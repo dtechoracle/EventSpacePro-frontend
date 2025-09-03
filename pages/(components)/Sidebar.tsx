@@ -51,7 +51,7 @@ const Sidebar = () => {
 
   return (
     <>
-      <aside className="bg-[#F6F4FA] w-1/5 h-screen px-3 py-8 flex-col justify-between hidden md:flex">
+      <aside className="bg-[#F6F4FA] w-1/5 h-screen px-3 py-8 flex-col justify-between hidden lg:flex">
         <div>
           <div className="w-full flex">
             <Image alt="" src={"/assets/mainLogo.svg"} width={200} height={200} />
@@ -81,14 +81,14 @@ const Sidebar = () => {
               pathname === "dashboard/settings" ? "bg-black/5" : ""
             }`}
           >
-            <Image src={"assets/sidebar/Gear.svg"} alt="Settings" width={20} height={20} />
+            <Image src={"/assets/sidebar/Gear.svg"} alt="Settings" width={20} height={20} />
             <h1 className="text-sm text-[#272235] group-hover:text-black font-medium">
               Settings
             </h1>
           </div>
 
           <div className="flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md">
-            <Image src={"assets/sidebar/SignOut.svg"} alt="Logout" width={20} height={20} />
+            <Image src={"/assets/sidebar/SignOut.svg"} alt="Logout" width={20} height={20} />
             <h1 className="text-sm text-[#272235] group-hover:text-black font-medium">
               Logout
             </h1>
@@ -97,7 +97,7 @@ const Sidebar = () => {
           <div className="bg-white rounded-full flex justify-between items-center p-2">
             <div className="flex gap-2">
               <Image
-                src={"assets/sidebar/sample-profile.svg"}
+                src={"/assets/sidebar/sample-profile.svg"}
                 alt="Profile"
                 width={40}
                 height={40}
@@ -107,14 +107,14 @@ const Sidebar = () => {
                 <p className="text-xs">Basic plan</p>
               </div>
             </div>
-            <Image src={"assets/sidebar/chevron-down.svg"} alt="Dropdown" width={20} height={20} />
+            <Image src={"/assets/sidebar/chevron-down.svg"} alt="Dropdown" width={20} height={20} />
           </div>
         </div>
       </aside>
 
       <button
         onClick={() => setOpen(!open)}
-        className={`fixed top-1 left-1 z-50 p-3 rounded-lg shadow-lg bg-[#4E1CD8] text-white md:hidden transition-transform ${
+        className={`fixed top-1 left-1 z-50 p-3 rounded-lg shadow-lg bg-[#4E1CD8] text-white lg:hidden transition-transform ${
           open ? "translate-x-52" : "translate-x-0"
         }`}
       >
@@ -128,7 +128,7 @@ const Sidebar = () => {
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="fixed top-0 left-0 h-full w-64 bg-[#F6F4FA] px-3 py-8 flex flex-col justify-between z-40 md:hidden"
+            className="fixed top-0 left-0 h-full w-64 bg-[#F6F4FA] px-3 py-8 flex flex-col justify-between z-40 lg:hidden"
           >
             <div>
               <div className="w-full flex">
@@ -161,14 +161,14 @@ const Sidebar = () => {
                   pathname === "dashboard/settings" ? "bg-black/5" : ""
                 }`}
               >
-                <Image src={"assets/sidebar/Gear.svg"} alt="Settings" width={20} height={20} />
+                <Image src={"/assets/sidebar/Gear.svg"} alt="Settings" width={20} height={20} />
                 <h1 className="text-sm text-[#272235] group-hover:text-black font-medium">
                   Settings
                 </h1>
               </div>
 
               <div className="flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md">
-                <Image src={"assets/sidebar/SignOut.svg"} alt="Logout" width={20} height={20} />
+                <Image src={"/assets/sidebar/SignOut.svg"} alt="Logout" width={20} height={20} />
                 <h1 className="text-sm text-[#272235] group-hover:text-black font-medium">
                   Logout
                 </h1>
@@ -177,7 +177,7 @@ const Sidebar = () => {
               <div className="bg-white rounded-full flex justify-between items-center p-2">
                 <div className="flex gap-2">
                   <Image
-                    src={"assets/sidebar/sample-profile.svg"}
+                    src={"/assets/sidebar/sample-profile.svg"}
                     alt="Profile"
                     width={40}
                     height={40}
@@ -187,7 +187,7 @@ const Sidebar = () => {
                     <p className="text-xs">Basic plan</p>
                   </div>
                 </div>
-                <Image src={"assets/sidebar/chevron-down.svg"} alt="Dropdown" width={20} height={20} />
+                <Image src={"/assets/sidebar/chevron-down.svg"} alt="Dropdown" width={20} height={20} />
               </div>
             </div>
           </motion.aside>
