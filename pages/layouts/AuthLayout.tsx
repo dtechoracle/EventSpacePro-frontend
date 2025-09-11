@@ -30,7 +30,7 @@ const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
                 <h1 className={`${instrumentSerif.className} text-center text-white text-3xl `}>Welcome Back!</h1>
                 <p className={`${instrumentSans.className} text-white mt-3`}>Login to design smarter events with AI-powered planning tools.</p>
               </div>}
-              {pathname == "/auth/signup" && <div className="flex-col gap-3 items-center">
+              {pathname !== "/auth/login" && <div className="flex-col gap-3 items-center">
                 <h1 className={`${instrumentSerif.className} text-center text-white text-3xl `}>Get started with us</h1>
                 <p className={`${instrumentSans.className} text-white mt-3`}>
                   Create your account to design smarter events with AI-powered planning tools.
