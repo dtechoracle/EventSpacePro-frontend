@@ -28,6 +28,7 @@ const Signup = () => {
 
       localStorage.setItem("email", email)
       await apiRequest("/auth/request-otp", "POST", { email });
+      localStorage.setItem("verifyType", "register")
 
       return res.data;
     },

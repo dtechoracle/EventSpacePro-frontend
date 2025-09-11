@@ -3,27 +3,43 @@ import AuthLayout from "../layouts/AuthLayout";
 import { useRouter } from "next/router";
 import { useState } from "react";
 import { apiRequest } from "@/helpers/Config";
+import { ApiError } from "next/dist/server/api-utils"
+import { useMutation } from "@tanstack/react-query"
+import toast from "react-hot-toast"
+import { Eye, EyeOff } from "lucide-react";
+import Cookies from "js-cookie"
 
 const ResetPassword = () => {
   const router = useRouter();
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false); const token = Cookies.get("authToken")
+
+  const mutation = useMutation({
+    mutationKey: ["reset-password"],
+    mutationFn: () => apiRequest("/auth/reset-password", "POST", {
+      token,
+      newPassword,
+    }),
+    onSuccess: () => {
+      toast.success("Account created successfully! OTP sent to your email");
+      router.push("/auth/login");
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message || "Signup failed");
+    },
+
+  })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
-      alert("Passwords do not match");
+      toast.error("Passwords do not match");
       return;
     }
 
-    try {
-      await apiRequest("/auth/reset-password", "POST", {
-        password: newPassword,
-      });
-      router.push("/auth/login");
-    } catch (err: any) {
-      console.error("Reset failed:", err.message);
-    }
+    mutation.mutate()
   };
 
   return (
@@ -44,24 +60,44 @@ const ResetPassword = () => {
             Create a new password for your account
           </p>
 
-          <form
-            onSubmit={handleSubmit}
-            className="w-full mt-6 space-y-4"
-          >
-            <input
-              type="password"
-              placeholder="New Password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
-            />
-            <input
-              type="password"
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
-            />
+          <form onSubmit={handleSubmit} className="w-full mt-6 space-y-4">
+            {/* New Password */}
+            <div className="relative">
+              <input
+                type={showNewPassword ? "text" : "password"}
+                placeholder="New Password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+              >
+                {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+
+            {/* Confirm Password */}
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+              >
+                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+
+            {/* Submit */}
             <button
               type="submit"
               className="w-full bg-[#4E1CD8] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[#4E1CD8] border-2 border-[#4E1CD8] transition"
@@ -69,7 +105,6 @@ const ResetPassword = () => {
               Reset Password
             </button>
           </form>
-
           <span className="mt-6 text-sm text-gray-600 flex gap-1">
             Remembered your password?{" "}
             <p

@@ -9,6 +9,7 @@ const fetchAuthToken = () => {
 export const apiRequest = async (
   endpoint: string,
   method = "GET",
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   body: any = null
 ) => {
   const token = fetchAuthToken();
