@@ -141,6 +141,16 @@ const Login = () => {
               Sign Up
             </p>
           </span>
+          <span className="mt-4 text-sm text-gray-600 flex gap-1">
+            Forgot your password?{" "}
+            <p
+              className="text-[#4E1CD8] font-medium hover:underline cursor-pointer"
+              onClick={() => router.push("/auth/request-password-reset")}
+            >
+              Reset here
+            </p>
+          </span>
+
         </div>
       </div>
     </AuthLayout>

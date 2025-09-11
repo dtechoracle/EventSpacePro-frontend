@@ -66,12 +66,20 @@ const OtpVerification = () => {
       const email = localStorage.getItem("email")
       if (!email) router.push("/auth/signup")
       const res = await apiRequest("/auth/verify-otp", "POST", { email, otp: code });
-      return res.data;
+      return res;
     },
     onSuccess: (data) => {
       toast.success("OTP verified successfully!");
       Cookies.set("authToken", data.token);
-      router.push("/dashboard");
+      localStorage.removeItem("email")
+      const verifyType = localStorage.getItem("verifyType")
+      if (verifyType == "reset") {
+        localStorage.removeItem("verifyType")
+        router.push("/auth/reset-password");
+      } else {
+        localStorage.removeItem("verifyType")
+        router.push("/dashboard");
+      }
     },
     onError: (err: ApiError) => {
       toast.error(err.message || "OTP verification failed");
@@ -124,13 +132,10 @@ const OtpVerification = () => {
 
           <button
             onClick={() => mutation.mutate()}
-            disabled={!allFilled}
-            className={`mt-8 w-full py-2 rounded-lg font-medium border-2 transition ${allFilled
-                ? `bg-[${buttonColor}] text-white border-[${buttonColor}] hover:bg-white hover:text-[${buttonColor}]`
-                : "bg-gray-200 text-gray-500 border-gray-200 cursor-not-allowed"
-              }`}
+            disabled={mutation.isPending}
+            className="w-full mt-5 bg-[#4E1CD8] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[#4E1CD8] border-2 border-[#4E1CD8] transition disabled:opacity-50"
           >
-            Verify OTP
+            {mutation.isPending ? "Verifying" : "Verify OTP"}
           </button>
         </div>
       </div>
