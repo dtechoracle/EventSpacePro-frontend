@@ -1,9 +1,59 @@
+import { useState } from "react";
 import Image from "next/image";
 import AuthLayout from "../layouts/AuthLayout";
 import { useRouter } from "next/router";
+import { useMutation } from "@tanstack/react-query";
+import toast from "react-hot-toast";
+import Cookies from "js-cookie";
+import { apiRequest } from "@/helpers/Config";
+import { AiOutlineEye, AiOutlineEyeInvisible } from "react-icons/ai";
+
+interface LoginResponse {
+  token: string;
+  data: {
+    _id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  };
+}
+
+interface ApiError {
+  message: string;
+  errors?: { path: string; message: string; code: string }[];
+}
 
 const Login = () => {
   const router = useRouter();
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const mutation = useMutation<LoginResponse, ApiError>({
+    mutationKey: ["auth-login"],
+    mutationFn: () => apiRequest("/login", "POST", {
+      email: form.email,
+      password: form.password,
+    }),
+    onSuccess: (data) => {
+      toast.success("Logged in successfully!");
+      Cookies.set("authToken", data.token);
+      router.push("/dashboard");
+    },
+    onError: (err) => {
+      const message =
+        err?.errors?.[0]?.message || err.message || "Login failed";
+      toast.error(message);
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    mutation.mutate();
+  };
 
   return (
     <AuthLayout>
@@ -40,22 +90,45 @@ const Login = () => {
             <div className="flex-grow h-px bg-gray-300"></div>
           </div>
 
-          <form className="w-full mt-6 space-y-4">
+          <form onSubmit={handleSubmit} className="w-full mt-6 space-y-4">
             <input
               type="email"
+              name="email"
               placeholder="Email"
+              value={form.email}
+              onChange={handleChange}
+              required
               className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
             />
-            <input
-              type="password"
-              placeholder="Password"
-              className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
-            />
+
+            <div className="relative w-full">
+              <input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                placeholder="Password"
+                value={form.password}
+                onChange={handleChange}
+                required
+                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
+              />
+              <span
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-gray-500"
+              >
+                {showPassword ? (
+                  <AiOutlineEyeInvisible size={20} />
+                ) : (
+                  <AiOutlineEye size={20} />
+                )}
+              </span>
+            </div>
+
             <button
               type="submit"
-              className="w-full bg-[#4E1CD8] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[#4E1CD8] border-2 border-[#4E1CD8] transition"
+              disabled={mutation.isPending}
+              className="w-full bg-[#4E1CD8] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[#4E1CD8] border-2 border-[#4E1CD8] transition disabled:opacity-50"
             >
-              Log In
+              {mutation.isPending ? "Logging In..." : "Log In"}
             </button>
           </form>
 
@@ -75,3 +148,4 @@ const Login = () => {
 };
 
 export default Login;
+
