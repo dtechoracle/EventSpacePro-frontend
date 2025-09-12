@@ -4,12 +4,13 @@ import Image from "next/image";
 import { useRouter } from "next/router";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X } from "lucide-react";
+import { Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 const Sidebar = () => {
   const router = useRouter();
   const { pathname } = router;
   const [open, setOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const links = [
     {
@@ -51,25 +52,44 @@ const Sidebar = () => {
 
   return (
     <>
-      <aside className="bg-[#F6F4FA] w-1/5 h-screen px-3 py-8 flex-col justify-between hidden lg:flex">
+      {/* Desktop Sidebar */}
+      <motion.aside
+        animate={{ width: isCollapsed ? "5rem" : "16rem" }}
+        transition={{ duration: 0.3, ease: "easeInOut" }}
+        className="relative bg-[#F6F4FA] h-screen px-3 py-8 flex-col justify-between hidden lg:flex"
+      >
         <div>
-          <div className="w-full flex">
-            <Image alt="" src={"/assets/mainLogo.svg"} width={200} height={200} />
+          <div className="w-full flex justify-center">
+            <Image
+              alt=""
+              src={"/assets/mainLogo.svg"}
+              width={isCollapsed ? 50 : 200}
+              height={isCollapsed ? 50 : 200}
+            />
           </div>
 
           <div className="pt-8 space-y-1">
             {links.map((item, index) => (
               <div
                 key={index}
-                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md ${
-                  item.route === pathname ? "bg-black/5" : ""
-                }`}
+                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${item.route === pathname ? "bg-black/5" : ""
+                  }`}
                 onClick={() => router.push(item.route)}
               >
                 <Image src={item.icon} alt={item.text} width={20} height={20} />
-                <h1 className="text-sm text-[#272235] group-hover:text-black font-medium">
-                  {item.text}
-                </h1>
+                <AnimatePresence>
+                  {!isCollapsed && (
+                    <motion.h1
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.2 }}
+                      className="text-sm text-[#272235] group-hover:text-black font-medium"
+                    >
+                      {item.text}
+                    </motion.h1>
+                  )}
+                </AnimatePresence>
               </div>
             ))}
           </div>
@@ -77,46 +97,89 @@ const Sidebar = () => {
 
         <div className="w-full gap-2">
           <div
-            className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md ${
-              pathname === "dashboard/settings" ? "bg-black/5" : ""
-            }`}
+            className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${pathname === "dashboard/settings" ? "bg-black/5" : ""
+              }`}
           >
             <Image src={"/assets/sidebar/Gear.svg"} alt="Settings" width={20} height={20} />
-            <h1 className="text-sm text-[#272235] group-hover:text-black font-medium">
-              Settings
-            </h1>
+            <AnimatePresence>
+              {!isCollapsed && (
+                <motion.h1
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="text-sm text-[#272235] group-hover:text-black font-medium"
+                >
+                  Settings
+                </motion.h1>
+              )}
+            </AnimatePresence>
           </div>
 
-          <div className="flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md">
+          <div className="flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer">
             <Image src={"/assets/sidebar/SignOut.svg"} alt="Logout" width={20} height={20} />
-            <h1 className="text-sm text-[#272235] group-hover:text-black font-medium">
-              Logout
-            </h1>
+            <AnimatePresence>
+              {!isCollapsed && (
+                <motion.h1
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="text-sm text-[#272235] group-hover:text-black font-medium"
+                >
+                  Logout
+                </motion.h1>
+              )}
+            </AnimatePresence>
           </div>
 
           <div className="bg-white rounded-full flex justify-between items-center p-2">
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <Image
                 src={"/assets/sidebar/sample-profile.svg"}
                 alt="Profile"
                 width={40}
                 height={40}
               />
-              <div>
-                <h1 className="font-semibold text-sm">John Doe</h1>
-                <p className="text-xs">Basic plan</p>
-              </div>
+              <AnimatePresence>
+                {!isCollapsed && (
+                  <motion.div
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <h1 className="font-semibold text-sm">John Doe</h1>
+                    <p className="text-xs">Basic plan</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-            <Image src={"/assets/sidebar/chevron-down.svg"} alt="Dropdown" width={20} height={20} />
+            {!isCollapsed && (
+              <Image
+                src={"/assets/sidebar/chevron-down.svg"}
+                alt="Dropdown"
+                width={20}
+                height={20}
+              />
+            )}
           </div>
         </div>
-      </aside>
 
+        {/* Collapse / Expand Button */}
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="absolute top-1/2 -right-3 transform -translate-y-1/2 bg-white shadow-lg rounded-full p-1"
+        >
+          {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+        </button>
+      </motion.aside>
+
+      {/* Mobile Sidebar (unchanged) */}
       <button
         onClick={() => setOpen(!open)}
-        className={`fixed top-1 left-1 z-50 p-3 rounded-lg shadow-lg bg-[#4E1CD8] text-white lg:hidden transition-transform ${
-          open ? "translate-x-52" : "translate-x-0"
-        }`}
+        className={`fixed top-1 left-1 z-50 p-3 rounded-lg shadow-lg bg-[#4E1CD8] text-white lg:hidden transition-transform ${open ? "translate-x-52" : "translate-x-0"
+          }`}
       >
         {open ? <X size={24} /> : <Menu size={24} />}
       </button>
@@ -138,9 +201,8 @@ const Sidebar = () => {
                 {links.map((item, index) => (
                   <div
                     key={index}
-                    className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md ${
-                      item.route === pathname ? "bg-black/5" : ""
-                    }`}
+                    className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${item.route === pathname ? "bg-black/5" : ""
+                      }`}
                     onClick={() => {
                       router.push(item.route);
                       setOpen(false);
@@ -157,9 +219,8 @@ const Sidebar = () => {
 
             <div className="w-full gap-2">
               <div
-                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md ${
-                  pathname === "dashboard/settings" ? "bg-black/5" : ""
-                }`}
+                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${pathname === "dashboard/settings" ? "bg-black/5" : ""
+                  }`}
               >
                 <Image src={"/assets/sidebar/Gear.svg"} alt="Settings" width={20} height={20} />
                 <h1 className="text-sm text-[#272235] group-hover:text-black font-medium">
@@ -167,7 +228,7 @@ const Sidebar = () => {
                 </h1>
               </div>
 
-              <div className="flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md">
+              <div className="flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer">
                 <Image src={"/assets/sidebar/SignOut.svg"} alt="Logout" width={20} height={20} />
                 <h1 className="text-sm text-[#272235] group-hover:text-black font-medium">
                   Logout
@@ -187,7 +248,12 @@ const Sidebar = () => {
                     <p className="text-xs">Basic plan</p>
                   </div>
                 </div>
-                <Image src={"/assets/sidebar/chevron-down.svg"} alt="Dropdown" width={20} height={20} />
+                <Image
+                  src={"/assets/sidebar/chevron-down.svg"}
+                  alt="Dropdown"
+                  width={20}
+                  height={20}
+                />
               </div>
             </div>
           </motion.aside>
