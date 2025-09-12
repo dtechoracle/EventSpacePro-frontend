@@ -4,7 +4,7 @@ import AuthLayout from "../layouts/AuthLayout";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import toast from "react-hot-toast";
-import { ApiError } from "next/dist/server/api-utils"
+import { ApiError } from "@/interfaces/index"
 import { useRouter } from "next/router";
 
 

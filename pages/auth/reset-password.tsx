@@ -3,7 +3,7 @@ import AuthLayout from "../layouts/AuthLayout";
 import { useRouter } from "next/router";
 import { useState } from "react";
 import { apiRequest } from "@/helpers/Config";
-import { ApiError } from "next/dist/server/api-utils"
+import { ApiError } from "@/interfaces/index"
 import { useMutation } from "@tanstack/react-query"
 import toast from "react-hot-toast"
 import { Eye, EyeOff } from "lucide-react";
