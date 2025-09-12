@@ -10,17 +10,24 @@ export const apiRequest = async (
   endpoint: string,
   method = "GET",
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  body: any = null
+  body: any = null,
+  requiresAuth = true
 ) => {
   const token = fetchAuthToken();
-  if (!token) throw new Error("No authentication token found");
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  // Only add Authorization if auth is required
+  if (requiresAuth) {
+    if (!token) throw new Error("No authentication token found");
+    headers.Authorization = `Bearer ${token}`;
+  }
 
   const options: RequestInit = {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
   };
 
   if (body) {
@@ -29,9 +36,8 @@ export const apiRequest = async (
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
 
-  // handle expired/invalid token
   if (response.status === 401 || response.status === 403) {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && requiresAuth) {
       window.location.href = "/auth/login";
     }
     throw new Error("Unauthorized: Redirecting to login");

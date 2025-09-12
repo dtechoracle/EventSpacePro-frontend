@@ -14,7 +14,7 @@ const RequestPasswordReset = () => {
 
   const mutation = useMutation<{ message: string }, ApiError>({
     mutationKey: ["auth-request-password-reset"],
-    mutationFn: () => apiRequest("/auth/request-otp", "POST", { email }),
+    mutationFn: () => apiRequest("/auth/request-otp", "POST", { email }, false),
     onSuccess: (data) => {
       toast.success(data.message || "Password reset link sent!");
       console.log("dadtattta", data)

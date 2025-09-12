@@ -21,7 +21,7 @@ const ResetPassword = () => {
     mutationFn: () => apiRequest("/auth/reset-password", "POST", {
       token,
       newPassword,
-    }),
+    }, false),
     onSuccess: () => {
       toast.success("Account created successfully! OTP sent to your email");
       router.push("/auth/login");

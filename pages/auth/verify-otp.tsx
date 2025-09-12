@@ -65,7 +65,7 @@ const OtpVerification = () => {
       const code = otp.join("");
       const email = localStorage.getItem("email")
       if (!email) router.push("/auth/signup")
-      const res = await apiRequest("/auth/verify-otp", "POST", { email, otp: code });
+      const res = await apiRequest("/auth/verify-otp", "POST", { email, otp: code }, false);
       return res;
     },
     onSuccess: (data) => {

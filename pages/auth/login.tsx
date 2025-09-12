@@ -37,7 +37,7 @@ const Login = () => {
     mutationFn: () => apiRequest("/login", "POST", {
       email: form.email,
       password: form.password,
-    }),
+    }, false),
     onSuccess: (data) => {
       toast.success("Logged in successfully!");
       Cookies.set("authToken", data.token);

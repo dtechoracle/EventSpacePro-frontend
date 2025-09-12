@@ -21,13 +21,13 @@ const Signup = () => {
 
   const signupMutation = useMutation({
     mutationFn: async (payload: typeof form) => {
-      const res = await apiRequest("/register", "POST", payload);
+      const res = await apiRequest("/register", "POST", payload, false);
 
       const email = res?.data?.email;
       if (!email) throw new Error("No email returned from register response");
 
       localStorage.setItem("email", email)
-      await apiRequest("/auth/request-otp", "POST", { email });
+      await apiRequest("/auth/request-otp", "POST", { email }, false);
       localStorage.setItem("verifyType", "register")
 
       return res.data;
