@@ -5,7 +5,7 @@ import { useState } from "react"
 import { useMutation } from "@tanstack/react-query"
 import { apiRequest } from "@/helpers/Config"
 import toast from "react-hot-toast"
-import { ApiError } from "next/dist/server/api-utils"
+import { ApiError } from "@/interfaces/index"
 import { FiEye, FiEyeOff } from "react-icons/fi";
 
 const Signup = () => {
