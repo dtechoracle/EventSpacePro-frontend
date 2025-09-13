@@ -35,7 +35,7 @@ const dashboard = () => {
 
           <div className="space-y-6">
             {/* Calendar */}
-            <div className="bg-gray-50 p-4 rounded-xl h-64 flex items-center justify-center">
+            <div className="bg-gray-50 p-4 rounded-xl flex items-center justify-center">
               <CustomCalendar />
             </div>
 

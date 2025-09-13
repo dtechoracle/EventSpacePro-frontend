@@ -8,6 +8,7 @@ import {
   FaPlus,
 } from "react-icons/fa";
 import { IoPlayOutline } from "react-icons/io5";
+import ShareModal from "./ShareModal";
 
 export default function PropertiesSidebar() {
   // Dropdown toggles
@@ -30,10 +31,12 @@ export default function PropertiesSidebar() {
   const [pageNumber, setPageNumber] = useState("");
   const [pricing, setPricing] = useState("");
   const [location, setLocation] = useState("");
+const [showShareModal, setShowShareModal] = useState(false)
 
   return (
     <aside className="h-screen flex flex-col p-3 overflow-y-auto text-sm">
       {/* Top bar */}
+      {showShareModal && <ShareModal onClose={() => setShowShareModal(false)}/> }
       <div className="flex items-center justify-between mb-8">
         <FaUserCircle
           className="text-blue-600 bg-blue-100 rounded-full p-0.5"
@@ -43,7 +46,7 @@ export default function PropertiesSidebar() {
           <button className="p-1 rounded hover:bg-gray-100">
             <IoPlayOutline size={14} />
           </button>
-          <button className="bg-[var(--accent)] text-white px-2 py-1.5 rounded text-xs shadow">
+          <button className="bg-[var(--accent)] text-white px-2 py-1.5 rounded text-xs shadow" onClick={() => setShowShareModal(true)}>
             Share
           </button>
         </div>

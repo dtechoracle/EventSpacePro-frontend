@@ -1,5 +1,6 @@
 "use client";
 
+import BottomToolbar from "@/pages/(components)/editor/BottomToolBar";
 import PropertiesSidebar from "@/pages/(components)/editor/PropertiesSidebar";
 import Toolbar from "@/pages/(components)/editor/ToolBar";
 import MainLayout from "@/pages/layouts/MainLayout";
@@ -9,6 +10,7 @@ export default function Editor() {
   return (
     <MainLayout>
       <div className="h-screen flex overflow-hidden">
+        <BottomToolbar />
         {/* Fixed Toolbar */}
         <div className="flex-shrink-0 w-64 bg-white">
           <Toolbar />
