@@ -7,3 +7,15 @@
   --secondary: #eaf6ef;
   --accent: #0933BB;
 }
+
+@layer components {
+  .sidebar-input {
+    background-color: rgb(0 0 0 / 0.05);
+    color: black;
+    border-radius: 0.25rem;
+    padding: 0.375rem 0.25rem;
+    width: 7rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+}

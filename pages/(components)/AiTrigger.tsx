@@ -52,7 +52,7 @@ export default function AiTrigger() {
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="What do you need help with?"
             onFocus={() => setIsOpen(true)}
-            className="w-full pl-10 pr-16 py-4 rounded-full placeholder:opacity-100 shadow-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] text-[var(--accent)] bg-white"
+            className="w-full pl-14 pr-16 py-4 rounded-full placeholder:opacity-100 shadow-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] text-[var(--accent)] bg-white"
           />
 
           {inputValue ? (
