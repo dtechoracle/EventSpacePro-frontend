@@ -34,7 +34,7 @@ export default function AiTrigger() {
 
   return (
     <>
-      <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg">
+      <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg">
         <div className="relative">
           {/* Left icon */}
           <div className="absolute left-3 top-1/2 -translate-y-1/2 bg-gray-200 p-2 rounded-full">
