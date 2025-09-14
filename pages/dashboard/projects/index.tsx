@@ -8,7 +8,7 @@ const projects = () => {
   return (
     <MainLayout>
       <div className="w-full min-h-screen">
-        <TopBar mainText="My Projects" subText="Recents"/>
+        <TopBar mainText="My Projects" subText="Recents" type="project"/>
         <div className="grid grid-cols-4 gap-3 pl-6">
           {
             Array.from({ length: 8 }).map((_, i) => (

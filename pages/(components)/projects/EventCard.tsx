@@ -1,14 +1,14 @@
 "use client";
 
-// import { useRouter } from "next/router";
+import { useRouter } from "next/router";
 import { BsThreeDotsVertical } from "react-icons/bs";
 
 export default function EventCard({id} : {id: number}) {
 
-  // const router = useRouter()
+  const router = useRouter()
 
   return (
-    <div className="relative w-full h-60 rounded-3xl overflow-hidden shadow-lg">
+    <div className="relative w-full h-60 rounded-3xl overflow-hidden shadow-lg" onClick={() => router.push(`/dashboard/editor/${id + 1}`)}>
       {/* Background with placeholder circles */}
       <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
         <div className="absolute -top-10 -left-10 w-40 h-40 bg-green-300 rounded-full blur-3xl opacity-70" />
