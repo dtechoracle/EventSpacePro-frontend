@@ -3,11 +3,23 @@
 import { PiFolderPlusDuotone } from "react-icons/pi";
 import { RiSearchLine, RiArrowUpDownFill, RiDownloadLine, RiAddLine } from "react-icons/ri";
 import { instrumentSerif } from "@/helpers/fonts";
+import CreateProjectModal from "./CreateProjectModal";
+import { useState } from "react";
+import CreateEventModal from "./CreateEventModal";
 
 
-const TopBar = ({ mainText, subText }: { mainText: string, subText: string }) => {
+const TopBar = ({ mainText, subText, type }: { mainText: string, subText: string, type: "event" | "project" }) => {
+
+  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false)
+  const [showCreateEventModal, setShowCreateEventModal] = useState(false)
+
+  const handleClick = () => {
+    type == "project" ? setShowCreateProjectModal(true) : setShowCreateEventModal(true)
+  }
   return (
     <div>
+      {showCreateProjectModal && <CreateProjectModal onClose={() => setShowCreateProjectModal(false)}/>}
+      {showCreateEventModal && <CreateEventModal onClose={() => setShowCreateEventModal(false)}/>}
       <div className="w-full flex justify-between pl-6 border border-black/10">
         <h1 className={`text-4xl ${instrumentSerif.className}`}>{mainText}</h1>
         <div className="flex items-center justify-between gap-4">
@@ -34,9 +46,9 @@ const TopBar = ({ mainText, subText }: { mainText: string, subText: string }) =>
             Import
           </button>
 
-          <button className="flex items-center gap-2 px-4 py-2 rounded-md bg-[var(--accent)] text-white text-sm font-medium hover:bg-blue-700">
+          <button className="flex capitalize items-center gap-2 px-4 py-2 rounded-md bg-[var(--accent)] text-white text-sm font-medium hover:bg-blue-700" onClick={handleClick}>
             <RiAddLine />
-            New Project
+            New {type}
           </button>
         </div>
       </div>

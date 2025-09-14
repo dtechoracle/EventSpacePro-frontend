@@ -1,51 +1,65 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  FaPaperPlane,
-  FaPuzzlePiece,
-  FaShapes,
-  FaPencilRuler,
-  FaColumns,
-  FaBriefcase,
-} from "react-icons/fa";
 import { ChevronDown } from "lucide-react";
-import { RiPushpinLine } from "react-icons/ri";
+import { useToolbarTools, ToolOption } from "@/hooks/useToolBarTools";
+import AssetsModal from "./AssetsModal";
 
-const tools = [
-  { icon: <FaPaperPlane size={18} />, label: "Tool 1" },
-  { icon: <FaPuzzlePiece size={18} />, label: "Tool 2" },
-  { icon: <FaShapes size={18} />, label: "Tool 3" },
-  { icon: <RiPushpinLine size={18} />, label: "Tool 4" },
-  { icon: <FaPencilRuler size={18} />, label: "Tool 5" },
-  { icon: <FaColumns size={18} />, label: "Tool 6" },
-  { icon: <FaBriefcase size={18} />, label: "Tool 7" },
-];
 
-export default function BottomToolbar() {
+interface BarProps{
+  setShowAssetsModal: React.Dispatch<React.SetStateAction<boolean>>
+}
+
+export default function BottomToolbar({setShowAssetsModal}: BarProps) {
+  const tools = useToolbarTools();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+
+  // Example states to toggle
+  const [isPreviewOn, setIsPreviewOn] = useState(false);
+  const [isGridVisible, setIsGridVisible] = useState(true);
+  const [isEditMode, setIsEditMode] = useState(false);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const toggleDropdown = (index: number) => {
-    setOpenIndex((prev) => (prev === index ? null : index));
+  // Handle option clicks
+  const handleOptionClick = (option: ToolOption) => {
+    switch (option.id) {
+      case "open-assets":
+        setShowAssetsModal(true);
+        break;
+      case "reset-layout":
+        console.log("Layout reset!");
+        break;
+      case "toggle-grid":
+        setIsGridVisible((prev) => !prev);
+        break;
+      case "clear-grid":
+        console.log("Grid cleared!");
+        break;
+      case "toggle-edit-mode":
+        setIsEditMode((prev) => !prev);
+        break;
+      case "export-project":
+        console.log("Exporting project...");
+        break;
+      default:
+        console.log("Clicked:", option.id);
+    }
+    setOpenIndex(null);
   };
 
+  // Close dropdowns when clicking outside
   useEffect(() => {
     function handlePointerDown(e: PointerEvent) {
       const el = containerRef.current;
-      if (!el) return;
-      const target = e.target as Node | null;
-      if (!target) return;
-      if (!el.contains(target)) {
+      if (el && !el.contains(e.target as Node)) {
         setOpenIndex(null);
       }
     }
-
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") setOpenIndex(null);
     }
-
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
@@ -65,7 +79,7 @@ export default function BottomToolbar() {
       >
         {tools.map((tool, index) => (
           <div key={index} className="flex items-center relative">
-            {/* Button */}
+            {/* Main Button */}
             <motion.button
               whileTap={{ scale: 0.95 }}
               whileHover={{ scale: 1.03 }}
@@ -76,11 +90,10 @@ export default function BottomToolbar() {
               {tool.icon}
             </motion.button>
 
-            {/* Dropdown Chevron */}
+            {/* Dropdown Toggle */}
             <button
-              onClick={() => toggleDropdown(index)}
+              onClick={() => setOpenIndex(openIndex === index ? null : index)}
               className="ml-1 text-gray-600 hover:text-black"
-              aria-label={`${tool.label} options`}
             >
               <ChevronDown size={16} />
             </button>
@@ -96,30 +109,21 @@ export default function BottomToolbar() {
                   className="absolute bottom-14 left-1/2 -translate-x-1/2 bg-white rounded-lg shadow-lg border p-2 w-44 z-[10000]"
                 >
                   <ul className="space-y-1 text-sm text-gray-700">
-                    <li
-                      className="px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
-                      onClick={() => setOpenIndex(null)}
-                    >
-                      {tool.label} Option 1
-                    </li>
-                    <li
-                      className="px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
-                      onClick={() => setOpenIndex(null)}
-                    >
-                      {tool.label} Option 2
-                    </li>
-                    <li
-                      className="px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
-                      onClick={() => setOpenIndex(null)}
-                    >
-                      {tool.label} Option 3
-                    </li>
+                    {tool.options.map((option) => (
+                      <li
+                        key={option.id}
+                        className="px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
+                        onClick={() => handleOptionClick(option)}
+                      >
+                        {option.label}
+                      </li>
+                    ))}
                   </ul>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Divider (not for last item) */}
+            {/* Divider */}
             {index !== tools.length - 1 && (
               <div className="w-px h-8 bg-gray-200 mx-3" />
             )}
