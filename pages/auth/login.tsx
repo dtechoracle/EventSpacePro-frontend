@@ -98,7 +98,7 @@ const Login = () => {
               value={form.email}
               onChange={handleChange}
               required
-              className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
+              className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
             />
 
             <div className="relative w-full">
@@ -109,7 +109,7 @@ const Login = () => {
                 value={form.password}
                 onChange={handleChange}
                 required
-                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
+                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
               <span
                 onClick={() => setShowPassword(!showPassword)}
@@ -126,7 +126,7 @@ const Login = () => {
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="w-full bg-[#4E1CD8] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[#4E1CD8] border-2 border-[#4E1CD8] transition disabled:opacity-50"
+              className="w-full bg-[var(--accent)] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[var(--accent)] border-2 border-[var(--accent)] transition disabled:opacity-50"
             >
               {mutation.isPending ? "Logging In..." : "Log In"}
             </button>
@@ -135,7 +135,7 @@ const Login = () => {
           <span className="mt-6 text-sm text-gray-600 flex gap-1">
             Don&apos;t have an account?{" "}
             <p
-              className="text-[#4E1CD8] font-medium hover:underline cursor-pointer"
+              className="text-[var(--accent)] font-medium hover:underline cursor-pointer"
               onClick={() => router.push("/auth/signup")}
             >
               Sign Up
@@ -144,7 +144,7 @@ const Login = () => {
           <span className="mt-4 text-sm text-gray-600 flex gap-1">
             Forgot your password?{" "}
             <p
-              className="text-[#4E1CD8] font-medium hover:underline cursor-pointer"
+              className="text-[var(--accent)] font-medium hover:underline cursor-pointer"
               onClick={() => router.push("/auth/request-password-reset")}
             >
               Reset here

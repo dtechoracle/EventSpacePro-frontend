@@ -68,7 +68,7 @@ const ResetPassword = () => {
                 placeholder="New Password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
+                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
               <button
                 type="button"
@@ -86,7 +86,7 @@ const ResetPassword = () => {
                 placeholder="Confirm Password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
+                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
               <button
                 type="button"
@@ -100,7 +100,7 @@ const ResetPassword = () => {
             {/* Submit */}
             <button
               type="submit"
-              className="w-full bg-[#4E1CD8] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[#4E1CD8] border-2 border-[#4E1CD8] transition"
+              className="w-full bg-[var(--accent)] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[var(--accent)] border-2 border-[var(--accent)] transition"
             >
               Reset Password
             </button>
@@ -108,7 +108,7 @@ const ResetPassword = () => {
           <span className="mt-6 text-sm text-gray-600 flex gap-1">
             Remembered your password?{" "}
             <p
-              className="text-[#4E1CD8] font-medium hover:underline cursor-pointer"
+              className="text-[var(--accent)] font-medium hover:underline cursor-pointer"
               onClick={() => router.push("/auth/login")}
             >
               Log In

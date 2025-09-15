@@ -56,7 +56,7 @@ const Sidebar = () => {
       <motion.aside
         animate={{ width: isCollapsed ? "5rem" : "16rem" }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className="relative bg-[#F6F4FA] h-screen px-3 py-8 flex-col justify-between hidden lg:flex"
+        className="relative bg-[var(--accent)]/5 h-screen px-3 py-8 flex-col justify-between hidden lg:flex"
       >
         <div>
           <div className="w-full flex justify-center">
@@ -178,7 +178,7 @@ const Sidebar = () => {
       {/* Mobile Sidebar (unchanged) */}
       <button
         onClick={() => setOpen(!open)}
-        className={`fixed top-1 left-1 z-50 p-3 rounded-lg shadow-lg bg-[#4E1CD8] text-white lg:hidden transition-transform ${open ? "translate-x-52" : "translate-x-0"
+        className={`fixed top-1 left-1 z-50 p-3 rounded-lg shadow-lg bg-[var(--accent)] text-white lg:hidden transition-transform ${open ? "translate-x-52" : "translate-x-0"
           }`}
       >
         {open ? <X size={24} /> : <Menu size={24} />}
