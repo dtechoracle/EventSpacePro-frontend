@@ -7,12 +7,11 @@ import { motion, AnimatePresence } from "framer-motion";
 export default function CreateEventModal({ onClose }: { onClose: () => void }) {
   const [phase, setPhase] = useState(1);
   const [eventName, setEventName] = useState("");
-  const [canvasSize, setCanvasSize] = useState("16:9");
-  const [customHeight, setCustomHeight] = useState("");
-  const [customWidth, setCustomWidth] = useState("");
+  const [paperSize, setPaperSize] = useState("A4");
   const router = useRouter();
 
   const handleStartEditing = () => {
+    // in real use you might pass eventName + paperSize via query or state
     router.push("/dashboard/editor/123");
     onClose();
   };
@@ -75,38 +74,26 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
                 className="flex flex-col gap-6"
               >
                 <h2 className="text-[2rem] font-semibold text-[#272235]">
-                  Choose Canvas Size
+                  Choose Paper Size
                 </h2>
 
                 <select
-                  value={canvasSize}
-                  onChange={(e) => setCanvasSize(e.target.value)}
+                  value={paperSize}
+                  onChange={(e) => setPaperSize(e.target.value)}
                   className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
                 >
-                  <option value="1:1">1:1</option>
-                  <option value="4:3">4:3</option>
-                  <option value="16:9">16:9</option>
-                  <option value="custom">Custom size</option>
+                  <option value="A0">A0</option>
+                  <option value="A1">A1</option>
+                  <option value="A2">A2</option>
+                  <option value="A3">A3</option>
+                  <option value="A4">A4</option>
+                  <option value="A5">A5</option>
+                  <option value="A6">A6</option>
+                  <option value="A7">A7</option>
+                  <option value="A8">A8</option>
+                  <option value="A9">A9</option>
+                  <option value="A10">A10</option>
                 </select>
-
-                {canvasSize === "custom" && (
-                  <div className="flex flex-col gap-4">
-                    <input
-                      type="number"
-                      placeholder="Custom Height"
-                      value={customHeight}
-                      onChange={(e) => setCustomHeight(e.target.value)}
-                      className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
-                    />
-                    <input
-                      type="number"
-                      placeholder="Custom Width"
-                      value={customWidth}
-                      onChange={(e) => setCustomWidth(e.target.value)}
-                      className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
-                    />
-                  </div>
-                )}
 
                 <button
                   onClick={handleStartEditing}

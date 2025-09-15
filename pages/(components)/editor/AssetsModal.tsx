@@ -38,7 +38,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
   console.log("Modal is running")
 
   return (
-    <div className="fixed left-1/2 top-16 -translate-x-1/2 w-[27.75rem] h-[19.5rem] bg-[#FDFDFF] rounded-[2rem] p-5 shadow-lg z-[9999]">
+    <div className="fixed left-1/2 top-16 -translate-x-1/2 w-[27.75rem] h-[19.5rem] bg-[#FDFDFF] rounded-[2rem] p-5 shadow-2xl z-[9999]">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <span className="text-[1.25rem] font-medium text-[#272235]">Assets</span>
