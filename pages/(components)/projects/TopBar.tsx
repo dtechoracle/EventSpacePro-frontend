@@ -1,25 +1,87 @@
 "use client";
 
 import { PiFolderPlusDuotone } from "react-icons/pi";
-import { RiSearchLine, RiArrowUpDownFill, RiDownloadLine, RiAddLine } from "react-icons/ri";
+import {
+  RiSearchLine,
+  RiArrowUpDownFill,
+  RiDownloadLine,
+  RiAddLine,
+} from "react-icons/ri";
 import { instrumentSerif } from "@/helpers/fonts";
 import CreateProjectModal from "./CreateProjectModal";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import CreateEventModal from "./CreateEventModal";
 
+const TopBar = ({
+  mainText,
+  subText,
+  type,
+}: {
+  mainText: string;
+  subText: string;
+  type: "event" | "project";
+}) => {
+  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
+  const [showCreateEventModal, setShowCreateEventModal] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
-const TopBar = ({ mainText, subText, type }: { mainText: string, subText: string, type: "event" | "project" }) => {
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false)
-  const [showCreateEventModal, setShowCreateEventModal] = useState(false)
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setDropdownOpen(false);
+      }
+    };
 
-  const handleClick = () => {
-    type == "project" ? setShowCreateProjectModal(true) : setShowCreateEventModal(true)
-  }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const handleProjectClick = () => {
+    setShowCreateProjectModal(true);
+  };
+
+  const handleEventClick = () => {
+    setShowCreateEventModal(true);
+    setDropdownOpen(false);
+  };
+
+  const handleUploadClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+    setDropdownOpen(false);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      console.log("Selected file:", e.target.files[0]);
+    }
+  };
+
   return (
     <div>
-      {showCreateProjectModal && <CreateProjectModal onClose={() => setShowCreateProjectModal(false)}/>}
-      {showCreateEventModal && <CreateEventModal onClose={() => setShowCreateEventModal(false)}/>}
+      {showCreateProjectModal && (
+        <CreateProjectModal onClose={() => setShowCreateProjectModal(false)} />
+      )}
+      {showCreateEventModal && (
+        <CreateEventModal onClose={() => setShowCreateEventModal(false)} />
+      )}
+
+      <input
+        type="file"
+        ref={fileInputRef}
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
       <div className="w-full flex justify-between pl-6 border border-black/10">
         <h1 className={`text-4xl ${instrumentSerif.className}`}>{mainText}</h1>
         <div className="flex items-center justify-between gap-4">
@@ -46,19 +108,51 @@ const TopBar = ({ mainText, subText, type }: { mainText: string, subText: string
             Import
           </button>
 
-          <button className="flex capitalize items-center gap-2 px-4 py-2 rounded-md bg-[var(--accent)] text-white text-sm font-medium hover:bg-blue-700" onClick={handleClick}>
-            <RiAddLine />
-            New {type}
-          </button>
+          {type === "project" ? (
+            <button
+              className="flex capitalize items-center gap-2 px-4 py-2 rounded-md bg-[var(--accent)] text-white text-sm font-medium hover:bg-blue-700"
+              onClick={handleProjectClick}
+            >
+              <RiAddLine />
+              New {type}
+            </button>
+          ) : (
+            <div className="relative" ref={dropdownRef}>
+              <button
+                className="flex capitalize items-center gap-2 px-4 py-2 rounded-md bg-[var(--accent)] text-white text-sm font-medium hover:bg-blue-700"
+                onClick={() => setDropdownOpen((prev) => !prev)}
+              >
+                <RiAddLine />
+                New
+              </button>
+
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                  <button
+                    onClick={handleEventClick}
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                  >
+                    Event
+                  </button>
+                  <button
+                    onClick={handleUploadClick}
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                  >
+                    Upload
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       <div className={`${instrumentSerif.className} text-3xl py-5 pl-6`}>
         {subText}
       </div>
-
     </div>
-  )
-}
+  );
+};
 
-export default TopBar
+export default TopBar;
+

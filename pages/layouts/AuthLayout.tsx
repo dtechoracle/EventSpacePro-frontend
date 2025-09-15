@@ -1,4 +1,4 @@
-import { instrumentSans, instrumentSerif } from "@/helpers/fonts";
+import { instrumentSans } from "@/helpers/fonts";
 import Head from "next/head";
 import Image from "next/image";
 import { useRouter } from "next/router";
@@ -32,7 +32,7 @@ const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
 
               {pathname === "/auth/login" && (
                 <div className="flex-col gap-3 items-center">
-                  <h1 className={`${instrumentSerif.className} text-center text-white text-3xl`}>
+                  <h1 className={`${instrumentSans.className} text-center text-white text-3xl`}>
                     Welcome Back!
                   </h1>
                   <p className={`${instrumentSans.className} text-white mt-3`}>
@@ -43,7 +43,7 @@ const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
 
               {pathname !== "/auth/login" && (
                 <div className="flex-col gap-3 items-center">
-                  <h1 className={`${instrumentSerif.className} text-center text-white text-3xl`}>
+                  <h1 className={`${instrumentSans.className} text-center text-white text-3xl`}>
                     Get started with us
                   </h1>
                   <p className={`${instrumentSans.className} text-white mt-3`}>
