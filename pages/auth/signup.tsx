@@ -92,7 +92,7 @@ const Signup = () => {
                 value={form.firstName}
                 onChange={handleChange}
                 required
-                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
+                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
               <input
                 type="text"
@@ -101,7 +101,7 @@ const Signup = () => {
                 value={form.lastName}
                 onChange={handleChange}
                 required
-                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
+                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
             </div>
             <input
@@ -111,7 +111,7 @@ const Signup = () => {
               value={form.email}
               onChange={handleChange}
               required
-              className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8]"
+              className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
             />
 
             {/* Password field with toggle */}
@@ -123,7 +123,7 @@ const Signup = () => {
                 value={form.password}
                 onChange={handleChange}
                 required
-                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4E1CD8] pr-10"
+                className="w-full bg-[#27223508] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] pr-10"
               />
               <button
                 type="button"
@@ -137,7 +137,7 @@ const Signup = () => {
             <button
               type="submit"
               disabled={signupMutation.isPending}
-              className="w-full bg-[#4E1CD8] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[#4E1CD8] border-2 border-[#4E1CD8] transition disabled:opacity-50"
+              className="w-full bg-[var(--accent)] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[var(--accent)] border-2 border-[var(--accent)] transition disabled:opacity-50"
             >
               {signupMutation.isPending ? "Signing Up..." : "Sign Up"}
             </button>
@@ -145,7 +145,7 @@ const Signup = () => {
           <span className="mt-6 text-sm text-gray-600 flex gap-1">
             Already have an account?
             <p
-              className="text-[#4E1CD8] font-medium hover:underline cursor-pointer"
+              className="text-[var(--accent)] font-medium hover:underline cursor-pointer"
               onClick={() => router.push("/auth/login")}
             >
               Log In

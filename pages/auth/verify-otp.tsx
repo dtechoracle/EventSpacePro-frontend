@@ -15,7 +15,7 @@ const OtpVerification = () => {
   const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const buttonColor = "#4E1CD8";
+  const buttonColor = "var(--accent)";
 
   const handleChange = (value: string, index: number) => {
     if (/^[0-9]?$/.test(value)) {
@@ -133,7 +133,7 @@ const OtpVerification = () => {
           <button
             onClick={() => mutation.mutate()}
             disabled={mutation.isPending}
-            className="w-full mt-5 bg-[#4E1CD8] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[#4E1CD8] border-2 border-[#4E1CD8] transition disabled:opacity-50"
+            className="w-full mt-5 bg-[var(--accent)] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[var(--accent)] border-2 border-[var(--accent)] transition disabled:opacity-50"
           >
             {mutation.isPending ? "Verifying" : "Verify OTP"}
           </button>
