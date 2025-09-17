@@ -7,7 +7,7 @@ const data = [
   { name: "Budget Left", value: 15 },
 ];
 
-const COLORS = ["#0933BB", "#2C2B35"];
+const COLORS = ["#0056A9", "#2C2B35"];
 
 export default function BudgetUtilization() {
   return (
