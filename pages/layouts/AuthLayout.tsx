@@ -32,10 +32,10 @@ const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
 
               {pathname === "/auth/login" && (
                 <div className="flex-col gap-3 items-center">
-                  <h1 className={`${instrumentSans.className} text-center text-white text-3xl`}>
+                  <h1 className={`${instrumentSans.className} text-center text-white text-4xl font-bold`}>
                     Welcome Back!
                   </h1>
-                  <p className={`${instrumentSans.className} text-white mt-3`}>
+                  <p className={`${instrumentSans.className} text-white mt-3 text-sm`}>
                     Login to design smarter events with AI-powered planning tools.
                   </p>
                 </div>
@@ -43,10 +43,10 @@ const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
 
               {pathname !== "/auth/login" && (
                 <div className="flex-col gap-3 items-center">
-                  <h1 className={`${instrumentSans.className} text-center text-white text-3xl`}>
+                  <h1 className={`${instrumentSans.className} text-center text-white text-4xl font-bold`}>
                     Get started with us
                   </h1>
-                  <p className={`${instrumentSans.className} text-white mt-3`}>
+                  <p className={`${instrumentSans.className} text-white mt-3 text-sm`}>
                     Create your account to design smarter events with AI-powered planning tools.
                   </p>
                 </div>

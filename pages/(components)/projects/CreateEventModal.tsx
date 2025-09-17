@@ -82,17 +82,11 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
                   onChange={(e) => setPaperSize(e.target.value)}
                   className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
                 >
-                  <option value="A0">A0</option>
                   <option value="A1">A1</option>
                   <option value="A2">A2</option>
                   <option value="A3">A3</option>
                   <option value="A4">A4</option>
                   <option value="A5">A5</option>
-                  <option value="A6">A6</option>
-                  <option value="A7">A7</option>
-                  <option value="A8">A8</option>
-                  <option value="A9">A9</option>
-                  <option value="A10">A10</option>
                 </select>
 
                 <button
