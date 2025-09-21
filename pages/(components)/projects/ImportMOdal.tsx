@@ -6,7 +6,7 @@ import { RiImage2Line, RiFilePdf2Line } from "react-icons/ri";
 import { SiAutodesk } from "react-icons/si";
 
 export default function ImportModal({ onClose }: { onClose: () => void }) {
-  const [selectedType, setSelectedType] = useState<"image" | "pdf" | "autocad" | null>(null);
+  const [selectedType, setSelectedType] = useState<"image" | "pdf" | "cad" | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleConfirm = () => {
@@ -25,7 +25,7 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
   const acceptMap: Record<string, string> = {
     image: "image/*",
     pdf: "application/pdf",
-    autocad: ".dwg,.dxf,.dwf",
+    cad: ".dwg,.dxf,.dwf",
   };
 
   return (
@@ -70,13 +70,13 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
             </button>
 
             <button
-              onClick={() => setSelectedType("autocad")}
+              onClick={() => setSelectedType("cad")}
               className={`flex flex-col items-center justify-center gap-2 p-4 border rounded-2xl ${
-                selectedType === "autocad" ? "border-[var(--accent)] bg-[var(--accent)]/10" : "border-gray-300"
+                selectedType === "cad" ? "border-[var(--accent)] bg-[var(--accent)]/10" : "border-gray-300"
               }`}
             >
               <SiAutodesk size={28} className="text-blue-600" />
-              <span className="text-sm">AutoCAD</span>
+              <span className="text-sm">CAD</span>
             </button>
           </div>
 

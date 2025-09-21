@@ -18,21 +18,25 @@ const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
       </Head>
       <div className="h-screen w-screen flex">
         <div className="w-1/2 p-4 hidden lg:block">
-          <div className="relative rounded-2xl bg-gradient-to-b from-[var(--accent)] via-[#272339] to-[#2F2A3D] h-full flex justify-center items-center overflow-hidden">
-            {/* Noise overlay */}
+          <div className="relative rounded-2xl h-full group group-hover:scale-105 flex justify-center items-center overflow-hidden bg-[url('/assets/bg.jpg')] bg-cover bg-center">
+            {/* Dark overlay */}
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-xs"></div>
+
+            {/* Noise overlay (optional, keeps your texture effect) */}
             <div className="absolute inset-0 pointer-events-none bg-[url('/assets/noise.png')] opacity-20 mix-blend-overlay"></div>
 
-            <div className="relative flex flex-col gap-6 items-center">
+            {/* Content */}
+            <div className="relative flex flex-col gap-6 items-center z-10 p-4">
               <Image
-                src="/assets/mainLogoLight.svg"
+                src="/assets/mainLogo.svg"
                 alt="Logo"
-                width={200}
-                height={200}
+                width={300}
+                height={300}
               />
 
               {pathname === "/auth/login" && (
                 <div className="flex-col gap-3 items-center">
-                  <h1 className={`${instrumentSans.className} text-center text-white text-4xl font-bold`}>
+                  <h1 className={`${instrumentSans.className} text-center text-white text-5xl font-bold`}>
                     Welcome Back!
                   </h1>
                   <p className={`${instrumentSans.className} text-white mt-3 text-sm`}>
