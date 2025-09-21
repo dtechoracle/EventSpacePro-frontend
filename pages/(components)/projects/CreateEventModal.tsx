@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSceneStore } from "@/store/sceneStore";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function CreateEventModal({ onClose }: { onClose: () => void }) {
@@ -9,9 +10,12 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
   const [eventName, setEventName] = useState("");
   const [paperSize, setPaperSize] = useState("A4");
   const router = useRouter();
+  const setCanvas = useSceneStore((s) => s.setCanvas);
 
   const handleStartEditing = () => {
-    // in real use you might pass eventName + paperSize via query or state
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setCanvas(paperSize as any);
+
     router.push("/dashboard/editor/123");
     onClose();
   };
@@ -82,11 +86,11 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
                   onChange={(e) => setPaperSize(e.target.value)}
                   className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
                 >
-                  <option value="A1">A1</option>
-                  <option value="A2">A2</option>
-                  <option value="A3">A3</option>
-                  <option value="A4">A4</option>
-                  <option value="A5">A5</option>
+                  <option value="A1">A1 (59.4 × 84.1 cm)</option>
+                  <option value="A2">A2 (42 × 59.4 cm)</option>
+                  <option value="A3">A3 (29.7 × 42 cm)</option>
+                  <option value="A4">A4 (21 × 29.7 cm)</option>
+                  <option value="A5">A5 (14.8 × 21 cm)</option>
                 </select>
 
                 <button

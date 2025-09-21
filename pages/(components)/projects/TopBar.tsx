@@ -43,7 +43,7 @@ const TopBar = ({
       )}
 
       <div className="w-full flex justify-between pl-6 border border-black/10">
-        <h1 className={`text-4xl ${instrumentSans.className}`}>{mainText}</h1>
+        <h1 className={`text-4xl font-bold`}>{mainText}</h1>
         <div className="flex items-center justify-between gap-4">
           <button className="p-2 rounded-md hover:bg-gray-100">
             <PiFolderPlusDuotone size={20} />
@@ -91,7 +91,7 @@ const TopBar = ({
         </div>
       </div>
 
-      <div className={`${instrumentSans.className} text-3xl py-5 pl-6`}>
+      <div className={`text-3xl py-5 pl-6`}>
         {subText}
       </div>
     </div>
