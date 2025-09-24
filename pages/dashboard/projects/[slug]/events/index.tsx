@@ -5,11 +5,12 @@ import { useRouter } from "next/router";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import { ImSpinner8 } from "react-icons/im";
+import { AssetInstance } from "@/store/sceneStore";
 
 interface EventData {
   _id: string;
   name: string;
-  canvasAssets: any[];
+  canvasAssets: AssetInstance[];
   createdAt: string;
   updatedAt: string;
   __v: number;
@@ -47,15 +48,15 @@ const router = useRouter();
           </div>
         )}
 
-        {data && (
+        {data && data.data && (
           <div className="grid grid-cols-4 gap-3 pl-6">
             {data.data.map((event) => (
-              <EventCard key={event._id} event={event} />
+              <EventCard key={event?._id || Math.random()} event={event} />
             ))}
           </div>
         )}
 
-        {data && data.data.length === 0 && (
+        {data && data.data && data.data.length === 0 && (
           <div className="flex justify-center items-center h-64">
             <p className="text-gray-500">No events found. Create your first event!</p>
           </div>

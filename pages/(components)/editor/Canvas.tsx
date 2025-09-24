@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useSceneStore } from "@/store/sceneStore";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useSceneStore, AssetInstance } from "@/store/sceneStore";
 import { ASSET_LIBRARY } from "@/lib/assets";
 import { RotateCw, RotateCcw } from "lucide-react";
 
@@ -37,7 +37,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos 
   const canvasPxW = (canvas?.width ?? 0) * mmToPx;
   const canvasPxH = (canvas?.height ?? 0) * mmToPx;
 
-  const clientToCanvasMM = (clientX: number, clientY: number) => {
+  const clientToCanvasMM = useCallback((clientX: number, clientY: number) => {
     if (!canvasRef.current || !canvas) return { x: 0, y: 0 };
     const rect = canvasRef.current.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
@@ -52,7 +52,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos 
     const xMm = (ux + halfWscreen) / (mmToPx * workspaceZoom);
     const yMm = (uy + halfHscreen) / (mmToPx * workspaceZoom);
     return { x: xMm, y: yMm };
-  };
+  }, [canvas, canvasPxW, canvasPxH, workspaceZoom, mmToPx, rotation]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -126,7 +126,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos 
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
     };
-  }, [workspaceZoom, mmToPx, rotation, updateAsset, setCanvasPos, selectedAssetId, assets]);
+  }, [workspaceZoom, mmToPx, rotation, updateAsset, setCanvasPos, selectedAssetId, assets, clientToCanvasMM]);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -200,7 +200,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos 
     isAdjustingHeight.current = true;
   };
 
-  const getAssetCornerPosition = (asset: any, handleType: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') => {
+  const getAssetCornerPosition = (asset: AssetInstance, handleType: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') => {
     if (asset.type === "square" || asset.type === "circle") {
       const width = (asset.width ?? 50) * asset.scale;
       const height = (asset.height ?? 50) * asset.scale;
@@ -246,7 +246,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos 
     return { x: asset.x, y: asset.y };
   };
 
-  const renderAssetHandles = (asset: any, leftPx: number, topPx: number) => {
+  const renderAssetHandles = (asset: AssetInstance, leftPx: number, topPx: number) => {
     const handleSize = 12;
     
     // Get corner positions in MM coordinates

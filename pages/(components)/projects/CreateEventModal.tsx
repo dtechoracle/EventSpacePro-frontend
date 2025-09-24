@@ -6,6 +6,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
+import { PaperSize } from "@/lib/paperSizes";
 import toast from "react-hot-toast";
 
 interface ApiError {
@@ -16,7 +17,7 @@ interface ApiError {
 export default function CreateEventModal({ onClose }: { onClose: () => void }) {
   const [phase, setPhase] = useState(1);
   const [eventName, setEventName] = useState("");
-  const [paperSize, setPaperSize] = useState("A4");
+  const [paperSize, setPaperSize] = useState<PaperSize>("A4");
   const router = useRouter();
   const setCanvas = useSceneStore((s) => s.setCanvas);
   const { slug } = router.query;
@@ -25,7 +26,7 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
     mutationKey: ["create-event"],
     mutationFn: () => apiRequest(`/projects/${slug}/events`, "POST", { name: eventName, size: paperSize }, true),
     onSuccess: () => {
-      setCanvas(paperSize as any);
+      setCanvas(paperSize);
       router.push(`/dashboard/editor/${slug}`);
       toast.success("Event created successfully!");
       onClose();
@@ -112,7 +113,7 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
 
                 <select
                   value={paperSize}
-                  onChange={(e) => setPaperSize(e.target.value)}
+                  onChange={(e) => setPaperSize(e.target.value as PaperSize)}
                   className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
                 >
                   <option value="A1">A1 (59.4 × 84.1 cm)</option>

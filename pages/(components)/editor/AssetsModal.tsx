@@ -18,7 +18,7 @@ const ASSET_CATEGORIES = {
 };
 
 export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
-  const addAsset = useSceneStore((s) => s.addAsset);
+  // const addAsset = useSceneStore((s) => s.addAsset);
 
   const [hydrated, setHydrated] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });

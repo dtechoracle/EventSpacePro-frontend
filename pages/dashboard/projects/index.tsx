@@ -6,6 +6,16 @@ import TopBar from "../../(components)/projects/TopBar";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import { ImSpinner8 } from "react-icons/im";
+import { AssetInstance } from "@/store/sceneStore";
+
+interface EventData {
+  _id: string;
+  name: string;
+  canvasAssets: AssetInstance[];
+  createdAt: string;
+  updatedAt: string;
+  __v: number;
+}
 
 interface ProjectData {
   _id: string;
@@ -21,8 +31,8 @@ interface ProjectData {
     status: string;
     invitedAt: string;
   }>;
-  events: any[];
-  assets: any[];
+  events: EventData[];
+  assets: AssetInstance[];
   slug: string;
   createdAt: string;
   updatedAt: string;
@@ -33,7 +43,7 @@ interface ApiResponse {
   data: ProjectData[];
 }
 
-const projects = () => {
+const Projects = () => {
   const { data, isLoading, error } = useQuery<ApiResponse>({
     queryKey: ["projects"],
     queryFn: () => apiRequest("/projects", "GET", null, true),
@@ -56,15 +66,15 @@ const projects = () => {
           </div>
         )}
 
-        {data && (
+        {data && data.data && (
           <div className="grid grid-cols-4 gap-3 pl-6">
             {data.data.map((project) => (
-              <ProjectCard key={project._id} project={project} />
+              <ProjectCard key={project?._id || Math.random()} project={project} />
             ))}
           </div>
         )}
 
-        {data && data.data.length === 0 && (
+        {data && data.data && data.data.length === 0 && (
           <div className="flex justify-center items-center h-64">
             <p className="text-gray-500">No projects found. Create your first project!</p>
           </div>
@@ -74,4 +84,4 @@ const projects = () => {
   );
 };
 
-export default projects;
+export default Projects;

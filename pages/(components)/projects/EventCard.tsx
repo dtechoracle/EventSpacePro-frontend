@@ -2,11 +2,12 @@
 
 import { useRouter } from "next/router";
 import { BsThreeDotsVertical } from "react-icons/bs";
+import { AssetInstance } from "@/store/sceneStore";
 
 interface EventData {
   _id: string;
   name: string;
-  canvasAssets: any[];
+  canvasAssets: AssetInstance[];
   createdAt: string;
   updatedAt: string;
   __v: number;
@@ -36,7 +37,7 @@ export default function EventCard({ event }: EventCardProps) {
   return (
     <div 
       className="relative w-full h-60 rounded-3xl overflow-hidden shadow-lg cursor-pointer" 
-      onClick={() => router.push(`/dashboard/editor/${event._id}`)}
+      onClick={() => router.push(`/dashboard/editor/${event?._id || ''}`)}
     >
       {/* Background with placeholder circles */}
       <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
@@ -57,8 +58,8 @@ export default function EventCard({ event }: EventCardProps) {
       {/* Content */}
       <div className="absolute bottom-0 left-0 w-full p-4 flex justify-between items-end">
         <div>
-          <h3 className="text-lg font-semibold text-black truncate">{event.name}</h3>
-          <p className="text-sm text-gray-600">Updated {getTimeAgo(event.updatedAt)}</p>
+          <h3 className="text-lg font-semibold text-black truncate">{event?.name || 'Unnamed Event'}</h3>
+          <p className="text-sm text-gray-600">Updated {getTimeAgo(event?.updatedAt || new Date().toISOString())}</p>
           {/* <p className="text-xs text-gray-500 mt-1">{event.canvasAssets.length} asset{event.canvasAssets.length !== 1 ? 's' : ''}</p> */}
         </div>
         <button 
