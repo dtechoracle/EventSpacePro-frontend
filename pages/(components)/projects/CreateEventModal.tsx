@@ -1,9 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/router";
 import { useSceneStore } from "@/store/sceneStore";
 import { motion, AnimatePresence } from "framer-motion";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/helpers/Config";
+import toast from "react-hot-toast";
+
+interface ApiError {
+  message: string;
+  errors?: { path: string; message: string; code: string }[];
+}
 
 export default function CreateEventModal({ onClose }: { onClose: () => void }) {
   const [phase, setPhase] = useState(1);
@@ -11,14 +19,35 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
   const [paperSize, setPaperSize] = useState("A4");
   const router = useRouter();
   const setCanvas = useSceneStore((s) => s.setCanvas);
+  const { slug } = router.query;
 
-  const handleStartEditing = () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    setCanvas(paperSize as any);
+  const mutation = useMutation<{ message: string }, ApiError>({
+    mutationKey: ["create-event"],
+    mutationFn: () => apiRequest(`/projects/${slug}/events`, "POST", { name: eventName, size: paperSize }, true),
+    onSuccess: () => {
+      setCanvas(paperSize as any);
+      router.push(`/dashboard/editor/${slug}`);
+      toast.success("Event created successfully!");
+      onClose();
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message || "Event creation failed");
+      setPhase(1); // Go back to phase 1 on error
+    },
+  });
 
-    router.push("/dashboard/editor/123");
-    onClose();
+  const handleSubmit = () => {
+    setPhase(2);
+    mutation.mutate();
   };
+
+  // const handleStartEditing = () => {
+  //   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  //   setCanvas(paperSize as any);
+
+  //   router.push(`/dashboard/editor/${slug}`);
+  //   onClose();
+  // };
 
   return (
     <AnimatePresence>
@@ -94,7 +123,7 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
                 </select>
 
                 <button
-                  onClick={handleStartEditing}
+                  onClick={handleSubmit}
                   className="w-full h-14 rounded-2xl text-white text-base font-medium bg-[var(--accent)]"
                 >
                   Start Editing

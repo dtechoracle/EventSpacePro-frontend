@@ -4,12 +4,41 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaPlus } from "react-icons/fa";
 import { ImSpinner8 } from "react-icons/im";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/helpers/Config";
+import toast from "react-hot-toast";
+
+interface ApiError {
+  message: string;
+  errors?: { path: string; message: string; code: string }[];
+}
 
 export default function CreateProjectModal({ onClose }: { onClose: () => void }) {
   const [phase, setPhase] = useState(1);
   const [projectName, setProjectName] = useState("");
   const [email, setEmail] = useState("");
+  const [role, setRole] = useState("owner");
   const [loading, setLoading] = useState(false);
+
+  
+
+  const mutation = useMutation<{ message: string }, ApiError>({
+    mutationKey: ["create-project"],
+    mutationFn: () => apiRequest("/projects", "POST", { name: projectName, users: [{ email: email, role: role }] }, true),
+    onSuccess: () => {
+      toast.success("Project created successfully!");
+      onClose();
+    },
+    onError: (err: ApiError) => {
+      toast.error(err.message || "Project creation failed");
+      setPhase(2); // Go back to phase 2 on error
+    },
+  });
+
+  const handleSubmit = () => {
+    setPhase(3);
+    mutation.mutate();
+  };
 
   // Handle auto-close after loading
   useEffect(() => {
@@ -94,7 +123,7 @@ export default function CreateProjectModal({ onClose }: { onClose: () => void })
                   className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
                 />
                 <button
-                  onClick={() => setPhase(3)}
+                  onClick={handleSubmit}
                   className={`w-full h-14 rounded-2xl text-base font-medium ${
                     email
                       ? "bg-[var(--accent)] text-white"

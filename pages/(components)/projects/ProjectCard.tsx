@@ -3,12 +3,57 @@
 import { useRouter } from "next/router";
 import { BsThreeDotsVertical } from "react-icons/bs";
 
-export default function ProjectCard({id} : {id: number}) {
+interface ProjectData {
+  _id: string;
+  name: string;
+  users: Array<{
+    user: string;
+    role: string;
+    email: string;
+  }>;
+  invites: Array<{
+    email: string;
+    role: string;
+    status: string;
+    invitedAt: string;
+  }>;
+  events: any[];
+  assets: any[];
+  slug: string;
+  createdAt: string;
+  updatedAt: string;
+  __v: number;
+}
 
-  const router = useRouter()
+interface ProjectCardProps {
+  project: ProjectData;
+}
+
+export default function ProjectCard({ project }: ProjectCardProps) {
+  const router = useRouter();
+
+  // Calculate time since last update
+  const getTimeAgo = (dateString: string) => {
+    const now = new Date();
+    const updated = new Date(dateString);
+    const diffInMs = now.getTime() - updated.getTime();
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+    
+    if (diffInDays === 0) return "Today";
+    if (diffInDays === 1) return "Yesterday";
+    if (diffInDays < 7) return `${diffInDays} days ago`;
+    if (diffInDays < 30) return `${Math.floor(diffInDays / 7)} weeks ago`;
+    return `${Math.floor(diffInDays / 30)} months ago`;
+  };
+
+  // Get total collaborators (users + pending invites)
+  const totalCollaborators = project.users.length + project.invites.length;
 
   return (
-    <div className="relative w-full h-60 rounded-3xl overflow-hidden shadow-lg" onClick={() => router.push(`/dashboard/projects/events/${id}`)}>
+    <div 
+      className="relative w-full h-60 rounded-3xl overflow-hidden shadow-lg cursor-pointer" 
+      onClick={() => router.push(`/dashboard/projects/${project.slug}/events`)}
+    >
       {/* Background with placeholder circles */}
       <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
         <div className="absolute -top-10 -left-10 w-40 h-40 bg-green-300 rounded-full blur-3xl opacity-70" />
@@ -28,10 +73,14 @@ export default function ProjectCard({id} : {id: number}) {
       {/* Content */}
       <div className="absolute bottom-0 left-0 w-full p-4 flex justify-between items-end">
         <div>
-          <h3 className="text-lg font-semibold text-black">Project 1</h3>
-          <p className="text-sm text-gray-600">Edited 3 days ago</p>
+          <h3 className="text-lg font-semibold text-black truncate">{project.name}</h3>
+          <p className="text-sm text-gray-600">Updated {getTimeAgo(project.updatedAt)}</p>
+          {/* <p className="text-xs text-gray-500 mt-1">{totalCollaborators} collaborator{totalCollaborators !== 1 ? 's' : ''}</p> */}
         </div>
-        <button className="p-2 rounded-full hover:bg-black/10">
+        <button 
+          className="p-2 rounded-full hover:bg-black/10"
+          onClick={(e) => e.stopPropagation()}
+        >
           <BsThreeDotsVertical className="text-xl text-gray-700" />
         </button>
       </div>
