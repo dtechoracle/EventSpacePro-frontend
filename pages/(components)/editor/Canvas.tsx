@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { useSceneStore, AssetInstance } from "@/store/sceneStore";
+import { useSceneStore, AssetInstance, EventData } from "@/store/sceneStore";
+import { PaperSize } from "@/lib/paperSizes";
+
+// Type for API response that wraps EventData
+type EventDataResponse = {
+  data: EventData;
+} | EventData;
 import { ASSET_LIBRARY } from "@/lib/assets";
 import { RotateCw, RotateCcw } from "lucide-react";
 
@@ -12,7 +18,7 @@ type CanvasProps = {
   setCanvasPos: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
   canvas?: { size: string; width: number; height: number } | null;
   assets?: AssetInstance[];
-  eventData?: any;
+  eventData?: EventDataResponse | null;
 };
 
 export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos, canvas: propCanvas, assets: propAssets, eventData }: CanvasProps) {
@@ -45,7 +51,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         // Set canvas
         if (propCanvas.size) {
           const setCanvas = useSceneStore.getState().setCanvas;
-          setCanvas(propCanvas.size as any);
+          setCanvas(propCanvas.size as PaperSize);
         }
         
         // Add assets
