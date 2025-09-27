@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -11,6 +11,37 @@ const Sidebar = () => {
   const { pathname } = router;
   const [open, setOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // Load persisted state from localStorage on component mount
+  useEffect(() => {
+    // Check if we're on the client side
+    if (typeof window !== 'undefined') {
+      const savedCollapsedState = localStorage.getItem('sidebar-collapsed');
+      const savedMobileState = localStorage.getItem('sidebar-mobile-open');
+      
+      if (savedCollapsedState !== null) {
+        setIsCollapsed(JSON.parse(savedCollapsedState));
+      }
+      
+      if (savedMobileState !== null) {
+        setOpen(JSON.parse(savedMobileState));
+      }
+    }
+  }, []);
+
+  // Save desktop collapse state to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sidebar-collapsed', JSON.stringify(isCollapsed));
+    }
+  }, [isCollapsed]);
+
+  // Save mobile open state to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sidebar-mobile-open', JSON.stringify(open));
+    }
+  }, [open]);
 
   const links = [
     {
@@ -54,7 +85,7 @@ const Sidebar = () => {
     <>
       {/* Desktop Sidebar */}
       <motion.aside
-        animate={{ width: isCollapsed ? "5rem" : "16rem" }}
+        animate={{ width: isCollapsed ? "5rem" : "13rem" }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
         className="relative bg-[var(--accent)]/5 h-screen px-3 py-8 flex-col justify-between hidden lg:flex"
       >

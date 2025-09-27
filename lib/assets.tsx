@@ -32,6 +32,11 @@ const CUSTOM_SVG_ASSETS: AssetDef[] = [
   { id: "round-table", label: "Round Table", path: "/assets/canvas/round-table.svg", isCustom: true },
   { id: "square-table", label: "Square Table", path: "/assets/canvas/square-table.svg", isCustom: true },
   { id: "wall", label: "Wall", path: "/assets/canvas/wall.svg", isCustom: true },
+  { id: "wall-1", label: "Wall 1", path: "/assets/canvas/wall-1.svg", isCustom: true },
+  { id: "wall-2", label: "Wall 2", path: "/assets/canvas/wall-2.svg", isCustom: true },
+  { id: "wall-90", label: "Wall 90 degree", path: "/assets/canvas/wall-90-degree.svg", isCustom: true },
+  { id: "wall-corner-joined", label: "Wall Corner Joined", path: "/assets/canvas/wall-corner-joined.svg", isCustom: true },
+  { id: "wall-corner", label: "Wall Corner", path: "/assets/canvas/wall-corner.svg", isCustom: true },
 ];
 
 export const ASSET_LIBRARY: AssetDef[] = [

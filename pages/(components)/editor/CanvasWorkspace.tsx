@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import Canvas from "./Canvas";
 import { useSceneStore, EventData } from "@/store/sceneStore";
 
@@ -42,18 +42,16 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
   }, []);
 
   // Use event data directly instead of store
-  console.log('CanvasWorkspace received eventData:', eventData);
-  
   // The eventData has a 'data' wrapper based on the API response
-  const actualData = (eventData as any)?.data || eventData;
-  console.log('CanvasWorkspace actualData:', actualData);
+  const actualData = useMemo(() => (eventData as any)?.data || eventData, [eventData]);
   
-  const canvas = actualData?.canvases?.[0] ? {
-    size: actualData.canvases[0].size,
-    width: actualData.canvases[0].width,
-    height: actualData.canvases[0].height,
-  } : null;
-  console.log('CanvasWorkspace extracted canvas:', canvas);
+  const canvas = useMemo(() => {
+    return actualData?.canvases?.[0] ? {
+      size: actualData.canvases[0].size,
+      width: actualData.canvases[0].width,
+      height: actualData.canvases[0].height,
+    } : null;
+  }, [actualData]);
 
   // center the canvas inside the viewport on first mount
   useEffect(() => {

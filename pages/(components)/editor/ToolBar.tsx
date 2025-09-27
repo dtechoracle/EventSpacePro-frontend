@@ -45,7 +45,7 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
         {onSave && (
           <button
             onClick={onSave}
-            className={`flex items-center gap-2 px-3 py-1 text-white text-sm rounded transition-colors ${
+            className={`flex items-center gap-2 px-3 py-1 text-white text-sm rounded transition-colors invisible ${
               hasUnsavedChanges 
                 ? 'bg-orange-500 hover:bg-orange-600 animate-pulse' 
                 : 'bg-green-500 hover:bg-green-600'

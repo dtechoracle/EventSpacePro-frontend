@@ -137,9 +137,17 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
 
                 <button
                   onClick={handleSubmit}
-                  className="w-full h-14 rounded-2xl text-white text-base font-medium bg-[var(--accent)]"
+                  disabled={mutation.isPending}
+                  className="w-full h-14 rounded-2xl text-white text-base font-medium bg-[var(--accent)] disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Start Editing
+                  {mutation.isPending ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Creating Event...
+                    </>
+                  ) : (
+                    "Start Editing"
+                  )}
                 </button>
               </motion.div>
             )}

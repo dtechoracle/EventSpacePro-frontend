@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useSceneStore, AssetInstance } from "@/store/sceneStore";
 import { ASSET_LIBRARY } from "@/lib/assets";
 import { RotateCw, RotateCcw } from "lucide-react";
@@ -38,7 +38,6 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
       
       // Only sync if the data has actually changed and we haven't synced this data yet
       if (dataId !== lastDataRef.current) {
-        console.log('Syncing new data to store...');
         
         // Reset store and populate with current props data
         reset();
@@ -169,7 +168,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
     };
-  }, [workspaceZoom, mmToPx, rotation, updateAsset, setCanvasPos, selectedAssetId, assets, clientToCanvasMM]);
+  }, [workspaceZoom, mmToPx, rotation, updateAsset, setCanvasPos, selectedAssetId, clientToCanvasMM]);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -181,15 +180,6 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
 
   if (!canvas) return null;
 
-  // Debug logging
-  console.log('Canvas rendering with:', {
-    propCanvas,
-    propAssets,
-    canvas,
-    assets,
-    assetsLength: assets.length,
-    eventData: eventData
-  });
 
   const rotateCW = () => setRotation((r) => (r + 90) % 360);
   const rotateCCW = () => setRotation((r) => (r - 90 + 360) % 360);
@@ -613,17 +603,6 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         const topPx = asset.y * mmToPx;
         const totalRotation = asset.rotation;
 
-        // Debug logging
-        console.log('Rendering asset:', {
-          id: asset.id,
-          type: asset.type,
-          x: asset.x,
-          y: asset.y,
-          scale: asset.scale,
-          def: def,
-          leftPx,
-          topPx
-        });
 
         if (asset.type === "square" || asset.type === "circle") {
           return (

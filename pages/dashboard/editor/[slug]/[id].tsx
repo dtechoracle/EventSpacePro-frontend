@@ -52,21 +52,17 @@ export default function Editor() {
   // Set current event data when loaded
   useEffect(() => {
     if (eventData && eventData !== currentEventData) {
-      console.log('Loading new event data:', eventData);
       setCurrentEventData(eventData);
     }
   }, [eventData, currentEventData]);
 
   // Auto-save functionality - only saves when there are actual unsaved changes
   useEffect(() => {
-    console.log('hasUnsavedChanges:', hasUnsavedChanges, 'currentEventData:', !!currentEventData);
-    
     if (!currentEventData || !hasUnsavedChanges) return;
 
     const timeoutId = setTimeout(() => {
       // Double-check if there are still unsaved changes before making the request
       const currentHasChanges = useSceneStore.getState().hasUnsavedChanges;
-      console.log('Auto-save timeout triggered, currentHasChanges:', currentHasChanges);
       
       if (currentHasChanges) {
         const updatedAssets = useSceneStore.getState().assets;
@@ -74,10 +70,7 @@ export default function Editor() {
           ...currentEventData,
           canvasAssets: updatedAssets,
         };
-        console.log('Auto-saving changes after user stopped editing...');
         saveCanvasAssets.mutate(updatedEventData);
-      } else {
-        console.log('No changes detected, skipping auto-save');
       }
     }, 3000); // Save 3 seconds after user stops making changes
 
@@ -87,7 +80,6 @@ export default function Editor() {
   // Manual save function
   const handleSave = () => {
     if (!hasUnsavedChanges || !currentEventData) {
-      console.log('No changes to save');
       return;
     }
     
@@ -96,7 +88,6 @@ export default function Editor() {
       ...currentEventData,
       canvasAssets: updatedAssets,
     };
-    console.log('Manually saving changes...');
     saveCanvasAssets.mutate(updatedEventData);
   };
   
@@ -143,8 +134,6 @@ export default function Editor() {
     );
   }
 
-  // Log the fetched event data for debugging
-  console.log("Event data:", eventData);
 
   return (
     <MainLayout>
@@ -156,7 +145,7 @@ export default function Editor() {
         <BottomToolbar setShowAssetsModal={setShowAssetsModal} />
 
         {/* Fixed Toolbar */}
-        <div className="flex-shrink-0 w-64 bg-white">
+        <div className="flex-shrink-0 w-48 bg-white">
           <Toolbar onSave={handleSave} hasUnsavedChanges={hasUnsavedChanges} />
         </div>
 
