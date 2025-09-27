@@ -1,10 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { FiChevronDown, FiChevronRight, FiPlus, FiBox } from "react-icons/fi";
+import { FiChevronDown, FiChevronRight, FiPlus, FiBox, FiSave } from "react-icons/fi";
 import { LuFocus } from "react-icons/lu";
 
-export default function Toolbar() {
+interface ToolbarProps {
+  onSave?: () => void;
+  hasUnsavedChanges?: boolean;
+}
+
+export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
   const [showCanvases, setShowCanvases] = useState(true);
   const [showLayers, setShowLayers] = useState(true);
 
@@ -35,7 +40,24 @@ export default function Toolbar() {
   return (
     <div className="w-64 h-screen bg-[#FDFDFF] flex flex-col p-4 text-sm">
       {/* Toolbar Heading */}
-      <h1 className="text-lg font-bold mb-4">Toolbar</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-lg font-bold">Toolbar</h1>
+        {onSave && (
+          <button
+            onClick={onSave}
+            className={`flex items-center gap-2 px-3 py-1 text-white text-sm rounded transition-colors ${
+              hasUnsavedChanges 
+                ? 'bg-orange-500 hover:bg-orange-600 animate-pulse' 
+                : 'bg-green-500 hover:bg-green-600'
+            }`}
+            title={hasUnsavedChanges ? "Save changes" : "No changes to save"}
+            disabled={!hasUnsavedChanges}
+          >
+            <FiSave size={14} />
+            {hasUnsavedChanges ? "Save" : "Saved"}
+          </button>
+        )}
+      </div>
 
       {/* Canvases Section */}
       <div className="mb-4">

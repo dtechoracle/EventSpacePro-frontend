@@ -23,7 +23,7 @@ interface ApiResponse {
 const Events = () => {
 
 const router = useRouter();
-  const { slug } = router.query;
+  const { slug, id } = router.query;
 
   const { data, isLoading, error } = useQuery<ApiResponse>({
     queryKey: ["events", slug],

@@ -2,11 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import Canvas from "./Canvas";
-import { useSceneStore } from "@/store/sceneStore";
+import { useSceneStore, EventData } from "@/store/sceneStore";
 
 const MM_TO_PX = 2; // must match the constant used in Canvas for mm -> px
 
-export default function CanvasWorkspace() {
+interface CanvasWorkspaceProps {
+  eventData?: EventData | null;
+}
+
+export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // workspace (viewport) transform (pan & zoom)
@@ -37,22 +41,34 @@ export default function CanvasWorkspace() {
     };
   }, []);
 
-  const sceneCanvas = useSceneStore((s) => s.canvas);
+  // Use event data directly instead of store
+  console.log('CanvasWorkspace received eventData:', eventData);
+  
+  // The eventData has a 'data' wrapper based on the API response
+  const actualData = (eventData as any)?.data || eventData;
+  console.log('CanvasWorkspace actualData:', actualData);
+  
+  const canvas = actualData?.canvases?.[0] ? {
+    size: actualData.canvases[0].size,
+    width: actualData.canvases[0].width,
+    height: actualData.canvases[0].height,
+  } : null;
+  console.log('CanvasWorkspace extracted canvas:', canvas);
 
   // center the canvas inside the viewport on first mount
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !sceneCanvas) return;
+    if (!el || !canvas) return;
 
     const rect = el.getBoundingClientRect();
-    const canvasPxW = sceneCanvas.width * MM_TO_PX;
-    const canvasPxH = sceneCanvas.height * MM_TO_PX;
+    const canvasPxW = canvas.width * MM_TO_PX;
+    const canvasPxH = canvas.height * MM_TO_PX;
 
     setCanvasPos({
       x: Math.round(rect.width / 2 - canvasPxW / 2),
       y: Math.round(rect.height / 2 - canvasPxH / 2),
     });
-  }, [sceneCanvas]);
+  }, [canvas]);
 
   // Smooth zoom animation using requestAnimationFrame
   useEffect(() => {
@@ -147,6 +163,9 @@ export default function CanvasWorkspace() {
             mmToPx={MM_TO_PX}
             canvasPos={canvasPos}
             setCanvasPos={setCanvasPos}
+            canvas={canvas}
+            assets={actualData?.canvasAssets || []}
+            eventData={actualData}
           />
         </div>
       </div>

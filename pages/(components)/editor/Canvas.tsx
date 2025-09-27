@@ -10,9 +10,13 @@ type CanvasProps = {
   mmToPx: number;
   canvasPos: { x: number; y: number };
   setCanvasPos: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
+  canvas?: { size: string; width: number; height: number } | null;
+  assets?: AssetInstance[];
+  eventData?: any;
 };
 
-export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos }: CanvasProps) {
+export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos, canvas: propCanvas, assets: propAssets, eventData }: CanvasProps) {
+  // Use store data for rendering (synced from props)
   const canvas = useSceneStore((s) => s.canvas);
   const assets = useSceneStore((s) => s.assets);
   const addAsset = useSceneStore((s) => s.addAsset);
@@ -20,6 +24,45 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos 
   const updateAsset = useSceneStore((s) => s.updateAsset);
   const selectedAssetId = useSceneStore((s) => s.selectedAssetId);
   const selectAsset = useSceneStore((s) => s.selectAsset);
+  const reset = useSceneStore((s) => s.reset);
+  const markAsSaved = useSceneStore((s) => s.markAsSaved);
+
+  // Sync props data to store when props change (only once per data change)
+  const hasSyncedRef = useRef(false);
+  const lastDataRef = useRef<string>('');
+  
+  useEffect(() => {
+    if (propCanvas && propAssets) {
+      // Create a unique identifier for this data set
+      const dataId = JSON.stringify({ canvas: propCanvas, assets: propAssets });
+      
+      // Only sync if the data has actually changed and we haven't synced this data yet
+      if (dataId !== lastDataRef.current) {
+        console.log('Syncing new data to store...');
+        
+        // Reset store and populate with current props data
+        reset();
+        
+        // Set canvas
+        if (propCanvas.size) {
+          const setCanvas = useSceneStore.getState().setCanvas;
+          setCanvas(propCanvas.size as any);
+        }
+        
+        // Add assets
+        propAssets.forEach(asset => {
+          addAssetObject(asset);
+        });
+        
+        // Mark as saved since this is from the backend
+        markAsSaved();
+        
+        // Update the refs
+        lastDataRef.current = dataId;
+        hasSyncedRef.current = true;
+      }
+    }
+  }, [propCanvas, propAssets]);
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const draggingAssetRef = useRef<string | null>(null);
@@ -137,6 +180,16 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos 
   };
 
   if (!canvas) return null;
+
+  // Debug logging
+  console.log('Canvas rendering with:', {
+    propCanvas,
+    propAssets,
+    canvas,
+    assets,
+    assetsLength: assets.length,
+    eventData: eventData
+  });
 
   const rotateCW = () => setRotation((r) => (r + 90) % 360);
   const rotateCCW = () => setRotation((r) => (r - 90 + 360) % 360);
@@ -560,6 +613,18 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos 
         const topPx = asset.y * mmToPx;
         const totalRotation = asset.rotation;
 
+        // Debug logging
+        console.log('Rendering asset:', {
+          id: asset.id,
+          type: asset.type,
+          x: asset.x,
+          y: asset.y,
+          scale: asset.scale,
+          def: def,
+          leftPx,
+          topPx
+        });
+
         if (asset.type === "square" || asset.type === "circle") {
           return (
             <div key={asset.id} className="relative">
@@ -610,7 +675,38 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos 
         }
 
         if (!def) return null;
+        
+        // Handle custom SVG assets
+        if (def.isCustom && def.path) {
+          return (
+            <div key={asset.id} className="relative">
+              <div
+                onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
+                style={{
+                  position: "absolute",
+                  left: leftPx,
+                  top: topPx,
+                  transform: `translate(-50%, -50%) rotate(${totalRotation}deg) scale(${asset.scale})`,
+                }}
+                className={isSelected ? "ring-2 ring-blue-500 bg-blue-50 p-1 rounded" : ""}
+              >
+                <img 
+                  src={def.path} 
+                  alt={def.label}
+                  style={{ width: 24, height: 24 }}
+                />
+              </div>
+              
+              {/* Handles */}
+              {isSelected && renderAssetHandles(asset, leftPx, topPx)}
+            </div>
+          );
+        }
+        
+        // Handle regular icon assets
         const Icon = def.icon;
+        if (!Icon) return null;
+        
         return (
           <div key={asset.id} className="relative">
             <div

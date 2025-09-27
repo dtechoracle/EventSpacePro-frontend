@@ -19,6 +19,7 @@ interface EventCardProps {
 
 export default function EventCard({ event }: EventCardProps) {
   const router = useRouter();
+  const { slug } = router.query;
 
   // Calculate time since last update
   const getTimeAgo = (dateString: string) => {
@@ -37,7 +38,7 @@ export default function EventCard({ event }: EventCardProps) {
   return (
     <div 
       className="relative w-full h-60 rounded-3xl overflow-hidden shadow-lg cursor-pointer" 
-      onClick={() => router.push(`/dashboard/editor/${event?._id || ''}`)}
+      onClick={() => router.push(`/dashboard/editor/${slug}/${event?._id || ''}`)}
     >
       {/* Background with placeholder circles */}
       <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">

@@ -13,8 +13,9 @@ type AssetsModalProps = {
 
 // Define asset categories for the full library tabs
 const ASSET_CATEGORIES = {
-  main: ASSET_LIBRARY.filter(a => !["square", "circle", "line"].includes(a.id)),
+  main: ASSET_LIBRARY.filter(a => !["square", "circle", "line"].includes(a.id) && !a.isCustom),
   shapes: ASSET_LIBRARY.filter(a => ["square", "circle", "line"].includes(a.id)),
+  custom: ASSET_LIBRARY.filter(a => a.isCustom),
 };
 
 export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
@@ -66,7 +67,6 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
 
   // Generic function to render asset buttons
   const renderAssetButton = (asset: AssetDef) => {
-    const Icon = asset.icon;
     return (
       <button
         key={asset.id}
@@ -74,10 +74,18 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
         onDragStart={(e) => e.dataTransfer.setData("assetType", asset.id)}
         className="w-[4.5rem] h-[4.5rem] rounded-2xl bg-[#0933BB08] p-2 flex flex-col items-center justify-center"
       >
-        <div className="text-[var(--accent)]">
-          <Icon size={24} />
+        <div className="text-[var(--accent)] w-6 h-6 flex items-center justify-center">
+          {asset.isCustom && asset.path ? (
+            <img 
+              src={asset.path} 
+              alt={asset.label}
+              className="w-6 h-6 object-contain"
+            />
+          ) : asset.icon ? (
+            <asset.icon size={24} />
+          ) : null}
         </div>
-        <span className="text-[0.625rem] text-[var(--accent)] mt-1">
+        <span className="text-[0.625rem] text-[var(--accent)] mt-1 text-center">
           {asset.label}
         </span>
       </button>

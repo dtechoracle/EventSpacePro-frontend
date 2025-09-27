@@ -6,7 +6,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
-import { PaperSize } from "@/lib/paperSizes";
+import { PaperSize, PAPER_SIZES } from "@/lib/paperSizes";
 import toast from "react-hot-toast";
 
 interface ApiError {
@@ -22,12 +22,24 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
   const setCanvas = useSceneStore((s) => s.setCanvas);
   const { slug } = router.query;
 
-  const mutation = useMutation<{ message: string }, ApiError>({
+  const mutation = useMutation<{ message: string; data: { _id: string } }, ApiError>({
     mutationKey: ["create-event"],
-    mutationFn: () => apiRequest(`/projects/${slug}/events`, "POST", { name: eventName, size: paperSize }, true),
-    onSuccess: () => {
+    mutationFn: () => {
+      const paperDimensions = PAPER_SIZES[paperSize];
+      const canvases = [{
+        size: paperSize,
+        width: paperDimensions.width,
+        height: paperDimensions.height
+      }];
+      
+      return apiRequest(`/projects/${slug}/events`, "POST", { 
+        name: eventName, 
+        canvases 
+      }, true);
+    },
+    onSuccess: (response) => {
       setCanvas(paperSize);
-      router.push(`/dashboard/editor/${slug}`);
+      router.push(`/dashboard/editor/${slug}/${response.data._id}`);
       toast.success("Event created successfully!");
       onClose();
     },
