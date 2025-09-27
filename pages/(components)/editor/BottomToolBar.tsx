@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { useToolbarTools, ToolOption } from "@/hooks/useToolBarTools";
-import AssetsModal from "./AssetsModal";
+// import AssetsModal from "./AssetsModal";
 
 
 interface BarProps{

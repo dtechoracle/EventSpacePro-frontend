@@ -6,6 +6,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
+import { PaperSize, PAPER_SIZES } from "@/lib/paperSizes";
 import toast from "react-hot-toast";
 
 interface ApiError {
@@ -16,17 +17,29 @@ interface ApiError {
 export default function CreateEventModal({ onClose }: { onClose: () => void }) {
   const [phase, setPhase] = useState(1);
   const [eventName, setEventName] = useState("");
-  const [paperSize, setPaperSize] = useState("A4");
+  const [paperSize, setPaperSize] = useState<PaperSize>("A4");
   const router = useRouter();
   const setCanvas = useSceneStore((s) => s.setCanvas);
   const { slug } = router.query;
 
-  const mutation = useMutation<{ message: string }, ApiError>({
+  const mutation = useMutation<{ message: string; data: { _id: string } }, ApiError>({
     mutationKey: ["create-event"],
-    mutationFn: () => apiRequest(`/projects/${slug}/events`, "POST", { name: eventName, size: paperSize }, true),
-    onSuccess: () => {
-      setCanvas(paperSize as any);
-      router.push(`/dashboard/editor/${slug}`);
+    mutationFn: () => {
+      const paperDimensions = PAPER_SIZES[paperSize];
+      const canvases = [{
+        size: paperSize,
+        width: paperDimensions.width,
+        height: paperDimensions.height
+      }];
+      
+      return apiRequest(`/projects/${slug}/events`, "POST", { 
+        name: eventName, 
+        canvases 
+      }, true);
+    },
+    onSuccess: (response) => {
+      setCanvas(paperSize);
+      router.push(`/dashboard/editor/${slug}/${response.data._id}`);
       toast.success("Event created successfully!");
       onClose();
     },
@@ -112,7 +125,7 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
 
                 <select
                   value={paperSize}
-                  onChange={(e) => setPaperSize(e.target.value)}
+                  onChange={(e) => setPaperSize(e.target.value as PaperSize)}
                   className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
                 >
                   <option value="A1">A1 (59.4 × 84.1 cm)</option>
@@ -124,9 +137,17 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
 
                 <button
                   onClick={handleSubmit}
-                  className="w-full h-14 rounded-2xl text-white text-base font-medium bg-[var(--accent)]"
+                  disabled={mutation.isPending}
+                  className="w-full h-14 rounded-2xl text-white text-base font-medium bg-[var(--accent)] disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Start Editing
+                  {mutation.isPending ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Creating Event...
+                    </>
+                  ) : (
+                    "Start Editing"
+                  )}
                 </button>
               </motion.div>
             )}

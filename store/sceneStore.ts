@@ -19,6 +19,22 @@ export type AssetInstance = {
   strokeColor?: string; // for line
 };
 
+export type CanvasData = {
+  size: string;
+  width: number;
+  height: number;
+  _id: string;
+};
+
+export type EventData = {
+  _id: string;
+  name: string;
+  canvases: CanvasData[];
+  canvasAssets: AssetInstance[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 type SceneState = {
   canvas: {
     size: PaperSize;
@@ -27,6 +43,9 @@ type SceneState = {
   } | null;
   assets: AssetInstance[];
   selectedAssetId: string | null;
+  eventData: EventData | null;
+  isInitialized: boolean;
+  hasUnsavedChanges: boolean;
 
   // Methods
   setCanvas: (size: PaperSize) => void;
@@ -36,6 +55,8 @@ type SceneState = {
   removeAsset: (id: string) => void;
   selectAsset: (id: string | null) => void;
   reset: () => void;
+  syncToEventData: () => AssetInstance[];
+  markAsSaved: () => void;
   hasHydrated: boolean;
 };
 
@@ -45,12 +66,21 @@ export const useSceneStore = create<SceneState>()(
       canvas: null,
       assets: [],
       selectedAssetId: null,
+      eventData: null,
+      isInitialized: false,
+      hasUnsavedChanges: false,
       hasHydrated: false,
 
       setCanvas: (size) => {
         const { width, height } = PAPER_SIZES[size];
-        set({ canvas: { size, width, height }, assets: [], selectedAssetId: null });
+        set({
+          canvas: { size, width, height },
+          assets: [],
+          selectedAssetId: null,
+          hasUnsavedChanges: true
+        });
       },
+
       addAsset: (type, x, y) => {
         const state = get();
         if (!state.canvas) return;
@@ -70,12 +100,15 @@ export const useSceneStore = create<SceneState>()(
             { id, type, x, y, scale: 1, rotation: 0, ...shapeDefaults },
           ],
           selectedAssetId: id,
+          hasUnsavedChanges: true,
         });
       },
+
       addAssetObject: (assetObj: AssetInstance) => {
         set((state) => ({
           assets: [...state.assets, assetObj],
           selectedAssetId: assetObj.id,
+          hasUnsavedChanges: true,
         }));
       },
 
@@ -84,17 +117,35 @@ export const useSceneStore = create<SceneState>()(
           assets: state.assets.map((a) =>
             a.id === id ? { ...a, ...updates } : a
           ),
+          hasUnsavedChanges: true,
         })),
 
       removeAsset: (id) =>
         set((state) => ({
           assets: state.assets.filter((a) => a.id !== id),
           selectedAssetId: state.selectedAssetId === id ? null : state.selectedAssetId,
+          hasUnsavedChanges: true,
         })),
 
       selectAsset: (id) => set({ selectedAssetId: id }),
 
-      reset: () => set({ canvas: null, assets: [], selectedAssetId: null }),
+      reset: () => set({
+        canvas: null,
+        assets: [],
+        selectedAssetId: null,
+        eventData: null,
+        isInitialized: false,
+        hasUnsavedChanges: false
+      }),
+
+      markAsSaved: () => set({ hasUnsavedChanges: false }),
+
+      syncToEventData: () => {
+        const state = get();
+        // This method will be called with current event data from the component
+        // Return just the assets for updating
+        return state.assets;
+      },
     }),
     { name: "scene-storage" }
   )

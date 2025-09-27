@@ -6,7 +6,7 @@
   --primary: #4E1CD8;
   --secondary: #eaf6ef;
   --accent: #0056A9;
-  --surface: #0000000D 
+  --surface: #0000000D
 }
 
 @layer components {
@@ -18,5 +18,21 @@
     width: 7rem;
     font-size: 0.75rem;
     line-height: 1rem;
+  }
+}
+
+@layer utilities {
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s infinite;
   }
 }
