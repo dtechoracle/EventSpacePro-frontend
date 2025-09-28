@@ -4,10 +4,15 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import Canvas from "./Canvas";
 import { useSceneStore, EventData } from "@/store/sceneStore";
 
+// Type for API response that wraps EventData
+type EventDataResponse = {
+  data: EventData;
+} | EventData;
+
 const MM_TO_PX = 2; // must match the constant used in Canvas for mm -> px
 
 interface CanvasWorkspaceProps {
-  eventData?: EventData | null;
+  eventData?: EventDataResponse | null;
 }
 
 export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
@@ -43,7 +48,10 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
 
   // Use event data directly instead of store
   // The eventData has a 'data' wrapper based on the API response
-  const actualData = useMemo(() => (eventData as any)?.data || eventData, [eventData]);
+  const actualData = useMemo(() => {
+    if (!eventData) return null;
+    return 'data' in eventData ? eventData.data : eventData;
+  }, [eventData]);
   
   const canvas = useMemo(() => {
     return actualData?.canvases?.[0] ? {
