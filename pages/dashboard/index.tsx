@@ -4,15 +4,23 @@ import PendingTasks from "../(components)/dashboard/PendingTasks";
 import UpcomingEventCard from "../(components)/dashboard/UpcomingEventCard";
 import MainLayout from "../layouts/MainLayout";
 import { BsStars } from "react-icons/bs";
+import { useUserStore } from "@/store/userStore";
+import { useEffect } from "react";
 
-const dashboard = () => {
+const Dashboard = () => {
+  const { user, fetchUser, isLoading } = useUserStore();
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
   return (
     <MainLayout>
       <div className="p-6">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-4xl font-bold">Hi, John!</h1>
+            <h1 className="text-4xl font-bold">Hi, {user?.firstName}!</h1>
             <p className="text-gray-500">Ready create another masterpiece?</p>
           </div>
           <button className="bg-[var(--accent)] flex items-center gap-3 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700">
@@ -52,4 +60,4 @@ const dashboard = () => {
   );
 };
 
-export default dashboard;
+export default Dashboard;

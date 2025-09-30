@@ -13,9 +13,16 @@ type AssetsModalProps = {
 
 // Define asset categories for the full library tabs
 const ASSET_CATEGORIES = {
-  main: ASSET_LIBRARY.filter(a => !["square", "circle", "line"].includes(a.id) && !a.isCustom),
+  architectural: ASSET_LIBRARY.filter(a => 
+    a.id.includes("wall") || 
+    a.id.includes("door")
+  ),
+  event: ASSET_LIBRARY.filter(a => 
+    !a.id.includes("wall") && 
+    !a.id.includes("door") && 
+    !["square", "circle", "line"].includes(a.id)
+  ),
   shapes: ASSET_LIBRARY.filter(a => ["square", "circle", "line"].includes(a.id)),
-  custom: ASSET_LIBRARY.filter(a => a.isCustom),
 };
 
 export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
@@ -28,7 +35,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
   const offset = useRef({ x: 0, y: 0 });
 
   const [showAll, setShowAll] = useState(false);
-  const [activeTab, setActiveTab] = useState<keyof typeof ASSET_CATEGORIES>("main");
+  const [activeTab, setActiveTab] = useState<keyof typeof ASSET_CATEGORIES>("architectural");
   const [searchTerm, setSearchTerm] = useState("");
 
   // Hydration + initial modal position
@@ -173,18 +180,25 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
           >
             {/* Tabs */}
             <div className="flex gap-2 mb-2">
-              {Object.keys(ASSET_CATEGORIES).map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setActiveTab(cat as keyof typeof ASSET_CATEGORIES)}
-                  className={`px-3 py-1 rounded ${activeTab === cat
-                      ? "bg-[var(--accent)] text-white"
-                      : "bg-gray-200 text-gray-700"
-                    }`}
-                >
-                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                </button>
-              ))}
+              {Object.keys(ASSET_CATEGORIES).map((cat) => {
+                const tabLabels: Record<keyof typeof ASSET_CATEGORIES, string> = {
+                  architectural: "Architectural",
+                  event: "Event Assets",
+                  shapes: "Shapes",
+                };
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveTab(cat as keyof typeof ASSET_CATEGORIES)}
+                    className={`px-3 py-1 rounded text-sm ${activeTab === cat
+                        ? "bg-[var(--accent)] text-white"
+                        : "bg-gray-200 text-gray-700"
+                      }`}
+                  >
+                    {tabLabels[cat as keyof typeof ASSET_CATEGORIES]}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Tab content */}

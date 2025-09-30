@@ -32,6 +32,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
   const selectAsset = useSceneStore((s) => s.selectAsset);
   const reset = useSceneStore((s) => s.reset);
   const markAsSaved = useSceneStore((s) => s.markAsSaved);
+  const showGrid = useSceneStore((s) => s.showGrid);
 
   // Sync props data to store when props change (only once per data change)
   const hasSyncedRef = useRef(false);
@@ -593,6 +594,33 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         }
       }}
     >
+      {/* Grid Overlay */}
+      {showGrid && (
+        <svg
+          className="absolute inset-0 pointer-events-none"
+          width={canvasPxW}
+          height={canvasPxH}
+          style={{ zIndex: 0 }}
+        >
+          <defs>
+            <pattern
+              id="grid-pattern"
+              width={20 * mmToPx}
+              height={20 * mmToPx}
+              patternUnits="userSpaceOnUse"
+            >
+              <path
+                d={`M ${20 * mmToPx} 0 L 0 0 0 ${20 * mmToPx}`}
+                fill="none"
+                stroke="rgba(96, 165, 250, 0.2)"
+                strokeWidth="1"
+              />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#grid-pattern)" />
+        </svg>
+      )}
+
       {/* Rotate Buttons */}
       {selectedAssetId === null && (
         <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-2 z-10 pointer-events-auto">
