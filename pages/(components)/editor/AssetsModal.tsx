@@ -15,11 +15,19 @@ type AssetsModalProps = {
 const ASSET_CATEGORIES = {
   architectural: ASSET_LIBRARY.filter(a => 
     a.id.includes("wall") || 
-    a.id.includes("door")
+    a.id.includes("door") ||
+    a.id.includes("stairs") ||
+    a.id.includes("bathtub") ||
+    a.id.includes("shower") ||
+    a.id.includes("wc")
   ),
   event: ASSET_LIBRARY.filter(a => 
     !a.id.includes("wall") && 
     !a.id.includes("door") && 
+    !a.id.includes("stairs") &&
+    !a.id.includes("bathtub") &&
+    !a.id.includes("shower") &&
+    !a.id.includes("wc") &&
     !["square", "circle", "line"].includes(a.id)
   ),
   shapes: ASSET_LIBRARY.filter(a => ["square", "circle", "line"].includes(a.id)),
