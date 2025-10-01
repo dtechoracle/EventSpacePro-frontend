@@ -37,6 +37,13 @@ const CUSTOM_SVG_ASSETS: AssetDef[] = [
   { id: "wall-90", label: "Wall 90 degree", path: "/assets/canvas/wall-90-degree.svg", isCustom: true },
   { id: "wall-corner-joined", label: "Wall Corner Joined", path: "/assets/canvas/wall-corner-joined.svg", isCustom: true },
   { id: "wall-corner", label: "Wall Corner", path: "/assets/canvas/wall-corner.svg", isCustom: true },
+  { id: "bathtub", label: "Bathtub", path: "/assets/canvas/bathtub.svg", isCustom: true },
+  { id: "shower", label: "Shower", path: "/assets/canvas/shower.svg", isCustom: true },
+  { id: "sofa", label: "Sofa", path: "/assets/canvas/sofa.svg", isCustom: true },
+  { id: "twin-sofa", label: "Twin Sofa", path: "/assets/canvas/twin-sofa.svg", isCustom: true },
+  { id: "stairs", label: "Stairs", path: "/assets/canvas/stairs.svg", isCustom: true },
+  { id: "wc", label: "WC", path: "/assets/canvas/wc.svg", isCustom: true },
+  { id: "oval-shaped-table", label: "Oval Shaped Table", path: "/assets/canvas/oval-shaped-table.svg", isCustom: true },
 ];
 
 export const ASSET_LIBRARY: AssetDef[] = [
