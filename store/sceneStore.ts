@@ -46,6 +46,7 @@ type SceneState = {
   eventData: EventData | null;
   isInitialized: boolean;
   hasUnsavedChanges: boolean;
+  showGrid: boolean;
 
   // Methods
   setCanvas: (size: PaperSize) => void;
@@ -54,6 +55,7 @@ type SceneState = {
   updateAsset: (id: string, updates: Partial<AssetInstance>) => void;
   removeAsset: (id: string) => void;
   selectAsset: (id: string | null) => void;
+  toggleGrid: () => void;
   reset: () => void;
   syncToEventData: () => AssetInstance[];
   markAsSaved: () => void;
@@ -70,6 +72,7 @@ export const useSceneStore = create<SceneState>()(
       isInitialized: false,
       hasUnsavedChanges: false,
       hasHydrated: false,
+      showGrid: false,
 
       setCanvas: (size) => {
         const { width, height } = PAPER_SIZES[size];
@@ -128,6 +131,8 @@ export const useSceneStore = create<SceneState>()(
         })),
 
       selectAsset: (id) => set({ selectedAssetId: id }),
+
+      toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
 
       reset: () => set({
         canvas: null,

@@ -23,6 +23,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
     updateAsset
   } = useAssetProperties();
 
+  const showGrid = useSceneStore((s) => s.showGrid);
+  const toggleGrid = useSceneStore((s) => s.toggleGrid);
+
   const [showModel, setShowModel] = useState(true);
   const [showCanvas, setShowCanvas] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -99,6 +102,33 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 onChange={(e) => setCanvasName(e.target.value)}
                 className="sidebar-input"
               />
+            </div>
+
+            {/* Grid Toggle */}
+            <div className="flex justify-between items-center py-2">
+              <span>Grid</span>
+              <div className="inline-flex rounded-lg bg-[#0000000D] p-1">
+                <button
+                  onClick={() => !showGrid && toggleGrid()}
+                  className={`px-4 py-1 text-xs rounded-md transition-all ${
+                    showGrid 
+                      ? 'bg-white text-gray-900 shadow-sm font-medium' 
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Show
+                </button>
+                <button
+                  onClick={() => showGrid && toggleGrid()}
+                  className={`px-4 py-1 text-xs rounded-md transition-all ${
+                    !showGrid 
+                      ? 'bg-white text-gray-900 shadow-sm font-medium' 
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Hide
+                </button>
+              </div>
             </div>
 
             {/* Transform Controls */}

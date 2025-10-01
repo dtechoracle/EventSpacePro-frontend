@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaPlus } from "react-icons/fa";
 import { ImSpinner8 } from "react-icons/im";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import toast from "react-hot-toast";
 
@@ -19,13 +19,26 @@ export default function CreateProjectModal({ onClose }: { onClose: () => void })
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("owner");
   const [loading, setLoading] = useState(false);
-
   
+  const queryClient = useQueryClient();
 
   const mutation = useMutation<{ message: string }, ApiError>({
     mutationKey: ["create-project"],
-    mutationFn: () => apiRequest("/projects", "POST", { name: projectName, users: [{ email: email, role: role }] }, true),
+    mutationFn: () => {
+      const payload: { name: string; users?: { email: string; role: string }[] } = {
+        name: projectName,
+      };
+      
+      // Only include users if email is provided
+      if (email && email.trim()) {
+        payload.users = [{ email: email, role: role }];
+      }
+      
+      return apiRequest("/projects", "POST", payload, true);
+    },
     onSuccess: () => {
+      // Invalidate and refetch projects list
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Project created successfully!");
       onClose();
     },
