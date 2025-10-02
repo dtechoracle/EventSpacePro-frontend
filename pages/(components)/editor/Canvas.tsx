@@ -83,6 +83,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
   const heightHandleType = useRef<'top' | 'bottom' | null>(null);
 
   const [rotation, setRotation] = useState<number>(0);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState<string>("");
   const canvasPxW = (canvas?.width ?? 0) * mmToPx;
   const canvasPxH = (canvas?.height ?? 0) * mmToPx;
 
@@ -121,7 +123,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
           
           // Calculate scale based on distance ratio
           const scaleRatio = currentDistance / initialDistance.current;
-          const newScale = Math.max(0.1, Math.min(5, initialScale.current * scaleRatio));
+          const newScale = Math.max(0.1, Math.min(10, initialScale.current * scaleRatio));
           
           updateAsset(selectedAssetId, { scale: newScale });
         }
@@ -213,6 +215,32 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
     draggingAssetRef.current = draggingId;
   };
 
+  const onTextDoubleClick = (e: React.MouseEvent, assetId: string) => {
+    e.stopPropagation();
+    const asset = assets.find((a) => a.id === assetId);
+    if (!asset || asset.type !== "text") return;
+    
+    setEditingTextId(assetId);
+    setEditingText(asset.text ?? "");
+  };
+
+  const onTextEditKeyDown = (e: React.KeyboardEvent, assetId: string) => {
+    if (e.key === "Enter" || e.key === "Escape") {
+      e.preventDefault();
+      if (e.key === "Enter") {
+        updateAsset(assetId, { text: editingText });
+      }
+      setEditingTextId(null);
+      setEditingText("");
+    }
+  };
+
+  const onTextEditBlur = (assetId: string) => {
+    updateAsset(assetId, { text: editingText });
+    setEditingTextId(null);
+    setEditingText("");
+  };
+
   const onScaleHandleMouseDown = (e: React.MouseEvent, assetId: string, handleType: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') => {
     e.stopPropagation();
     const asset = assets.find((a) => a.id === assetId);
@@ -251,19 +279,21 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
   };
 
   const getAssetCornerPosition = (asset: AssetInstance, handleType: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') => {
+    const handleSize = 12;
+    
     if (asset.type === "square" || asset.type === "circle") {
       const width = (asset.width ?? 50) * asset.scale;
       const height = (asset.height ?? 50) * asset.scale;
       
       switch (handleType) {
         case 'top-left':
-          return { x: asset.x - width / 2, y: asset.y - height / 2 };
+          return { x: asset.x - width / 2 - handleSize / 2, y: asset.y - height / 2 - handleSize / 2 };
         case 'top-right':
-          return { x: asset.x + width / 2, y: asset.y - height / 2 };
+          return { x: asset.x + width / 2 + handleSize / 2, y: asset.y - height / 2 - handleSize / 2 };
         case 'bottom-left':
-          return { x: asset.x - width / 2, y: asset.y + height / 2 };
+          return { x: asset.x - width / 2 - handleSize / 2, y: asset.y + height / 2 + handleSize / 2 };
         case 'bottom-right':
-          return { x: asset.x + width / 2, y: asset.y + height / 2 };
+          return { x: asset.x + width / 2 + handleSize / 2, y: asset.y + height / 2 + handleSize / 2 };
       }
     } else if (asset.type === "line") {
       const width = (asset.width ?? 100) * asset.scale;
@@ -271,26 +301,45 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
       
       switch (handleType) {
         case 'top-left':
-          return { x: asset.x - width / 2, y: asset.y - height / 2 };
+          return { x: asset.x - width / 2 - handleSize / 2, y: asset.y - height / 2 - handleSize / 2 };
         case 'top-right':
-          return { x: asset.x + width / 2, y: asset.y - height / 2 };
+          return { x: asset.x + width / 2 + handleSize / 2, y: asset.y - height / 2 - handleSize / 2 };
         case 'bottom-left':
-          return { x: asset.x - width / 2, y: asset.y + height / 2 };
+          return { x: asset.x - width / 2 - handleSize / 2, y: asset.y + height / 2 + handleSize / 2 };
         case 'bottom-right':
-          return { x: asset.x + width / 2, y: asset.y + height / 2 };
+          return { x: asset.x + width / 2 + handleSize / 2, y: asset.y + height / 2 + handleSize / 2 };
       }
-    } else {
-      // For icons, use a fixed size reference
-      const iconSize = 24 * asset.scale;
+    } else if (asset.type === "text") {
+      // For text, estimate size based on text content and font size
+      const fontSize = (asset.fontSize ?? 16) * asset.scale;
+      const textLength = (asset.text ?? "Enter text").length;
+      const estimatedWidth = Math.max(textLength * fontSize * 0.6, 50); // Rough estimation
+      const estimatedHeight = fontSize * 1.2;
+      
       switch (handleType) {
         case 'top-left':
-          return { x: asset.x - iconSize / 2, y: asset.y - iconSize / 2 };
+          return { x: asset.x - estimatedWidth / 2 - handleSize / 2, y: asset.y - estimatedHeight / 2 - handleSize / 2 };
         case 'top-right':
-          return { x: asset.x + iconSize / 2, y: asset.y - iconSize / 2 };
+          return { x: asset.x + estimatedWidth / 2 + handleSize / 2, y: asset.y - estimatedHeight / 2 - handleSize / 2 };
         case 'bottom-left':
-          return { x: asset.x - iconSize / 2, y: asset.y + iconSize / 2 };
+          return { x: asset.x - estimatedWidth / 2 - handleSize / 2, y: asset.y + estimatedHeight / 2 + handleSize / 2 };
         case 'bottom-right':
-          return { x: asset.x + iconSize / 2, y: asset.y + iconSize / 2 };
+          return { x: asset.x + estimatedWidth / 2 + handleSize / 2, y: asset.y + estimatedHeight / 2 + handleSize / 2 };
+      }
+    } else {
+      // For all other assets (icons, custom SVGs), use width and height
+      const width = (asset.width ?? 24) * asset.scale;
+      const height = (asset.height ?? 24) * asset.scale;
+      
+      switch (handleType) {
+        case 'top-left':
+          return { x: asset.x - width / 2 - handleSize / 2, y: asset.y - height / 2 - handleSize / 2 };
+        case 'top-right':
+          return { x: asset.x + width / 2 + handleSize / 2, y: asset.y - height / 2 - handleSize / 2 };
+        case 'bottom-left':
+          return { x: asset.x - width / 2 - handleSize / 2, y: asset.y + height / 2 + handleSize / 2 };
+        case 'bottom-right':
+          return { x: asset.x + width / 2 + handleSize / 2, y: asset.y + height / 2 + handleSize / 2 };
       }
     }
     return { x: asset.x, y: asset.y };
@@ -339,7 +388,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-right')}
             style={{
               position: "absolute",
-              left: topRightPx.x - handleSize,
+              left: topRightPx.x,
               top: topRightPx.y,
               width: handleSize,
               height: handleSize,
@@ -357,7 +406,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             style={{
               position: "absolute",
               left: bottomLeftPx.x,
-              top: bottomLeftPx.y - handleSize,
+              top: bottomLeftPx.y,
               width: handleSize,
               height: handleSize,
               backgroundColor: "#3B82F6",
@@ -373,8 +422,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-right')}
             style={{
               position: "absolute",
-              left: bottomRightPx.x - handleSize,
-              top: bottomRightPx.y - handleSize,
+              left: bottomRightPx.x,
+              top: bottomRightPx.y,
               width: handleSize,
               height: handleSize,
               backgroundColor: "#3B82F6",
@@ -410,7 +459,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             style={{
               position: "absolute",
               left: leftPx - 4,
-              top: bottomLeftPx.y - handleSize,
+              top: bottomLeftPx.y,
               width: 8,
               height: handleSize,
               backgroundColor: "#10B981",
@@ -451,7 +500,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-right')}
             style={{
               position: "absolute",
-              left: topRightPx.x - handleSize,
+              left: topRightPx.x,
               top: topRightPx.y,
               width: handleSize,
               height: handleSize,
@@ -469,7 +518,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             style={{
               position: "absolute",
               left: bottomLeftPx.x,
-              top: bottomLeftPx.y - handleSize,
+              top: bottomLeftPx.y,
               width: handleSize,
               height: handleSize,
               backgroundColor: "#3B82F6",
@@ -485,8 +534,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-right')}
             style={{
               position: "absolute",
-              left: bottomRightPx.x - handleSize,
-              top: bottomRightPx.y - handleSize,
+              left: bottomRightPx.x,
+              top: bottomRightPx.y,
               width: handleSize,
               height: handleSize,
               backgroundColor: "#3B82F6",
@@ -654,7 +703,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                   transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
                   cursor: "move",
                 }}
-                className={isSelected ? "ring-2 ring-blue-500" : ""}
+                className={isSelected ? "" : ""}
               />
               
               {/* Handles */}
@@ -673,12 +722,12 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                   left: leftPx,
                   top: topPx,
                   width: (asset.width ?? 100) * asset.scale,
-                  height: (asset.strokeWidth ?? 2) * asset.scale,
+                  height: (asset.height ?? 2) * asset.scale,
                   backgroundColor: asset.strokeColor,
                   transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
                   cursor: "move",
                 }}
-                className={isSelected ? "ring-2 ring-blue-500" : ""}
+                className={isSelected ? "" : ""}
               />
               
               {/* Handles */}
@@ -688,6 +737,65 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         }
 
         if (!def) return null;
+        
+        // Handle text assets
+        if (asset.type === "text") {
+          const isEditing = editingTextId === asset.id;
+          
+          return (
+            <div key={asset.id} className="relative">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editingText}
+                  onChange={(e) => setEditingText(e.target.value)}
+                  onKeyDown={(e) => onTextEditKeyDown(e, asset.id)}
+                  onBlur={() => onTextEditBlur(asset.id)}
+                  autoFocus
+                  style={{
+                    position: "absolute",
+                    left: leftPx,
+                    top: topPx,
+                    transform: `translate(-50%, -50%) rotate(${totalRotation}deg) scale(${asset.scale})`,
+                    fontSize: `${asset.fontSize ?? 16}px`,
+                    color: asset.textColor ?? "#000000",
+                    fontFamily: asset.fontFamily ?? "Arial",
+                    background: "transparent",
+                    border: "none",
+                    outline: "none",
+                    padding: 0,
+                    margin: 0,
+                    minWidth: "100px",
+                  }}
+                  className="text-center"
+                />
+              ) : (
+                <div
+                  onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
+                  onDoubleClick={(e) => onTextDoubleClick(e, asset.id)}
+                  style={{
+                    position: "absolute",
+                    left: leftPx,
+                    top: topPx,
+                    transform: `translate(-50%, -50%) rotate(${totalRotation}deg) scale(${asset.scale})`,
+                    fontSize: `${asset.fontSize ?? 16}px`,
+                    color: asset.textColor ?? "#000000",
+                    fontFamily: asset.fontFamily ?? "Arial",
+                    whiteSpace: "nowrap",
+                    userSelect: "none",
+                    cursor: "move",
+                  }}
+                  className={isSelected ? "" : ""}
+                >
+                  {asset.text ?? "Enter text"}
+                </div>
+              )}
+              
+              {/* Handles */}
+              {isSelected && !isEditing && renderAssetHandles(asset, leftPx, topPx)}
+            </div>
+          );
+        }
         
         // Handle custom SVG assets
         if (def.isCustom && def.path) {
@@ -699,14 +807,16 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                   position: "absolute",
                   left: leftPx,
                   top: topPx,
-                  transform: `translate(-50%, -50%) rotate(${totalRotation}deg) scale(${asset.scale})`,
+                  width: (asset.width ?? 24) * asset.scale,
+                  height: (asset.height ?? 24) * asset.scale,
+                  transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
                 }}
-                className={isSelected ? "ring-2 ring-blue-500 bg-blue-50 p-1 rounded" : ""}
+                className={isSelected ? "" : ""}
               >
                 <img 
                   src={def.path} 
                   alt={def.label}
-                  style={{ width: 24, height: 24 }}
+                  style={{ width: "100%", height: "100%", objectFit: "contain" }}
                 />
               </div>
               
@@ -728,11 +838,16 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                 position: "absolute",
                 left: leftPx,
                 top: topPx,
-                transform: `translate(-50%, -50%) rotate(${totalRotation}deg) scale(${asset.scale})`,
+                width: (asset.width ?? 24) * asset.scale,
+                height: (asset.height ?? 24) * asset.scale,
+                transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
-              className={isSelected ? "ring-2 ring-blue-500 bg-blue-50 p-1 rounded" : "text-[var(--accent)]"}
+              className={isSelected ? "text-[var(--accent)]" : "text-[var(--accent)]"}
             >
-              <Icon size={24} />
+              <Icon size={Math.min((asset.width ?? 24) * asset.scale, (asset.height ?? 24) * asset.scale)} />
             </div>
             
             {/* Handles */}
