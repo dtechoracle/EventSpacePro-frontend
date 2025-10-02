@@ -9,6 +9,7 @@ import {
   FaWineGlassAlt,
   FaUsers,
   FaCamera,
+  FaFont,
 } from "react-icons/fa";
 import { IconType } from "react-icons";
 
@@ -60,6 +61,7 @@ export const ASSET_LIBRARY: AssetDef[] = [
   { id: "square", label: "Square", icon: () => <div className="w-full h-full bg-gray-300" /> },
   { id: "circle", label: "Circle", icon: () => <div className="w-full h-full rounded-full bg-gray-300" /> },
   { id: "line", label: "Line", icon: () => <div className="w-full h-1 bg-gray-300" /> },
+  { id: "text", label: "Text", icon: FaFont },
   // Add custom SVG assets
   ...CUSTOM_SVG_ASSETS,
 ];

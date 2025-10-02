@@ -5,12 +5,19 @@ import { useRouter } from "next/router";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { useUserStore } from "@/store/userStore";
 
 const Sidebar = () => {
   const router = useRouter();
   const { pathname } = router;
   const [open, setOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const { user, fetchUser, isLoading } = useUserStore();
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
 
   // Load persisted state from localStorage on component mount
   useEffect(() => {
@@ -180,7 +187,7 @@ const Sidebar = () => {
                     exit={{ opacity: 0, x: -10 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <h1 className="font-semibold text-sm">John Doe</h1>
+                    <h1 className="font-semibold text-sm">{user?.firstName} {user?.lastName}</h1>
                     <p className="text-xs">Basic plan</p>
                   </motion.div>
                 )}
@@ -275,7 +282,7 @@ const Sidebar = () => {
                     height={40}
                   />
                   <div>
-                    <h1 className="font-semibold text-sm">John Doe</h1>
+                    <h1 className="font-semibold text-sm">{user?.firstName} {user?.lastName}</h1>
                     <p className="text-xs">Basic plan</p>
                   </div>
                 </div>

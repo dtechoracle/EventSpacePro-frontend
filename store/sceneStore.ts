@@ -11,12 +11,20 @@ export type AssetInstance = {
   scale: number;
   rotation: number;
 
-  // Extra shape properties
-  width?: number; // for square/circle/line
-  height?: number; // for square/circle
+  // Universal sizing properties
+  width?: number; // for all assets
+  height?: number; // for all assets
+
+  // Shape-specific properties
   strokeWidth?: number; // for line
   fillColor?: string; // for shapes
   strokeColor?: string; // for line
+
+  // Text properties
+  text?: string; // for text
+  fontSize?: number; // for text
+  textColor?: string; // for text
+  fontFamily?: string; // for text
 };
 
 export type CanvasData = {
@@ -94,8 +102,10 @@ export const useSceneStore = create<SceneState>()(
           type === "square" || type === "circle"
             ? { width: 50, height: 50, fillColor: "#93C5FD" }
             : type === "line"
-              ? { width: 100, strokeWidth: 2, strokeColor: "#3B82F6" }
-              : {};
+              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#3B82F6" }
+              : type === "text"
+                ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial" }
+                : { width: 24, height: 24 }; // Default for icons
 
         set({
           assets: [
