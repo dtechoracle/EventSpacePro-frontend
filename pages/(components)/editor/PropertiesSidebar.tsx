@@ -25,6 +25,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
   const showGrid = useSceneStore((s) => s.showGrid);
   const toggleGrid = useSceneStore((s) => s.toggleGrid);
+  const addAsset = useSceneStore((s) => s.addAsset);
 
   const [showModel, setShowModel] = useState(true);
   const [showCanvas, setShowCanvas] = useState(true);
@@ -131,6 +132,23 @@ export default function PropertiesSidebar(): React.JSX.Element {
               </div>
             </div>
 
+            {/* Add Text Button */}
+            <div className="flex justify-between items-center py-2">
+              <span>Add Text</span>
+              <button
+                onClick={() => {
+                  // Add text at center of canvas
+                  const canvas = useSceneStore.getState().canvas;
+                  if (canvas) {
+                    addAsset("text", canvas.width / 2, canvas.height / 2);
+                  }
+                }}
+                className="px-4 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-all shadow-sm font-medium"
+              >
+                Create
+              </button>
+            </div>
+
             {/* Transform Controls */}
             {selectedAsset && (
               <div className="mt-2">
@@ -170,27 +188,35 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   />
                 </div>
 
-                {/* Shape-specific properties */}
-                {selectedAsset.type === "square" || selectedAsset.type === "circle" ? (
+                {/* Universal sizing properties - disabled for text */}
+                {selectedAsset.type !== "text" && (
                   <div className="space-y-2 mt-2">
                     <div className="flex justify-between items-center">
                       <span>Width (px)</span>
                       <input
                         type="number"
-                        value={selectedAsset.width}
+                        value={selectedAsset.width || 24}
                         onChange={(e) => updateAsset(selectedAsset.id, { width: Number(e.target.value) })}
                         className="sidebar-input w-28 text-xs"
+                        min={1}
                       />
                     </div>
                     <div className="flex justify-between items-center">
                       <span>Height (px)</span>
                       <input
                         type="number"
-                        value={selectedAsset.height}
+                        value={selectedAsset.height || 24}
                         onChange={(e) => updateAsset(selectedAsset.id, { height: Number(e.target.value) })}
                         className="sidebar-input w-28 text-xs"
+                        min={1}
                       />
                     </div>
+                  </div>
+                )}
+
+                {/* Shape-specific properties */}
+                {selectedAsset.type === "square" || selectedAsset.type === "circle" ? (
+                  <div className="space-y-2 mt-2">
                     <div className="flex justify-between items-center">
                       <span>Fill Color</span>
                       <input
@@ -204,21 +230,13 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 ) : selectedAsset.type === "line" ? (
                   <div className="space-y-2 mt-2">
                     <div className="flex justify-between items-center">
-                      <span>Length (px)</span>
-                      <input
-                        type="number"
-                        value={selectedAsset.width}
-                        onChange={(e) => updateAsset(selectedAsset.id, { width: Number(e.target.value) })}
-                        className="sidebar-input w-28 text-xs"
-                      />
-                    </div>
-                    <div className="flex justify-between items-center">
                       <span>Stroke Width</span>
                       <input
                         type="number"
-                        value={selectedAsset.strokeWidth}
+                        value={selectedAsset.strokeWidth || 2}
                         onChange={(e) => updateAsset(selectedAsset.id, { strokeWidth: Number(e.target.value) })}
                         className="sidebar-input w-28 text-xs"
+                        min={1}
                       />
                     </div>
                     <div className="flex justify-between items-center">
@@ -229,6 +247,54 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         onChange={(e) => updateAsset(selectedAsset.id, { strokeColor: e.target.value })}
                         className="w-28 h-6 p-0 border-none"
                       />
+                    </div>
+                  </div>
+                ) : selectedAsset.type === "text" ? (
+                  <div className="space-y-2 mt-2">
+                    <div className="flex justify-between items-center">
+                      <span>Text</span>
+                      <input
+                        type="text"
+                        value={selectedAsset.text || ""}
+                        onChange={(e) => updateAsset(selectedAsset.id, { text: e.target.value })}
+                        className="sidebar-input w-28 text-xs"
+                        placeholder="Enter text"
+                      />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Font Size</span>
+                      <input
+                        type="number"
+                        value={selectedAsset.fontSize || 16}
+                        onChange={(e) => updateAsset(selectedAsset.id, { fontSize: Number(e.target.value) })}
+                        className="sidebar-input w-28 text-xs"
+                        min={8}
+                        max={72}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Text Color</span>
+                      <input
+                        type="color"
+                        value={selectedAsset.textColor || "#000000"}
+                        onChange={(e) => updateAsset(selectedAsset.id, { textColor: e.target.value })}
+                        className="w-28 h-6 p-0 border-none"
+                      />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Font Family</span>
+                      <select
+                        value={selectedAsset.fontFamily || "Arial"}
+                        onChange={(e) => updateAsset(selectedAsset.id, { fontFamily: e.target.value })}
+                        className="sidebar-input w-28 text-xs"
+                      >
+                        <option value="Arial">Arial</option>
+                        <option value="Helvetica">Helvetica</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Georgia">Georgia</option>
+                        <option value="Verdana">Verdana</option>
+                        <option value="Courier New">Courier New</option>
+                      </select>
                     </div>
                   </div>
                 ) : null}
