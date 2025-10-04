@@ -20,11 +20,18 @@ export type AssetInstance = {
   fillColor?: string; // for shapes
   strokeColor?: string; // for line
 
+  // Double-line specific properties
+  lineGap?: number; // gap between the two lines
+  lineColor?: string; // color of the double lines
+
   // Text properties
   text?: string; // for text
   fontSize?: number; // for text
   textColor?: string; // for text
   fontFamily?: string; // for text
+
+  // Universal background properties
+  backgroundColor?: string; // for all assets, default transparent
 };
 
 export type CanvasData = {
@@ -56,6 +63,10 @@ type SceneState = {
   hasUnsavedChanges: boolean;
   showGrid: boolean;
 
+  // Pen tool state
+  isPenMode: boolean;
+  penStartPoint: { x: number; y: number } | null;
+
   // Methods
   setCanvas: (size: PaperSize) => void;
   addAsset: (type: string, x: number, y: number) => void;
@@ -68,6 +79,10 @@ type SceneState = {
   syncToEventData: () => AssetInstance[];
   markAsSaved: () => void;
   hasHydrated: boolean;
+
+  // Pen tool methods
+  setPenMode: (enabled: boolean) => void;
+  setPenStartPoint: (point: { x: number; y: number } | null) => void;
 };
 
 export const useSceneStore = create<SceneState>()(
@@ -81,6 +96,8 @@ export const useSceneStore = create<SceneState>()(
       hasUnsavedChanges: false,
       hasHydrated: false,
       showGrid: false,
+      isPenMode: false,
+      penStartPoint: null,
 
       setCanvas: (size) => {
         const { width, height } = PAPER_SIZES[size];
@@ -100,12 +117,14 @@ export const useSceneStore = create<SceneState>()(
         // Default properties for shapes
         const shapeDefaults: Partial<AssetInstance> =
           type === "square" || type === "circle"
-            ? { width: 50, height: 50, fillColor: "#93C5FD" }
+            ? { width: 50, height: 50, fillColor: "#93C5FD", backgroundColor: "transparent" }
             : type === "line"
-              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#3B82F6" }
-              : type === "text"
-                ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial" }
-                : { width: 24, height: 24 }; // Default for icons
+              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#3B82F6", backgroundColor: "transparent" }
+              : type === "double-line"
+                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#3B82F6", lineGap: 8, lineColor: "#3B82F6", backgroundColor: "transparent" }
+                : type === "text"
+                  ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: "transparent" }
+                  : { width: 24, height: 24, backgroundColor: "transparent" }; // Default for icons
 
         set({
           assets: [
@@ -150,7 +169,9 @@ export const useSceneStore = create<SceneState>()(
         selectedAssetId: null,
         eventData: null,
         isInitialized: false,
-        hasUnsavedChanges: false
+        hasUnsavedChanges: false,
+        isPenMode: false,
+        penStartPoint: null
       }),
 
       markAsSaved: () => set({ hasUnsavedChanges: false }),
@@ -161,6 +182,10 @@ export const useSceneStore = create<SceneState>()(
         // Return just the assets for updating
         return state.assets;
       },
+
+      setPenMode: (enabled) => set({ isPenMode: enabled }),
+
+      setPenStartPoint: (point) => set({ penStartPoint: point }),
     }),
     { name: "scene-storage" }
   )

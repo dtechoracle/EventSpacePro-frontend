@@ -132,22 +132,6 @@ export default function PropertiesSidebar(): React.JSX.Element {
               </div>
             </div>
 
-            {/* Add Text Button */}
-            <div className="flex justify-between items-center py-2">
-              <span>Add Text</span>
-              <button
-                onClick={() => {
-                  // Add text at center of canvas
-                  const canvas = useSceneStore.getState().canvas;
-                  if (canvas) {
-                    addAsset("text", canvas.width / 2, canvas.height / 2);
-                  }
-                }}
-                className="px-4 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-all shadow-sm font-medium"
-              >
-                Create
-              </button>
-            </div>
 
             {/* Transform Controls */}
             {selectedAsset && (
@@ -249,6 +233,38 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       />
                     </div>
                   </div>
+                ) : selectedAsset.type === "double-line" ? (
+                  <div className="space-y-2 mt-2">
+                    <div className="flex justify-between items-center">
+                      <span>Line Width</span>
+                      <input
+                        type="number"
+                        value={selectedAsset.strokeWidth || 2}
+                        onChange={(e) => updateAsset(selectedAsset.id, { strokeWidth: Number(e.target.value) })}
+                        className="sidebar-input w-28 text-xs"
+                        min={1}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Line Gap</span>
+                      <input
+                        type="number"
+                        value={selectedAsset.lineGap || 8}
+                        onChange={(e) => updateAsset(selectedAsset.id, { lineGap: Number(e.target.value) })}
+                        className="sidebar-input w-28 text-xs"
+                        min={1}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Line Color</span>
+                      <input
+                        type="color"
+                        value={selectedAsset.lineColor || "#3B82F6"}
+                        onChange={(e) => updateAsset(selectedAsset.id, { lineColor: e.target.value })}
+                        className="w-28 h-6 p-0 border-none"
+                      />
+                    </div>
+                  </div>
                 ) : selectedAsset.type === "text" ? (
                   <div className="space-y-2 mt-2">
                     <div className="flex justify-between items-center">
@@ -298,6 +314,33 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     </div>
                   </div>
                 ) : null}
+
+                {/* Background Color */}
+                <div className="flex justify-between items-center mb-2 mt-2">
+                  <span>Background</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={!!(selectedAsset.backgroundColor && selectedAsset.backgroundColor !== "transparent")}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          updateAsset(selectedAsset.id, { backgroundColor: "#FFFFFF" });
+                        } else {
+                          updateAsset(selectedAsset.id, { backgroundColor: "transparent" });
+                        }
+                      }}
+                      className="w-4 h-4"
+                    />
+                    {selectedAsset.backgroundColor && selectedAsset.backgroundColor !== "transparent" && (
+                      <input
+                        type="color"
+                        value={selectedAsset.backgroundColor}
+                        onChange={(e) => updateAsset(selectedAsset.id, { backgroundColor: e.target.value })}
+                        className="w-8 h-6 p-0 border-none"
+                      />
+                    )}
+                  </div>
+                </div>
 
                 {/* Rotation */}
                 <div className="flex justify-between items-center mb-2 mt-2">
