@@ -61,6 +61,12 @@ export const ASSET_LIBRARY: AssetDef[] = [
   { id: "square", label: "Square", icon: () => <div className="w-full h-full bg-gray-300" /> },
   { id: "circle", label: "Circle", icon: () => <div className="w-full h-full rounded-full bg-gray-300" /> },
   { id: "line", label: "Line", icon: () => <div className="w-full h-1 bg-gray-300" /> },
+  { id: "double-line", label: "Double Line", icon: () => (
+    <div className="w-2 h-full flex flex-row justify-center space-x-1">
+      <div className="w-0.5 h-full bg-gray-300" />
+      <div className="w-0.5 h-full bg-gray-300" />
+    </div>
+  )},
   { id: "text", label: "Text", icon: FaFont },
   // Add custom SVG assets
   ...CUSTOM_SVG_ASSETS,

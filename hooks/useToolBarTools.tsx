@@ -6,6 +6,7 @@ import {
   FaPencilRuler,
   FaColumns,
   FaBriefcase,
+  FaPen,
 } from "react-icons/fa";
 import { RiPushpinLine } from "react-icons/ri";
 
@@ -38,9 +39,9 @@ export function useToolbarTools(): Tool[] {
       ],
     },
     {
-      icon: <FaShapes size={18} />,
+      icon: <FaPen size={18} />,
       label: "Tool 3",
-      options: [{ id: "randomize-shapes", label: "Randomize Shapes" }],
+      options: [{ id: "draw-line", label: "Draw Line" }, { id: "add-text", label: "Add Text" }],
     },
     {
       icon: <RiPushpinLine size={18} />,
