@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { useToolbarTools, ToolOption } from "@/hooks/useToolBarTools";
+import { useSceneStore } from "@/store/sceneStore";
 // import AssetsModal from "./AssetsModal";
 
 
@@ -14,6 +15,7 @@ interface BarProps{
 export default function BottomToolbar({setShowAssetsModal}: BarProps) {
   const tools = useToolbarTools();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const { isPenMode, setPenMode } = useSceneStore();
 
   // Example states to toggle
   const [isPreviewOn, setIsPreviewOn] = useState(false);
@@ -30,6 +32,16 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
         break;
       case "reset-layout":
         console.log("Layout reset!");
+        break;
+      case "draw-line":
+        setPenMode(!isPenMode);
+        break;
+      case "add-text":
+        // Add text at center of canvas
+        const canvas = useSceneStore.getState().canvas;
+        if (canvas) {
+          useSceneStore.getState().addAsset("text", canvas.width / 2, canvas.height / 2);
+        }
         break;
       case "toggle-grid":
         setIsGridVisible((prev) => !prev);
@@ -83,7 +95,11 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
             <motion.button
               whileTap={{ scale: 0.95 }}
               whileHover={{ scale: 1.03 }}
-              className="w-10 h-10 flex items-center justify-center bg-[var(--accent)] text-white rounded-lg"
+              className={`w-10 h-10 flex items-center justify-center rounded-lg ${
+                tool.options.some(opt => opt.id === "draw-line") && isPenMode 
+                  ? "bg-green-600 text-white" 
+                  : "bg-[var(--accent)] text-white"
+              }`}
               aria-expanded={openIndex === index}
               aria-haspopup="menu"
             >
@@ -112,10 +128,15 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
                     {tool.options.map((option) => (
                       <li
                         key={option.id}
-                        className="px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
+                        className={`px-2 py-1 rounded hover:bg-gray-100 cursor-pointer flex items-center justify-between ${
+                          option.id === "draw-line" && isPenMode ? "bg-green-100 text-green-800" : ""
+                        }`}
                         onClick={() => handleOptionClick(option)}
                       >
-                        {option.label}
+                        <span>{option.label}</span>
+                        {option.id === "draw-line" && isPenMode && (
+                          <div className="w-2 h-2 bg-green-600 rounded-full"></div>
+                        )}
                       </li>
                     ))}
                   </ul>
