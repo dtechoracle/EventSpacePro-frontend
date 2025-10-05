@@ -24,6 +24,9 @@ export type AssetInstance = {
   lineGap?: number; // gap between the two lines
   lineColor?: string; // color of the double lines
 
+  // Path-based line properties
+  path?: { x: number; y: number }[]; // for drawn lines
+
   // Text properties
   text?: string; // for text
   fontSize?: number; // for text
@@ -65,7 +68,9 @@ type SceneState = {
 
   // Pen tool state
   isPenMode: boolean;
-  penStartPoint: { x: number; y: number } | null;
+  isDrawing: boolean;
+  currentPath: { x: number; y: number }[];
+  tempPath: { x: number; y: number }[];
 
   // Methods
   setCanvas: (size: PaperSize) => void;
@@ -82,7 +87,11 @@ type SceneState = {
 
   // Pen tool methods
   setPenMode: (enabled: boolean) => void;
-  setPenStartPoint: (point: { x: number; y: number } | null) => void;
+  setIsDrawing: (drawing: boolean) => void;
+  setCurrentPath: (path: { x: number; y: number }[]) => void;
+  setTempPath: (path: { x: number; y: number }[]) => void;
+  addPointToPath: (point: { x: number; y: number }) => void;
+  clearPath: () => void;
 };
 
 export const useSceneStore = create<SceneState>()(
@@ -97,7 +106,9 @@ export const useSceneStore = create<SceneState>()(
       hasHydrated: false,
       showGrid: false,
       isPenMode: false,
-      penStartPoint: null,
+      isDrawing: false,
+      currentPath: [],
+      tempPath: [],
 
       setCanvas: (size) => {
         const { width, height } = PAPER_SIZES[size];
@@ -122,9 +133,11 @@ export const useSceneStore = create<SceneState>()(
               ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#3B82F6", backgroundColor: "transparent" }
               : type === "double-line"
                 ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#3B82F6", lineGap: 8, lineColor: "#3B82F6", backgroundColor: "transparent" }
-                : type === "text"
-                  ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: "transparent" }
-                  : { width: 24, height: 24, backgroundColor: "transparent" }; // Default for icons
+                : type === "drawn-line"
+                  ? { strokeWidth: 2, strokeColor: "#3B82F6", backgroundColor: "transparent" }
+                  : type === "text"
+                    ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: "transparent" }
+                    : { width: 24, height: 24, backgroundColor: "transparent" }; // Default for icons
 
         set({
           assets: [
@@ -171,7 +184,9 @@ export const useSceneStore = create<SceneState>()(
         isInitialized: false,
         hasUnsavedChanges: false,
         isPenMode: false,
-        penStartPoint: null
+        isDrawing: false,
+        currentPath: [],
+        tempPath: []
       }),
 
       markAsSaved: () => set({ hasUnsavedChanges: false }),
@@ -185,7 +200,21 @@ export const useSceneStore = create<SceneState>()(
 
       setPenMode: (enabled) => set({ isPenMode: enabled }),
 
-      setPenStartPoint: (point) => set({ penStartPoint: point }),
+      setIsDrawing: (drawing) => set({ isDrawing: drawing }),
+
+      setCurrentPath: (path) => set({ currentPath: path }),
+
+      setTempPath: (path) => set({ tempPath: path }),
+
+      addPointToPath: (point) => set((state) => ({
+        currentPath: [...state.currentPath, point]
+      })),
+
+      clearPath: () => set({
+        currentPath: [],
+        tempPath: [],
+        isDrawing: false
+      }),
     }),
     { name: "scene-storage" }
   )

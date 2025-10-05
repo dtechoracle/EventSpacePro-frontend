@@ -34,9 +34,15 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
   const markAsSaved = useSceneStore((s) => s.markAsSaved);
   const showGrid = useSceneStore((s) => s.showGrid);
   const isPenMode = useSceneStore((s) => s.isPenMode);
-  const penStartPoint = useSceneStore((s) => s.penStartPoint);
+  const isDrawing = useSceneStore((s) => s.isDrawing);
+  const currentPath = useSceneStore((s) => s.currentPath);
+  const tempPath = useSceneStore((s) => s.tempPath);
   const setPenMode = useSceneStore((s) => s.setPenMode);
-  const setPenStartPoint = useSceneStore((s) => s.setPenStartPoint);
+  const setIsDrawing = useSceneStore((s) => s.setIsDrawing);
+  const setCurrentPath = useSceneStore((s) => s.setCurrentPath);
+  const setTempPath = useSceneStore((s) => s.setTempPath);
+  const addPointToPath = useSceneStore((s) => s.addPointToPath);
+  const clearPath = useSceneStore((s) => s.clearPath);
 
   // Sync props data to store when props change (only once per data change)
   const hasSyncedRef = useRef(false);
@@ -88,6 +94,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
   const initialMouseAngle = useRef(0);
   const scaleHandleType = useRef<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | null>(null);
   const heightHandleType = useRef<'top' | 'bottom' | null>(null);
+  const currentDrawingPath = useRef<{ x: number; y: number }[]>([]);
 
   const [rotation, setRotation] = useState<number>(0);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
@@ -172,6 +179,15 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         return;
       }
       
+      if (isDrawing && isPenMode) {
+        const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+        currentDrawingPath.current = [...currentDrawingPath.current, { x, y }];
+        setCurrentPath(currentDrawingPath.current);
+        setTempPath(currentDrawingPath.current);
+        console.log('Drawing point:', { x, y }, 'Path length:', currentDrawingPath.current.length);
+        return;
+      }
+
       if (draggingAssetRef.current) {
         const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
         updateAsset(draggingAssetRef.current, { x, y });
@@ -186,6 +202,40 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
     };
 
     const onUp = () => {
+      if (isDrawing && isPenMode) {
+        // Create drawn line asset
+        if (currentDrawingPath.current.length > 1) {
+          const id = `drawn-line-${Date.now()}`;
+          
+          // Calculate center point of the path
+          const centerX = currentDrawingPath.current.reduce((sum, point) => sum + point.x, 0) / currentDrawingPath.current.length;
+          const centerY = currentDrawingPath.current.reduce((sum, point) => sum + point.y, 0) / currentDrawingPath.current.length;
+          
+          const newAsset: AssetInstance = {
+            id,
+            type: "drawn-line",
+            x: centerX,
+            y: centerY,
+            scale: 1,
+            rotation: 0,
+            strokeWidth: 2,
+            strokeColor: "#3B82F6",
+            path: currentDrawingPath.current.map(point => ({
+              x: point.x - centerX,
+              y: point.y - centerY
+            }))
+          };
+          
+          addAssetObject(newAsset);
+          selectAsset(id);
+        }
+        
+        // Reset drawing state
+        currentDrawingPath.current = [];
+        clearPath();
+        setPenMode(false);
+      }
+
       draggingAssetRef.current = null;
       isMovingCanvas.current = false;
       isScalingAsset.current = false;
@@ -216,45 +266,6 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
     addAsset(type, x, y);
   };
 
-  const handleCanvasClick = (e: React.MouseEvent) => {
-    if (!isPenMode || !canvasRef.current || !canvas) return;
-    
-    e.stopPropagation();
-    const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-    
-    if (!penStartPoint) {
-      // First click - set start point
-      setPenStartPoint({ x, y });
-    } else {
-      // Second click - create double line
-      const id = `double-line-${Date.now()}`;
-      const centerX = (penStartPoint.x + x) / 2;
-      const centerY = (penStartPoint.y + y) / 2;
-      const height = Math.sqrt(Math.pow(x - penStartPoint.x, 2) + Math.pow(y - penStartPoint.y, 2));
-      
-      const newAsset: AssetInstance = {
-        id,
-        type: "double-line",
-        x: centerX,
-        y: centerY,
-        scale: 1,
-        rotation: 0,
-        width: 2,
-        height: height,
-        strokeWidth: 2,
-        strokeColor: "#3B82F6",
-        lineGap: 8,
-        lineColor: "#3B82F6"
-      };
-      
-      addAssetObject(newAsset);
-      selectAsset(id);
-      
-      // Reset pen mode
-      setPenMode(false);
-      setPenStartPoint(null);
-    }
-  };
 
   if (!canvas) return null;
 
@@ -814,10 +825,168 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         x: assetCenterPx.x, 
         y: assetCenterPx.y - height / 2 - 30 
       };
+    } else if (asset.type === "drawn-line") {
+      // For drawn lines, use a fixed bounding box since the path can be any shape
+      const boundingSize = 100 * asset.scale;
+      
+      const topLeftPx = { 
+        x: assetCenterPx.x - boundingSize / 2 - 6, 
+        y: assetCenterPx.y - boundingSize / 2 - 6 
+      };
+      const topRightPx = { 
+        x: assetCenterPx.x + boundingSize / 2 + 6, 
+        y: assetCenterPx.y - boundingSize / 2 - 6 
+      };
+      const bottomLeftPx = { 
+        x: assetCenterPx.x - boundingSize / 2 - 6, 
+        y: assetCenterPx.y + boundingSize / 2 + 6 
+      };
+      const bottomRightPx = { 
+        x: assetCenterPx.x + boundingSize / 2 + 6, 
+        y: assetCenterPx.y + boundingSize / 2 + 6 
+      };
+      const rotationHandlePx = { 
+        x: assetCenterPx.x, 
+        y: assetCenterPx.y - boundingSize / 2 - 30 
+      };
 
       return (
         <>
-          {/* Corner scaling handles for double-line */}
+          {/* Corner scaling handles for drawn-line */}
+          <div
+            onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-left')}
+            style={{
+              position: "absolute",
+              left: topLeftPx.x,
+              top: topLeftPx.y,
+              width: handleSize,
+              height: handleSize,
+              backgroundColor: "#3B82F6",
+              border: "2px solid white",
+              borderRadius: "2px",
+              cursor: "nw-resize",
+              zIndex: 10,
+            }}
+            className="hover:bg-blue-600 transition-colors"
+            title="Scale"
+          />
+          <div
+            onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-right')}
+            style={{
+              position: "absolute",
+              left: topRightPx.x,
+              top: topRightPx.y,
+              width: handleSize,
+              height: handleSize,
+              backgroundColor: "#3B82F6",
+              border: "2px solid white",
+              borderRadius: "2px",
+              cursor: "ne-resize",
+              zIndex: 10,
+            }}
+            className="hover:bg-blue-600 transition-colors"
+            title="Scale"
+          />
+          <div
+            onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-left')}
+            style={{
+              position: "absolute",
+              left: bottomLeftPx.x,
+              top: bottomLeftPx.y,
+              width: handleSize,
+              height: handleSize,
+              backgroundColor: "#3B82F6",
+              border: "2px solid white",
+              borderRadius: "2px",
+              cursor: "sw-resize",
+              zIndex: 10,
+            }}
+            className="hover:bg-blue-600 transition-colors"
+            title="Scale"
+          />
+          <div
+            onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-right')}
+            style={{
+              position: "absolute",
+              left: bottomRightPx.x,
+              top: bottomRightPx.y,
+              width: handleSize,
+              height: handleSize,
+              backgroundColor: "#3B82F6",
+              border: "2px solid white",
+              borderRadius: "2px",
+              cursor: "se-resize",
+              zIndex: 10,
+            }}
+            className="hover:bg-blue-600 transition-colors"
+            title="Scale"
+          />
+          
+          {/* Rotation line and handle */}
+          <div
+            style={{
+              position: "absolute",
+              left: assetCenterPx.x,
+              top: assetCenterPx.y,
+              width: 2,
+              height: 30,
+              backgroundColor: "#8B5CF6",
+              transformOrigin: "bottom center",
+              transform: `translate(-50%, -50%)`,
+              zIndex: 9,
+            }}
+          />
+          <div
+            onMouseDown={(e) => onRotationHandleMouseDown(e, asset.id)}
+            style={{
+              position: "absolute",
+              left: rotationHandlePx.x,
+              top: rotationHandlePx.y,
+              width: handleSize,
+              height: handleSize,
+              backgroundColor: "#8B5CF6",
+              border: "2px solid white",
+              borderRadius: "50%",
+              cursor: "grab",
+              zIndex: 10,
+              transform: "translate(-50%, -50%)",
+            }}
+            className="hover:bg-purple-600 transition-colors"
+            title="Rotate"
+          />
+        </>
+      );
+    } else if (asset.type === "text") {
+      // For text, estimate size based on text content and font size
+      const fontSize = (asset.fontSize ?? 16) * asset.scale;
+      const textLength = (asset.text ?? "Enter text").length;
+      const estimatedWidth = Math.max(textLength * fontSize * 0.6, 50); // Rough estimation
+      const estimatedHeight = fontSize * 1.2;
+      
+      const topLeftPx = { 
+        x: assetCenterPx.x - estimatedWidth / 2 - handleSize / 2, 
+        y: assetCenterPx.y - estimatedHeight / 2 - handleSize / 2 
+      };
+      const topRightPx = { 
+        x: assetCenterPx.x + estimatedWidth / 2 + handleSize / 2, 
+        y: assetCenterPx.y - estimatedHeight / 2 - handleSize / 2 
+      };
+      const bottomLeftPx = { 
+        x: assetCenterPx.x - estimatedWidth / 2 - handleSize / 2, 
+        y: assetCenterPx.y + estimatedHeight / 2 + handleSize / 2 
+      };
+      const bottomRightPx = { 
+        x: assetCenterPx.x + estimatedWidth / 2 + handleSize / 2, 
+        y: assetCenterPx.y + estimatedHeight / 2 + handleSize / 2 
+      };
+      const rotationHandlePx = { 
+        x: assetCenterPx.x, 
+        y: assetCenterPx.y - estimatedHeight / 2 - 30 
+      };
+
+      return (
+        <>
+          {/* Corner scaling handles for text */}
           <div
             onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-left')}
             style={{
@@ -1205,7 +1374,15 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         if (e.button !== 0) return;
         if (e.target === canvasRef.current) {
           if (isPenMode) {
-            handleCanvasClick(e);
+            e.stopPropagation();
+            const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+            
+            // Start drawing
+            currentDrawingPath.current = [{ x, y }];
+            setIsDrawing(true);
+            setCurrentPath([{ x, y }]);
+            setTempPath([{ x, y }]);
+            console.log('Started drawing at:', { x, y });
           } else {
             selectAsset(null);
             e.stopPropagation();
@@ -1242,23 +1419,23 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         </svg>
       )}
 
-      {/* Pen Start Point Indicator */}
-      {isPenMode && penStartPoint && (
-        <div
-          style={{
-            position: "absolute",
-            left: penStartPoint.x * mmToPx,
-            top: penStartPoint.y * mmToPx,
-            width: 8,
-            height: 8,
-            backgroundColor: "#EF4444",
-            border: "2px solid white",
-            borderRadius: "50%",
-            transform: "translate(-50%, -50%)",
-            zIndex: 5,
-          }}
-          className="animate-pulse"
-        />
+      {/* Temporary Drawing Path */}
+      {isDrawing && tempPath.length > 1 && (
+        <svg
+          className="absolute inset-0 pointer-events-none"
+          width={canvasPxW}
+          height={canvasPxH}
+          style={{ zIndex: 5 }}
+        >
+          <path
+            d={`M ${tempPath[0].x * mmToPx} ${tempPath[0].y * mmToPx} ${tempPath.slice(1).map(point => `L ${point.x * mmToPx} ${point.y * mmToPx}`).join(' ')}`}
+            stroke="#3B82F6"
+            strokeWidth="2"
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       )}
 
       {/* Rotate Buttons */}
@@ -1420,6 +1597,62 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                     backgroundColor: asset.lineColor ?? "#3B82F6",
                   }}
                 />
+              </div>
+              
+              {/* Handles */}
+              {isSelected && renderAssetHandles(asset, leftPx, topPx)}
+            </div>
+          );
+        }
+
+        if (asset.type === "drawn-line") {
+          return (
+            <div key={asset.id} className="relative">
+              {/* Background layer */}
+              {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: leftPx,
+                    top: topPx,
+                    width: 100,
+                    height: 100,
+                    backgroundColor: asset.backgroundColor,
+                    transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+                    zIndex: -1,
+                  }}
+                />
+              )}
+              
+              {/* Main drawn line */}
+              <div
+                onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
+                style={{
+                  position: "absolute",
+                  left: leftPx,
+                  top: topPx,
+                  transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+                  cursor: "move",
+                }}
+                className={isSelected ? "" : ""}
+              >
+                <svg
+                  width="200"
+                  height="200"
+                  viewBox="-100 -100 200 200"
+                  style={{ overflow: "visible" }}
+                >
+                  {asset.path && asset.path.length > 1 && (
+                    <path
+                      d={`M ${asset.path[0].x} ${asset.path[0].y} ${asset.path.slice(1).map(point => `L ${point.x} ${point.y}`).join(' ')}`}
+                      stroke={asset.strokeColor ?? "#3B82F6"}
+                      strokeWidth={(asset.strokeWidth ?? 2) * asset.scale}
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  )}
+                </svg>
               </div>
               
               {/* Handles */}
