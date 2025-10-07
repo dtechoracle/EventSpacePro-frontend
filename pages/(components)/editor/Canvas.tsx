@@ -119,6 +119,50 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
     return { x: xMm, y: yMm };
   }, [canvas, canvasPxW, canvasPxH, workspaceZoom, mmToPx, rotation]);
 
+  // Function to straighten a path if it's close to being a straight line
+  const straightenPath = useCallback((path: { x: number; y: number }[]) => {
+    if (path.length < 3) return path;
+    
+    const startPoint = path[0];
+    const endPoint = path[path.length - 1];
+    
+    // Calculate straight-line distance
+    const straightDistance = Math.sqrt(
+      Math.pow(endPoint.x - startPoint.x, 2) + Math.pow(endPoint.y - startPoint.y, 2)
+    );
+    
+    // Calculate actual path distance
+    let actualDistance = 0;
+    for (let i = 1; i < path.length; i++) {
+      const segmentDistance = Math.sqrt(
+        Math.pow(path[i].x - path[i-1].x, 2) + Math.pow(path[i].y - path[i-1].y, 2)
+      );
+      actualDistance += segmentDistance;
+    }
+    
+    // Calculate straightness ratio (1.0 = perfectly straight)
+    const straightnessRatio = straightDistance / actualDistance;
+    
+    // If the path is close to straight (ratio > 0.85), straighten it
+    if (straightnessRatio > 0.85) {
+      // Create a straight line with multiple points for smooth rendering
+      const numPoints = Math.max(3, Math.ceil(straightDistance / 5)); // 1 point per 5mm
+      const straightenedPath: { x: number; y: number }[] = [];
+      
+      for (let i = 0; i < numPoints; i++) {
+        const t = i / (numPoints - 1);
+        const x = startPoint.x + (endPoint.x - startPoint.x) * t;
+        const y = startPoint.y + (endPoint.y - startPoint.y) * t;
+        straightenedPath.push({ x, y });
+      }
+      
+      return straightenedPath;
+    }
+    
+    // If not straight enough, return original path
+    return path;
+  }, []);
+
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (isRotatingAsset.current && selectedAssetId) {
@@ -183,7 +227,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
         currentDrawingPath.current = [...currentDrawingPath.current, { x, y }];
         setCurrentPath(currentDrawingPath.current);
-        setTempPath(currentDrawingPath.current);
+        setTempPath([...currentDrawingPath.current]); // Create a new array to ensure re-render
         console.log('Drawing point:', { x, y }, 'Path length:', currentDrawingPath.current.length);
         return;
       }
@@ -203,27 +247,43 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
 
     const onUp = () => {
       if (isDrawing && isPenMode) {
-        // Create drawn line asset
+        // Create double line asset
         if (currentDrawingPath.current.length > 1) {
-          const id = `drawn-line-${Date.now()}`;
+          const id = `double-line-${Date.now()}`;
           
-          // Calculate center point of the path
-          const centerX = currentDrawingPath.current.reduce((sum, point) => sum + point.x, 0) / currentDrawingPath.current.length;
-          const centerY = currentDrawingPath.current.reduce((sum, point) => sum + point.y, 0) / currentDrawingPath.current.length;
+          // Straighten the path if it's close to a straight line
+          const straightenedPath = straightenPath(currentDrawingPath.current);
+          
+          // Calculate center point and dimensions of the straightened path
+          const startPoint = straightenedPath[0];
+          const endPoint = straightenedPath[straightenedPath.length - 1];
+          
+          const centerX = (startPoint.x + endPoint.x) / 2;
+          const centerY = (startPoint.y + endPoint.y) / 2;
+          
+          // Calculate length for the double line
+          const length = Math.sqrt(
+            Math.pow(endPoint.x - startPoint.x, 2) + Math.pow(endPoint.y - startPoint.y, 2)
+          );
+          
+          // Determine if the line is more horizontal or vertical
+          const deltaX = Math.abs(endPoint.x - startPoint.x);
+          const deltaY = Math.abs(endPoint.y - startPoint.y);
+          const isHorizontal = deltaX > deltaY;
           
           const newAsset: AssetInstance = {
             id,
-            type: "drawn-line",
+            type: "double-line",
             x: centerX,
             y: centerY,
             scale: 1,
-            rotation: 0,
-            strokeWidth: 2,
-            strokeColor: "#3B82F6",
-            path: currentDrawingPath.current.map(point => ({
-              x: point.x - centerX,
-              y: point.y - centerY
-            }))
+            rotation: 0, // Start with 0 rotation - user can rotate manually if needed
+            width: isHorizontal ? length : 2, // Width: length for horizontal lines, thickness for vertical
+            height: isHorizontal ? 2 : length, // Height: thickness for horizontal lines, length for vertical
+            lineGap: 8, // Gap between the two lines
+            lineColor: "#3B82F6", // Color of the lines
+            backgroundColor: "transparent",
+            isHorizontal: isHorizontal // Store the orientation
           };
           
           addAssetObject(newAsset);
@@ -231,6 +291,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         }
         
         // Reset drawing state
+        setIsDrawing(false);
         currentDrawingPath.current = [];
         clearPath();
         setPenMode(false);
@@ -256,7 +317,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
     };
-  }, [workspaceZoom, mmToPx, rotation, updateAsset, setCanvasPos, selectedAssetId, clientToCanvasMM]);
+  }, [workspaceZoom, mmToPx, rotation, updateAsset, setCanvasPos, selectedAssetId, clientToCanvasMM, isDrawing, isPenMode, setCurrentPath, setTempPath, clearPath, setPenMode, straightenPath]);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -407,19 +468,21 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
       }
     } else if (asset.type === "double-line") {
       const lineGap = (asset.lineGap ?? 8) * asset.scale;
-      const lineWidth = (asset.width ?? 2) * asset.scale;
-      const height = (asset.height ?? 100) * asset.scale;
-      const totalWidth = lineWidth + lineGap;
+      const isHorizontal = asset.isHorizontal ?? true;
+      const lineThickness = 2;
+      
+      const totalWidth = isHorizontal ? (asset.width ?? 100) * asset.scale : (lineThickness + lineGap);
+      const totalHeight = isHorizontal ? (lineThickness + lineGap) : (asset.height ?? 100) * asset.scale;
       
       switch (handleType) {
         case 'top-left':
-          return { x: asset.x - totalWidth / 2 - 6, y: asset.y - height / 2 - 6 };
+          return { x: asset.x - totalWidth / 2 - 6, y: asset.y - totalHeight / 2 - 6 };
         case 'top-right':
-          return { x: asset.x + totalWidth / 2 + 6, y: asset.y - height / 2 - 6 };
+          return { x: asset.x + totalWidth / 2 + 6, y: asset.y - totalHeight / 2 - 6 };
         case 'bottom-left':
-          return { x: asset.x - totalWidth / 2 - 6, y: asset.y + height / 2 + 6 };
+          return { x: asset.x - totalWidth / 2 - 6, y: asset.y + totalHeight / 2 + 6 };
         case 'bottom-right':
-          return { x: asset.x + totalWidth / 2 + 6, y: asset.y + height / 2 + 6 };
+          return { x: asset.x + totalWidth / 2 + 6, y: asset.y + totalHeight / 2 + 6 };
       }
     } else if (asset.type === "text") {
       // For text, estimate size based on text content and font size
@@ -473,10 +536,15 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         y: asset.y - height / 2 - handleOffset 
       };
     } else if (asset.type === "double-line") {
-      const height = (asset.height ?? 100) * asset.scale;
+      const isHorizontal = asset.isHorizontal ?? true;
+      const lineThickness = 2;
+      const lineGap = (asset.lineGap ?? 8) * asset.scale;
+      
+      const totalHeight = isHorizontal ? (lineThickness + lineGap) : (asset.height ?? 100) * asset.scale;
+      
       return { 
         x: asset.x, 
-        y: asset.y - height / 2 - handleOffset 
+        y: asset.y - totalHeight / 2 - handleOffset 
       };
     } else if (asset.type === "text") {
       const fontSize = (asset.fontSize ?? 16) * asset.scale;
@@ -598,7 +666,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             title="Scale"
           />
           
-          {/* Height adjustment handles */}
+          {/* Height adjustment handles - hidden for double-line assets */}
+          {/* 
           <div
             onMouseDown={(e) => onHeightHandleMouseDown(e, asset.id, 'top')}
             style={{
@@ -633,6 +702,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             className="hover:bg-green-600 transition-colors"
             title="Adjust height"
           />
+          */}
           
           {/* Rotation line and handle */}
           <div
@@ -642,7 +712,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#8B5CF6",
+              backgroundColor: "#3B82F6",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -656,14 +726,14 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#8B5CF6",
+              backgroundColor: "#3B82F6",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
               zIndex: 10,
               transform: "translate(-50%, -50%)",
             }}
-            className="hover:bg-purple-600 transition-colors"
+            className="hover:bg-blue-600 transition-colors"
             title="Rotate"
           />
         </>
@@ -773,7 +843,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#8B5CF6",
+              backgroundColor: "#3B82F6",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -787,44 +857,191 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#8B5CF6",
+              backgroundColor: "#3B82F6",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
               zIndex: 10,
               transform: "translate(-50%, -50%)",
             }}
-            className="hover:bg-purple-600 transition-colors"
+            className="hover:bg-blue-600 transition-colors"
             title="Rotate"
           />
         </>
       );
     } else if (asset.type === "double-line") {
       const lineGap = (asset.lineGap ?? 8) * asset.scale;
-      const lineWidth = (asset.width ?? 2) * asset.scale;
-      const height = (asset.height ?? 100) * asset.scale;
-      const totalWidth = lineWidth + lineGap;
+      const isHorizontal = asset.isHorizontal ?? true;
+      const lineThickness = 2;
+      
+      const totalWidth = isHorizontal ? (asset.width ?? 100) * asset.scale : (lineThickness + lineGap);
+      const totalHeight = isHorizontal ? (lineThickness + lineGap) : (asset.height ?? 100) * asset.scale;
       
       const topLeftPx = { 
         x: assetCenterPx.x - totalWidth / 2 - 6, 
-        y: assetCenterPx.y - height / 2 - 6 
+        y: assetCenterPx.y - totalHeight / 2 - 6 
       };
       const topRightPx = { 
         x: assetCenterPx.x + totalWidth / 2 + 6, 
-        y: assetCenterPx.y - height / 2 - 6 
+        y: assetCenterPx.y - totalHeight / 2 - 6 
       };
       const bottomLeftPx = { 
         x: assetCenterPx.x - totalWidth / 2 - 6, 
-        y: assetCenterPx.y + height / 2 + 6 
+        y: assetCenterPx.y + totalHeight / 2 + 6 
       };
       const bottomRightPx = { 
         x: assetCenterPx.x + totalWidth / 2 + 6, 
-        y: assetCenterPx.y + height / 2 + 6 
+        y: assetCenterPx.y + totalHeight / 2 + 6 
       };
       const rotationHandlePx = { 
         x: assetCenterPx.x, 
-        y: assetCenterPx.y - height / 2 - 30 
+        y: assetCenterPx.y - totalHeight / 2 - 30 
       };
+
+      return (
+        <>
+          {/* Corner scaling handles for double-line */}
+          <div
+            onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-left')}
+            style={{
+              position: "absolute",
+              left: topLeftPx.x,
+              top: topLeftPx.y,
+              width: handleSize,
+              height: handleSize,
+              backgroundColor: "#3B82F6",
+              border: "2px solid white",
+              borderRadius: "2px",
+              cursor: "nw-resize",
+              zIndex: 10,
+            }}
+            className="hover:bg-blue-600 transition-colors"
+            title="Scale"
+          />
+          <div
+            onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-right')}
+            style={{
+              position: "absolute",
+              left: topRightPx.x,
+              top: topRightPx.y,
+              width: handleSize,
+              height: handleSize,
+              backgroundColor: "#3B82F6",
+              border: "2px solid white",
+              borderRadius: "2px",
+              cursor: "ne-resize",
+              zIndex: 10,
+            }}
+            className="hover:bg-blue-600 transition-colors"
+            title="Scale"
+          />
+          <div
+            onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-left')}
+            style={{
+              position: "absolute",
+              left: bottomLeftPx.x,
+              top: bottomLeftPx.y,
+              width: handleSize,
+              height: handleSize,
+              backgroundColor: "#3B82F6",
+              border: "2px solid white",
+              borderRadius: "2px",
+              cursor: "sw-resize",
+              zIndex: 10,
+            }}
+            className="hover:bg-blue-600 transition-colors"
+            title="Scale"
+          />
+          <div
+            onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-right')}
+            style={{
+              position: "absolute",
+              left: bottomRightPx.x,
+              top: bottomRightPx.y,
+              width: handleSize,
+              height: handleSize,
+              backgroundColor: "#3B82F6",
+              border: "2px solid white",
+              borderRadius: "2px",
+              cursor: "se-resize",
+              zIndex: 10,
+            }}
+            className="hover:bg-blue-600 transition-colors"
+            title="Scale"
+          />
+          
+          {/* Height adjustment handles - hidden for double-line assets */}
+          {/* 
+          <div
+            onMouseDown={(e) => onHeightHandleMouseDown(e, asset.id, 'top')}
+            style={{
+              position: "absolute",
+              left: assetCenterPx.x - 10,
+              top: topLeftPx.y,
+              width: 8,
+              height: handleSize,
+              backgroundColor: "#10B981",
+              border: "2px solid white",
+              borderRadius: "2px",
+              cursor: "ns-resize",
+              zIndex: 10,
+            }}
+            className="hover:bg-green-600 transition-colors"
+            title="Adjust height"
+          />
+          <div
+            onMouseDown={(e) => onHeightHandleMouseDown(e, asset.id, 'bottom')}
+            style={{
+              position: "absolute",
+              left: assetCenterPx.x - 10,
+              top: bottomLeftPx.y,
+              width: 8,
+              height: handleSize,
+              backgroundColor: "#10B981",
+              border: "2px solid white",
+              borderRadius: "2px",
+              cursor: "ns-resize",
+              zIndex: 10,
+            }}
+            className="hover:bg-green-600 transition-colors"
+            title="Adjust height"
+          />
+          */}
+          
+          {/* Rotation line and handle */}
+          <div
+            style={{
+              position: "absolute",
+              left: assetCenterPx.x,
+              top: assetCenterPx.y,
+              width: 2,
+              height: 30,
+              backgroundColor: "#3B82F6",
+              transformOrigin: "bottom center",
+              transform: `translate(-50%, -50%)`,
+              zIndex: 9,
+            }}
+          />
+          <div
+            onMouseDown={(e) => onRotationHandleMouseDown(e, asset.id)}
+            style={{
+              position: "absolute",
+              left: rotationHandlePx.x,
+              top: rotationHandlePx.y,
+              width: handleSize,
+              height: handleSize,
+              backgroundColor: "#3B82F6",
+              border: "2px solid white",
+              borderRadius: "50%",
+              cursor: "grab",
+              zIndex: 10,
+              transform: "translate(-50%, -50%)",
+            }}
+            className="hover:bg-blue-600 transition-colors"
+            title="Rotate"
+          />
+        </>
+      );
     } else if (asset.type === "drawn-line") {
       // For drawn lines, use a fixed bounding box since the path can be any shape
       const boundingSize = 100 * asset.scale;
@@ -930,7 +1147,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#8B5CF6",
+              backgroundColor: "#3B82F6",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -944,14 +1161,14 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#8B5CF6",
+              backgroundColor: "#3B82F6",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
               zIndex: 10,
               transform: "translate(-50%, -50%)",
             }}
-            className="hover:bg-purple-600 transition-colors"
+            className="hover:bg-blue-600 transition-colors"
             title="Rotate"
           />
         </>
@@ -1064,7 +1281,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#8B5CF6",
+              backgroundColor: "#3B82F6",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -1078,14 +1295,14 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#8B5CF6",
+              backgroundColor: "#3B82F6",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
               zIndex: 10,
               transform: "translate(-50%, -50%)",
             }}
-            className="hover:bg-purple-600 transition-colors"
+            className="hover:bg-blue-600 transition-colors"
             title="Rotate"
           />
         </>
@@ -1198,7 +1415,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#8B5CF6",
+              backgroundColor: "#3B82F6",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -1212,14 +1429,14 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#8B5CF6",
+              backgroundColor: "#3B82F6",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
               zIndex: 10,
               transform: "translate(-50%, -50%)",
             }}
-            className="hover:bg-purple-600 transition-colors"
+            className="hover:bg-blue-600 transition-colors"
             title="Rotate"
           />
         </>
@@ -1330,7 +1547,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#8B5CF6",
+              backgroundColor: "#3B82F6",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -1344,14 +1561,14 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#8B5CF6",
+              backgroundColor: "#3B82F6",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
               zIndex: 10,
               transform: "translate(-50%, -50%)",
             }}
-            className="hover:bg-purple-600 transition-colors"
+            className="hover:bg-blue-600 transition-colors"
             title="Rotate"
           />
         </>
@@ -1383,6 +1600,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             setCurrentPath([{ x, y }]);
             setTempPath([{ x, y }]);
             console.log('Started drawing at:', { x, y });
+            return; // Prevent canvas movement when in pen mode
           } else {
             selectAsset(null);
             e.stopPropagation();
@@ -1420,21 +1638,30 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
       )}
 
       {/* Temporary Drawing Path */}
-      {isDrawing && tempPath.length > 1 && (
+      {isDrawing && tempPath.length > 0 && (
         <svg
           className="absolute inset-0 pointer-events-none"
           width={canvasPxW}
           height={canvasPxH}
           style={{ zIndex: 5 }}
         >
-          <path
-            d={`M ${tempPath[0].x * mmToPx} ${tempPath[0].y * mmToPx} ${tempPath.slice(1).map(point => `L ${point.x * mmToPx} ${point.y * mmToPx}`).join(' ')}`}
-            stroke="#3B82F6"
-            strokeWidth="2"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          {tempPath.length === 1 ? (
+            <circle
+              cx={tempPath[0].x * mmToPx}
+              cy={tempPath[0].y * mmToPx}
+              r="2"
+              fill="#3B82F6"
+            />
+          ) : (
+            <path
+              d={`M ${tempPath[0].x * mmToPx} ${tempPath[0].y * mmToPx} ${tempPath.slice(1).map(point => `L ${point.x * mmToPx} ${point.y * mmToPx}`).join(' ')}`}
+              stroke="#3B82F6"
+              strokeWidth="2"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
         </svg>
       )}
 
@@ -1541,7 +1768,14 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
 
         if (asset.type === "double-line") {
           const lineGap = (asset.lineGap ?? 8) * asset.scale;
-          const lineWidth = (asset.width ?? 2) * asset.scale;
+          const isHorizontal = asset.isHorizontal ?? true;
+          
+          // Get the line thickness and length
+          const lineThickness = 2; // Fixed thickness for now
+          const lineLength = isHorizontal ? (asset.width ?? 100) : (asset.height ?? 100);
+          
+          const containerWidth = isHorizontal ? lineLength * asset.scale : (lineThickness + lineGap);
+          const containerHeight = isHorizontal ? (lineThickness + lineGap) : lineLength * asset.scale;
           
           return (
             <div key={asset.id} className="relative">
@@ -1552,8 +1786,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                     position: "absolute",
                     left: leftPx,
                     top: topPx,
-                    width: lineWidth + lineGap,
-                    height: (asset.height ?? 100) * asset.scale,
+                    width: containerWidth,
+                    height: containerHeight,
                     backgroundColor: asset.backgroundColor,
                     transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
                     zIndex: -1,
@@ -1568,35 +1802,64 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                   position: "absolute",
                   left: leftPx,
                   top: topPx,
-                  width: lineWidth + lineGap,
-                  height: (asset.height ?? 100) * asset.scale,
+                  width: containerWidth,
+                  height: containerHeight,
                   transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
                   cursor: "move",
                 }}
                 className={isSelected ? "" : ""}
               >
-                {/* First line */}
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: lineWidth,
-                    height: "100%",
-                    backgroundColor: asset.lineColor ?? "#3B82F6",
-                  }}
-                />
-                {/* Second line */}
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: lineWidth + lineGap,
-                    width: lineWidth,
-                    height: "100%",
-                    backgroundColor: asset.lineColor ?? "#3B82F6",
-                  }}
-                />
+                {isHorizontal ? (
+                  <>
+                    {/* First line - horizontal */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: lineThickness,
+                        backgroundColor: asset.lineColor ?? "#3B82F6",
+                      }}
+                    />
+                    {/* Second line - horizontal */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: lineThickness + lineGap,
+                        left: 0,
+                        width: "100%",
+                        height: lineThickness,
+                        backgroundColor: asset.lineColor ?? "#3B82F6",
+                      }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    {/* First line - vertical */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: lineThickness,
+                        height: "100%",
+                        backgroundColor: asset.lineColor ?? "#3B82F6",
+                      }}
+                    />
+                    {/* Second line - vertical */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: lineThickness + lineGap,
+                        width: lineThickness,
+                        height: "100%",
+                        backgroundColor: asset.lineColor ?? "#3B82F6",
+                      }}
+                    />
+                  </>
+                )}
               </div>
               
               {/* Handles */}

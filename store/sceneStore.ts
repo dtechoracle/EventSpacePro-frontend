@@ -23,6 +23,7 @@ export type AssetInstance = {
   // Double-line specific properties
   lineGap?: number; // gap between the two lines
   lineColor?: string; // color of the double lines
+  isHorizontal?: boolean; // orientation of double lines
 
   // Path-based line properties
   path?: { x: number; y: number }[]; // for drawn lines

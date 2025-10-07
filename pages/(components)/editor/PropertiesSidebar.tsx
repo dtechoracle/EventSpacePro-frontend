@@ -265,6 +265,28 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       />
                     </div>
                   </div>
+                ) : selectedAsset.type === "drawn-line" ? (
+                  <div className="space-y-2 mt-2">
+                    <div className="flex justify-between items-center">
+                      <span>Stroke Width</span>
+                      <input
+                        type="number"
+                        value={selectedAsset.strokeWidth || 2}
+                        onChange={(e) => updateAsset(selectedAsset.id, { strokeWidth: Number(e.target.value) })}
+                        className="sidebar-input w-28 text-xs"
+                        min={1}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Stroke Color</span>
+                      <input
+                        type="color"
+                        value={selectedAsset.strokeColor || "#3B82F6"}
+                        onChange={(e) => updateAsset(selectedAsset.id, { strokeColor: e.target.value })}
+                        className="w-28 h-6 p-0 border-none"
+                      />
+                    </div>
+                  </div>
                 ) : selectedAsset.type === "text" ? (
                   <div className="space-y-2 mt-2">
                     <div className="flex justify-between items-center">
