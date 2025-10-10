@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useSceneStore, AssetInstance, EventData } from "@/store/sceneStore";
 import { PaperSize } from "@/lib/paperSizes";
+import { PAPER_SIZES } from "@/lib/paperSizes";
 
 // Type for API response that wraps EventData
 type EventDataResponse = {
@@ -34,15 +35,20 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
   const markAsSaved = useSceneStore((s) => s.markAsSaved);
   const showGrid = useSceneStore((s) => s.showGrid);
   const isPenMode = useSceneStore((s) => s.isPenMode);
+  const isWallMode = useSceneStore((s) => s.isWallMode);
   const isDrawing = useSceneStore((s) => s.isDrawing);
   const currentPath = useSceneStore((s) => s.currentPath);
   const tempPath = useSceneStore((s) => s.tempPath);
   const setPenMode = useSceneStore((s) => s.setPenMode);
+  const setWallMode = useSceneStore((s) => s.setWallMode);
   const setIsDrawing = useSceneStore((s) => s.setIsDrawing);
   const setCurrentPath = useSceneStore((s) => s.setCurrentPath);
   const setTempPath = useSceneStore((s) => s.setTempPath);
   const addPointToPath = useSceneStore((s) => s.addPointToPath);
   const clearPath = useSceneStore((s) => s.clearPath);
+  const copyAsset = useSceneStore((s) => s.copyAsset);
+  const pasteAsset = useSceneStore((s) => s.pasteAsset);
+  const clipboard = useSceneStore((s) => s.clipboard);
 
   // Sync props data to store when props change (only once per data change)
   const hasSyncedRef = useRef(false);
@@ -59,8 +65,9 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         // Reset store and populate with current props data
         reset();
         
-        // Set canvas
-        if (propCanvas.size) {
+        // Set canvas only if size is a known PaperSize (A1–A5)
+        const isKnownSize = !!(propCanvas.size && (propCanvas.size as keyof typeof PAPER_SIZES) in PAPER_SIZES);
+        if (isKnownSize) {
           const setCanvas = useSceneStore.getState().setCanvas;
           setCanvas(propCanvas.size as PaperSize);
         }
@@ -99,11 +106,15 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
   const [rotation, setRotation] = useState<number>(0);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>("");
-  const canvasPxW = (canvas?.width ?? 0) * mmToPx;
-  const canvasPxH = (canvas?.height ?? 0) * mmToPx;
+  const [copiedAssetId, setCopiedAssetId] = useState<string | null>(null);
+  // Use store canvas when known; otherwise fall back to provided dimensions so we can still render an empty layout without paper
+  const effectiveWidthMm = (canvas?.width ?? propCanvas?.width ?? 0);
+  const effectiveHeightMm = (canvas?.height ?? propCanvas?.height ?? 0);
+  const canvasPxW = effectiveWidthMm * mmToPx;
+  const canvasPxH = effectiveHeightMm * mmToPx;
 
   const clientToCanvasMM = useCallback((clientX: number, clientY: number) => {
-    if (!canvasRef.current || !canvas) return { x: 0, y: 0 };
+    if (!canvasRef.current || !effectiveWidthMm || !effectiveHeightMm) return { x: 0, y: 0 };
     const rect = canvasRef.current.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
@@ -117,7 +128,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
     const xMm = (ux + halfWscreen) / (mmToPx * workspaceZoom);
     const yMm = (uy + halfHscreen) / (mmToPx * workspaceZoom);
     return { x: xMm, y: yMm };
-  }, [canvas, canvasPxW, canvasPxH, workspaceZoom, mmToPx, rotation]);
+  }, [effectiveWidthMm, effectiveHeightMm, canvasPxW, canvasPxH, workspaceZoom, mmToPx, rotation]);
 
   // Function to straighten a path if it's close to being a straight line
   const straightenPath = useCallback((path: { x: number; y: number }[]) => {
@@ -223,7 +234,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         return;
       }
       
-      if (isDrawing && isPenMode) {
+      if (isDrawing && (isPenMode || isWallMode)) {
         const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
         currentDrawingPath.current = [...currentDrawingPath.current, { x, y }];
         setCurrentPath(currentDrawingPath.current);
@@ -246,11 +257,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
     };
 
     const onUp = () => {
-      if (isDrawing && isPenMode) {
-        // Create double line asset
+      if (isDrawing && (isPenMode || isWallMode)) {
         if (currentDrawingPath.current.length > 1) {
-          const id = `double-line-${Date.now()}`;
-          
           // Straighten the path if it's close to a straight line
           const straightenedPath = straightenPath(currentDrawingPath.current);
           
@@ -261,7 +269,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
           const centerX = (startPoint.x + endPoint.x) / 2;
           const centerY = (startPoint.y + endPoint.y) / 2;
           
-          // Calculate length for the double line
+          // Calculate length for the line
           const length = Math.sqrt(
             Math.pow(endPoint.x - startPoint.x, 2) + Math.pow(endPoint.y - startPoint.y, 2)
           );
@@ -271,23 +279,51 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
           const deltaY = Math.abs(endPoint.y - startPoint.y);
           const isHorizontal = deltaX > deltaY;
           
-          const newAsset: AssetInstance = {
-            id,
-            type: "double-line",
-            x: centerX,
-            y: centerY,
-            scale: 1,
-            rotation: 0, // Start with 0 rotation - user can rotate manually if needed
-            width: isHorizontal ? length : 2, // Width: length for horizontal lines, thickness for vertical
-            height: isHorizontal ? 2 : length, // Height: thickness for horizontal lines, length for vertical
-            lineGap: 8, // Gap between the two lines
-            lineColor: "#3B82F6", // Color of the lines
-            backgroundColor: "transparent",
-            isHorizontal: isHorizontal // Store the orientation
-          };
+          let newAsset: AssetInstance;
+          
+          if (isWallMode) {
+            // Create double line asset for wall mode
+            const id = `double-line-${Date.now()}`;
+            newAsset = {
+              id,
+              type: "double-line",
+              x: centerX,
+              y: centerY,
+              scale: 1,
+              rotation: 0, // Start with 0 rotation - user can rotate manually if needed
+              width: isHorizontal ? length : 2, // Width: length for horizontal lines, thickness for vertical
+              height: isHorizontal ? 2 : length, // Height: thickness for horizontal lines, length for vertical
+              lineGap: 8, // Gap between the two lines
+              lineColor: "#3B82F6", // Color of the lines
+              backgroundColor: "transparent",
+              isHorizontal: isHorizontal // Store the orientation
+            };
+          } else {
+            // Create single line asset for pen mode (drawn-line type for path rendering)
+            const id = `drawn-line-${Date.now()}`;
+            
+            // Convert path coordinates to be relative to the center point
+            const relativePath = straightenedPath.map(point => ({
+              x: point.x - centerX,
+              y: point.y - centerY
+            }));
+            
+            newAsset = {
+              id,
+              type: "drawn-line",
+              x: centerX,
+              y: centerY,
+              scale: 1,
+              rotation: 0, // Start with 0 rotation - user can rotate manually if needed
+              strokeWidth: 2,
+              strokeColor: "#3B82F6",
+              backgroundColor: "transparent",
+              path: relativePath // Store the relative path for rendering
+            };
+          }
           
           addAssetObject(newAsset);
-          selectAsset(id);
+          selectAsset(newAsset.id);
         }
         
         // Reset drawing state
@@ -295,6 +331,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         currentDrawingPath.current = [];
         clearPath();
         setPenMode(false);
+        setWallMode(false);
       }
 
       draggingAssetRef.current = null;
@@ -317,7 +354,34 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
     };
-  }, [workspaceZoom, mmToPx, rotation, updateAsset, setCanvasPos, selectedAssetId, clientToCanvasMM, isDrawing, isPenMode, setCurrentPath, setTempPath, clearPath, setPenMode, straightenPath]);
+  }, [workspaceZoom, mmToPx, rotation, updateAsset, setCanvasPos, selectedAssetId, clientToCanvasMM, isDrawing, isPenMode, isWallMode, setCurrentPath, setTempPath, clearPath, setPenMode, setWallMode, straightenPath]);
+
+  // Keyboard event handlers for copy/paste
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle copy/paste if we're not in a text input or textarea
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'c' && selectedAssetId) {
+          e.preventDefault();
+          copyAsset(selectedAssetId);
+          // Show visual feedback
+          setCopiedAssetId(selectedAssetId);
+          setTimeout(() => setCopiedAssetId(null), 500);
+        } else if (e.key === 'v' && clipboard) {
+          e.preventDefault();
+          pasteAsset();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedAssetId, clipboard, copyAsset, pasteAsset]);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -327,9 +391,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
     addAsset(type, x, y);
   };
 
-
-  if (!canvas) return null;
-
+  // When canvas is unknown (non A-series), we still render an empty layout with no paper background
 
   const rotateCW = () => setRotation((r) => (r + 90) % 360);
   const rotateCCW = () => setRotation((r) => (r - 90 + 360) % 360);
@@ -1583,14 +1645,14 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
   return (
     <div
       ref={canvasRef}
-      className={`relative bg-white border shadow-md ${isPenMode ? 'cursor-crosshair' : ''}`}
+      className={`relative ${canvas ? 'bg-white border shadow-md' : 'bg-transparent'} ${(isPenMode || isWallMode) ? 'cursor-crosshair' : ''}`}
       style={{ width: canvasPxW, height: canvasPxH, transform: `rotate(${rotation}deg)`, transformOrigin: "center center" }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
       onMouseDown={(e) => {
         if (e.button !== 0) return;
         if (e.target === canvasRef.current) {
-          if (isPenMode) {
+          if (isPenMode || isWallMode) {
             e.stopPropagation();
             const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
             
@@ -1677,6 +1739,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
       {assets.map((asset) => {
         const def = ASSET_LIBRARY.find((a) => a.id === asset.type);
         const isSelected = asset.id === selectedAssetId;
+        const isCopied = asset.id === copiedAssetId;
         const leftPx = asset.x * mmToPx;
         const topPx = asset.y * mmToPx;
         const totalRotation = asset.rotation;
@@ -1715,6 +1778,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                   borderRadius: asset.type === "circle" ? "50%" : "0%",
                   transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
                   cursor: "move",
+                  boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
+                  transition: isCopied ? "box-shadow 0.3s ease" : undefined,
                 }}
                 className={isSelected ? "" : ""}
               />
@@ -1756,6 +1821,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                   backgroundColor: asset.strokeColor,
                   transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
                   cursor: "move",
+                  boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
+                  transition: isCopied ? "box-shadow 0.3s ease" : undefined,
                 }}
                 className={isSelected ? "" : ""}
               />
@@ -1806,6 +1873,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                   height: containerHeight,
                   transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
                   cursor: "move",
+                  boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
+                  transition: isCopied ? "box-shadow 0.3s ease" : undefined,
                 }}
                 className={isSelected ? "" : ""}
               >
@@ -1896,6 +1965,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                   top: topPx,
                   transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
                   cursor: "move",
+                  boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
+                  transition: isCopied ? "box-shadow 0.3s ease" : undefined,
                 }}
                 className={isSelected ? "" : ""}
               >
@@ -1992,6 +2063,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                     whiteSpace: "nowrap",
                     userSelect: "none",
                     cursor: "move",
+                    boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
+                    transition: isCopied ? "box-shadow 0.3s ease" : undefined,
                   }}
                   className={isSelected ? "" : ""}
                 >
@@ -2018,6 +2091,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                   width: (asset.width ?? 24) * asset.scale,
                   height: (asset.height ?? 24) * asset.scale,
                   transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+                  boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
+                  transition: isCopied ? "box-shadow 0.3s ease" : undefined,
                 }}
                 className={isSelected ? "" : ""}
               >
@@ -2052,6 +2127,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
+                transition: isCopied ? "box-shadow 0.3s ease" : undefined,
               }}
               className={isSelected ? "text-[var(--accent)]" : "text-[var(--accent)]"}
             >
@@ -2064,9 +2141,11 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         );
       })}
 
-      <span className="absolute bottom-2 right-2 text-xs text-gray-400 pointer-events-none">
-        {canvas.size} ({canvas.width}×{canvas.height} mm)
-      </span>
+      {canvas && (
+        <span className="absolute bottom-2 right-2 text-xs text-gray-400 pointer-events-none">
+          {canvas.size} ({canvas.width}×{canvas.height} mm)
+        </span>
+      )}
     </div>
   );
 }

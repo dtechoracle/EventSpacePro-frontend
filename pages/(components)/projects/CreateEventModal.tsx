@@ -14,10 +14,13 @@ interface ApiError {
   errors?: { path: string; message: string; code: string }[];
 }
 
+type PaperChoice = PaperSize | "layout";
+
 export default function CreateEventModal({ onClose }: { onClose: () => void }) {
   const [phase, setPhase] = useState(1);
   const [eventName, setEventName] = useState("");
-  const [paperSize, setPaperSize] = useState<PaperSize>("A4");
+  const [eventType, setEventType] = useState("");
+  const [paperSize, setPaperSize] = useState<PaperChoice>("A4");
   const router = useRouter();
   const setCanvas = useSceneStore((s) => s.setCanvas);
   const { slug } = router.query;
@@ -25,7 +28,8 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
   const mutation = useMutation<{ message: string; data: { _id: string } }, ApiError>({
     mutationKey: ["create-event"],
     mutationFn: () => {
-      const paperDimensions = PAPER_SIZES[paperSize];
+      const isKnown = (paperSize as keyof typeof PAPER_SIZES) in PAPER_SIZES;
+      const paperDimensions = isKnown ? PAPER_SIZES[paperSize as PaperSize] : { width: 1000, height: 1000 };
       const canvases = [{
         size: paperSize,
         width: paperDimensions.width,
@@ -34,11 +38,15 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
       
       return apiRequest(`/projects/${slug}/events`, "POST", { 
         name: eventName, 
+        type: eventType,
         canvases 
       }, true);
     },
     onSuccess: (response) => {
-      setCanvas(paperSize);
+      const isKnown = (paperSize as keyof typeof PAPER_SIZES) in PAPER_SIZES;
+      if (isKnown) {
+        setCanvas(paperSize as PaperSize);
+      }
       router.push(`/dashboard/editor/${slug}/${response.data._id}`);
       toast.success("Event created successfully!");
       onClose();
@@ -100,9 +108,20 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
                   onChange={(e) => setEventName(e.target.value)}
                   className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
                 />
+                <select
+                  value={eventType}
+                  onChange={(e) => setEventType(e.target.value)}
+                  className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
+                >
+                  <option value="" className="text-gray-500">Event Type</option>
+                  <option value="Custom venue">Custom Venue</option>
+                  <option value="Create marquee">Create Marquee</option>
+                  <option value="Half store">Half Store</option>
+                  <option value="Preloaded venue">Preloaded Venue</option>
+                </select>
                 <button
-                  onClick={() => eventName && setPhase(2)}
-                  disabled={!eventName}
+                  onClick={() => eventName && eventType && setPhase(2)}
+                  disabled={!eventName || !eventType}
                   className="w-full h-14 rounded-2xl text-white text-base font-medium bg-[var(--accent)] disabled:opacity-50"
                 >
                   Next
@@ -125,9 +144,10 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
 
                 <select
                   value={paperSize}
-                  onChange={(e) => setPaperSize(e.target.value as PaperSize)}
+                  onChange={(e) => setPaperSize(e.target.value as PaperChoice)}
                   className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
                 >
+                  <option value="layout">Plain Layout</option>
                   <option value="A1">A1 (59.4 × 84.1 cm)</option>
                   <option value="A2">A2 (42 × 59.4 cm)</option>
                   <option value="A3">A3 (29.7 × 42 cm)</option>
