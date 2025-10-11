@@ -38,14 +38,14 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
   };
 
   return (
-    <div className="w-64 h-screen bg-[#FDFDFF] flex flex-col p-4 text-sm">
+    <div className="w-32 h-screen bg-[#FDFDFF] flex flex-col p-2 text-xs">
       {/* Toolbar Heading */}
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-lg font-bold">Toolbar</h1>
+        <h1 className="text-sm font-bold">Toolbar</h1>
         {onSave && (
           <button
             onClick={onSave}
-            className={`flex items-center gap-2 px-3 py-1 text-white text-sm rounded transition-colors invisible ${
+            className={`flex items-center gap-1 px-2 py-1 text-white text-xs rounded transition-colors invisible ${
               hasUnsavedChanges 
                 ? 'bg-orange-500 hover:bg-orange-600 animate-pulse' 
                 : 'bg-green-500 hover:bg-green-600'
@@ -53,7 +53,7 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
             title={hasUnsavedChanges ? "Save changes" : "No changes to save"}
             disabled={!hasUnsavedChanges}
           >
-            <FiSave size={14} />
+            <FiSave size={12} />
             {hasUnsavedChanges ? "Save" : "Saved"}
           </button>
         )}
@@ -67,32 +67,32 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
             onClick={() => setShowCanvases((p) => !p)}
           >
             <span className="capitalize text-xs font-semibold tracking-wide">
-              Canvases
+              Pages
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <div onClick={() => setShowCanvases((p) => !p)}>
               {showCanvases ? <FiChevronDown /> : <FiChevronRight />}
             </div>
             <button className="p-1 hover:bg-gray-100 rounded">
-              <FiPlus size={14} />
+              <FiPlus size={12} />
             </button>
           </div>
         </div>
 
         {showCanvases && (
-          <div className="space-y-2 pt-3">
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-5 bg-[var(--accent)] text-white flex items-center justify-center text-xs font-bold rounded">
+          <div className="space-y-1 pt-2">
+            <div className="flex items-center gap-1">
+              <div className="w-4 h-4 bg-[var(--accent)] text-white flex items-center justify-center text-xs font-bold rounded">
                 M
               </div>
-              <span className="font-medium">Model Canvas</span>
+              <span className="font-medium text-xs">Model</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-5 bg-[var(--accent)] text-white flex items-center justify-center text-xs font-bold rounded">
+            <div className="flex items-center gap-1">
+              <div className="w-4 h-4 bg-[var(--accent)] text-white flex items-center justify-center text-xs font-bold rounded">
                 P
               </div>
-              <span className="font-medium">Paper Canvas</span>
+              <span className="font-medium text-xs">Paper</span>
             </div>
           </div>
         )}
@@ -109,7 +109,7 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
               Layers
             </span>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-1 items-center">
             <div onClick={() => setShowLayers((p) => !p)} >
               {showLayers ? <FiChevronDown /> : <FiChevronRight />}
             </div>
@@ -118,13 +118,13 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
               className="p-1 hover:bg-gray-100 rounded"
               onClick={addLayer}
             >
-              <FiPlus size={14} />
+              <FiPlus size={12} />
             </button>
           </div>
         </div>
 
         {showLayers && (
-          <div className="space-y-1 pt-3">
+          <div className="space-y-1 pt-2">
             {layers.map((layer) => (
               <div key={layer.id} className="">
                 <div className="flex items-center gap-1">
@@ -133,18 +133,18 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
                     onClick={() => toggleLayer(layer.id)}
                   >
                     {layer.open ? (
-                      <FiChevronDown size={14} />
+                      <FiChevronDown size={12} />
                     ) : (
-                      <FiChevronRight size={14} />
+                      <FiChevronRight size={12} />
                     )}
                   </button>
 
-                  <div className="h-3 w-1 rounded-sm bg-[var(--accent)] mr-1" />
+                  <div className="h-2 w-1 rounded-sm bg-[var(--accent)] mr-1" />
 
                   {editingLayer === layer.id ? (
                     <input
                       autoFocus
-                      className="border rounded px-1 text-xs"
+                      className="border rounded px-1 text-xs w-20"
                       value={layer.name}
                       onChange={(e) =>
                         setLayers((prev) =>
@@ -171,7 +171,7 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
                 </div>
 
                 {layer.open && (
-                  <div className="pl-6 text-gray-500 text-xs space-y-1">
+                  <div className="pl-4 text-gray-500 text-xs space-y-0.5">
                     {layer.children.map((child, idx) => (
                       <div key={idx}>{child}</div>
                     ))}
@@ -185,13 +185,13 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
 
       <div>
         <div className="space-y-1 text-xs text-black/65">
-          <div className="flex items-center gap-2">
-            <LuFocus size={14} />
-            <span>Asset 1</span>
+          <div className="flex items-center gap-1">
+            <LuFocus size={12} />
+            <span className="text-xs">Asset 1</span>
           </div>
-          <div className="flex items-center gap-2">
-            <LuFocus size={14} />
-            <span>Asset 2</span>
+          <div className="flex items-center gap-1">
+            <LuFocus size={12} />
+            <span className="text-xs">Asset 2</span>
           </div>
         </div>
       </div>

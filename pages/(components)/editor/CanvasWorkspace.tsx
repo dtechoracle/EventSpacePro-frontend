@@ -61,18 +61,27 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
     } : null;
   }, [actualData]);
 
+  // Calculate canvas dimensions in pixels
+  const canvasPxW = canvas ? canvas.width * MM_TO_PX : 0;
+  const canvasPxH = canvas ? canvas.height * MM_TO_PX : 0;
+
   // center the canvas inside the viewport on first mount
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !canvas) return;
 
     const rect = el.getBoundingClientRect();
-    const canvasPxW = canvas.width * MM_TO_PX;
-    const canvasPxH = canvas.height * MM_TO_PX;
 
+    // Center the canvas in the viewport (relative to center transform origin)
     setCanvasPos({
-      x: Math.round(rect.width / 2 - canvasPxW / 2),
-      y: Math.round(rect.height / 2 - canvasPxH / 2),
+      x: rect.width / 2,
+      y: rect.height / 2,
+    });
+    
+    // Reset offset to center the view
+    setOffset({
+      x: rect.width / 2,
+      y: rect.height / 2,
     });
   }, [canvas]);
 
@@ -153,15 +162,15 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
         className="relative w-full h-full"
         style={{
           transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-          transformOrigin: "top left",
+          transformOrigin: "center center",
         }}
       >
         {/* Canvas (paper) */}
         <div
           style={{
             position: "absolute",
-            left: canvasPos.x,
-            top: canvasPos.y,
+            left: canvasPos.x - (canvasPxW || 0) / 2,
+            top: canvasPos.y - (canvasPxH || 0) / 2,
           }}
         >
           <Canvas

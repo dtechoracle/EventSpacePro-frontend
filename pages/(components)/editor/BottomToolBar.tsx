@@ -15,7 +15,7 @@ interface BarProps{
 export default function BottomToolbar({setShowAssetsModal}: BarProps) {
   const tools = useToolbarTools();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const { isPenMode, setPenMode } = useSceneStore();
+  const { isPenMode, isWallMode, setPenMode, setWallMode } = useSceneStore();
 
   // Example states to toggle
   const [isPreviewOn, setIsPreviewOn] = useState(false);
@@ -35,6 +35,11 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
         break;
       case "draw-line":
         setPenMode(!isPenMode);
+        if (isPenMode) setWallMode(false); // Turn off wall mode when turning off pen mode
+        break;
+      case "draw-wall":
+        setWallMode(!isWallMode);
+        if (isWallMode) setPenMode(false); // Turn off pen mode when turning off wall mode
         break;
       case "add-text":
         // Add text at center of canvas
@@ -87,7 +92,7 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
         initial={{ y: 100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: "spring", stiffness: 200, damping: 20 }}
-        className="flex items-center gap-3 bg-white px-4 py-2 rounded-2xl shadow-lg relative"
+        className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-lg relative"
       >
         {tools.map((tool, index) => (
           <div key={index} className="flex items-center relative">
@@ -95,8 +100,9 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
             <motion.button
               whileTap={{ scale: 0.95 }}
               whileHover={{ scale: 1.03 }}
-              className={`w-10 h-10 flex items-center justify-center rounded-lg ${
-                tool.options.some(opt => opt.id === "draw-line") && isPenMode 
+              className={`w-8 h-8 flex items-center justify-center rounded-md ${
+                (tool.options.some(opt => opt.id === "draw-line") && isPenMode) || 
+                (tool.options.some(opt => opt.id === "draw-wall") && isWallMode)
                   ? "bg-green-600 text-white" 
                   : "bg-[var(--accent)] text-white"
               }`}
@@ -109,9 +115,9 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
             {/* Dropdown Toggle */}
             <button
               onClick={() => setOpenIndex(openIndex === index ? null : index)}
-              className="ml-1 text-gray-600 hover:text-black"
+              className="ml-0.5 text-gray-600 hover:text-black"
             >
-              <ChevronDown size={16} />
+              <ChevronDown size={14} />
             </button>
 
             {/* Dropdown Menu */}
@@ -122,19 +128,19 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.98 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute bottom-14 left-1/2 -translate-x-1/2 bg-white rounded-lg shadow-lg border p-2 w-44 z-[10000]"
+                  className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-white rounded-md shadow-lg border p-1.5 w-40 z-[10000]"
                 >
-                  <ul className="space-y-1 text-sm text-gray-700">
+                  <ul className="space-y-0.5 text-xs text-gray-700">
                     {tool.options.map((option) => (
                       <li
                         key={option.id}
-                        className={`px-2 py-1 rounded hover:bg-gray-100 cursor-pointer flex items-center justify-between ${
-                          option.id === "draw-line" && isPenMode ? "bg-green-100 text-green-800" : ""
+                        className={`px-2 py-1.5 rounded hover:bg-gray-100 cursor-pointer flex items-center justify-between ${
+                          (option.id === "draw-line" && isPenMode) || (option.id === "draw-wall" && isWallMode) ? "bg-green-100 text-green-800" : ""
                         }`}
                         onClick={() => handleOptionClick(option)}
                       >
                         <span>{option.label}</span>
-                        {option.id === "draw-line" && isPenMode && (
+                        {(option.id === "draw-line" && isPenMode) || (option.id === "draw-wall" && isWallMode) && (
                           <div className="w-2 h-2 bg-green-600 rounded-full"></div>
                         )}
                       </li>
@@ -146,7 +152,7 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
 
             {/* Divider */}
             {index !== tools.length - 1 && (
-              <div className="w-px h-8 bg-gray-200 mx-3" />
+              <div className="w-px h-6 bg-gray-200 mx-2" />
             )}
           </div>
         ))}

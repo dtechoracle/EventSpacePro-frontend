@@ -41,7 +41,7 @@ export function useToolbarTools(): Tool[] {
     {
       icon: <FaPen size={18} />,
       label: "Tool 3",
-      options: [{ id: "draw-line", label: "Draw Line" }, { id: "add-text", label: "Add Text" }],
+      options: [{ id: "draw-line", label: "Draw Line" }, { id: "draw-wall", label: "Draw Wall" }, { id: "add-text", label: "Add Text" }],
     },
     {
       icon: <RiPushpinLine size={18} />,

@@ -69,9 +69,13 @@ type SceneState = {
 
   // Pen tool state
   isPenMode: boolean;
+  isWallMode: boolean;
   isDrawing: boolean;
   currentPath: { x: number; y: number }[];
   tempPath: { x: number; y: number }[];
+
+  // Copy/paste state
+  clipboard: AssetInstance | null;
 
   // Methods
   setCanvas: (size: PaperSize) => void;
@@ -88,11 +92,17 @@ type SceneState = {
 
   // Pen tool methods
   setPenMode: (enabled: boolean) => void;
+  setWallMode: (enabled: boolean) => void;
   setIsDrawing: (drawing: boolean) => void;
   setCurrentPath: (path: { x: number; y: number }[]) => void;
   setTempPath: (path: { x: number; y: number }[]) => void;
   addPointToPath: (point: { x: number; y: number }) => void;
   clearPath: () => void;
+
+  // Copy/paste methods
+  copyAsset: (id: string) => void;
+  pasteAsset: (offsetX?: number, offsetY?: number) => void;
+  clearClipboard: () => void;
 };
 
 export const useSceneStore = create<SceneState>()(
@@ -107,9 +117,11 @@ export const useSceneStore = create<SceneState>()(
       hasHydrated: false,
       showGrid: false,
       isPenMode: false,
+      isWallMode: false,
       isDrawing: false,
       currentPath: [],
       tempPath: [],
+      clipboard: null,
 
       setCanvas: (size) => {
         const { width, height } = PAPER_SIZES[size];
@@ -185,6 +197,7 @@ export const useSceneStore = create<SceneState>()(
         isInitialized: false,
         hasUnsavedChanges: false,
         isPenMode: false,
+        isWallMode: false,
         isDrawing: false,
         currentPath: [],
         tempPath: []
@@ -201,6 +214,8 @@ export const useSceneStore = create<SceneState>()(
 
       setPenMode: (enabled) => set({ isPenMode: enabled }),
 
+      setWallMode: (enabled) => set({ isWallMode: enabled }),
+
       setIsDrawing: (drawing) => set({ isDrawing: drawing }),
 
       setCurrentPath: (path) => set({ currentPath: path }),
@@ -216,6 +231,35 @@ export const useSceneStore = create<SceneState>()(
         tempPath: [],
         isDrawing: false
       }),
+
+      // Copy/paste methods
+      copyAsset: (id) => {
+        const state = get();
+        const asset = state.assets.find(a => a.id === id);
+        if (asset) {
+          set({ clipboard: { ...asset } });
+        }
+      },
+
+      pasteAsset: (offsetX = 10, offsetY = 10) => {
+        const state = get();
+        if (!state.clipboard || !state.canvas) return;
+
+        const newAsset: AssetInstance = {
+          ...state.clipboard,
+          id: `${state.clipboard.type}-${Date.now()}`,
+          x: state.clipboard.x + offsetX,
+          y: state.clipboard.y + offsetY,
+        };
+
+        set({
+          assets: [...state.assets, newAsset],
+          selectedAssetId: newAsset.id,
+          hasUnsavedChanges: true,
+        });
+      },
+
+      clearClipboard: () => set({ clipboard: null }),
     }),
     { name: "scene-storage" }
   )
