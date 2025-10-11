@@ -89,7 +89,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
           className="flex items-center gap-1 text-xs font-semibold tracking-wide mb-1"
           onClick={() => setShowCanvas((s) => !s)}
         >
-          {showCanvas ? <FaChevronDown size={12} /> : <FaChevronRight size={12} />} Model Canvas
+          {showCanvas ? <FaChevronDown size={12} /> : <FaChevronRight size={12} />} Model Pages
         </button>
         {showCanvas && (
           <div className="space-y-1 pl-5 text-xs">
@@ -98,7 +98,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
               <span>Name</span>
               <input
                 type="text"
-                placeholder="new canvas name"
+                placeholder="New page name"
                 value={canvasName}
                 onChange={(e) => setCanvasName(e.target.value)}
                 className="sidebar-input"

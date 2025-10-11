@@ -145,7 +145,7 @@ export default function Editor() {
         <BottomToolbar setShowAssetsModal={setShowAssetsModal} />
 
         {/* Fixed Toolbar */}
-        <div className="flex-shrink-0 w-48 bg-white">
+        <div className="flex-shrink-0 w-fit bg-white">
           <Toolbar onSave={handleSave} hasUnsavedChanges={hasUnsavedChanges} />
         </div>
 
