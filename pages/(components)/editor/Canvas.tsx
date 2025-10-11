@@ -1982,8 +1982,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             const wallGap = 8 * mmToPx; // 8mm gap
             
             // Create continuous path for entire wall structure
-            let outerPath = '';
-            let innerPath = '';
+            const outerPath = '';
+            const innerPath = '';
             
             // Build wall geometry with proper corner handling
             const wallPoints: Array<{
@@ -2437,8 +2437,8 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                     const wallGap = (asset.wallGap ?? 8) * asset.scale;
                     
                     // Create continuous path for entire wall structure
-                    let outerPath = '';
-                    let innerPath = '';
+                    const outerPath = '';
+                    const innerPath = '';
                     
                     // Build wall geometry with proper corner handling
                     const wallPoints: Array<{
