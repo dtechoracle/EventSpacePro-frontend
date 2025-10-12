@@ -72,16 +72,16 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
 
     const rect = el.getBoundingClientRect();
 
-    // Center the canvas in the viewport (relative to center transform origin)
+    // Position canvas at center of viewport
     setCanvasPos({
       x: rect.width / 2,
       y: rect.height / 2,
     });
     
-    // Reset offset to center the view
+    // Reset offset to zero (no initial pan)
     setOffset({
-      x: rect.width / 2,
-      y: rect.height / 2,
+      x: 0,
+      y: 0,
     });
   }, [canvas]);
 
@@ -100,7 +100,7 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Wheel zoom handler (updates targetZoom only)
+  // Wheel zoom handler (updates targetZoom and adjusts offset to keep canvas centered)
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -109,10 +109,14 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         const delta = -e.deltaY * 0.001;
+        const oldZoom = targetZoom.current;
         targetZoom.current = Math.min(
           3,
           Math.max(0.2, targetZoom.current + delta)
         );
+        
+        // Keep offset at zero to maintain canvas center during zoom
+        // The canvas positioning handles the centering
       }
     };
 
@@ -162,7 +166,7 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
         className="relative w-full h-full"
         style={{
           transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-          transformOrigin: "center center",
+          transformOrigin: "top left",
         }}
       >
         {/* Canvas (paper) */}

@@ -26,6 +26,12 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const showGrid = useSceneStore((s) => s.showGrid);
   const toggleGrid = useSceneStore((s) => s.toggleGrid);
   const addAsset = useSceneStore((s) => s.addAsset);
+  
+  // Wall drawing state
+  const wallDrawingMode = useSceneStore((s) => s.wallDrawingMode);
+  const currentWallSegments = useSceneStore((s) => s.currentWallSegments);
+  const finishWallDrawing = useSceneStore((s) => s.finishWallDrawing);
+  const cancelWallDrawing = useSceneStore((s) => s.cancelWallDrawing);
 
   const [showModel, setShowModel] = useState(true);
   const [showCanvas, setShowCanvas] = useState(true);
@@ -132,6 +138,30 @@ export default function PropertiesSidebar(): React.JSX.Element {
               </div>
             </div>
 
+            {/* Wall Drawing Controls */}
+            {wallDrawingMode && (
+              <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="text-xs font-medium text-blue-800 mb-2">Wall Drawing</div>
+                <div className="text-xs text-blue-600 mb-3">
+                  Segments: {currentWallSegments.length}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={finishWallDrawing}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs py-2 px-3 rounded shadow"
+                  >
+                    Finish Wall
+                  </button>
+                  <button
+                    onClick={cancelWallDrawing}
+                    className="flex-1 bg-gray-500 hover:bg-gray-600 text-white text-xs py-2 px-3 rounded shadow"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
 
             {/* Transform Controls */}
             {selectedAsset && (
@@ -205,7 +235,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span>Fill Color</span>
                       <input
                         type="color"
-                        value={selectedAsset.fillColor || "#93C5FD"}
+                        value={selectedAsset.fillColor || "transparent"}
                         onChange={(e) => updateAsset(selectedAsset.id, { fillColor: e.target.value })}
                         className="w-28 h-6 p-0 border-none"
                       />
@@ -227,7 +257,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span>Stroke Color</span>
                       <input
                         type="color"
-                        value={selectedAsset.strokeColor || "#3B82F6"}
+                        value={selectedAsset.strokeColor || "#000000"}
                         onChange={(e) => updateAsset(selectedAsset.id, { strokeColor: e.target.value })}
                         className="w-28 h-6 p-0 border-none"
                       />
@@ -259,7 +289,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span>Line Color</span>
                       <input
                         type="color"
-                        value={selectedAsset.lineColor || "#3B82F6"}
+                        value={selectedAsset.lineColor || "#000000"}
                         onChange={(e) => updateAsset(selectedAsset.id, { lineColor: e.target.value })}
                         className="w-28 h-6 p-0 border-none"
                       />
@@ -281,7 +311,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span>Stroke Color</span>
                       <input
                         type="color"
-                        value={selectedAsset.strokeColor || "#3B82F6"}
+                        value={selectedAsset.strokeColor || "#000000"}
                         onChange={(e) => updateAsset(selectedAsset.id, { strokeColor: e.target.value })}
                         className="w-28 h-6 p-0 border-none"
                       />
@@ -333,6 +363,40 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         <option value="Verdana">Verdana</option>
                         <option value="Courier New">Courier New</option>
                       </select>
+                    </div>
+                  </div>
+                ) : selectedAsset.type === "wall-segments" ? (
+                  <div className="space-y-2 mt-2">
+                    <div className="flex justify-between items-center">
+                      <span>Line Color</span>
+                      <input
+                        type="color"
+                        value={selectedAsset.lineColor || "#000000"}
+                        onChange={(e) => updateAsset(selectedAsset.id, { lineColor: e.target.value })}
+                        className="w-28 h-6 p-0 border-none"
+                      />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Wall Thickness</span>
+                      <input
+                        type="number"
+                        value={selectedAsset.wallThickness || 2}
+                        onChange={(e) => updateAsset(selectedAsset.id, { wallThickness: Number(e.target.value) })}
+                        className="sidebar-input w-28 text-xs"
+                        min={1}
+                        max={20}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Wall Gap</span>
+                      <input
+                        type="number"
+                        value={selectedAsset.wallGap || 8}
+                        onChange={(e) => updateAsset(selectedAsset.id, { wallGap: Number(e.target.value) })}
+                        className="sidebar-input w-28 text-xs"
+                        min={2}
+                        max={50}
+                      />
                     </div>
                   </div>
                 ) : null}
