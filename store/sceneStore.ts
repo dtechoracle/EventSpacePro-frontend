@@ -53,6 +53,7 @@ export type CanvasData = {
 export type EventData = {
   _id: string;
   name: string;
+  type?: string;
   canvases: CanvasData[];
   canvasAssets: AssetInstance[];
   createdAt: string;
@@ -164,15 +165,15 @@ export const useSceneStore = create<SceneState>()(
         // Default properties for shapes
         const shapeDefaults: Partial<AssetInstance> =
           type === "square" || type === "circle"
-            ? { width: 50, height: 50, fillColor: "#93C5FD", backgroundColor: "transparent" }
+            ? { width: 50, height: 50, backgroundColor: "transparent" }
             : type === "line"
-              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#3B82F6", backgroundColor: "transparent" }
+              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#000000", backgroundColor: "transparent" }
               : type === "double-line"
-                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#3B82F6", lineGap: 8, lineColor: "#3B82F6", backgroundColor: "transparent" }
+                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#000000", lineGap: 8, lineColor: "#000000", backgroundColor: "transparent" }
                 : type === "drawn-line"
-                  ? { strokeWidth: 2, strokeColor: "#3B82F6", backgroundColor: "transparent" }
+                  ? { strokeWidth: 2, strokeColor: "#000000", backgroundColor: "transparent" }
                   : type === "wall-segments"
-                    ? { wallThickness: 2, wallGap: 8, lineColor: "#3B82F6", backgroundColor: "transparent" }
+                    ? { wallThickness: 2, wallGap: 8, lineColor: "#000000", backgroundColor: "transparent" }
                     : type === "text"
                       ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: "transparent" }
                       : { width: 24, height: 24, backgroundColor: "transparent" }; // Default for icons
@@ -309,12 +310,8 @@ export const useSceneStore = create<SceneState>()(
           const centerX = (minX + maxX) / 2;
           const centerY = (minY + maxY) / 2;
 
-          // Convert segments to be relative to center point
-          const relativeSegments = state.currentWallSegments.map(segment => ({
-            start: { x: segment.start.x - centerX, y: segment.start.y - centerY },
-            end: { x: segment.end.x - centerX, y: segment.end.y - centerY }
-          }));
-
+          // Keep segments in absolute coordinates (like temporary preview)
+          // This ensures the wall appears at the same size as during drawing
           const wallAsset: AssetInstance = {
             id: `wall-segments-${Date.now()}`,
             type: "wall-segments",
@@ -322,10 +319,10 @@ export const useSceneStore = create<SceneState>()(
             y: centerY,
             scale: 1,
             rotation: 0,
-            wallSegments: relativeSegments,
+            wallSegments: state.currentWallSegments, // Keep absolute coordinates
             wallThickness: 2,
             wallGap: 8,
-            lineColor: "#3B82F6",
+            lineColor: "#000000",
             backgroundColor: "transparent"
           };
 

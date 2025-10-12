@@ -22,6 +22,216 @@ type CanvasProps = {
   eventData?: EventDataResponse | null;
 };
 
+// Wall geometry helper types
+type WallSegment = {
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+};
+
+type WallGeometry = {
+  outerPoints: { x: number; y: number }[];
+  innerPoints: { x: number; y: number }[];
+};
+
+// Helper function to calculate wall geometry with clean rectangular corners
+function buildWallGeometry(segments: WallSegment[], wallGap: number): WallGeometry {
+  if (segments.length === 0) {
+    return { outerPoints: [], innerPoints: [] };
+  }
+
+  if (segments.length === 1) {
+    // Single segment - simple parallel lines
+    const segment = segments[0];
+    const dx = segment.end.x - segment.start.x;
+    const dy = segment.end.y - segment.start.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    
+    if (length === 0) {
+      return { outerPoints: [], innerPoints: [] };
+    }
+    
+    const angle = Math.atan2(dy, dx);
+    const perpX = Math.cos(angle + Math.PI / 2) * (wallGap / 2);
+    const perpY = Math.sin(angle + Math.PI / 2) * (wallGap / 2);
+    
+    return {
+      outerPoints: [
+        { x: segment.start.x + perpX, y: segment.start.y + perpY },
+        { x: segment.end.x + perpX, y: segment.end.y + perpY }
+      ],
+      innerPoints: [
+        { x: segment.start.x - perpX, y: segment.start.y - perpY },
+        { x: segment.end.x - perpX, y: segment.end.y - perpY }
+      ]
+    };
+  }
+
+  const outerPoints: { x: number; y: number }[] = [];
+  const innerPoints: { x: number; y: number }[] = [];
+
+  // Process each segment and create clean rectangular connections
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    const dx = segment.end.x - segment.start.x;
+    const dy = segment.end.y - segment.start.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    
+    if (length === 0) continue;
+    
+    const angle = Math.atan2(dy, dx);
+    const perpX = Math.cos(angle + Math.PI / 2) * (wallGap / 2);
+    const perpY = Math.sin(angle + Math.PI / 2) * (wallGap / 2);
+    
+    if (i === 0) {
+      // First segment - start with perpendicular offset
+      outerPoints.push({
+        x: segment.start.x + perpX,
+        y: segment.start.y + perpY
+      });
+      innerPoints.push({
+        x: segment.start.x - perpX,
+        y: segment.start.y - perpY
+      });
+    }
+    
+    // For corners, we need to calculate the intersection of the perpendicular lines
+    if (i < segments.length - 1) {
+      const nextSegment = segments[i + 1];
+      const nextDx = nextSegment.end.x - nextSegment.start.x;
+      const nextDy = nextSegment.end.y - nextSegment.start.y;
+      const nextLength = Math.sqrt(nextDx * nextDx + nextDy * nextDy);
+      
+      if (nextLength > 0) {
+        const nextAngle = Math.atan2(nextDy, nextDx);
+        const nextPerpX = Math.cos(nextAngle + Math.PI / 2) * (wallGap / 2);
+        const nextPerpY = Math.sin(nextAngle + Math.PI / 2) * (wallGap / 2);
+        
+        // Calculate intersection points for the corner
+        const cornerPoint = { x: segment.end.x, y: segment.end.y };
+        
+        // Calculate outer corner intersection
+        const outerIntersection = calculateLineIntersection(
+          { x: cornerPoint.x + perpX, y: cornerPoint.y + perpY },
+          { x: cornerPoint.x + dx, y: cornerPoint.y + dy },
+          { x: cornerPoint.x + nextPerpX, y: cornerPoint.y + nextPerpY },
+          { x: cornerPoint.x + nextDx, y: cornerPoint.y + nextDy }
+        );
+        
+        // Calculate inner corner intersection
+        const innerIntersection = calculateLineIntersection(
+          { x: cornerPoint.x - perpX, y: cornerPoint.y - perpY },
+          { x: cornerPoint.x + dx, y: cornerPoint.y + dy },
+          { x: cornerPoint.x - nextPerpX, y: cornerPoint.y - nextPerpY },
+          { x: cornerPoint.x + nextDx, y: cornerPoint.y + nextDy }
+        );
+        
+        // Use intersection points if they exist, otherwise fall back to perpendicular offsets
+        if (outerIntersection) {
+          outerPoints.push(outerIntersection);
+        } else {
+          outerPoints.push({
+            x: cornerPoint.x + perpX,
+            y: cornerPoint.y + perpY
+          });
+        }
+        
+        if (innerIntersection) {
+          innerPoints.push(innerIntersection);
+        } else {
+          innerPoints.push({
+            x: cornerPoint.x - perpX,
+            y: cornerPoint.y - perpY
+          });
+        }
+      } else {
+        // No next segment or zero length, use perpendicular offset
+        outerPoints.push({
+          x: segment.end.x + perpX,
+          y: segment.end.y + perpY
+        });
+        innerPoints.push({
+          x: segment.end.x - perpX,
+          y: segment.end.y - perpY
+        });
+      }
+    } else {
+      // Last segment - end with perpendicular offset
+      outerPoints.push({
+        x: segment.end.x + perpX,
+        y: segment.end.y + perpY
+      });
+      innerPoints.push({
+        x: segment.end.x - perpX,
+        y: segment.end.y - perpY
+      });
+    }
+  }
+
+  return { outerPoints, innerPoints };
+}
+
+// Helper function to calculate line intersection
+function calculateLineIntersection(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  p3: { x: number; y: number },
+  p4: { x: number; y: number }
+): { x: number; y: number } | null {
+  const denom = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
+  
+  if (Math.abs(denom) < 1e-10) {
+    // Lines are parallel
+    return null;
+  }
+  
+  const t = ((p1.x - p3.x) * (p3.y - p4.y) - (p1.y - p3.y) * (p3.x - p4.x)) / denom;
+  
+  return {
+    x: p1.x + t * (p2.x - p1.x),
+    y: p1.y + t * (p2.y - p1.y)
+  };
+}
+
+// Helper function to calculate bounding box from wall segments
+function calculateWallBoundingBox(asset: AssetInstance): { width: number; height: number } {
+  if (!asset.wallSegments || asset.wallSegments.length === 0) {
+    return { width: 200, height: 200 }; // Default fallback
+  }
+
+  const wallGap = asset.wallGap ?? 8;
+  
+  // Convert absolute coordinates to relative coordinates for geometry calculation
+  const relativeSegments = asset.wallSegments.map(segment => ({
+    start: { x: segment.start.x - asset.x, y: segment.start.y - asset.y },
+    end: { x: segment.end.x - asset.x, y: segment.end.y - asset.y }
+  }));
+  
+  const geometry = buildWallGeometry(relativeSegments, wallGap);
+  
+  // Combine all points from both outer and inner geometry
+  const allPoints = [...geometry.outerPoints, ...geometry.innerPoints];
+  
+  if (allPoints.length === 0) {
+    return { width: 200, height: 200 }; // Default fallback
+  }
+
+  // Find min/max coordinates
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  
+  allPoints.forEach(point => {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  });
+
+  // Calculate actual width and height
+  const width = Math.max(maxX - minX, 50); // Minimum 50mm width
+  const height = Math.max(maxY - minY, 50); // Minimum 50mm height
+  
+  return { width, height };
+}
+
 export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos, canvas: propCanvas, assets: propAssets, eventData }: CanvasProps) {
   // Use store data for rendering (synced from props)
   const canvas = useSceneStore((s) => s.canvas);
@@ -329,7 +539,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               width: isHorizontal ? length : 2, // Width: length for horizontal lines, thickness for vertical
               height: isHorizontal ? 2 : length, // Height: thickness for horizontal lines, length for vertical
               lineGap: 8, // Gap between the two lines
-              lineColor: "#3B82F6", // Color of the lines
+              lineColor: "#000000", // Color of the lines
               backgroundColor: "transparent",
               isHorizontal: isHorizontal // Store the orientation
             };
@@ -351,7 +561,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               scale: 1,
               rotation: 0, // Start with 0 rotation - user can rotate manually if needed
               strokeWidth: 2,
-              strokeColor: "#3B82F6",
+              strokeColor: "#000000",
               backgroundColor: "transparent",
               path: relativePath // Store the relative path for rendering
             };
@@ -752,7 +962,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "nw-resize",
@@ -769,7 +979,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "ne-resize",
@@ -786,7 +996,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "sw-resize",
@@ -803,7 +1013,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "se-resize",
@@ -859,7 +1069,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -873,7 +1083,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
@@ -921,7 +1131,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "nw-resize",
@@ -938,7 +1148,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "ne-resize",
@@ -955,7 +1165,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "sw-resize",
@@ -972,7 +1182,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "se-resize",
@@ -990,7 +1200,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -1004,7 +1214,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
@@ -1056,7 +1266,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "nw-resize",
@@ -1073,7 +1283,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "ne-resize",
@@ -1090,7 +1300,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "sw-resize",
@@ -1107,7 +1317,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "se-resize",
@@ -1163,7 +1373,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -1177,7 +1387,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
@@ -1225,7 +1435,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "nw-resize",
@@ -1242,7 +1452,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "ne-resize",
@@ -1259,7 +1469,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "sw-resize",
@@ -1276,7 +1486,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "se-resize",
@@ -1294,7 +1504,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -1308,7 +1518,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
@@ -1321,28 +1531,30 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         </>
       );
     } else if (asset.type === "wall-segments") {
-      // For wall segments, use a fixed bounding box since segments can be any shape
-      const boundingSize = 200 * asset.scale;
+      // For wall segments, calculate actual bounding box from wall geometry
+      const boundingBox = calculateWallBoundingBox(asset);
+      const width = boundingBox.width * asset.scale;
+      const height = boundingBox.height * asset.scale;
       
       const topLeftPx = { 
-        x: assetCenterPx.x - boundingSize / 2 - 6, 
-        y: assetCenterPx.y - boundingSize / 2 - 6 
+        x: assetCenterPx.x - width / 2 - 6, 
+        y: assetCenterPx.y - height / 2 - 6 
       };
       const topRightPx = { 
-        x: assetCenterPx.x + boundingSize / 2 + 6, 
-        y: assetCenterPx.y - boundingSize / 2 - 6 
+        x: assetCenterPx.x + width / 2 + 6, 
+        y: assetCenterPx.y - height / 2 - 6 
       };
       const bottomLeftPx = { 
-        x: assetCenterPx.x - boundingSize / 2 - 6, 
-        y: assetCenterPx.y + boundingSize / 2 + 6 
+        x: assetCenterPx.x - width / 2 - 6, 
+        y: assetCenterPx.y + height / 2 + 6 
       };
       const bottomRightPx = { 
-        x: assetCenterPx.x + boundingSize / 2 + 6, 
-        y: assetCenterPx.y + boundingSize / 2 + 6 
+        x: assetCenterPx.x + width / 2 + 6, 
+        y: assetCenterPx.y + height / 2 + 6 
       };
       const rotationHandlePx = { 
         x: assetCenterPx.x, 
-        y: assetCenterPx.y - boundingSize / 2 - 30 
+        y: assetCenterPx.y - height / 2 - 30 
       };
 
       return (
@@ -1356,7 +1568,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "nw-resize",
@@ -1373,7 +1585,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "ne-resize",
@@ -1390,7 +1602,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "sw-resize",
@@ -1407,7 +1619,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "se-resize",
@@ -1425,7 +1637,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -1439,7 +1651,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
@@ -1490,7 +1702,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "nw-resize",
@@ -1507,7 +1719,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "ne-resize",
@@ -1524,7 +1736,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "sw-resize",
@@ -1541,7 +1753,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "se-resize",
@@ -1559,7 +1771,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -1573,7 +1785,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
@@ -1624,7 +1836,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "nw-resize",
@@ -1641,7 +1853,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "ne-resize",
@@ -1658,7 +1870,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "sw-resize",
@@ -1675,7 +1887,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "se-resize",
@@ -1693,7 +1905,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -1707,7 +1919,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
@@ -1756,7 +1968,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "nw-resize",
@@ -1773,7 +1985,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: topRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "ne-resize",
@@ -1790,7 +2002,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomLeftPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "sw-resize",
@@ -1807,7 +2019,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: bottomRightPx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "2px",
               cursor: "se-resize",
@@ -1825,7 +2037,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: assetCenterPx.y,
               width: 2,
               height: 30,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               transformOrigin: "bottom center",
               transform: `translate(-50%, -50%)`,
               zIndex: 9,
@@ -1839,7 +2051,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               top: rotationHandlePx.y,
               width: handleSize,
               height: handleSize,
-              backgroundColor: "#3B82F6",
+              backgroundColor: "#000000",
               border: "2px solid white",
               borderRadius: "50%",
               cursor: "grab",
@@ -1953,12 +2165,12 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               cx={tempPath[0].x * mmToPx}
               cy={tempPath[0].y * mmToPx}
               r="2"
-              fill="#3B82F6"
+              fill="#000000"
             />
           ) : (
             <path
               d={`M ${tempPath[0].x * mmToPx} ${tempPath[0].y * mmToPx} ${tempPath.slice(1).map(point => `L ${point.x * mmToPx} ${point.y * mmToPx}`).join(' ')}`}
-              stroke="#3B82F6"
+              stroke="#000000"
               strokeWidth="2"
               fill="none"
               strokeLinecap="round"
@@ -1979,135 +2191,103 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
           {/* Render completed wall segments */}
           {currentWallSegments.length > 0 && (() => {
             const wallThickness = 2;
-            const wallGap = 8 * mmToPx; // 8mm gap
+            const wallGap = 8; // 8mm gap in mm units
             
-            // Create continuous path for entire wall structure
-            const outerPath = '';
-            const innerPath = '';
+            // Convert segments to mm units for geometry calculation
+            const segmentsInMM = currentWallSegments.map(segment => ({
+              start: { x: segment.start.x, y: segment.start.y },
+              end: { x: segment.end.x, y: segment.end.y }
+            }));
             
-            // Build wall geometry with proper corner handling
-            const wallPoints: Array<{
-              start: { x: number; y: number };
-              end: { x: number; y: number };
-              perpX: number;
-              perpY: number;
-              angle: number;
-              index: number;
-            }> = [];
+            // Build wall geometry with mitered corners
+            const geometry = buildWallGeometry(segmentsInMM, wallGap);
             
-            currentWallSegments.forEach((segment, index) => {
-              const dx = segment.end.x - segment.start.x;
-              const dy = segment.end.y - segment.start.y;
-              const length = Math.sqrt(dx * dx + dy * dy);
-              
-              if (length === 0) return;
-              
-              // Calculate angle and perpendicular (convert to pixels)
-              const angle = Math.atan2(dy, dx);
-              const perpX = Math.cos(angle + Math.PI / 2) * (wallGap / 2);
-              const perpY = Math.sin(angle + Math.PI / 2) * (wallGap / 2);
-              
-              // Store wall geometry points
-              wallPoints.push({
-                start: { x: segment.start.x * mmToPx, y: segment.start.y * mmToPx },
-                end: { x: segment.end.x * mmToPx, y: segment.end.y * mmToPx },
-                perpX, perpY, angle, index
-              });
-            });
-            
-            // Render each wall segment as a simple rectangle
-            const wallSegments = [];
-            
-            for (let i = 0; i < wallPoints.length; i++) {
-              const current = wallPoints[i];
-              
-              // Calculate the four corners of the wall rectangle
-              const outerStartX = current.start.x + current.perpX;
-              const outerStartY = current.start.y + current.perpY;
-              const outerEndX = current.end.x + current.perpX;
-              const outerEndY = current.end.y + current.perpY;
-              
-              const innerStartX = current.start.x - current.perpX;
-              const innerStartY = current.start.y - current.perpY;
-              const innerEndX = current.end.x - current.perpX;
-              const innerEndY = current.end.y - current.perpY;
-              
-              // Create rectangle path for this wall segment
-              const wallRectPath = `M ${outerStartX} ${outerStartY} L ${outerEndX} ${outerEndY} L ${innerEndX} ${innerEndY} L ${innerStartX} ${innerStartY} Z`;
-              
-              wallSegments.push(
-                <path
-                  key={`wall-segment-${i}`}
-                  d={wallRectPath}
-                  fill="none"
-                  stroke="#3B82F6"
-                  strokeWidth={wallThickness}
-                />
-              );
+            if (geometry.outerPoints.length === 0 || geometry.innerPoints.length === 0) {
+              return null;
             }
             
+            // Convert geometry points to pixels
+            const outerPointsPx = geometry.outerPoints.map(point => ({
+              x: point.x * mmToPx,
+              y: point.y * mmToPx
+            }));
+            
+            const innerPointsPx = geometry.innerPoints.map(point => ({
+              x: point.x * mmToPx,
+              y: point.y * mmToPx
+            }));
+            
+            // Build continuous path for smooth corners
+            const outerPath = outerPointsPx.map((point, index) => 
+              `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
+            ).join(' ');
+            
+            const innerPath = innerPointsPx.reverse().map((point, index) => 
+              `${index === 0 ? 'L' : 'L'} ${point.x} ${point.y}`
+            ).join(' ');
+            
+            const fullPath = `${outerPath} ${innerPath} Z`;
+            
             return (
-              <g>
-                {wallSegments}
-              </g>
+              <path
+                d={fullPath}
+                fill="none"
+                stroke="#000000"
+                strokeWidth={wallThickness}
+                strokeLinejoin="miter"
+              />
             );
           })()}
           
           {/* Render current wall segment being drawn */}
           {currentWallStart && currentWallTempEnd && (() => {
-            const dx = currentWallTempEnd.x - currentWallStart.x;
-            const dy = currentWallTempEnd.y - currentWallStart.y;
-            const length = Math.sqrt(dx * dx + dy * dy);
+            const wallGap = 8; // 8mm gap in mm units
             
-            if (length === 0) return null;
+            // Create temporary segment for geometry calculation
+            const tempSegment = {
+              start: { x: currentWallStart.x, y: currentWallStart.y },
+              end: { x: currentWallTempEnd.x, y: currentWallTempEnd.y }
+            };
             
-            // Calculate angle and perpendicular (convert to pixels)
-            const angle = Math.atan2(dy, dx);
-            const wallGap = 8 * mmToPx; // 8mm gap
-            const perpX = Math.cos(angle + Math.PI / 2) * (wallGap / 2);
-            const perpY = Math.sin(angle + Math.PI / 2) * (wallGap / 2);
+            // Build wall geometry for the current segment
+            const geometry = buildWallGeometry([tempSegment], wallGap);
             
-            // Outer wall points (one side of the wall) - convert to pixels
-            const outerStartX = currentWallStart.x * mmToPx + perpX;
-            const outerStartY = currentWallStart.y * mmToPx + perpY;
-            const outerEndX = currentWallTempEnd.x * mmToPx + perpX;
-            const outerEndY = currentWallTempEnd.y * mmToPx + perpY;
+            if (geometry.outerPoints.length === 0 || geometry.innerPoints.length === 0) {
+              return null;
+            }
             
-            // Inner wall points (other side of the wall) - convert to pixels
-            const innerStartX = currentWallStart.x * mmToPx - perpX;
-            const innerStartY = currentWallStart.y * mmToPx - perpY;
-            const innerEndX = currentWallTempEnd.x * mmToPx - perpX;
-            const innerEndY = currentWallTempEnd.y * mmToPx - perpY;
+            // Convert geometry points to pixels
+            const outerPointsPx = geometry.outerPoints.map(point => ({
+              x: point.x * mmToPx,
+              y: point.y * mmToPx
+            }));
+            
+            const innerPointsPx = geometry.innerPoints.map(point => ({
+              x: point.x * mmToPx,
+              y: point.y * mmToPx
+            }));
+            
+            // Build continuous path for the current segment
+            const outerPath = outerPointsPx.map((point, index) => 
+              `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
+            ).join(' ');
+            
+            const innerPath = innerPointsPx.reverse().map((point, index) => 
+              `${index === 0 ? 'L' : 'L'} ${point.x} ${point.y}`
+            ).join(' ');
+            
+            const fullPath = `${outerPath} ${innerPath} Z`;
             
             return (
-              <g>
-                {/* Outer wall line */}
-                <line
-                  x1={outerStartX}
-                  y1={outerStartY}
-                  x2={outerEndX}
-                  y2={outerEndY}
-                  stroke="#3B82F6"
-                  strokeWidth="2"
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  strokeDasharray="5,5"
-                  opacity="0.7"
-                />
-                {/* Inner wall line */}
-                <line
-                  x1={innerStartX}
-                  y1={innerStartY}
-                  x2={innerEndX}
-                  y2={innerEndY}
-                  stroke="#3B82F6"
-                  strokeWidth="2"
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  strokeDasharray="5,5"
-                  opacity="0.7"
-                />
-              </g>
+              <path
+                d={fullPath}
+                fill="none"
+                stroke="#000000"
+                strokeWidth="2"
+                strokeLinejoin="miter"
+                strokeDasharray="5,5"
+                opacity="0.7"
+              />
             );
           })()}
           
@@ -2117,7 +2297,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               cx={currentWallStart.x * mmToPx}
               cy={currentWallStart.y * mmToPx}
               r="3"
-              fill="#3B82F6"
+              fill="#000000"
               stroke="white"
               strokeWidth="1"
             />
@@ -2286,7 +2466,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                         left: 0,
                         width: "100%",
                         height: lineThickness,
-                        backgroundColor: asset.lineColor ?? "#3B82F6",
+                        backgroundColor: asset.lineColor ?? "#000000",
                       }}
                     />
                     {/* Second line - horizontal */}
@@ -2297,7 +2477,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                         left: 0,
                         width: "100%",
                         height: lineThickness,
-                        backgroundColor: asset.lineColor ?? "#3B82F6",
+                        backgroundColor: asset.lineColor ?? "#000000",
                       }}
                     />
                   </>
@@ -2311,7 +2491,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                         left: 0,
                         width: lineThickness,
                         height: "100%",
-                        backgroundColor: asset.lineColor ?? "#3B82F6",
+                        backgroundColor: asset.lineColor ?? "#000000",
                       }}
                     />
                     {/* Second line - vertical */}
@@ -2322,7 +2502,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                         left: lineThickness + lineGap,
                         width: lineThickness,
                         height: "100%",
-                        backgroundColor: asset.lineColor ?? "#3B82F6",
+                        backgroundColor: asset.lineColor ?? "#000000",
                       }}
                     />
                   </>
@@ -2377,7 +2557,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                   {asset.path && asset.path.length > 1 && (
                     <path
                       d={`M ${asset.path[0].x} ${asset.path[0].y} ${asset.path.slice(1).map(point => `L ${point.x} ${point.y}`).join(' ')}`}
-                      stroke={asset.strokeColor ?? "#3B82F6"}
+                      stroke={asset.strokeColor ?? "#000000"}
                       strokeWidth={(asset.strokeWidth ?? 2) * asset.scale}
                       fill="none"
                       strokeLinecap="round"
@@ -2426,88 +2606,70 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                 }}
                 className={isSelected ? "" : ""}
               >
-                <svg
-                  width="200"
-                  height="200"
-                  viewBox="-100 -100 200 200"
-                  style={{ overflow: "visible" }}
-                >
+                {(() => {
+                  const boundingBox = calculateWallBoundingBox(asset);
+                  const width = Math.max(boundingBox.width, 100); // Minimum 100mm
+                  const height = Math.max(boundingBox.height, 100); // Minimum 100mm
+                  
+                  return (
+                    <svg
+                      width={width}
+                      height={height}
+                      viewBox={`${-width/2} ${-height/2} ${width} ${height}`}
+                      style={{ overflow: "visible" }}
+                    >
                   {asset.wallSegments && asset.wallSegments.length > 0 && (() => {
                     const wallThickness = (asset.wallThickness ?? 2) * asset.scale;
-                    const wallGap = (asset.wallGap ?? 8) * asset.scale;
+                    const wallGap = (asset.wallGap ?? 8); // Wall gap in mm units (will be scaled)
                     
-                    // Create continuous path for entire wall structure
-                    const outerPath = '';
-                    const innerPath = '';
+                    // Convert absolute coordinates to relative coordinates for rendering
+                    const relativeSegments = asset.wallSegments.map(segment => ({
+                      start: { x: segment.start.x - asset.x, y: segment.start.y - asset.y },
+                      end: { x: segment.end.x - asset.x, y: segment.end.y - asset.y }
+                    }));
                     
-                    // Build wall geometry with proper corner handling
-                    const wallPoints: Array<{
-                      start: { x: number; y: number };
-                      end: { x: number; y: number };
-                      perpX: number;
-                      perpY: number;
-                      angle: number;
-                      index: number;
-                    }> = [];
+                    // Build wall geometry with mitered corners
+                    const geometry = buildWallGeometry(relativeSegments, wallGap);
                     
-                    asset.wallSegments.forEach((segment, index) => {
-                      const dx = segment.end.x - segment.start.x;
-                      const dy = segment.end.y - segment.start.y;
-                      const length = Math.sqrt(dx * dx + dy * dy);
-                      
-                      if (length === 0) return;
-                      
-                      // Calculate angle and perpendicular
-                      const angle = Math.atan2(dy, dx);
-                      const perpX = Math.cos(angle + Math.PI / 2) * (wallGap / 2);
-                      const perpY = Math.sin(angle + Math.PI / 2) * (wallGap / 2);
-                      
-                      // Store wall geometry points
-                      wallPoints.push({
-                        start: { x: segment.start.x, y: segment.start.y },
-                        end: { x: segment.end.x, y: segment.end.y },
-                        perpX, perpY, angle, index
-                      });
-                    });
-                    
-                    // Render each wall segment as a simple rectangle
-                    const wallSegments = [];
-                    
-                    for (let i = 0; i < wallPoints.length; i++) {
-                      const current = wallPoints[i];
-                      
-                      // Calculate the four corners of the wall rectangle
-                      const outerStartX = current.start.x + current.perpX;
-                      const outerStartY = current.start.y + current.perpY;
-                      const outerEndX = current.end.x + current.perpX;
-                      const outerEndY = current.end.y + current.perpY;
-                      
-                      const innerStartX = current.start.x - current.perpX;
-                      const innerStartY = current.start.y - current.perpY;
-                      const innerEndX = current.end.x - current.perpX;
-                      const innerEndY = current.end.y - current.perpY;
-                      
-                      // Create rectangle path for this wall segment
-                      const wallRectPath = `M ${outerStartX} ${outerStartY} L ${outerEndX} ${outerEndY} L ${innerEndX} ${innerEndY} L ${innerStartX} ${innerStartY} Z`;
-                      
-                      wallSegments.push(
-                        <path
-                          key={`wall-segment-${i}`}
-                          d={wallRectPath}
-                          fill="none"
-                          stroke={asset.lineColor ?? "#3B82F6"}
-                          strokeWidth={wallThickness}
-                        />
-                      );
+                    if (geometry.outerPoints.length === 0 || geometry.innerPoints.length === 0) {
+                      return null;
                     }
                     
+                    // Apply scale to geometry points
+                    const outerPointsScaled = geometry.outerPoints.map(point => ({
+                      x: point.x * asset.scale,
+                      y: point.y * asset.scale
+                    }));
+                    
+                    const innerPointsScaled = geometry.innerPoints.map(point => ({
+                      x: point.x * asset.scale,
+                      y: point.y * asset.scale
+                    }));
+                    
+                    // Build continuous path for smooth corners
+                    const outerPath = outerPointsScaled.map((point, index) => 
+                      `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
+                    ).join(' ');
+                    
+                    const innerPath = innerPointsScaled.reverse().map((point, index) => 
+                      `${index === 0 ? 'L' : 'L'} ${point.x} ${point.y}`
+                    ).join(' ');
+                    
+                    const fullPath = `${outerPath} ${innerPath} Z`;
+                    
                     return (
-                      <g>
-                        {wallSegments}
-                      </g>
+                      <path
+                        d={fullPath}
+                        fill="none"
+                        stroke={asset.lineColor ?? "#000000"}
+                        strokeWidth={wallThickness}
+                        strokeLinejoin="miter"
+                      />
                     );
                   })()}
-                </svg>
+                    </svg>
+                  );
+                })()}
               </div>
               
               {/* Handles */}

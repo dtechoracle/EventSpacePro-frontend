@@ -235,7 +235,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span>Fill Color</span>
                       <input
                         type="color"
-                        value={selectedAsset.fillColor || "#93C5FD"}
+                        value={selectedAsset.fillColor || "transparent"}
                         onChange={(e) => updateAsset(selectedAsset.id, { fillColor: e.target.value })}
                         className="w-28 h-6 p-0 border-none"
                       />
@@ -257,7 +257,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span>Stroke Color</span>
                       <input
                         type="color"
-                        value={selectedAsset.strokeColor || "#3B82F6"}
+                        value={selectedAsset.strokeColor || "#000000"}
                         onChange={(e) => updateAsset(selectedAsset.id, { strokeColor: e.target.value })}
                         className="w-28 h-6 p-0 border-none"
                       />
@@ -289,7 +289,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span>Line Color</span>
                       <input
                         type="color"
-                        value={selectedAsset.lineColor || "#3B82F6"}
+                        value={selectedAsset.lineColor || "#000000"}
                         onChange={(e) => updateAsset(selectedAsset.id, { lineColor: e.target.value })}
                         className="w-28 h-6 p-0 border-none"
                       />
@@ -311,7 +311,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span>Stroke Color</span>
                       <input
                         type="color"
-                        value={selectedAsset.strokeColor || "#3B82F6"}
+                        value={selectedAsset.strokeColor || "#000000"}
                         onChange={(e) => updateAsset(selectedAsset.id, { strokeColor: e.target.value })}
                         className="w-28 h-6 p-0 border-none"
                       />
@@ -363,6 +363,40 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         <option value="Verdana">Verdana</option>
                         <option value="Courier New">Courier New</option>
                       </select>
+                    </div>
+                  </div>
+                ) : selectedAsset.type === "wall-segments" ? (
+                  <div className="space-y-2 mt-2">
+                    <div className="flex justify-between items-center">
+                      <span>Line Color</span>
+                      <input
+                        type="color"
+                        value={selectedAsset.lineColor || "#000000"}
+                        onChange={(e) => updateAsset(selectedAsset.id, { lineColor: e.target.value })}
+                        className="w-28 h-6 p-0 border-none"
+                      />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Wall Thickness</span>
+                      <input
+                        type="number"
+                        value={selectedAsset.wallThickness || 2}
+                        onChange={(e) => updateAsset(selectedAsset.id, { wallThickness: Number(e.target.value) })}
+                        className="sidebar-input w-28 text-xs"
+                        min={1}
+                        max={20}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Wall Gap</span>
+                      <input
+                        type="number"
+                        value={selectedAsset.wallGap || 8}
+                        onChange={(e) => updateAsset(selectedAsset.id, { wallGap: Number(e.target.value) })}
+                        className="sidebar-input w-28 text-xs"
+                        min={2}
+                        max={50}
+                      />
                     </div>
                   </div>
                 ) : null}
