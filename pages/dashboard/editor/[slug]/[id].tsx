@@ -10,7 +10,15 @@ import CanvasWorkspace from "@/pages/(components)/editor/CanvasWorkspace";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
-import { useSceneStore, EventData } from "@/store/sceneStore";
+import { useSceneStore, EventData, AssetInstance, CanvasData } from "@/store/sceneStore";
+
+// Type for the payload we send to the API
+type UpdateEventPayload = {
+  name: string;
+  type?: string;
+  canvases: CanvasData[];
+  canvasAssets: AssetInstance[];
+};
 
 export default function Editor() {
   const [showAssetsModal, setShowAssetsModal] = useState(false);
@@ -35,8 +43,8 @@ export default function Editor() {
 
   // Mutation to save canvas assets
   const saveCanvasAssets = useMutation({
-    mutationFn: async (updatedEventData: EventData) => {
-      return apiRequest(`/projects/${slug}/events/${id}`, "PUT", updatedEventData, true);
+    mutationFn: async (payload: UpdateEventPayload | { canvasAssets: AssetInstance[] }) => {
+      return apiRequest(`/projects/${slug}/events/${id}`, "PUT", payload, true);
     },
     onSuccess: (savedData) => {
       // Mark as saved and update local event data
@@ -66,11 +74,11 @@ export default function Editor() {
       
       if (currentHasChanges) {
         const updatedAssets = useSceneStore.getState().assets;
-        const updatedEventData: EventData = {
-          ...currentEventData,
+        // Only send canvasAssets for auto-save since that's what we're primarily updating
+        const payload = {
           canvasAssets: updatedAssets,
         };
-        saveCanvasAssets.mutate(updatedEventData);
+        saveCanvasAssets.mutate(payload);
       }
     }, 3000); // Save 3 seconds after user stops making changes
 
@@ -84,11 +92,14 @@ export default function Editor() {
     }
     
     const updatedAssets = syncToEventData();
-    const updatedEventData: EventData = {
-      ...currentEventData,
+    // Send only the fields that can be updated: name, type, canvases, canvasAssets
+    const payload = {
+      name: currentEventData.name,
+      type: currentEventData.type || "workshop", // Add default type if not present
+      canvases: currentEventData.canvases,
       canvasAssets: updatedAssets,
     };
-    saveCanvasAssets.mutate(updatedEventData);
+    saveCanvasAssets.mutate(payload);
   };
   
   // Keyboard shortcut for saving (Ctrl+S)

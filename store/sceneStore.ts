@@ -28,6 +28,11 @@ export type AssetInstance = {
   // Path-based line properties
   path?: { x: number; y: number }[]; // for drawn lines
 
+  // Wall segment properties
+  wallSegments?: { start: { x: number; y: number }; end: { x: number; y: number } }[]; // for wall segments
+  wallThickness?: number; // thickness of wall lines
+  wallGap?: number; // gap between wall lines
+
   // Text properties
   text?: string; // for text
   fontSize?: number; // for text
@@ -48,6 +53,7 @@ export type CanvasData = {
 export type EventData = {
   _id: string;
   name: string;
+  type?: string;
   canvases: CanvasData[];
   canvasAssets: AssetInstance[];
   createdAt: string;
@@ -74,6 +80,12 @@ type SceneState = {
   currentPath: { x: number; y: number }[];
   tempPath: { x: number; y: number }[];
 
+  // Wall drawing state
+  wallDrawingMode: boolean;
+  currentWallSegments: { start: { x: number; y: number }; end: { x: number; y: number } }[];
+  currentWallStart: { x: number; y: number } | null;
+  currentWallTempEnd: { x: number; y: number } | null;
+
   // Copy/paste state
   clipboard: AssetInstance | null;
 
@@ -99,6 +111,14 @@ type SceneState = {
   addPointToPath: (point: { x: number; y: number }) => void;
   clearPath: () => void;
 
+  // Wall drawing methods
+  setWallDrawingMode: (enabled: boolean) => void;
+  startWallSegment: (start: { x: number; y: number }) => void;
+  updateWallTempEnd: (end: { x: number; y: number }) => void;
+  commitWallSegment: () => void;
+  finishWallDrawing: () => void;
+  cancelWallDrawing: () => void;
+
   // Copy/paste methods
   copyAsset: (id: string) => void;
   pasteAsset: (offsetX?: number, offsetY?: number) => void;
@@ -121,6 +141,10 @@ export const useSceneStore = create<SceneState>()(
       isDrawing: false,
       currentPath: [],
       tempPath: [],
+      wallDrawingMode: false,
+      currentWallSegments: [],
+      currentWallStart: null,
+      currentWallTempEnd: null,
       clipboard: null,
 
       setCanvas: (size) => {
@@ -141,16 +165,18 @@ export const useSceneStore = create<SceneState>()(
         // Default properties for shapes
         const shapeDefaults: Partial<AssetInstance> =
           type === "square" || type === "circle"
-            ? { width: 50, height: 50, fillColor: "#93C5FD", backgroundColor: "transparent" }
+            ? { width: 50, height: 50, backgroundColor: "transparent" }
             : type === "line"
-              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#3B82F6", backgroundColor: "transparent" }
+              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#000000", backgroundColor: "transparent" }
               : type === "double-line"
-                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#3B82F6", lineGap: 8, lineColor: "#3B82F6", backgroundColor: "transparent" }
+                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#000000", lineGap: 8, lineColor: "#000000", backgroundColor: "transparent" }
                 : type === "drawn-line"
-                  ? { strokeWidth: 2, strokeColor: "#3B82F6", backgroundColor: "transparent" }
-                  : type === "text"
-                    ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: "transparent" }
-                    : { width: 24, height: 24, backgroundColor: "transparent" }; // Default for icons
+                  ? { strokeWidth: 2, strokeColor: "#000000", backgroundColor: "transparent" }
+                  : type === "wall-segments"
+                    ? { wallThickness: 2, wallGap: 8, lineColor: "#000000", backgroundColor: "transparent" }
+                    : type === "text"
+                      ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: "transparent" }
+                      : { width: 24, height: 24, backgroundColor: "transparent" }; // Default for icons
 
         set({
           assets: [
@@ -200,7 +226,11 @@ export const useSceneStore = create<SceneState>()(
         isWallMode: false,
         isDrawing: false,
         currentPath: [],
-        tempPath: []
+        tempPath: [],
+        wallDrawingMode: false,
+        currentWallSegments: [],
+        currentWallStart: null,
+        currentWallTempEnd: null
       }),
 
       markAsSaved: () => set({ hasUnsavedChanges: false }),
@@ -230,6 +260,89 @@ export const useSceneStore = create<SceneState>()(
         currentPath: [],
         tempPath: [],
         isDrawing: false
+      }),
+
+      // Wall drawing methods
+      setWallDrawingMode: (enabled) => set({
+        wallDrawingMode: enabled,
+        currentWallSegments: enabled ? [] : [],
+        currentWallStart: enabled ? null : null,
+        currentWallTempEnd: enabled ? null : null
+      }),
+
+      startWallSegment: (start) => set({
+        currentWallStart: start,
+        currentWallTempEnd: null
+      }),
+
+      updateWallTempEnd: (end) => set({
+        currentWallTempEnd: end
+      }),
+
+      commitWallSegment: () => {
+        const state = get();
+        if (state.currentWallStart && state.currentWallTempEnd) {
+          const newSegment = {
+            start: state.currentWallStart,
+            end: state.currentWallTempEnd
+          };
+          set({
+            currentWallSegments: [...state.currentWallSegments, newSegment],
+            currentWallStart: state.currentWallTempEnd, // Next segment starts where this one ends
+            currentWallTempEnd: null
+          });
+        }
+      },
+
+      finishWallDrawing: () => {
+        const state = get();
+        if (state.currentWallSegments.length > 0) {
+          // Calculate center point of all wall segments
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+          state.currentWallSegments.forEach(segment => {
+            minX = Math.min(minX, segment.start.x, segment.end.x);
+            minY = Math.min(minY, segment.start.y, segment.end.y);
+            maxX = Math.max(maxX, segment.start.x, segment.end.x);
+            maxY = Math.max(maxY, segment.start.y, segment.end.y);
+          });
+
+          const centerX = (minX + maxX) / 2;
+          const centerY = (minY + maxY) / 2;
+
+          // Keep segments in absolute coordinates (like temporary preview)
+          // This ensures the wall appears at the same size as during drawing
+          const wallAsset: AssetInstance = {
+            id: `wall-segments-${Date.now()}`,
+            type: "wall-segments",
+            x: centerX,
+            y: centerY,
+            scale: 1,
+            rotation: 0,
+            wallSegments: state.currentWallSegments, // Keep absolute coordinates
+            wallThickness: 2,
+            wallGap: 8,
+            lineColor: "#000000",
+            backgroundColor: "transparent"
+          };
+
+          set((state) => ({
+            assets: [...state.assets, wallAsset],
+            selectedAssetId: wallAsset.id,
+            hasUnsavedChanges: true,
+            wallDrawingMode: false,
+            currentWallSegments: [],
+            currentWallStart: null,
+            currentWallTempEnd: null
+          }));
+        }
+      },
+
+      cancelWallDrawing: () => set({
+        wallDrawingMode: false,
+        currentWallSegments: [],
+        currentWallStart: null,
+        currentWallTempEnd: null
       }),
 
       // Copy/paste methods
