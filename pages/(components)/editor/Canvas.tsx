@@ -69,8 +69,16 @@ function buildWallGeometry(segments: WallSegment[], wallGap: number): WallGeomet
   const outerPoints: { x: number; y: number }[] = [];
   const innerPoints: { x: number; y: number }[] = [];
 
+  // Check if this is a closed loop (last segment ends at first segment start)
+  const isClosedLoop = segments.length > 2 && 
+    Math.abs(segments[segments.length - 1].end.x - segments[0].start.x) < 1 &&
+    Math.abs(segments[segments.length - 1].end.y - segments[0].start.y) < 1;
+
   // Process each segment and create clean rectangular connections
-  for (let i = 0; i < segments.length; i++) {
+  // For closed loops, we skip the last segment since it overlaps with the first
+  const maxIndex = isClosedLoop ? segments.length - 1 : segments.length;
+  
+  for (let i = 0; i < maxIndex; i++) {
     const segment = segments[i];
     const dx = segment.end.x - segment.start.x;
     const dy = segment.end.y - segment.start.y;
@@ -95,8 +103,11 @@ function buildWallGeometry(segments: WallSegment[], wallGap: number): WallGeomet
     }
     
     // For corners, we need to calculate the intersection of the perpendicular lines
-    if (i < segments.length - 1) {
-      const nextSegment = segments[i + 1];
+    if (i < maxIndex - 1 || isClosedLoop) {
+      const nextSegment = isClosedLoop && i === maxIndex - 1 
+        ? segments[0] // For closed loops, last processed segment connects to first segment
+        : segments[i + 1];
+        
       const nextDx = nextSegment.end.x - nextSegment.start.x;
       const nextDy = nextSegment.end.y - nextSegment.start.y;
       const nextLength = Math.sqrt(nextDx * nextDx + nextDy * nextDy);
@@ -155,7 +166,7 @@ function buildWallGeometry(segments: WallSegment[], wallGap: number): WallGeomet
         });
       }
     } else {
-      // Last segment - end with perpendicular offset
+      // Last segment (non-closed loop) - end with perpendicular offset
       outerPoints.push({
         x: segment.end.x + perpX,
         y: segment.end.y + perpY
@@ -192,6 +203,144 @@ function calculateLineIntersection(
   };
 }
 
+// Helper function to detect if a point is close to any wall segment
+function findNearbyWallSegment(
+  point: { x: number; y: number }, 
+  wallAssets: AssetInstance[], 
+  threshold: number = 5
+): { asset: AssetInstance; segmentIndex: number; isStart: boolean } | null {
+  for (const asset of wallAssets) {
+    if (!asset.wallSegments) continue;
+    
+    for (let i = 0; i < asset.wallSegments.length; i++) {
+      const segment = asset.wallSegments[i];
+      
+      // Check distance to start point
+      const distToStart = Math.sqrt(
+        Math.pow(point.x - segment.start.x, 2) + 
+        Math.pow(point.y - segment.start.y, 2)
+      );
+      
+      if (distToStart <= threshold) {
+        return { asset, segmentIndex: i, isStart: true };
+      }
+      
+      // Check distance to end point
+      const distToEnd = Math.sqrt(
+        Math.pow(point.x - segment.end.x, 2) + 
+        Math.pow(point.y - segment.end.y, 2)
+      );
+      
+      if (distToEnd <= threshold) {
+        return { asset, segmentIndex: i, isStart: false };
+      }
+    }
+  }
+  
+  return null;
+}
+
+// Helper function to merge wall segments when they connect
+function mergeWallSegments(
+  currentSegments: { start: { x: number; y: number }; end: { x: number; y: number } }[],
+  existingAsset: AssetInstance
+): { start: { x: number; y: number }; end: { x: number; y: number } }[] {
+  if (!existingAsset.wallSegments) return currentSegments;
+  
+  // Convert existing asset segments to absolute coordinates
+  const existingSegments = existingAsset.wallSegments.map(segment => ({
+    start: { 
+      x: segment.start.x + existingAsset.x, 
+      y: segment.start.y + existingAsset.y 
+    },
+    end: { 
+      x: segment.end.x + existingAsset.x, 
+      y: segment.end.y + existingAsset.y 
+    }
+  }));
+  
+  // Combine all segments
+  const allSegments = [...existingSegments, ...currentSegments];
+  
+  // Remove duplicates and merge connected segments
+  const mergedSegments: { start: { x: number; y: number }; end: { x: number; y: number } }[] = [];
+  
+  for (const segment of allSegments) {
+    // Check if this segment connects to any existing merged segment
+    let connected = false;
+    
+    for (let i = 0; i < mergedSegments.length; i++) {
+      const merged = mergedSegments[i];
+      
+      // Check if segment connects to merged segment start
+      if (Math.abs(segment.end.x - merged.start.x) < 1 && 
+          Math.abs(segment.end.y - merged.start.y) < 1) {
+        mergedSegments[i] = { start: segment.start, end: merged.end };
+        connected = true;
+        break;
+      }
+      
+      // Check if segment connects to merged segment end
+      if (Math.abs(segment.start.x - merged.end.x) < 1 && 
+          Math.abs(segment.start.y - merged.end.y) < 1) {
+        mergedSegments[i] = { start: merged.start, end: segment.end };
+        connected = true;
+        break;
+      }
+    }
+    
+    if (!connected) {
+      mergedSegments.push(segment);
+    }
+  }
+  
+  return mergedSegments;
+}
+
+// Helper function to snap wall endpoints to 90-degree angles
+function snapTo90Degrees(
+  startPoint: { x: number; y: number },
+  endPoint: { x: number; y: number },
+  snapTolerance: number = 6 // degrees - reduced for more precise snapping
+): { x: number; y: number } {
+  const dx = endPoint.x - startPoint.x;
+  const dy = endPoint.y - startPoint.y;
+  const length = Math.sqrt(dx * dx + dy * dy);
+  
+  if (length === 0) return endPoint;
+  
+  const angle = Math.atan2(dy, dx) * (180 / Math.PI); // Convert to degrees
+  const angleRad = Math.atan2(dy, dx);
+  
+  // Define snap angles: 0°, 90°, 180°, 270° (or -90°)
+  const snapAngles = [0, 90, 180, -90, 270];
+  
+  // Find the closest snap angle
+  let closestSnapAngle = snapAngles[0];
+  let minDifference = Math.abs(angle - snapAngles[0]);
+  
+  for (const snapAngle of snapAngles) {
+    const difference = Math.abs(angle - snapAngle);
+    if (difference < minDifference) {
+      minDifference = difference;
+      closestSnapAngle = snapAngle;
+    }
+  }
+  
+  // If we're within snap tolerance, snap to the closest angle
+  if (minDifference <= snapTolerance) {
+    const snappedAngleRad = closestSnapAngle * (Math.PI / 180); // Convert back to radians
+    
+    return {
+      x: startPoint.x + Math.cos(snappedAngleRad) * length,
+      y: startPoint.y + Math.sin(snappedAngleRad) * length
+    };
+  }
+  
+  // No snapping, return original point
+  return endPoint;
+}
+
 // Helper function to calculate bounding box from wall segments
 function calculateWallBoundingBox(asset: AssetInstance): { width: number; height: number } {
   if (!asset.wallSegments || asset.wallSegments.length === 0) {
@@ -200,11 +349,8 @@ function calculateWallBoundingBox(asset: AssetInstance): { width: number; height
 
   const wallGap = asset.wallGap ?? 8;
   
-  // Convert absolute coordinates to relative coordinates for geometry calculation
-  const relativeSegments = asset.wallSegments.map(segment => ({
-    start: { x: segment.start.x - asset.x, y: segment.start.y - asset.y },
-    end: { x: segment.end.x - asset.x, y: segment.end.y - asset.y }
-  }));
+  // Wall segments are already in relative coordinates
+  const relativeSegments = asset.wallSegments;
   
   const geometry = buildWallGeometry(relativeSegments, wallGap);
   
@@ -483,7 +629,12 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         
         // Check if mouse is within canvas bounds
         if (canvas && (x >= 0 && y >= 0 && x <= canvas.width && y <= canvas.height)) {
-          updateWallTempEnd({ x, y });
+          // Apply 90-degree snapping if we have a starting point
+          let snappedPoint = { x, y };
+          if (currentWallStart) {
+            snappedPoint = snapTo90Degrees(currentWallStart, { x, y });
+          }
+          updateWallTempEnd(snappedPoint);
         }
         return;
       }
@@ -2190,7 +2341,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
         >
           {/* Render completed wall segments */}
           {currentWallSegments.length > 0 && (() => {
-            const wallThickness = 2;
+            const wallThickness = 1; // Consistent with default wall thickness
             const wallGap = 8; // 8mm gap in mm units
             
             // Convert segments to mm units for geometry calculation
@@ -2199,8 +2350,30 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
               end: { x: segment.end.x, y: segment.end.y }
             }));
             
+            // Check if current wall connects to any existing walls
+            const wallAssets = assets.filter(asset => asset.wallSegments && asset.wallSegments.length > 0);
+            let mergedSegments = segmentsInMM;
+            let connectedAsset: AssetInstance | null = null;
+            
+            // Check if the first or last point of current wall connects to an existing wall
+            if (segmentsInMM.length > 0) {
+              const firstPoint = segmentsInMM[0].start;
+              const lastPoint = segmentsInMM[segmentsInMM.length - 1].end;
+              
+              const firstConnection = findNearbyWallSegment(firstPoint, wallAssets);
+              const lastConnection = findNearbyWallSegment(lastPoint, wallAssets);
+              
+              if (firstConnection) {
+                connectedAsset = firstConnection.asset;
+                mergedSegments = mergeWallSegments(segmentsInMM, connectedAsset);
+              } else if (lastConnection) {
+                connectedAsset = lastConnection.asset;
+                mergedSegments = mergeWallSegments(segmentsInMM, connectedAsset);
+              }
+            }
+            
             // Build wall geometry with mitered corners
-            const geometry = buildWallGeometry(segmentsInMM, wallGap);
+            const geometry = buildWallGeometry(mergedSegments, wallGap);
             
             if (geometry.outerPoints.length === 0 || geometry.innerPoints.length === 0) {
               return null;
@@ -2229,11 +2402,11 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             const fullPath = `${outerPath} ${innerPath} Z`;
             
             return (
-              <path
+                <path
                 d={fullPath}
-                fill="none"
+                  fill="none"
                 stroke="#000000"
-                strokeWidth={wallThickness}
+                  strokeWidth={wallThickness}
                 strokeLinejoin="miter"
               />
             );
@@ -2242,6 +2415,11 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
           {/* Render current wall segment being drawn */}
           {currentWallStart && currentWallTempEnd && (() => {
             const wallGap = 8; // 8mm gap in mm units
+            
+            // Check if the current segment is snapped to 90 degrees
+            const originalPoint = clientToCanvasMM(lastMousePosition.current.x, lastMousePosition.current.y);
+            const snappedPoint = snapTo90Degrees(currentWallStart, originalPoint);
+            const isSnapped = Math.abs(snappedPoint.x - originalPoint.x) > 0.1 || Math.abs(snappedPoint.y - originalPoint.y) > 0.1;
             
             // Create temporary segment for geometry calculation
             const tempSegment = {
@@ -2279,15 +2457,42 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             const fullPath = `${outerPath} ${innerPath} Z`;
             
             return (
-              <path
-                d={fullPath}
-                fill="none"
-                stroke="#000000"
-                strokeWidth="2"
-                strokeLinejoin="miter"
-                strokeDasharray="5,5"
-                opacity="0.7"
-              />
+              <>
+                <path
+                  d={fullPath}
+                  fill="none"
+                  stroke={isSnapped ? "#22C55E" : "#000000"} // Green when snapped, black when not
+                  strokeWidth="2"
+                  strokeLinejoin="miter"
+                  strokeDasharray={isSnapped ? "10,5" : "5,5"} // Different dash pattern when snapped
+                  opacity="0.7"
+                />
+                {/* Show snap angle indicator */}
+                {isSnapped && (() => {
+                  const dx = currentWallTempEnd.x - currentWallStart.x;
+                  const dy = currentWallTempEnd.y - currentWallStart.y;
+                  const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+                  const normalizedAngle = ((angle % 360) + 360) % 360;
+                  const snapAngle = Math.round(normalizedAngle / 90) * 90;
+                  
+                  const midX = ((currentWallStart.x + currentWallTempEnd.x) / 2) * mmToPx;
+                  const midY = ((currentWallStart.y + currentWallTempEnd.y) / 2) * mmToPx;
+                  
+                  return (
+                    <text
+                      x={midX}
+                      y={midY - 10}
+                      textAnchor="middle"
+                      fontSize="12"
+                      fill="#22C55E"
+                      fontWeight="bold"
+                      pointerEvents="none"
+                    >
+                      {snapAngle}°
+                    </text>
+                  );
+                })()}
+              </>
             );
           })()}
           
@@ -2616,17 +2821,14 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                       width={width}
                       height={height}
                       viewBox={`${-width/2} ${-height/2} ${width} ${height}`}
-                      style={{ overflow: "visible" }}
-                    >
+                  style={{ overflow: "visible" }}
+                >
                   {asset.wallSegments && asset.wallSegments.length > 0 && (() => {
-                    const wallThickness = (asset.wallThickness ?? 2) * asset.scale;
+                    const wallThickness = (asset.wallThickness ?? 1) * asset.scale;
                     const wallGap = (asset.wallGap ?? 8); // Wall gap in mm units (will be scaled)
                     
-                    // Convert absolute coordinates to relative coordinates for rendering
-                    const relativeSegments = asset.wallSegments.map(segment => ({
-                      start: { x: segment.start.x - asset.x, y: segment.start.y - asset.y },
-                      end: { x: segment.end.x - asset.x, y: segment.end.y - asset.y }
-                    }));
+                    // Wall segments are already in relative coordinates
+                    const relativeSegments = asset.wallSegments;
                     
                     // Build wall geometry with mitered corners
                     const geometry = buildWallGeometry(relativeSegments, wallGap);
@@ -2658,16 +2860,16 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
                     const fullPath = `${outerPath} ${innerPath} Z`;
                     
                     return (
-                      <path
+                        <path
                         d={fullPath}
-                        fill="none"
+                          fill="none"
                         stroke={asset.lineColor ?? "#000000"}
-                        strokeWidth={wallThickness}
+                          strokeWidth={wallThickness}
                         strokeLinejoin="miter"
                       />
                     );
                   })()}
-                    </svg>
+                </svg>
                   );
                 })()}
               </div>

@@ -7,6 +7,11 @@ import {
   FaDownload,
   FaBox,
   FaPenNib,
+  FaShapes,
+  FaSquare,
+  FaCircle,
+  FaArrowRight,
+  FaDrawPolygon,
 } from "react-icons/fa";
 
 export interface ToolOption {
@@ -35,6 +40,16 @@ export function useToolbarTools(): Tool[] {
       label: "Assets",
       options: [
         { id: "open-assets", label: "Assets" },
+      ],
+    },
+    {
+      icon: <FaShapes size={18} />,
+      label: "Shapes",
+      options: [
+        { id: "rectangle", label: "Rectangle" },
+        { id: "circle", label: "Circle" },
+        { id: "arrow", label: "Arrow" },
+        { id: "polygon", label: "Polygon" },
       ],
     },
     {
