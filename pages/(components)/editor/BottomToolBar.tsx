@@ -40,6 +40,20 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
         setShowAssetsModal(true);
         break;
       
+      // Shape tools
+      case "rectangle":
+        console.log("Rectangle tool activated");
+        break;
+      case "circle":
+        console.log("Circle tool activated");
+        break;
+      case "arrow":
+        console.log("Arrow tool activated");
+        break;
+      case "polygon":
+        console.log("Polygon tool activated");
+        break;
+      
       // Drawing tools
       case "draw-line":
         setPenMode(!isPenMode);
