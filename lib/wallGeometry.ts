@@ -1,0 +1,513 @@
+import { AssetInstance } from "@/store/sceneStore";
+
+// Wall geometry helper types
+export type WallSegment = {
+    start: { x: number; y: number };
+    end: { x: number; y: number };
+};
+
+export type WallGeometry = {
+    outerPoints: { x: number; y: number }[];
+    innerPoints: { x: number; y: number }[];
+};
+
+// Helper function to calculate line intersection
+export function calculateLineIntersection(
+    p1: { x: number; y: number },
+    p2: { x: number; y: number },
+    p3: { x: number; y: number },
+    p4: { x: number; y: number }
+): { x: number; y: number } | null {
+    const denom = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
+
+    if (Math.abs(denom) < 1e-10) {
+        // Lines are parallel
+        return null;
+    }
+
+    const t = ((p1.x - p3.x) * (p3.y - p4.y) - (p1.y - p3.y) * (p3.x - p4.x)) / denom;
+
+    return {
+        x: p1.x + t * (p2.x - p1.x),
+        y: p1.y + t * (p2.y - p1.y)
+    };
+}
+
+// Helper function to calculate wall geometry with clean rectangular corners
+export function buildWallGeometry(segments: WallSegment[], wallGap: number): WallGeometry {
+    if (segments.length === 0) {
+        return { outerPoints: [], innerPoints: [] };
+    }
+
+    if (segments.length === 1) {
+        // Single segment - simple parallel lines
+        const segment = segments[0];
+        const dx = segment.end.x - segment.start.x;
+        const dy = segment.end.y - segment.start.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+
+        if (length === 0) {
+            return { outerPoints: [], innerPoints: [] };
+        }
+
+        const angle = Math.atan2(dy, dx);
+        const perpX = Math.cos(angle + Math.PI / 2) * (wallGap / 2);
+        const perpY = Math.sin(angle + Math.PI / 2) * (wallGap / 2);
+
+        return {
+            outerPoints: [
+                { x: segment.start.x + perpX, y: segment.start.y + perpY },
+                { x: segment.end.x + perpX, y: segment.end.y + perpY }
+            ],
+            innerPoints: [
+                { x: segment.start.x - perpX, y: segment.start.y - perpY },
+                { x: segment.end.x - perpX, y: segment.end.y - perpY }
+            ]
+        };
+    }
+
+    // For multiple segments, create a continuous outline
+    const outerPoints: { x: number; y: number }[] = [];
+    const innerPoints: { x: number; y: number }[] = [];
+
+    // Check if this is a closed loop (last segment ends at first segment start)
+    const isClosedLoop = segments.length > 2 &&
+        Math.abs(segments[segments.length - 1].end.x - segments[0].start.x) < 1 &&
+        Math.abs(segments[segments.length - 1].end.y - segments[0].start.y) < 1;
+
+    // Process each segment to create continuous outline
+    for (let i = 0; i < segments.length; i++) {
+        const segment = segments[i];
+        const dx = segment.end.x - segment.start.x;
+        const dy = segment.end.y - segment.start.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+
+        if (length === 0) continue;
+
+        const angle = Math.atan2(dy, dx);
+        const perpX = Math.cos(angle + Math.PI / 2) * (wallGap / 2);
+        const perpY = Math.sin(angle + Math.PI / 2) * (wallGap / 2);
+
+        if (i === 0) {
+            // First segment - start with perpendicular offset
+            outerPoints.push({
+                x: segment.start.x + perpX,
+                y: segment.start.y + perpY
+            });
+            innerPoints.push({
+                x: segment.start.x - perpX,
+                y: segment.start.y - perpY
+            });
+        }
+
+        // For the end of each segment, calculate the corner intersection
+        const nextSegment = isClosedLoop && i === segments.length - 1
+            ? segments[0] // For closed loops, last segment connects to first segment
+            : segments[i + 1];
+
+        if (nextSegment && i < segments.length - 1) {
+            // There's a next segment - calculate corner intersection
+            const nextDx = nextSegment.end.x - nextSegment.start.x;
+            const nextDy = nextSegment.end.y - nextSegment.start.y;
+            const nextLength = Math.sqrt(nextDx * nextDx + nextDy * nextDy);
+
+            if (nextLength > 0) {
+                const nextAngle = Math.atan2(nextDy, nextDx);
+                const nextPerpX = Math.cos(nextAngle + Math.PI / 2) * (wallGap / 2);
+                const nextPerpY = Math.sin(nextAngle + Math.PI / 2) * (wallGap / 2);
+
+                // Calculate intersection points for the corner
+                const cornerPoint = { x: segment.end.x, y: segment.end.y };
+
+                // Calculate outer corner intersection
+                const outerIntersection = calculateLineIntersection(
+                    { x: cornerPoint.x + perpX, y: cornerPoint.y + perpY },
+                    { x: cornerPoint.x + dx, y: cornerPoint.y + dy },
+                    { x: cornerPoint.x + nextPerpX, y: cornerPoint.y + nextPerpY },
+                    { x: cornerPoint.x + nextDx, y: cornerPoint.y + nextDy }
+                );
+
+                // Calculate inner corner intersection
+                const innerIntersection = calculateLineIntersection(
+                    { x: cornerPoint.x - perpX, y: cornerPoint.y - perpY },
+                    { x: cornerPoint.x + dx, y: cornerPoint.y + dy },
+                    { x: cornerPoint.x - nextPerpX, y: cornerPoint.y - nextPerpY },
+                    { x: cornerPoint.x + nextDx, y: cornerPoint.y + nextDy }
+                );
+
+                // Use intersection points if they exist, otherwise fall back to perpendicular offsets
+                if (outerIntersection) {
+                    outerPoints.push(outerIntersection);
+                } else {
+                    outerPoints.push({
+                        x: cornerPoint.x + perpX,
+                        y: cornerPoint.y + perpY
+                    });
+                }
+
+                if (innerIntersection) {
+                    innerPoints.push(innerIntersection);
+                } else {
+                    innerPoints.push({
+                        x: cornerPoint.x - perpX,
+                        y: cornerPoint.y - perpY
+                    });
+                }
+            } else {
+                // Next segment has zero length, use perpendicular offset
+                outerPoints.push({
+                    x: segment.end.x + perpX,
+                    y: segment.end.y + perpY
+                });
+                innerPoints.push({
+                    x: segment.end.x - perpX,
+                    y: segment.end.y - perpY
+                });
+            }
+        } else {
+            // Last segment (non-closed loop) - end with perpendicular offset
+            outerPoints.push({
+                x: segment.end.x + perpX,
+                y: segment.end.y + perpY
+            });
+            innerPoints.push({
+                x: segment.end.x - perpX,
+                y: segment.end.y - perpY
+            });
+        }
+    }
+
+    return { outerPoints, innerPoints };
+}
+
+// Helper function to detect if a point is close to any wall segment
+export function findNearbyWallSegment(
+    point: { x: number; y: number },
+    wallAssets: AssetInstance[],
+    threshold: number = 5
+): { asset: AssetInstance; segmentIndex: number; isStart: boolean } | null {
+    for (const asset of wallAssets) {
+        if (!asset.wallSegments) continue;
+
+        for (let i = 0; i < asset.wallSegments.length; i++) {
+            const segment = asset.wallSegments[i];
+
+            // Check distance to start point
+            const distToStart = Math.sqrt(
+                Math.pow(point.x - segment.start.x, 2) +
+                Math.pow(point.y - segment.start.y, 2)
+            );
+
+            if (distToStart <= threshold) {
+                return { asset, segmentIndex: i, isStart: true };
+            }
+
+            // Check distance to end point
+            const distToEnd = Math.sqrt(
+                Math.pow(point.x - segment.end.x, 2) +
+                Math.pow(point.y - segment.end.y, 2)
+            );
+
+            if (distToEnd <= threshold) {
+                return { asset, segmentIndex: i, isStart: false };
+            }
+        }
+    }
+
+    return null;
+}
+
+// Helper function to find intersections between two wall segments
+export function findWallIntersection(
+    segment1: { start: { x: number; y: number }; end: { x: number; y: number } },
+    segment2: { start: { x: number; y: number }; end: { x: number; y: number } }
+): { x: number; y: number } | null {
+    return calculateLineIntersection(
+        segment1.start, segment1.end,
+        segment2.start, segment2.end
+    );
+}
+
+// Helper function to create wall geometry with intersection gaps
+export function buildWallGeometryWithIntersections(
+    segments: WallSegment[],
+    wallGap: number,
+    allWallAssets: AssetInstance[]
+): WallGeometry {
+    if (segments.length === 0) {
+        return { outerPoints: [], innerPoints: [] };
+    }
+
+    if (segments.length === 1) {
+        // Single segment - simple parallel lines
+        const segment = segments[0];
+        const dx = segment.end.x - segment.start.x;
+        const dy = segment.end.y - segment.start.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+
+        if (length === 0) {
+            return { outerPoints: [], innerPoints: [] };
+        }
+
+        const angle = Math.atan2(dy, dx);
+        const perpX = Math.cos(angle + Math.PI / 2) * (wallGap / 2);
+        const perpY = Math.sin(angle + Math.PI / 2) * (wallGap / 2);
+
+        return {
+            outerPoints: [
+                { x: segment.start.x + perpX, y: segment.start.y + perpY },
+                { x: segment.end.x + perpX, y: segment.end.y + perpY }
+            ],
+            innerPoints: [
+                { x: segment.start.x - perpX, y: segment.start.y - perpY },
+                { x: segment.end.x - perpX, y: segment.end.y - perpY }
+            ]
+        };
+    }
+
+    // For multiple segments, create a continuous outline
+    const outerPoints: { x: number; y: number }[] = [];
+    const innerPoints: { x: number; y: number }[] = [];
+
+    // Check if this is a closed loop (last segment ends at first segment start)
+    const isClosedLoop = segments.length > 2 &&
+        Math.abs(segments[segments.length - 1].end.x - segments[0].start.x) < 1 &&
+        Math.abs(segments[segments.length - 1].end.y - segments[0].start.y) < 1;
+
+    // Process each segment to create continuous outline
+    for (let i = 0; i < segments.length; i++) {
+        const segment = segments[i];
+        const dx = segment.end.x - segment.start.x;
+        const dy = segment.end.y - segment.start.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+
+        if (length === 0) continue;
+
+        const angle = Math.atan2(dy, dx);
+        const perpX = Math.cos(angle + Math.PI / 2) * (wallGap / 2);
+        const perpY = Math.sin(angle + Math.PI / 2) * (wallGap / 2);
+
+        if (i === 0) {
+            // First segment - start with perpendicular offset
+            outerPoints.push({
+                x: segment.start.x + perpX,
+                y: segment.start.y + perpY
+            });
+            innerPoints.push({
+                x: segment.start.x - perpX,
+                y: segment.start.y - perpY
+            });
+        }
+
+        // For the end of each segment, calculate the corner intersection
+        const nextSegment = isClosedLoop && i === segments.length - 1
+            ? segments[0] // For closed loops, last segment connects to first segment
+            : segments[i + 1];
+
+        if (nextSegment && i < segments.length - 1) {
+            // There's a next segment - calculate corner intersection
+            const nextDx = nextSegment.end.x - nextSegment.start.x;
+            const nextDy = nextSegment.end.y - nextSegment.start.y;
+            const nextLength = Math.sqrt(nextDx * nextDx + nextDy * nextDy);
+
+            if (nextLength > 0) {
+                const nextAngle = Math.atan2(nextDy, nextDx);
+                const nextPerpX = Math.cos(nextAngle + Math.PI / 2) * (wallGap / 2);
+                const nextPerpY = Math.sin(nextAngle + Math.PI / 2) * (wallGap / 2);
+
+                // Calculate intersection points for the corner
+                const cornerPoint = { x: segment.end.x, y: segment.end.y };
+
+                // Calculate outer corner intersection
+                const outerIntersection = calculateLineIntersection(
+                    { x: cornerPoint.x + perpX, y: cornerPoint.y + perpY },
+                    { x: cornerPoint.x + dx, y: cornerPoint.y + dy },
+                    { x: cornerPoint.x + nextPerpX, y: cornerPoint.y + nextPerpY },
+                    { x: cornerPoint.x + nextDx, y: cornerPoint.y + nextDy }
+                );
+
+                // Calculate inner corner intersection
+                const innerIntersection = calculateLineIntersection(
+                    { x: cornerPoint.x - perpX, y: cornerPoint.y - perpY },
+                    { x: cornerPoint.x + dx, y: cornerPoint.y + dy },
+                    { x: cornerPoint.x - nextPerpX, y: cornerPoint.y - nextPerpY },
+                    { x: cornerPoint.x + nextDx, y: cornerPoint.y + nextDy }
+                );
+
+                // Use intersection points if they exist, otherwise fall back to perpendicular offsets
+                if (outerIntersection) {
+                    outerPoints.push(outerIntersection);
+                } else {
+                    outerPoints.push({
+                        x: cornerPoint.x + perpX,
+                        y: cornerPoint.y + perpY
+                    });
+                }
+
+                if (innerIntersection) {
+                    innerPoints.push(innerIntersection);
+                } else {
+                    innerPoints.push({
+                        x: cornerPoint.x - perpX,
+                        y: cornerPoint.y - perpY
+                    });
+                }
+            } else {
+                // Next segment has zero length, use perpendicular offset
+                outerPoints.push({
+                    x: segment.end.x + perpX,
+                    y: segment.end.y + perpY
+                });
+                innerPoints.push({
+                    x: segment.end.x - perpX,
+                    y: segment.end.y - perpY
+                });
+            }
+        } else {
+            // Last segment (non-closed loop) - end with perpendicular offset
+            outerPoints.push({
+                x: segment.end.x + perpX,
+                y: segment.end.y + perpY
+            });
+            innerPoints.push({
+                x: segment.end.x - perpX,
+                y: segment.end.y - perpY
+            });
+        }
+    }
+
+    return { outerPoints, innerPoints };
+}
+
+// Helper function to merge wall segments when they connect
+export function mergeWallSegments(
+    currentSegments: { start: { x: number; y: number }; end: { x: number; y: number } }[],
+    existingAsset: AssetInstance
+): { start: { x: number; y: number }; end: { x: number; y: number } }[] {
+    if (!existingAsset.wallSegments) return currentSegments;
+
+    // Convert existing asset segments to absolute coordinates
+    const existingSegments = existingAsset.wallSegments.map(segment => ({
+        start: {
+            x: segment.start.x + existingAsset.x,
+            y: segment.start.y + existingAsset.y
+        },
+        end: {
+            x: segment.end.x + existingAsset.x,
+            y: segment.end.y + existingAsset.y
+        }
+    }));
+
+    // Combine all segments
+    const allSegments = [...existingSegments, ...currentSegments];
+
+    // Remove duplicates and merge connected segments
+    const mergedSegments: { start: { x: number; y: number }; end: { x: number; y: number } }[] = [];
+
+    for (const segment of allSegments) {
+        // Check if this segment connects to any existing merged segment
+        let connected = false;
+
+        for (let i = 0; i < mergedSegments.length; i++) {
+            const merged = mergedSegments[i];
+
+            // Check if segment connects to merged segment start
+            if (Math.abs(segment.end.x - merged.start.x) < 1 &&
+                Math.abs(segment.end.y - merged.start.y) < 1) {
+                mergedSegments[i] = { start: segment.start, end: merged.end };
+                connected = true;
+                break;
+            }
+
+            // Check if segment connects to merged segment end
+            if (Math.abs(segment.start.x - merged.end.x) < 1 &&
+                Math.abs(segment.start.y - merged.end.y) < 1) {
+                mergedSegments[i] = { start: merged.start, end: segment.end };
+                connected = true;
+                break;
+            }
+        }
+
+        if (!connected) {
+            mergedSegments.push(segment);
+        }
+    }
+
+    return mergedSegments;
+}
+
+// Helper function to snap wall endpoints to 90-degree angles
+export function snapTo90Degrees(
+    startPoint: { x: number; y: number },
+    endPoint: { x: number; y: number },
+    snapTolerance: number = 6 // degrees - reduced for more precise snapping
+): { x: number; y: number } {
+    const dx = endPoint.x - startPoint.x;
+    const dy = endPoint.y - startPoint.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+
+    if (length === 0) return endPoint;
+
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI); // Convert to degrees
+    const angleRad = Math.atan2(dy, dx);
+
+    // Define snap angles: 0°, 90°, 180°, 270° (or -90°)
+    const snapAngles = [0, 90, 180, -90, 270];
+
+    // Find the closest snap angle
+    let closestSnapAngle = snapAngles[0];
+    let minDifference = Math.abs(angle - snapAngles[0]);
+
+    for (const snapAngle of snapAngles) {
+        const difference = Math.abs(angle - snapAngle);
+        if (difference < minDifference) {
+            minDifference = difference;
+            closestSnapAngle = snapAngle;
+        }
+    }
+
+    // If we're within snap tolerance, snap to the closest angle
+    if (minDifference <= snapTolerance) {
+        const snappedAngleRad = closestSnapAngle * (Math.PI / 180); // Convert back to radians
+
+        return {
+            x: startPoint.x + Math.cos(snappedAngleRad) * length,
+            y: startPoint.y + Math.sin(snappedAngleRad) * length
+        };
+    }
+
+    // No snapping, return original point
+    return endPoint;
+}
+
+// Helper function to calculate bounding box from wall segments
+export function calculateWallBoundingBox(asset: AssetInstance): { width: number; height: number } {
+    if (!asset.wallSegments || asset.wallSegments.length === 0) {
+        return { width: 200, height: 200 }; // Default fallback
+    }
+
+    const wallGap = asset.wallGap ?? 8;
+
+    // Wall segments are already in relative coordinates
+    const relativeSegments = asset.wallSegments;
+
+    const geometry = buildWallGeometry(relativeSegments, wallGap);
+
+    // Combine all points from both outer and inner geometry
+    const allPoints = [...geometry.outerPoints, ...geometry.innerPoints];
+
+    if (allPoints.length === 0) {
+        return { width: 200, height: 200 }; // Default fallback
+    }
+
+    // Find min/max coordinates
+    const minX = Math.min(...allPoints.map(p => p.x));
+    const maxX = Math.max(...allPoints.map(p => p.x));
+    const minY = Math.min(...allPoints.map(p => p.y));
+    const maxY = Math.max(...allPoints.map(p => p.y));
+
+    return {
+        width: Math.max(50, maxX - minX), // Minimum 50mm width
+        height: Math.max(50, maxY - minY) // Minimum 50mm height
+    };
+}
