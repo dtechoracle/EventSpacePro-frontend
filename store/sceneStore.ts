@@ -297,9 +297,98 @@ export const useSceneStore = create<SceneState>()(
       finishWallDrawing: () => {
         const state = get();
         if (state.currentWallSegments.length > 0) {
+          // Helper function to calculate corner intersection for perpendicular walls
+          const calculateCornerIntersection = (
+            segment1: { start: { x: number; y: number }; end: { x: number; y: number } },
+            segment2: { start: { x: number; y: number }; end: { x: number; y: number } },
+            connectionPoint: { x: number; y: number },
+            wallGap: number = 8
+          ) => {
+            // Calculate wall directions
+            const dir1 = {
+              x: segment1.end.x - segment1.start.x,
+              y: segment1.end.y - segment1.start.y
+            };
+            const dir2 = {
+              x: segment2.end.x - segment2.start.x,
+              y: segment2.end.y - segment2.start.y
+            };
+
+            // Normalize directions
+            const len1 = Math.sqrt(dir1.x * dir1.x + dir1.y * dir1.y);
+            const len2 = Math.sqrt(dir2.x * dir2.x + dir2.y * dir2.y);
+
+            if (len1 === 0 || len2 === 0) return { segment1, segment2 };
+
+            const norm1 = { x: dir1.x / len1, y: dir1.y / len1 };
+            const norm2 = { x: dir2.x / len2, y: dir2.y / len2 };
+
+            // Calculate perpendicular vectors (wall thickness direction)
+            const perp1 = { x: -norm1.y, y: norm1.x };
+            const perp2 = { x: -norm2.y, y: norm2.x };
+
+            // Calculate outer and inner edge points for both walls
+            const halfGap = wallGap / 2;
+            const outer1 = {
+              x: connectionPoint.x + perp1.x * halfGap,
+              y: connectionPoint.y + perp1.y * halfGap
+            };
+            const inner1 = {
+              x: connectionPoint.x - perp1.x * halfGap,
+              y: connectionPoint.y - perp1.y * halfGap
+            };
+            const outer2 = {
+              x: connectionPoint.x + perp2.x * halfGap,
+              y: connectionPoint.y + perp2.y * halfGap
+            };
+            const inner2 = {
+              x: connectionPoint.x - perp2.x * halfGap,
+              y: connectionPoint.y - perp2.y * halfGap
+            };
+
+            // Calculate intersection points for clean corner
+            // For smooth corners, we need to trim the existing wall segment
+            // so the new wall can fill the corner space
+
+            // Determine which wall is the "existing" one (segment1) and which is "new" (segment2)
+            // Trim the existing wall to stop before the connection point
+            const trimDistance = wallGap; // Trim by wall gap distance to create smooth corner
+
+            // Calculate trim point for existing wall (segment1)
+            const segment1Dir = {
+              x: segment1.end.x - segment1.start.x,
+              y: segment1.end.y - segment1.start.y
+            };
+            const segment1Len = Math.sqrt(segment1Dir.x * segment1Dir.x + segment1Dir.y * segment1Dir.y);
+
+            if (segment1Len > 0) {
+              const segment1Norm = { x: segment1Dir.x / segment1Len, y: segment1Dir.y / segment1Len };
+
+              // Trim point is trimDistance away from connection point along the wall direction
+              const trimmedSegment1 = {
+                start: segment1.start,
+                end: {
+                  x: connectionPoint.x - segment1Norm.x * trimDistance,
+                  y: connectionPoint.y - segment1Norm.y * trimDistance
+                }
+              };
+
+              // New wall (segment2) starts from connection point
+              const trimmedSegment2 = {
+                start: connectionPoint,
+                end: segment2.end
+              };
+
+              return { segment1: trimmedSegment1, segment2: trimmedSegment2 };
+            }
+
+            // Fallback if segment length is 0
+            return { segment1, segment2 };
+          };
+
           // Check if current wall connects to any existing walls
           const wallAssets = state.assets.filter(asset => asset.wallSegments && asset.wallSegments.length > 0);
-          let connectedAsset: { asset: AssetInstance; segmentIndex: number; connectionPoint: 'start' | 'end'; connectionPosition: { x: number; y: number } } | null = null;
+          let connectedAsset: { asset: AssetInstance; segmentIndex: number; connectionPoint: 'start' | 'end'; connectionPosition: { x: number; y: number }; isPerpendicular: boolean } | null = null;
 
           // Check if the first or last point of current wall connects to an existing wall
           if (state.currentWallSegments.length > 0) {
@@ -309,8 +398,8 @@ export const useSceneStore = create<SceneState>()(
             // Helper function to find nearby wall segment with connection details
             const findNearbyWallSegment = (
               point: { x: number; y: number },
-              threshold: number = 5
-            ): { asset: AssetInstance; segmentIndex: number; connectionPoint: 'start' | 'end'; connectionPosition: { x: number; y: number } } | null => {
+              threshold: number = 10 // Updated from 5mm to 10mm for better snap distance
+            ): { asset: AssetInstance; segmentIndex: number; connectionPoint: 'start' | 'end'; connectionPosition: { x: number; y: number }; isPerpendicular: boolean } | null => {
               for (const asset of wallAssets) {
                 if (!asset.wallSegments) continue;
 
@@ -339,20 +428,62 @@ export const useSceneStore = create<SceneState>()(
                   );
 
                   if (distToStart <= threshold) {
+                    // Check if walls are perpendicular (within 5 degrees of 90°)
+                    const currentWallDir = state.currentWallSegments.length > 0 ? {
+                      x: state.currentWallSegments[state.currentWallSegments.length - 1].end.x - state.currentWallSegments[0].start.x,
+                      y: state.currentWallSegments[state.currentWallSegments.length - 1].end.y - state.currentWallSegments[0].start.y
+                    } : { x: 0, y: 0 };
+
+                    const existingWallDir = {
+                      x: absEnd.x - absStart.x,
+                      y: absEnd.y - absStart.y
+                    };
+
+                    const currentLen = Math.sqrt(currentWallDir.x * currentWallDir.x + currentWallDir.y * currentWallDir.y);
+                    const existingLen = Math.sqrt(existingWallDir.x * existingWallDir.x + existingWallDir.y * existingWallDir.y);
+
+                    let isPerpendicular = false;
+                    if (currentLen > 0 && existingLen > 0) {
+                      const dotProduct = Math.abs((currentWallDir.x * existingWallDir.x + currentWallDir.y * existingWallDir.y) / (currentLen * existingLen));
+                      isPerpendicular = dotProduct < 0.087; // cos(85°) ≈ 0.087, so walls within 5° of perpendicular
+                    }
+
                     return {
                       asset,
                       segmentIndex: i,
                       connectionPoint: 'start',
-                      connectionPosition: absStart
+                      connectionPosition: absStart,
+                      isPerpendicular
                     };
                   }
 
                   if (distToEnd <= threshold) {
+                    // Check if walls are perpendicular (within 5 degrees of 90°)
+                    const currentWallDir = state.currentWallSegments.length > 0 ? {
+                      x: state.currentWallSegments[state.currentWallSegments.length - 1].end.x - state.currentWallSegments[0].start.x,
+                      y: state.currentWallSegments[state.currentWallSegments.length - 1].end.y - state.currentWallSegments[0].start.y
+                    } : { x: 0, y: 0 };
+
+                    const existingWallDir = {
+                      x: absEnd.x - absStart.x,
+                      y: absEnd.y - absStart.y
+                    };
+
+                    const currentLen = Math.sqrt(currentWallDir.x * currentWallDir.x + currentWallDir.y * currentWallDir.y);
+                    const existingLen = Math.sqrt(existingWallDir.x * existingWallDir.x + existingWallDir.y * existingWallDir.y);
+
+                    let isPerpendicular = false;
+                    if (currentLen > 0 && existingLen > 0) {
+                      const dotProduct = Math.abs((currentWallDir.x * existingWallDir.x + currentWallDir.y * existingWallDir.y) / (currentLen * existingLen));
+                      isPerpendicular = dotProduct < 0.087; // cos(85°) ≈ 0.087, so walls within 5° of perpendicular
+                    }
+
                     return {
                       asset,
                       segmentIndex: i,
                       connectionPoint: 'end',
-                      connectionPosition: absEnd
+                      connectionPosition: absEnd,
+                      isPerpendicular
                     };
                   }
                 }
@@ -369,29 +500,93 @@ export const useSceneStore = create<SceneState>()(
               if (asset.id === connectedAsset!.asset.id) {
                 // Convert existing asset segments to absolute coordinates
                 const existingSegments = asset.wallSegments!.map((segment, index) => {
-                  // Trim the connected segment to avoid overlap
+                  // Handle the connected segment with proper corner calculation
                   if (index === connectedAsset!.segmentIndex) {
                     const connectionPos = connectedAsset!.connectionPosition;
                     const connectionPoint = connectedAsset!.connectionPoint;
+                    const isPerpendicular = connectedAsset!.isPerpendicular;
 
-                    // If connecting to the start of the segment, trim from the start
-                    if (connectionPoint === 'start') {
+                    // Convert segment to absolute coordinates
+                    const absSegment = {
+                      start: {
+                        x: segment.start.x + asset.x,
+                        y: segment.start.y + asset.y
+                      },
+                      end: {
+                        x: segment.end.x + asset.x,
+                        y: segment.end.y + asset.y
+                      }
+                    };
+
+                    if (isPerpendicular) {
+                      // Use corner intersection calculation for perpendicular walls
+                      const currentWallSegment = state.currentWallSegments[state.currentWallSegments.length - 1];
+                      const cornerResult = calculateCornerIntersection(
+                        absSegment,
+                        currentWallSegment,
+                        connectionPos,
+                        asset.wallGap || 8
+                      );
+
+                      // Return the trimmed existing segment
                       return {
-                        start: connectionPos, // Trim to connection point
-                        end: {
-                          x: segment.end.x + asset.x,
-                          y: segment.end.y + asset.y
-                        }
+                        start: cornerResult.segment1.start,
+                        end: cornerResult.segment1.end
                       };
                     } else {
-                      // If connecting to the end of the segment, trim from the end
-                      return {
-                        start: {
-                          x: segment.start.x + asset.x,
-                          y: segment.start.y + asset.y
-                        },
-                        end: connectionPos // Trim to connection point
-                      };
+                      // For non-perpendicular walls, still trim existing wall to make room
+                      const trimDistance = asset.wallGap || 8;
+
+                      if (connectionPoint === 'start') {
+                        // Trim from start, moving the start point away from connection
+                        const segmentDir = {
+                          x: absSegment.end.x - absSegment.start.x,
+                          y: absSegment.end.y - absSegment.start.y
+                        };
+                        const segmentLen = Math.sqrt(segmentDir.x * segmentDir.x + segmentDir.y * segmentDir.y);
+
+                        if (segmentLen > 0) {
+                          const segmentNorm = { x: segmentDir.x / segmentLen, y: segmentDir.y / segmentLen };
+                          return {
+                            start: {
+                              x: connectionPos.x + segmentNorm.x * trimDistance,
+                              y: connectionPos.y + segmentNorm.y * trimDistance
+                            },
+                            end: absSegment.end
+                          };
+                        }
+                      } else {
+                        // Trim from end, moving the end point away from connection
+                        const segmentDir = {
+                          x: absSegment.end.x - absSegment.start.x,
+                          y: absSegment.end.y - absSegment.start.y
+                        };
+                        const segmentLen = Math.sqrt(segmentDir.x * segmentDir.x + segmentDir.y * segmentDir.y);
+
+                        if (segmentLen > 0) {
+                          const segmentNorm = { x: segmentDir.x / segmentLen, y: segmentDir.y / segmentLen };
+                          return {
+                            start: absSegment.start,
+                            end: {
+                              x: connectionPos.x - segmentNorm.x * trimDistance,
+                              y: connectionPos.y - segmentNorm.y * trimDistance
+                            }
+                          };
+                        }
+                      }
+
+                      // Fallback to original trimming
+                      if (connectionPoint === 'start') {
+                        return {
+                          start: connectionPos,
+                          end: absSegment.end
+                        };
+                      } else {
+                        return {
+                          start: absSegment.start,
+                          end: connectionPos
+                        };
+                      }
                     }
                   } else {
                     // Keep other segments unchanged
@@ -408,11 +603,39 @@ export const useSceneStore = create<SceneState>()(
                   }
                 });
 
-                // Combine all segments
-                const allSegments = [...existingSegments, ...state.currentWallSegments];
+                // Handle current wall segments with corner intersection if perpendicular
+                let currentSegments = state.currentWallSegments;
+                if (connectedAsset.isPerpendicular) {
+                  const currentWallSegment = state.currentWallSegments[state.currentWallSegments.length - 1];
+                  const existingSegment = connectedAsset.asset.wallSegments![connectedAsset.segmentIndex];
+                  const absExistingSegment = {
+                    start: {
+                      x: existingSegment.start.x + connectedAsset.asset.x,
+                      y: existingSegment.start.y + connectedAsset.asset.y
+                    },
+                    end: {
+                      x: existingSegment.end.x + connectedAsset.asset.x,
+                      y: existingSegment.end.y + connectedAsset.asset.y
+                    }
+                  };
 
-                // Remove duplicates and merge connected segments
+                  const cornerResult = calculateCornerIntersection(
+                    absExistingSegment,
+                    currentWallSegment,
+                    connectedAsset.connectionPosition,
+                    connectedAsset.asset.wallGap || 8
+                  );
+
+                  // Update the last segment of current wall with trimmed version
+                  currentSegments = [...state.currentWallSegments.slice(0, -1), cornerResult.segment2];
+                }
+
+                // Combine all segments
+                const allSegments = [...existingSegments, ...currentSegments];
+
+                // Remove duplicates and merge connected segments with improved tolerance
                 const mergedSegments: { start: { x: number; y: number }; end: { x: number; y: number } }[] = [];
+                const connectionTolerance = 15; // Increased from 1mm to 15mm for better connection detection
 
                 for (const segment of allSegments) {
                   // Check if this segment connects to any existing merged segment
@@ -422,16 +645,24 @@ export const useSceneStore = create<SceneState>()(
                     const merged = mergedSegments[i];
 
                     // Check if segment connects to merged segment start
-                    if (Math.abs(segment.end.x - merged.start.x) < 1 &&
-                      Math.abs(segment.end.y - merged.start.y) < 1) {
+                    const distToStart = Math.sqrt(
+                      Math.pow(segment.end.x - merged.start.x, 2) +
+                      Math.pow(segment.end.y - merged.start.y, 2)
+                    );
+
+                    // Check if segment connects to merged segment end
+                    const distToEnd = Math.sqrt(
+                      Math.pow(segment.start.x - merged.end.x, 2) +
+                      Math.pow(segment.start.y - merged.end.y, 2)
+                    );
+
+                    if (distToStart <= connectionTolerance) {
                       mergedSegments[i] = { start: segment.start, end: merged.end };
                       connected = true;
                       break;
                     }
 
-                    // Check if segment connects to merged segment end
-                    if (Math.abs(segment.start.x - merged.end.x) < 1 &&
-                      Math.abs(segment.start.y - merged.end.y) < 1) {
+                    if (distToEnd <= connectionTolerance) {
                       mergedSegments[i] = { start: merged.start, end: segment.end };
                       connected = true;
                       break;
