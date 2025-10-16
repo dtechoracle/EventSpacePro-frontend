@@ -54,6 +54,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
   const setIsDrawing = useSceneStore((s) => s.setIsDrawing);
   const setCurrentPath = useSceneStore((s) => s.setCurrentPath);
   const setTempPath = useSceneStore((s) => s.setTempPath);
+  const shapeMode = useSceneStore((s) => s.shapeMode);
   const startWallSegment = useSceneStore((s) => s.startWallSegment);
 
   // Sync props data to store when props change (only once per data change)
@@ -154,7 +155,7 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
   return (
     <div
       ref={canvasRef}
-      className={`relative ${canvas ? 'bg-white border shadow-md' : 'bg-transparent'} ${(isPenMode || isWallMode || wallDrawingMode) ? 'cursor-crosshair' : ''}`}
+      className={`relative ${canvas ? 'bg-white border shadow-md' : 'bg-transparent'} ${(isPenMode || isWallMode || wallDrawingMode || shapeMode) ? 'cursor-crosshair' : ''}`}
       style={{ width: canvasPxW, height: canvasPxH, transform: `rotate(${rotation}deg)`, transformOrigin: "center center" }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
@@ -189,14 +190,40 @@ export default function Canvas({ workspaceZoom, mmToPx, canvasPos, setCanvasPos,
             }
             
             if (!currentWallStart) {
-              // Start new wall segment
-              startWallSegment({ x, y });
-              console.log('Started wall segment at:', { x, y });
+              // Start new wall segment, snapping to nearest existing wall endpoint if close
+              let startPoint = { x, y };
+              const snapThreshold = 6; // mm
+              // Look for nearest endpoint among existing wall assets
+              const wallAssets = assets.filter(a => a.wallSegments && a.wallSegments.length > 0);
+              let closest: { x: number; y: number } | null = null;
+              let closestDist = Infinity;
+              for (const a of wallAssets) {
+                for (const seg of a.wallSegments!) {
+                  const absStart = { x: seg.start.x + a.x, y: seg.start.y + a.y };
+                  const absEnd = { x: seg.end.x + a.x, y: seg.end.y + a.y };
+                  const dxS = x - absStart.x; const dyS = y - absStart.y;
+                  const distS = Math.sqrt(dxS * dxS + dyS * dyS);
+                  if (distS < closestDist) { closestDist = distS; closest = absStart; }
+                  const dxE = x - absEnd.x; const dyE = y - absEnd.y;
+                  const distE = Math.sqrt(dxE * dxE + dyE * dyE);
+                  if (distE < closestDist) { closestDist = distE; closest = absEnd; }
+                }
+              }
+              if (closest && closestDist <= snapThreshold) {
+                startPoint = closest;
+              }
+              startWallSegment(startPoint);
+              console.log('Started wall segment at:', startPoint);
             } else {
               // This will be handled by the mouse up event to commit the current segment
               console.log('Continuing wall segment at:', { x, y });
             }
             return; // Prevent canvas movement when in wall mode
+          } else if (shapeMode) {
+            e.stopPropagation();
+            const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+            useSceneStore.getState().startShape({ x, y });
+            return;
           } else {
             selectAsset(null);
             e.stopPropagation();

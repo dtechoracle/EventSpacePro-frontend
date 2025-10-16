@@ -40,7 +40,7 @@ export function buildWallGeometry(segments: WallSegment[], wallGap: number): Wal
     }
 
     if (segments.length === 1) {
-        // Single segment - simple parallel lines
+        // Single segment - with a truncated start cap
         const segment = segments[0];
         const dx = segment.end.x - segment.start.x;
         const dy = segment.end.y - segment.start.y;
@@ -53,14 +53,18 @@ export function buildWallGeometry(segments: WallSegment[], wallGap: number): Wal
         const angle = Math.atan2(dy, dx);
         const perpX = Math.cos(angle + Math.PI / 2) * (wallGap / 2);
         const perpY = Math.sin(angle + Math.PI / 2) * (wallGap / 2);
+        const normX = dx / length;
+        const normY = dy / length;
+        const capOffset = wallGap / 2; // advance the start to create a beveled cap
+        const startAdv = { x: segment.start.x + normX * capOffset, y: segment.start.y + normY * capOffset };
 
         return {
             outerPoints: [
-                { x: segment.start.x + perpX, y: segment.start.y + perpY },
+                { x: startAdv.x + perpX, y: startAdv.y + perpY },
                 { x: segment.end.x + perpX, y: segment.end.y + perpY }
             ],
             innerPoints: [
-                { x: segment.start.x - perpX, y: segment.start.y - perpY },
+                { x: startAdv.x - perpX, y: startAdv.y - perpY },
                 { x: segment.end.x - perpX, y: segment.end.y - perpY }
             ]
         };
@@ -89,15 +93,41 @@ export function buildWallGeometry(segments: WallSegment[], wallGap: number): Wal
         const perpY = Math.sin(angle + Math.PI / 2) * (wallGap / 2);
 
         if (i === 0) {
-            // First segment - start with perpendicular offset
-            outerPoints.push({
-                x: segment.start.x + perpX,
-                y: segment.start.y + perpY
-            });
-            innerPoints.push({
-                x: segment.start.x - perpX,
-                y: segment.start.y - perpY
-            });
+            if (isClosedLoop) {
+                // Closed loop: compute the START corner using the LAST segment to avoid a notch at the join
+                const prev = segments[segments.length - 1];
+                const pdx = prev.end.x - prev.start.x;
+                const pdy = prev.end.y - prev.start.y;
+                const plen = Math.sqrt(pdx * pdx + pdy * pdy);
+                if (plen > 0) {
+                    const pAngle = Math.atan2(pdy, pdx);
+                    const pPerpX = Math.cos(pAngle + Math.PI / 2) * (wallGap / 2);
+                    const pPerpY = Math.sin(pAngle + Math.PI / 2) * (wallGap / 2);
+                    const cornerPoint = { x: segment.start.x, y: segment.start.y };
+                    const outerIntersection = calculateLineIntersection(
+                        { x: cornerPoint.x + pPerpX, y: cornerPoint.y + pPerpY },
+                        { x: cornerPoint.x + pdx, y: cornerPoint.y + pdy },
+                        { x: cornerPoint.x + perpX, y: cornerPoint.y + perpY },
+                        { x: cornerPoint.x + dx, y: cornerPoint.y + dy }
+                    );
+                    const innerIntersection = calculateLineIntersection(
+                        { x: cornerPoint.x - pPerpX, y: cornerPoint.y - pPerpY },
+                        { x: cornerPoint.x + pdx, y: cornerPoint.y + pdy },
+                        { x: cornerPoint.x - perpX, y: cornerPoint.y - perpY },
+                        { x: cornerPoint.x + dx, y: cornerPoint.y + dy }
+                    );
+                    outerPoints.push(outerIntersection ?? { x: cornerPoint.x + perpX, y: cornerPoint.y + perpY });
+                    innerPoints.push(innerIntersection ?? { x: cornerPoint.x - perpX, y: cornerPoint.y - perpY });
+                } else {
+                    // Fallback if previous has zero length
+                    outerPoints.push({ x: segment.start.x + perpX, y: segment.start.y + perpY });
+                    innerPoints.push({ x: segment.start.x - perpX, y: segment.start.y - perpY });
+                }
+            } else {
+                // Open path: no top cap — start directly at perpendicular offsets
+                outerPoints.push({ x: segment.start.x + perpX, y: segment.start.y + perpY });
+                innerPoints.push({ x: segment.start.x - perpX, y: segment.start.y - perpY });
+            }
         }
 
         // For the end of each segment, calculate the corner intersection
@@ -105,7 +135,10 @@ export function buildWallGeometry(segments: WallSegment[], wallGap: number): Wal
             ? segments[0] // For closed loops, last segment connects to first segment
             : segments[i + 1];
 
-        if (nextSegment && i < segments.length - 1) {
+        // If this is a closed loop, we also need to compute the corner between the
+        // last and first segments. Previously this branch skipped the last corner,
+        // causing the start/end corner to remain un-mitered.
+        if (nextSegment && (isClosedLoop || i < segments.length - 1)) {
             // There's a next segment - calculate corner intersection
             const nextDx = nextSegment.end.x - nextSegment.start.x;
             const nextDy = nextSegment.end.y - nextSegment.start.y;
@@ -482,16 +515,28 @@ export function snapTo90Degrees(
 
 // Helper function to calculate bounding box from wall segments
 export function calculateWallBoundingBox(asset: AssetInstance): { width: number; height: number } {
-    if (!asset.wallSegments || asset.wallSegments.length === 0) {
-        return { width: 200, height: 200 }; // Default fallback
-    }
-
+    // Prefer node-edge data if present; otherwise fall back to legacy segments
     const wallGap = asset.wallGap ?? 8;
 
-    // Wall segments are already in relative coordinates
-    const relativeSegments = asset.wallSegments;
+    let geometry: WallGeometry = { outerPoints: [], innerPoints: [] };
 
-    const geometry = buildWallGeometry(relativeSegments, wallGap);
+    if (asset.wallNodes && asset.wallNodes.length > 0 && asset.wallEdges && asset.wallEdges.length > 0) {
+        // Build relative segments from node-edge graph
+        const segments = asset.wallEdges.map(edge => {
+            const a = asset.wallNodes![edge.a];
+            const b = asset.wallNodes![edge.b];
+            return {
+                start: { x: a.x - asset.x, y: a.y - asset.y },
+                end: { x: b.x - asset.x, y: b.y - asset.y },
+            };
+        });
+        geometry = buildWallGeometry(segments, wallGap);
+    } else if (asset.wallSegments && asset.wallSegments.length > 0) {
+        const relativeSegments = asset.wallSegments;
+        geometry = buildWallGeometry(relativeSegments, wallGap);
+    } else {
+        return { width: 200, height: 200 };
+    }
 
     // Combine all points from both outer and inner geometry
     const allPoints = [...geometry.outerPoints, ...geometry.innerPoints];

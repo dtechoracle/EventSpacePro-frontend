@@ -33,6 +33,8 @@ export function useCanvasMouseHandlers({
   const currentWallSegments = useSceneStore((s) => s.currentWallSegments);
   const currentWallStart = useSceneStore((s) => s.currentWallStart);
   const currentWallTempEnd = useSceneStore((s) => s.currentWallTempEnd);
+  const firstHorizontalWallLength = useSceneStore((s) => s.firstHorizontalWallLength);
+  const wallDraftNodes = useSceneStore((s) => s.wallDraftNodes);
 
   // Store actions
   const updateAsset = useSceneStore((s) => s.updateAsset);
@@ -44,6 +46,14 @@ export function useCanvasMouseHandlers({
   const clearPath = useSceneStore((s) => s.clearPath);
   const updateWallTempEnd = useSceneStore((s) => s.updateWallTempEnd);
   const commitWallSegment = useSceneStore((s) => s.commitWallSegment);
+  const finishWallDrawingAction = useSceneStore((s) => s.finishWallDrawing);
+  const finishWallDraftAction = useSceneStore((s) => s.finishWallDraft);
+  const shapeMode = useSceneStore((s) => s.shapeMode);
+  const shapeStart = useSceneStore((s) => s.shapeStart);
+  const shapeTempEnd = useSceneStore((s) => s.shapeTempEnd);
+  const startShape = useSceneStore((s) => s.startShape);
+  const updateShapeTempEnd = useSceneStore((s) => s.updateShapeTempEnd);
+  const finishShapeAction = useSceneStore((s) => s.finishShape);
   const addAssetObject = useSceneStore((s) => s.addAssetObject);
   const selectAsset = useSceneStore((s) => s.selectAsset);
 
@@ -63,6 +73,8 @@ export function useCanvasMouseHandlers({
   const heightHandleType = useRef<'top' | 'bottom' | null>(null);
   const currentDrawingPath = useRef<{ x: number; y: number }[]>([]);
   const lastMousePosition = useRef({ x: 0, y: 0 });
+  const draggingOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const draggingAssetStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Expose refs for external access
   const refs = {
@@ -81,6 +93,8 @@ export function useCanvasMouseHandlers({
     heightHandleType,
     currentDrawingPath,
     lastMousePosition,
+    draggingOffset,
+    draggingAssetStart,
   };
 
   useEffect(() => {
@@ -146,7 +160,7 @@ export function useCanvasMouseHandlers({
         return;
       }
       
-      if (isDrawing && (isPenMode || isWallMode)) {
+      if (isDrawing && isPenMode) {
         const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
         currentDrawingPath.current = [...currentDrawingPath.current, { x, y }];
         setCurrentPath(currentDrawingPath.current);
@@ -155,16 +169,108 @@ export function useCanvasMouseHandlers({
         return;
       }
 
+      // Shape drawing mouse move preview
+      if (shapeMode && shapeStart) {
+        const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+        let end = { x, y };
+        if ((e as any).shiftKey && (shapeMode === 'rectangle' || shapeMode === 'ellipse')) {
+          const dx = x - shapeStart.x; const dy = y - shapeStart.y;
+          const size = Math.max(Math.abs(dx), Math.abs(dy));
+          end = { x: shapeStart.x + Math.sign(dx || 1) * size, y: shapeStart.y + Math.sign(dy || 1) * size };
+        }
+        updateShapeTempEnd(end);
+        return;
+      }
+
       // Handle wall drawing mode mouse movement
       if (wallDrawingMode && currentWallStart) {
         const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-        
+
         // Check if mouse is within canvas bounds
         if (canvas && (x >= 0 && y >= 0 && x <= canvas.width && y <= canvas.height)) {
-          // Apply 90-degree snapping if we have a starting point
+          // Apply 90-degree snapping relative to current segment start
           let snappedPoint = { x, y };
-          if (currentWallStart) {
-            snappedPoint = snapTo90Degrees(currentWallStart, { x, y });
+          snappedPoint = snapTo90Degrees(currentWallStart, snappedPoint);
+
+          // If we have a tracked first horizontal length, align opposite horizontal walls
+          if (firstHorizontalWallLength && currentWallSegments.length >= 2) {
+            // Heuristic: if this looks horizontal, force length to match the first horizontal
+            const dx = snappedPoint.x - currentWallStart.x;
+            const dy = snappedPoint.y - currentWallStart.y;
+            if (Math.abs(dx) >= Math.abs(dy)) {
+              const sign = dx >= 0 ? 1 : -1;
+              snappedPoint = { x: currentWallStart.x + sign * firstHorizontalWallLength, y: currentWallStart.y };
+            }
+          }
+
+          // Edge snapping: if endpoint is near an existing wall edge, snap to the edge projection
+          const projectPointToSegment = (p: { x: number; y: number }, aPt: { x: number; y: number }, bPt: { x: number; y: number }) => {
+            const abx = bPt.x - aPt.x; const aby = bPt.y - aPt.y;
+            const apx = p.x - aPt.x; const apy = p.y - aPt.y;
+            const ab2 = abx * abx + aby * aby;
+            if (ab2 === 0) return { x: aPt.x, y: aPt.y, t: 0 };
+            let t = (apx * abx + apy * aby) / ab2;
+            t = Math.max(0, Math.min(1, t));
+            return { x: aPt.x + abx * t, y: aPt.y + aby * t, t };
+          };
+
+          const edgeSnapThreshold = 3; // mm
+          let nearestProj: { x: number; y: number } | null = null;
+          let nearestDist = Infinity;
+          const wallAssets = assets.filter(a => (a.wallNodes && a.wallNodes.length > 0) || (a.wallSegments && a.wallSegments.length > 0));
+          for (const a of wallAssets) {
+            if (a.wallNodes && a.wallEdges && a.wallEdges.length > 0) {
+              for (const e of a.wallEdges) {
+                const pa = a.wallNodes[e.a];
+                const pb = a.wallNodes[e.b];
+                const proj = projectPointToSegment(snappedPoint, pa, pb);
+                const d = Math.hypot(proj.x - snappedPoint.x, proj.y - snappedPoint.y);
+                if (d < nearestDist) { nearestDist = d; nearestProj = { x: proj.x, y: proj.y }; }
+              }
+            } else if (a.wallSegments && a.wallSegments.length > 0) {
+              for (const seg of a.wallSegments) {
+                const pa = { x: seg.start.x + a.x, y: seg.start.y + a.y };
+                const pb = { x: seg.end.x + a.x, y: seg.end.y + a.y };
+                const proj = projectPointToSegment(snappedPoint, pa, pb);
+                const d = Math.hypot(proj.x - snappedPoint.x, proj.y - snappedPoint.y);
+                if (d < nearestDist) { nearestDist = d; nearestProj = { x: proj.x, y: proj.y }; }
+              }
+            }
+          }
+          if (nearestProj && nearestDist <= edgeSnapThreshold) {
+            snappedPoint = nearestProj;
+          }
+
+          // Additionally, snap to the very first point to allow easy closing of the loop
+          const firstPoint = currentWallSegments.length > 0
+            ? currentWallSegments[0].start
+            : null;
+          if (firstPoint) {
+            const dxStart = snappedPoint.x - firstPoint.x;
+            const dyStart = snappedPoint.y - firstPoint.y;
+            const distStart = Math.sqrt(dxStart * dxStart + dyStart * dyStart);
+            const closeThreshold = 6; // mm
+            if (distStart <= closeThreshold) {
+              // Snap directly to the first point so the last corner will close perfectly
+              snappedPoint = { x: firstPoint.x, y: firstPoint.y };
+            }
+          }
+
+          // Auto-close when approaching first point (no extra click)
+          const firstPointAuto = currentWallSegments.length > 0 ? currentWallSegments[0].start : null;
+          if (firstPointAuto) {
+            const dist = Math.hypot(snappedPoint.x - firstPointAuto.x, snappedPoint.y - firstPointAuto.y);
+            if (dist <= 2) {
+              updateWallTempEnd({ x: firstPointAuto.x, y: firstPointAuto.y });
+              // If we're using the draft flow, finish that instead of legacy
+              if (wallDraftNodes && wallDraftNodes.length > 0 && finishWallDraftAction) {
+                finishWallDraftAction();
+              } else {
+                commitWallSegment();
+                finishWallDrawingAction();
+              }
+              return;
+            }
           }
           updateWallTempEnd(snappedPoint);
         }
@@ -173,7 +279,9 @@ export function useCanvasMouseHandlers({
 
       if (draggingAssetRef.current) {
         const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-        updateAsset(draggingAssetRef.current, { x, y });
+        const newX = x + draggingOffset.current.x;
+        const newY = y + draggingOffset.current.y;
+        updateAsset(draggingAssetRef.current, { x: newX, y: newY });
         return;
       }
       
@@ -186,7 +294,8 @@ export function useCanvasMouseHandlers({
     };
 
     const onUp = () => {
-      if (isDrawing && (isPenMode || isWallMode)) {
+      // If we're in wall drawing mode, do not create any pen/wall (double-line) assets here
+      if (!wallDrawingMode && isDrawing && isPenMode) {
         if (currentDrawingPath.current.length > 1) {
           // Straighten the path if it's close to a straight line
           const straightenedPath = straightenPath(currentDrawingPath.current);
@@ -265,7 +374,35 @@ export function useCanvasMouseHandlers({
 
       // Handle wall drawing mode mouse up
       if (wallDrawingMode && currentWallStart && currentWallTempEnd) {
+        // If we're close to the very first point, close the loop and finish the wall
+        const firstPoint = currentWallSegments.length > 0
+          ? currentWallSegments[0].start
+          : null;
+
+        if (firstPoint) {
+          const dxStart = currentWallTempEnd.x - firstPoint.x;
+          const dyStart = currentWallTempEnd.y - firstPoint.y;
+          const distStart = Math.sqrt(dxStart * dxStart + dyStart * dyStart);
+          const closeThreshold = 6; // mm
+          if (distStart <= closeThreshold) {
+            // Snap end to start, commit final segment, then finish to build asset/merge
+            updateWallTempEnd({ x: firstPoint.x, y: firstPoint.y });
+            commitWallSegment();
+            // Finish drawing (will create or merge wall and reset state)
+            const { finishWallDrawing } = useSceneStore.getState();
+            finishWallDrawing();
+            return;
+          }
+        }
+
+        // Default behavior: just commit the current segment and continue
         commitWallSegment();
+      }
+
+      // Finish shape drawing on mouse up
+      if (shapeMode && shapeStart) {
+        finishShapeAction();
+        return;
       }
 
       // Reset all interaction states

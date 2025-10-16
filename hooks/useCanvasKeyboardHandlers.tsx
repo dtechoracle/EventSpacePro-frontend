@@ -6,6 +6,8 @@ export function useCanvasKeyboardHandlers() {
   const clipboard = useSceneStore((s) => s.clipboard);
   const copyAsset = useSceneStore((s) => s.copyAsset);
   const pasteAsset = useSceneStore((s) => s.pasteAsset);
+  const removeAsset = useSceneStore((s) => s.removeAsset);
+  const assets = useSceneStore((s) => s.assets);
   const wallDrawingMode = useSceneStore((s) => s.wallDrawingMode);
   const currentWallSegments = useSceneStore((s) => s.currentWallSegments);
   const finishWallDrawing = useSceneStore((s) => s.finishWallDrawing);
@@ -42,7 +44,29 @@ export function useCanvasKeyboardHandlers() {
         } else if (e.key === 'v' && clipboard) {
           e.preventDefault();
           pasteAsset();
+        } else if (e.key === 'x' && selectedAssetId) {
+          e.preventDefault();
+          copyAsset(selectedAssetId);
+          removeAsset(selectedAssetId);
+        } else if (e.key === 'd' && selectedAssetId) {
+          // Duplicate (Ctrl/⌘+D)
+          e.preventDefault();
+          copyAsset(selectedAssetId);
+          pasteAsset(10, 10);
+        } else if (e.key === 'z') {
+          // Undo/Redo placeholders (wire to history if available)
+          e.preventDefault();
+          console.debug('Undo requested - integrate with history stack');
+        } else if (e.key === 'y') {
+          e.preventDefault();
+          console.debug('Redo requested - integrate with history stack');
         }
+      }
+
+      // Delete/Backspace to remove selected asset
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedAssetId) {
+        e.preventDefault();
+        removeAsset(selectedAssetId);
       }
     };
 
@@ -53,6 +77,8 @@ export function useCanvasKeyboardHandlers() {
     clipboard,
     copyAsset,
     pasteAsset,
+    removeAsset,
+    assets,
     wallDrawingMode,
     currentWallSegments,
     finishWallDrawing,

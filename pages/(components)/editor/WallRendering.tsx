@@ -1,6 +1,7 @@
 import React from 'react';
 import { AssetInstance } from '@/store/sceneStore';
 import { buildWallGeometry, calculateWallBoundingBox } from '@/lib/wallGeometry';
+import { useSceneStore } from '@/store/sceneStore';
 
 type WallRenderingProps = {
   asset: AssetInstance;
@@ -14,6 +15,8 @@ export default function WallRendering({ asset, leftPx, topPx, totalRotation }: W
   if (!asset) {
     return null;
   }
+
+  const showDebugOutlines = useSceneStore((s) => s.showDebugOutlines);
 
   return (
     <div
@@ -37,7 +40,8 @@ export default function WallRendering({ asset, leftPx, topPx, totalRotation }: W
             viewBox={`${-width/2} ${-height/2} ${width} ${height}`}
             style={{ overflow: "visible" }}
           >
-            {asset.wallSegments && asset.wallSegments.length > 0 && (() => {
+            {/* Render legacy segments only when we DON'T have node-edge data */}
+            {(!asset.wallNodes && asset.wallSegments && asset.wallSegments.length > 0) && (() => {
               const wallThickness = (asset.wallThickness ?? 1) * asset.scale;
               const wallGap = (asset.wallGap ?? 8); // Wall gap in mm units (will be scaled)
               
@@ -62,22 +66,54 @@ export default function WallRendering({ asset, leftPx, topPx, totalRotation }: W
                 y: point.y * asset.scale
               }));
               
-              // Build continuous path for smooth corners - create one continuous outline
-              const outerPath = outerPointsScaled.map((point, index) => 
-                `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
-              ).join(' ');
-              
-              // Connect back to start with inner path
-              const innerPath = innerPointsScaled.reverse().map((point, index) => 
-                `${index === 0 ? 'L' : 'L'} ${point.x} ${point.y}`
-              ).join(' ');
-              
-              const fullPath = `${outerPath} ${innerPath} Z`;
-              
-              // Render as a single continuous path with stroke (outline only)
+              // Build two independent polylines (outer and inner) to avoid a closing connector line
+              const outerPath = `${outerPointsScaled.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')} Z`;
+              const innerPath = `${innerPointsScaled.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')} Z`;
+
+              // Render two independent closed strokes (no fill) to avoid any bridging line
+              // Blend the first/last corner by stroking a compound path
+              const compound = `${outerPath} ${innerPath}`;
+              return (
+                <>
+                  <path
+                    d={compound}
+                    fill="none"
+                    stroke={asset.lineColor ?? "#000000"}
+                    strokeWidth={wallThickness}
+                    strokeLinejoin="round"
+                    strokeLinecap="square"
+                  />
+                  {showDebugOutlines && (
+                    <path d={compound} fill="none" stroke="#FF00FF" strokeWidth={1} strokeDasharray="4,4" />
+                  )}
+                </>
+              );
+            })()}
+
+            {/* Node-edge rendering path (takes precedence if present) */}
+            {asset.wallNodes && asset.wallEdges && asset.wallEdges.length > 0 && (() => {
+              const wallThickness = (asset.wallThickness ?? 1) * asset.scale;
+              const wallGap = (asset.wallGap ?? 8);
+              // Convert edges into segments (absolute -> relative to asset center)
+              const segments = asset.wallEdges.map(edge => {
+                const a = asset.wallNodes![edge.a];
+                const b = asset.wallNodes![edge.b];
+                return {
+                  start: { x: a.x - asset.x, y: a.y - asset.y },
+                  end: { x: b.x - asset.x, y: b.y - asset.y }
+                };
+              });
+              const geometry = buildWallGeometry(segments, wallGap);
+              if (geometry.outerPoints.length === 0 || geometry.innerPoints.length === 0) return null;
+              const outerPointsScaled = geometry.outerPoints.map(p => ({ x: p.x * asset.scale, y: p.y * asset.scale }));
+              const innerPointsScaled = geometry.innerPoints.map(p => ({ x: p.x * asset.scale, y: p.y * asset.scale }));
+              // Build compound stroke for seamless join
+              const outerPath = `${outerPointsScaled.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')} Z`;
+              const innerPath = `${innerPointsScaled.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')} Z`;
+              const compound = `${outerPath} ${innerPath}`;
               return (
                 <path
-                  d={fullPath}
+                  d={compound}
                   fill="none"
                   stroke={asset.lineColor ?? "#000000"}
                   strokeWidth={wallThickness}

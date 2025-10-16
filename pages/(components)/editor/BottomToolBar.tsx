@@ -58,7 +58,7 @@ interface BarProps{
 export default function BottomToolbar({setShowAssetsModal}: BarProps) {
   const tools = useToolbarTools();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const { isPenMode, isWallMode, setPenMode, setWallMode, wallDrawingMode, setWallDrawingMode, finishWallDrawing, cancelWallDrawing, currentWallSegments } = useSceneStore();
+  const { isPenMode, isWallMode, setPenMode, setWallMode, wallDrawingMode, setWallDrawingMode, finishWallDrawing, cancelWallDrawing, currentWallSegments, setShapeMode } = useSceneStore();
 
   // Example states to toggle
   const [isPreviewOn, setIsPreviewOn] = useState(false);
@@ -85,13 +85,13 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
       
       // Shape tools
       case "rectangle":
-        console.log("Rectangle tool activated");
+        setShapeMode('rectangle');
         break;
       case "circle":
-        console.log("Circle tool activated");
+        setShapeMode('ellipse');
         break;
       case "arrow":
-        console.log("Arrow tool activated");
+        setShapeMode('line');
         break;
       case "polygon":
         console.log("Polygon tool activated");

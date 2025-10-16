@@ -35,7 +35,8 @@ export function useAssetHandlers({ clientToCanvasMM, mouseRefs }: UseAssetHandle
 
     let draggingId = asset.id;
 
-    if (e.ctrlKey || e.metaKey) {
+    // Duplicate only when Alt/Option is held, not Ctrl/Cmd (to avoid accidental duplication during move)
+    if (e.altKey) {
       const newAsset = {
         ...asset,
         id: crypto.randomUUID(),
@@ -48,6 +49,10 @@ export function useAssetHandlers({ clientToCanvasMM, mouseRefs }: UseAssetHandle
 
     selectAsset(draggingId);
     mouseRefs.draggingAssetRef.current = draggingId;
+    // Record offset as asset - mouse; during drag, newPos = mouse + offset
+    const { x: mouseX, y: mouseY } = clientToCanvasMM((e as any).clientX, (e as any).clientY);
+    mouseRefs.draggingOffset.current = { x: asset.x - mouseX, y: asset.y - mouseY };
+    mouseRefs.draggingAssetStart.current = { x: asset.x, y: asset.y };
   }, [assets, addAssetObject, selectAsset, mouseRefs]);
 
   const onTextDoubleClick = useCallback((e: React.MouseEvent, assetId: string) => {

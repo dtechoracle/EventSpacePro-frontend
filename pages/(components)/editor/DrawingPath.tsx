@@ -1,5 +1,5 @@
 import React from 'react';
-import { AssetInstance } from '@/store/sceneStore';
+import { AssetInstance, useSceneStore } from '@/store/sceneStore';
 import { 
   buildWallGeometry, 
   findNearbyWallSegment, 
@@ -36,8 +36,13 @@ export default function DrawingPath({
   lastMousePosition,
   clientToCanvasMM
 }: DrawingPathProps) {
-  // Don't render anything if not drawing and not in wall mode
-  if (!isDrawing && !wallDrawingMode) return null;
+  // Read ALL hooks unconditionally to keep hook order stable across renders
+  const shapeMode = useSceneStore((s) => s.shapeMode);
+  const shapeStart = useSceneStore((s) => s.shapeStart);
+  const shapeTempEnd = useSceneStore((s) => s.shapeTempEnd);
+
+  // Now gate rendering
+  if (!isDrawing && !wallDrawingMode && !shapeMode) return null;
 
   return (
     <svg
@@ -46,8 +51,38 @@ export default function DrawingPath({
       height={canvasPxH}
       style={{ zIndex: 5 }}
     >
+      {/* Shape drawing preview */}
+      {shapeMode && shapeStart && shapeTempEnd && (
+        (() => {
+          const x1 = shapeStart.x * mmToPx;
+          const y1 = shapeStart.y * mmToPx;
+          const x2 = shapeTempEnd.x * mmToPx;
+          const y2 = shapeTempEnd.y * mmToPx;
+          const left = Math.min(x1, x2);
+          const top = Math.min(y1, y2);
+          const w = Math.abs(x2 - x1);
+          const h = Math.abs(y2 - y1);
+
+          if (shapeMode === 'rectangle') {
+            return (
+              <rect x={left} y={top} width={w} height={h} fill="none" stroke="#111827" strokeWidth={1.5} strokeDasharray="6,4" />
+            );
+          }
+          if (shapeMode === 'ellipse') {
+            return (
+              <ellipse cx={left + w / 2} cy={top + h / 2} rx={w / 2} ry={h / 2} fill="none" stroke="#111827" strokeWidth={1.5} strokeDasharray="6,4" />
+            );
+          }
+          if (shapeMode === 'line') {
+            return (
+              <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#111827" strokeWidth={2} strokeDasharray="6,4" />
+            );
+          }
+          return null;
+        })()
+      )}
       {/* Temporary Drawing Path for pen mode */}
-      {isDrawing && tempPath.length > 0 && (
+      {isDrawing && tempPath.length > 0 && !wallDrawingMode && (
         <>
           {tempPath.length === 1 ? (
             <circle
@@ -191,7 +226,10 @@ export default function DrawingPath({
               `${index === 0 ? 'L' : 'L'} ${point.x} ${point.y}`
             ).join(' ');
             
-            const fullPath = `${outerPath} ${innerPath} Z`;
+            // If the mouse is approaching the first node, avoid closing the path so the "top cap" isn't drawn
+            const firstPoint = currentWallSegments.length > 0 ? currentWallSegments[0].start : null;
+            const isClosing = firstPoint ? (Math.hypot(currentWallTempEnd.x - firstPoint.x, currentWallTempEnd.y - firstPoint.y) <= 2) : false;
+            const fullPath = isClosing ? `${outerPath} ${innerPath}` : `${outerPath} ${innerPath} Z`;
             
             return (
               <>
@@ -205,6 +243,28 @@ export default function DrawingPath({
                   strokeDasharray={isSnapped ? "10,5" : "5,5"} // Different dash pattern when snapped
                   opacity="0.7"
                 />
+              {(() => {
+                // Dimension label for the current segment (in mm)
+                const dx = currentWallTempEnd.x - currentWallStart.x;
+                const dy = currentWallTempEnd.y - currentWallStart.y;
+                const lengthMm = Math.sqrt(dx * dx + dy * dy);
+                const midX = ((currentWallStart.x + currentWallTempEnd.x) / 2) * mmToPx;
+                const midY = ((currentWallStart.y + currentWallTempEnd.y) / 2) * mmToPx - 12;
+                return (
+                  <text
+                    x={midX}
+                    y={midY}
+                    textAnchor="middle"
+                    fontSize="12"
+                    fill="#111827"
+                    fontWeight="bold"
+                    pointerEvents="none"
+                    style={{ userSelect: 'none' }}
+                  >
+                    {Math.round(lengthMm)} mm
+                  </text>
+                );
+              })()}
                 {/* Show snap angle indicator */}
                 {isSnapped && (() => {
                   const dx = currentWallTempEnd.x - currentWallStart.x;

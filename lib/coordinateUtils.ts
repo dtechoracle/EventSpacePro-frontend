@@ -79,18 +79,20 @@ export function getAssetCornerPosition(asset: AssetInstance, handleType: 'top-le
                 return { x: asset.x + totalWidth / 2 + 6, y: asset.y + totalHeight / 2 + 6 };
         }
     } else if (asset.type === "wall-segments") {
-        // For wall segments, use a fixed bounding box since segments can be any shape
-        const boundingSize = 200 * asset.scale;
+        // For wall segments, compute actual bounding box from geometry
+        const { width, height } = calculateWallBoundingBox(asset);
+        const w = width * asset.scale;
+        const h = height * asset.scale;
 
         switch (handleType) {
             case 'top-left':
-                return { x: asset.x - boundingSize / 2 - 6, y: asset.y - boundingSize / 2 - 6 };
+                return { x: asset.x - w / 2 - 6, y: asset.y - h / 2 - 6 };
             case 'top-right':
-                return { x: asset.x + boundingSize / 2 + 6, y: asset.y - boundingSize / 2 - 6 };
+                return { x: asset.x + w / 2 + 6, y: asset.y - h / 2 - 6 };
             case 'bottom-left':
-                return { x: asset.x - boundingSize / 2 - 6, y: asset.y + boundingSize / 2 + 6 };
+                return { x: asset.x - w / 2 - 6, y: asset.y + h / 2 + 6 };
             case 'bottom-right':
-                return { x: asset.x + boundingSize / 2 + 6, y: asset.y + boundingSize / 2 + 6 };
+                return { x: asset.x + w / 2 + 6, y: asset.y + h / 2 + 6 };
         }
     } else if (asset.type === "text") {
         // For text, estimate size based on text content and font size
@@ -155,12 +157,13 @@ export function getRotationHandlePosition(asset: AssetInstance) {
             y: asset.y - totalHeight / 2 - handleOffset
         };
     } else if (asset.type === "wall-segments") {
-        // For wall segments, use a fixed bounding box since segments can be any shape
-        const boundingSize = 200 * asset.scale;
+        // Use actual wall bounding box height for rotation handle position
+        const { height } = calculateWallBoundingBox(asset);
+        const h = height * asset.scale;
 
         return {
             x: asset.x,
-            y: asset.y - boundingSize / 2 - handleOffset
+            y: asset.y - h / 2 - handleOffset
         };
     } else if (asset.type === "text") {
         const fontSize = (asset.fontSize ?? 16) * asset.scale;

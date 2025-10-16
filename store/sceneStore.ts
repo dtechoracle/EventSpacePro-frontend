@@ -32,6 +32,9 @@ export type AssetInstance = {
   wallSegments?: { start: { x: number; y: number }; end: { x: number; y: number } }[]; // for wall segments
   wallThickness?: number; // thickness of wall lines
   wallGap?: number; // gap between wall lines
+  // Graph representation (nodes + edges). Nodes are absolute mm positions; edges reference node indices
+  wallNodes?: { x: number; y: number }[];
+  wallEdges?: { a: number; b: number }[];
 
   // Text properties
   text?: string; // for text
@@ -72,6 +75,11 @@ type SceneState = {
   isInitialized: boolean;
   hasUnsavedChanges: boolean;
   showGrid: boolean;
+  showDebugOutlines?: boolean;
+  // Shape drawing
+  shapeMode: 'rectangle' | 'ellipse' | 'line' | null;
+  shapeStart: { x: number; y: number } | null;
+  shapeTempEnd: { x: number; y: number } | null;
 
   // Pen tool state
   isPenMode: boolean;
@@ -85,6 +93,10 @@ type SceneState = {
   currentWallSegments: { start: { x: number; y: number }; end: { x: number; y: number } }[];
   currentWallStart: { x: number; y: number } | null;
   currentWallTempEnd: { x: number; y: number } | null;
+  // Tracking: remember first horizontal wall length during drawing
+  firstHorizontalWallLength?: number | null;
+  // New draft state (nodes-only while drawing)
+  wallDraftNodes?: { x: number; y: number }[];
 
   // Copy/paste state
   clipboard: AssetInstance | null;
@@ -97,6 +109,12 @@ type SceneState = {
   removeAsset: (id: string) => void;
   selectAsset: (id: string | null) => void;
   toggleGrid: () => void;
+  toggleDebugOutlines: () => void;
+  setShapeMode: (mode: 'rectangle' | 'ellipse' | 'line' | null) => void;
+  startShape: (start: { x: number; y: number }) => void;
+  updateShapeTempEnd: (end: { x: number; y: number }) => void;
+  finishShape: () => void;
+  cancelShape: () => void;
   reset: () => void;
   syncToEventData: () => AssetInstance[];
   markAsSaved: () => void;
@@ -118,6 +136,10 @@ type SceneState = {
   commitWallSegment: () => void;
   finishWallDrawing: () => void;
   cancelWallDrawing: () => void;
+  // New draft methods
+  startWallDraft: (start: { x: number; y: number }) => void;
+  addWallDraftNode: (pt: { x: number; y: number }) => void;
+  finishWallDraft: () => void;
 
   // Copy/paste methods
   copyAsset: (id: string) => void;
@@ -136,6 +158,10 @@ export const useSceneStore = create<SceneState>()(
       hasUnsavedChanges: false,
       hasHydrated: false,
       showGrid: false,
+      showDebugOutlines: false,
+      shapeMode: null,
+      shapeStart: null,
+      shapeTempEnd: null,
       isPenMode: false,
       isWallMode: false,
       isDrawing: false,
@@ -145,6 +171,8 @@ export const useSceneStore = create<SceneState>()(
       currentWallSegments: [],
       currentWallStart: null,
       currentWallTempEnd: null,
+      firstHorizontalWallLength: null,
+      wallDraftNodes: [],
       clipboard: null,
 
       setCanvas: (size) => {
@@ -159,6 +187,8 @@ export const useSceneStore = create<SceneState>()(
 
       addAsset: (type, x, y) => {
         const state = get();
+        // Prevent any non-wall asset creation while wall drawing is active (avoids ghost assets)
+        if (state.wallDrawingMode && type !== "wall-segments") return;
         if (!state.canvas) return;
         const id = `${type}-${Date.now()}`;
 
@@ -189,20 +219,82 @@ export const useSceneStore = create<SceneState>()(
       },
 
       addAssetObject: (assetObj: AssetInstance) => {
-        set((state) => ({
-          assets: [...state.assets, assetObj],
-          selectedAssetId: assetObj.id,
-          hasUnsavedChanges: true,
-        }));
+        set((state) => {
+          // Block ghost creations during wall drawing; only allow the wall asset itself
+          if (state.wallDrawingMode && assetObj.type !== "wall-segments") {
+            return { hasUnsavedChanges: state.hasUnsavedChanges } as any;
+          }
+          return {
+            assets: [...state.assets, assetObj],
+            selectedAssetId: assetObj.id,
+            hasUnsavedChanges: true,
+          };
+        });
       },
 
-      updateAsset: (id, updates) =>
-        set((state) => ({
-          assets: state.assets.map((a) =>
-            a.id === id ? { ...a, ...updates } : a
-          ),
-          hasUnsavedChanges: true,
-        })),
+      updateAsset: (id, updates) => {
+        const state = get();
+        const updatedAssets = state.assets.map((a) => (a.id === id ? { ...a, ...updates } : a));
+        set({ assets: updatedAssets, hasUnsavedChanges: true });
+
+        // Automatic wall opening for double doors when moved/scaled
+        const moved = updates.x !== undefined || updates.y !== undefined || updates.rotation !== undefined || updates.width !== undefined || updates.scale !== undefined;
+        const door = updatedAssets.find(a => a.id === id);
+        if (!door || door.type !== 'double-door' || !moved) return;
+
+        const doorCenter = { x: door.x, y: door.y };
+        // Door width is adjustable; assume it's stored in mm on the asset
+        const doorWidthMm = Math.max(50, (door.width ?? 900) * (door.scale ?? 1));
+        const opening = doorWidthMm; // opening equals visual door width
+
+        const projectPointToSegment = (p: { x: number; y: number }, aPt: { x: number; y: number }, bPt: { x: number; y: number }) => {
+          const abx = bPt.x - aPt.x; const aby = bPt.y - aPt.y;
+          const apx = p.x - aPt.x; const apy = p.y - aPt.y;
+          const ab2 = abx * abx + aby * aby;
+          if (ab2 === 0) return { x: aPt.x, y: aPt.y, t: 0, dist: Math.hypot(p.x - aPt.x, p.y - aPt.y) };
+          let t = (apx * abx + apy * aby) / ab2;
+          t = Math.max(0, Math.min(1, t));
+          const projx = aPt.x + abx * t; const projy = aPt.y + aby * t;
+          // perpendicular distance
+          const dist = Math.abs((aby * p.x - abx * p.y + bPt.x * aPt.y - bPt.y * aPt.x)) / Math.sqrt(ab2);
+          return { x: projx, y: projy, t, dist };
+        };
+
+        // find nearest wall edge
+        let targetIndex = -1; let targetEdgeIndex = -1; let targetProj: any = null; let minDist = Infinity;
+        state.assets.forEach((w, wi) => {
+          if (!w.wallNodes || !w.wallEdges || w.id === door.id) return;
+          w.wallEdges.forEach((e, ei) => {
+            const a = w.wallNodes![e.a];
+            const b = w.wallNodes![e.b];
+            const proj = projectPointToSegment(doorCenter, a, b);
+            if (proj.dist < minDist) { minDist = proj.dist; targetIndex = wi; targetEdgeIndex = ei; targetProj = { ...proj, aIndex: e.a, bIndex: e.b }; }
+          });
+        });
+        const snapThreshold = 20; // mm - easier to catch the target wall
+        if (targetIndex >= 0 && minDist <= snapThreshold) {
+          const wall = state.assets[targetIndex];
+          const nodes = [...(wall.wallNodes ?? [])];
+          const edges = [...(wall.wallEdges ?? [])];
+          const a = nodes[targetProj.aIndex];
+          const b = nodes[targetProj.bIndex];
+          const dx = b.x - a.x; const dy = b.y - a.y;
+          const length = Math.sqrt(dx * dx + dy * dy) || 1;
+          const nx = dx / length; const ny = dy / length;
+          const half = (opening / 2);
+          const center = { x: targetProj.x, y: targetProj.y };
+          const p1 = { x: center.x - nx * half, y: center.y - ny * half };
+          const p2 = { x: center.x + nx * half, y: center.y + ny * half };
+          const n1 = nodes.push(p1) - 1;
+          const n2 = nodes.push(p2) - 1;
+          // replace edge with two edges leaving a gap (n1..n2 is the opening)
+          edges.splice(targetEdgeIndex, 1, { a: targetProj.aIndex, b: n1 }, { a: n2, b: targetProj.bIndex });
+
+          // Persist updated wall
+          const newAssets = state.assets.map((w, wi) => wi === targetIndex ? { ...w, wallNodes: nodes, wallEdges: edges, wallSegments: undefined } : w);
+          set({ assets: newAssets, hasUnsavedChanges: true });
+        }
+      },
 
       removeAsset: (id) =>
         set((state) => ({
@@ -214,6 +306,76 @@ export const useSceneStore = create<SceneState>()(
       selectAsset: (id) => set({ selectedAssetId: id }),
 
       toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
+
+      toggleDebugOutlines: () => set((state) => ({ showDebugOutlines: !state.showDebugOutlines })),
+
+      setShapeMode: (mode) => set({ shapeMode: mode, shapeStart: null, shapeTempEnd: null }),
+      startShape: (start) => set({ shapeStart: start, shapeTempEnd: null }),
+      updateShapeTempEnd: (end) => set({ shapeTempEnd: end }),
+      finishShape: () => {
+        const state = get();
+        if (!state.shapeMode || !state.shapeStart || !state.shapeTempEnd) return;
+        const start = state.shapeStart;
+        const end = state.shapeTempEnd;
+        const centerX = (start.x + end.x) / 2;
+        const centerY = (start.y + end.y) / 2;
+        const width = Math.max(1, Math.abs(end.x - start.x));
+        const height = Math.max(1, Math.abs(end.y - start.y));
+        let newAsset: AssetInstance | null = null;
+        if (state.shapeMode === 'rectangle') {
+          newAsset = {
+            id: `rect-${Date.now()}`,
+            type: 'square',
+            x: centerX,
+            y: centerY,
+            scale: 1,
+            rotation: 0,
+            width,
+            height,
+            backgroundColor: 'transparent',
+            fillColor: 'transparent',
+            strokeColor: '#000000',
+            strokeWidth: 2,
+          } as any;
+        } else if (state.shapeMode === 'ellipse') {
+          newAsset = {
+            id: `ellipse-${Date.now()}`,
+            type: 'circle',
+            x: centerX,
+            y: centerY,
+            scale: 1,
+            rotation: 0,
+            width,
+            height,
+            backgroundColor: 'transparent',
+            fillColor: 'transparent',
+            strokeColor: '#000000',
+            strokeWidth: 2,
+          } as any;
+        } else if (state.shapeMode === 'line') {
+          newAsset = {
+            id: `line-${Date.now()}`,
+            type: 'line',
+            x: centerX,
+            y: centerY,
+            scale: 1,
+            rotation: 0,
+            width,
+            height: 2,
+            strokeWidth: 2,
+            strokeColor: '#000000',
+          } as any;
+        }
+        if (newAsset) {
+          set({
+            assets: [...state.assets, newAsset],
+            selectedAssetId: newAsset.id,
+            hasUnsavedChanges: true,
+          });
+        }
+        set({ shapeStart: null, shapeTempEnd: null, shapeMode: null });
+      },
+      cancelShape: () => set({ shapeStart: null, shapeTempEnd: null, shapeMode: null }),
 
       reset: () => set({
         canvas: null,
@@ -265,10 +427,81 @@ export const useSceneStore = create<SceneState>()(
       // Wall drawing methods
       setWallDrawingMode: (enabled) => set({
         wallDrawingMode: enabled,
+        // Ensure pen drawing is fully disabled to avoid ghost assets
+        isPenMode: false,
+        isWallMode: false,
+        isDrawing: false,
+        currentPath: [],
+        tempPath: [],
         currentWallSegments: enabled ? [] : [],
         currentWallStart: enabled ? null : null,
-        currentWallTempEnd: enabled ? null : null
+        currentWallTempEnd: enabled ? null : null,
+        wallDraftNodes: enabled ? [] : [],
+        firstHorizontalWallLength: enabled ? null : null
       }),
+      // New draft methods (nodes only)
+      startWallDraft: (start) => set((state) => ({
+        wallDraftNodes: [start],
+        wallDrawingMode: true,
+      })),
+
+      addWallDraftNode: (pt) => set((state) => ({
+        wallDraftNodes: [...(state.wallDraftNodes ?? []), pt],
+      })),
+
+      finishWallDraft: () => {
+        const state = get();
+        const nodes = state.wallDraftNodes ?? [];
+        if (nodes.length < 2) {
+          set({ wallDrawingMode: false, wallDraftNodes: [] });
+          return;
+        }
+
+        // Build edges from consecutive nodes
+        const edges: { a: number; b: number }[] = [];
+        for (let i = 0; i < nodes.length - 1; i++) {
+          edges.push({ a: i, b: i + 1 });
+        }
+
+        // Auto-close if last is near first
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        if (Math.hypot(last.x - first.x, last.y - first.y) <= 1) {
+          edges.push({ a: nodes.length - 1, b: 0 });
+          nodes[nodes.length - 1] = { x: first.x, y: first.y };
+        }
+
+        // Compute center
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        nodes.forEach(n => { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); });
+        const cx = (minX + maxX) / 2; const cy = (minY + maxY) / 2;
+
+        const wallAsset: AssetInstance = {
+          id: `wall-segments-${Date.now()}`,
+          type: "wall-segments",
+          x: cx,
+          y: cy,
+          scale: 2,
+          rotation: 0,
+          wallNodes: nodes,
+          wallEdges: edges,
+          wallThickness: 1,
+          wallGap: 8,
+          lineColor: "#000000",
+          backgroundColor: "transparent"
+        };
+
+        set((state) => ({
+          assets: [...state.assets, wallAsset],
+          selectedAssetId: wallAsset.id,
+          wallDrawingMode: false,
+          wallDraftNodes: [],
+          currentWallSegments: [],
+          currentWallStart: null,
+          currentWallTempEnd: null,
+          hasUnsavedChanges: true,
+        }));
+      },
 
       startWallSegment: (start) => set({
         currentWallStart: start,
@@ -286,10 +519,17 @@ export const useSceneStore = create<SceneState>()(
             start: state.currentWallStart,
             end: state.currentWallTempEnd
           };
+          // Determine if this is the first horizontal segment to track length
+          const dx = newSegment.end.x - newSegment.start.x;
+          const dy = newSegment.end.y - newSegment.start.y;
+          const isHorizontal = Math.abs(dx) >= Math.abs(dy);
+          const length = Math.sqrt(dx * dx + dy * dy);
+
           set({
             currentWallSegments: [...state.currentWallSegments, newSegment],
             currentWallStart: state.currentWallTempEnd, // Next segment starts where this one ends
-            currentWallTempEnd: null
+            currentWallTempEnd: null,
+            firstHorizontalWallLength: state.firstHorizontalWallLength ?? (isHorizontal ? length : null)
           });
         }
       },
@@ -388,7 +628,7 @@ export const useSceneStore = create<SceneState>()(
 
           // Check if current wall connects to any existing walls
           const wallAssets = state.assets.filter(asset => asset.wallSegments && asset.wallSegments.length > 0);
-          let connectedAsset: { asset: AssetInstance; segmentIndex: number; connectionPoint: 'start' | 'end'; connectionPosition: { x: number; y: number }; isPerpendicular: boolean } | null = null;
+          let connectedAsset: { asset: AssetInstance; segmentIndex: number; connectionPoint: 'start' | 'end'; connectionPosition: { x: number; y: number }; isPerpendicular: boolean; currentSide: 'first' | 'last' } | null = null;
 
           // Check if the first or last point of current wall connects to an existing wall
           if (state.currentWallSegments.length > 0) {
@@ -491,11 +731,17 @@ export const useSceneStore = create<SceneState>()(
               return null;
             };
 
-            connectedAsset = findNearbyWallSegment(firstPoint) || findNearbyWallSegment(lastPoint);
+            const firstConn = findNearbyWallSegment(firstPoint);
+            const lastConn = findNearbyWallSegment(lastPoint);
+            if (firstConn) {
+              connectedAsset = { ...firstConn, currentSide: 'first' };
+            } else if (lastConn) {
+              connectedAsset = { ...lastConn, currentSide: 'last' };
+            }
           }
 
           if (connectedAsset) {
-            // Merge with existing wall asset and handle overlaps
+            // Merge with existing wall asset and handle overlaps (prefer node reuse)
             const updatedAssets = state.assets.map(asset => {
               if (asset.id === connectedAsset!.asset.id) {
                 // Convert existing asset segments to absolute coordinates
@@ -520,7 +766,9 @@ export const useSceneStore = create<SceneState>()(
 
                     if (isPerpendicular) {
                       // Use corner intersection calculation for perpendicular walls
-                      const currentWallSegment = state.currentWallSegments[state.currentWallSegments.length - 1];
+                      const currentWallSegment = connectedAsset!.currentSide === 'last'
+                        ? state.currentWallSegments[state.currentWallSegments.length - 1]
+                        : state.currentWallSegments[0];
                       const cornerResult = calculateCornerIntersection(
                         absSegment,
                         currentWallSegment,
@@ -603,10 +851,12 @@ export const useSceneStore = create<SceneState>()(
                   }
                 });
 
-                // Handle current wall segments with corner intersection if perpendicular
+                // Handle current wall segments: trim/miter near the connection point
                 let currentSegments = state.currentWallSegments;
                 if (connectedAsset.isPerpendicular) {
-                  const currentWallSegment = state.currentWallSegments[state.currentWallSegments.length - 1];
+                  const currentWallSegment = connectedAsset.currentSide === 'last'
+                    ? state.currentWallSegments[state.currentWallSegments.length - 1]
+                    : state.currentWallSegments[0];
                   const existingSegment = connectedAsset.asset.wallSegments![connectedAsset.segmentIndex];
                   const absExistingSegment = {
                     start: {
@@ -626,8 +876,58 @@ export const useSceneStore = create<SceneState>()(
                     connectedAsset.asset.wallGap || 8
                   );
 
-                  // Update the last segment of current wall with trimmed version
-                  currentSegments = [...state.currentWallSegments.slice(0, -1), cornerResult.segment2];
+                  // Update the affected segment of current wall with trimmed version
+                  if (connectedAsset.currentSide === 'last') {
+                    currentSegments = [...state.currentWallSegments.slice(0, -1), cornerResult.segment2];
+                  } else {
+                    currentSegments = [cornerResult.segment2, ...state.currentWallSegments.slice(1)];
+                  }
+                } else {
+                  // Non-perpendicular: also trim the current wall so both sides make room
+                  const trimDistance = connectedAsset.asset.wallGap || 8;
+                  if (connectedAsset.currentSide === 'last') {
+                    const seg = state.currentWallSegments[state.currentWallSegments.length - 1];
+                    const dir = { x: seg.end.x - seg.start.x, y: seg.end.y - seg.start.y };
+                    const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
+                    if (len > 0) {
+                      const norm = { x: dir.x / len, y: dir.y / len };
+                      const trimmed = {
+                        start: seg.start,
+                        end: { x: seg.end.x - norm.x * trimDistance, y: seg.end.y - norm.y * trimDistance }
+                      };
+                      currentSegments = [...state.currentWallSegments.slice(0, -1), trimmed];
+                    }
+                  } else {
+                    const seg = state.currentWallSegments[0];
+                    const dir = { x: seg.end.x - seg.start.x, y: seg.end.y - seg.start.y };
+                    const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
+                    if (len > 0) {
+                      const norm = { x: dir.x / len, y: dir.y / len };
+                      const trimmed = {
+                        start: { x: seg.start.x + norm.x * trimDistance, y: seg.start.y + norm.y * trimDistance },
+                        end: seg.end
+                      };
+                      currentSegments = [trimmed, ...state.currentWallSegments.slice(1)];
+                    }
+                  }
+                }
+
+                // Snap the current wall endpoint exactly to the connection position so endpoints match
+                if (connectedAsset.currentSide === 'last') {
+                  if (currentSegments.length > 0) {
+                    const lastIdx = currentSegments.length - 1;
+                    currentSegments[lastIdx] = {
+                      start: currentSegments[lastIdx].start,
+                      end: { x: connectedAsset.connectionPosition.x, y: connectedAsset.connectionPosition.y }
+                    };
+                  }
+                } else {
+                  if (currentSegments.length > 0) {
+                    currentSegments[0] = {
+                      start: { x: connectedAsset.connectionPosition.x, y: connectedAsset.connectionPosition.y },
+                      end: currentSegments[0].end
+                    };
+                  }
                 }
 
                 // Combine all segments
@@ -674,9 +974,58 @@ export const useSceneStore = create<SceneState>()(
                   }
                 }
 
+                // Order segments so consecutive items share endpoints (critical for clean corners)
+                const tolerance = 1; // mm
+                const orderedSegments: { start: { x: number; y: number }; end: { x: number; y: number } }[] = [];
+                if (mergedSegments.length > 0) {
+                  const remaining = [...mergedSegments];
+                  orderedSegments.push(remaining.shift()!);
+                  while (remaining.length > 0) {
+                    const last = orderedSegments[orderedSegments.length - 1];
+                    let foundIndex = -1;
+                    for (let i = 0; i < remaining.length; i++) {
+                      const seg = remaining[i];
+                      const distEndToStart = Math.hypot(last.end.x - seg.start.x, last.end.y - seg.start.y);
+                      const distEndToEnd = Math.hypot(last.end.x - seg.end.x, last.end.y - seg.end.y);
+                      if (distEndToStart <= tolerance) {
+                        foundIndex = i; // correct orientation
+                        break;
+                      } else if (distEndToEnd <= tolerance) {
+                        // reverse segment to match orientation
+                        remaining[i] = { start: seg.end, end: seg.start };
+                        foundIndex = i;
+                        break;
+                      }
+                    }
+                    if (foundIndex >= 0) {
+                      orderedSegments.push(remaining.splice(foundIndex, 1)[0]);
+                    } else {
+                      // start a new chain if no continuation found
+                      orderedSegments.push(remaining.shift()!);
+                    }
+                  }
+                }
+
+                const finalSegments = orderedSegments.length > 0 ? orderedSegments : mergedSegments;
+
+                // Build/merge nodes graph on the target asset
+                const nodes: { x: number; y: number }[] = asset.wallNodes ? [...asset.wallNodes] : [];
+                const addNode = (pt: { x: number; y: number }) => {
+                  const idx = nodes.findIndex(n => Math.hypot(n.x - pt.x, n.y - pt.y) <= 0.5);
+                  if (idx >= 0) return idx;
+                  nodes.push({ x: pt.x, y: pt.y });
+                  return nodes.length - 1;
+                };
+                const edges: { a: number; b: number }[] = [];
+                finalSegments.forEach(seg => {
+                  const ai = addNode(seg.start);
+                  const bi = addNode(seg.end);
+                  if (ai !== bi) edges.push({ a: ai, b: bi });
+                });
+
                 // Calculate new center point for the merged wall
                 let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-                mergedSegments.forEach(segment => {
+                finalSegments.forEach(segment => {
                   minX = Math.min(minX, segment.start.x, segment.end.x);
                   minY = Math.min(minY, segment.start.y, segment.end.y);
                   maxX = Math.max(maxX, segment.start.x, segment.end.x);
@@ -687,7 +1036,7 @@ export const useSceneStore = create<SceneState>()(
                 const newCenterY = (minY + maxY) / 2;
 
                 // Convert merged segments back to relative coordinates
-                const relativeSegments = mergedSegments.map(segment => ({
+                const relativeSegments = finalSegments.map(segment => ({
                   start: {
                     x: segment.start.x - newCenterX,
                     y: segment.start.y - newCenterY
@@ -702,7 +1051,10 @@ export const useSceneStore = create<SceneState>()(
                   ...asset,
                   x: newCenterX,
                   y: newCenterY,
-                  wallSegments: relativeSegments
+                  // Keep segments only for compatibility features like bbox; runtime rendering will prefer nodes
+                  wallSegments: undefined,
+                  wallNodes: nodes,
+                  wallEdges: edges
                 };
               }
               return asset;
@@ -715,13 +1067,30 @@ export const useSceneStore = create<SceneState>()(
               wallDrawingMode: false,
               currentWallSegments: [],
               currentWallStart: null,
-              currentWallTempEnd: null
+              currentWallTempEnd: null,
+              firstHorizontalWallLength: null
             }));
           } else {
-            // Create new wall asset (existing logic)
+            // Create new wall asset as node-edge graph
+            // If the path returns to the start within tolerance, snap it closed so no start cap remains
+            let segmentsToUse = state.currentWallSegments;
+            if (state.currentWallSegments.length > 1) {
+              const first = state.currentWallSegments[0].start;
+              const lastEnd = state.currentWallSegments[state.currentWallSegments.length - 1].end;
+              const closeTol = 1.0; // mm
+              if (Math.hypot(lastEnd.x - first.x, lastEnd.y - first.y) <= closeTol) {
+                // Force exact closure
+                const fixed = [...state.currentWallSegments];
+                fixed[fixed.length - 1] = {
+                  start: fixed[fixed.length - 1].start,
+                  end: { x: first.x, y: first.y }
+                };
+                segmentsToUse = fixed;
+              }
+            }
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
-            state.currentWallSegments.forEach(segment => {
+            segmentsToUse.forEach(segment => {
               minX = Math.min(minX, segment.start.x, segment.end.x);
               minY = Math.min(minY, segment.start.y, segment.end.y);
               maxX = Math.max(maxX, segment.start.x, segment.end.x);
@@ -731,19 +1100,20 @@ export const useSceneStore = create<SceneState>()(
             const centerX = (minX + maxX) / 2;
             const centerY = (minY + maxY) / 2;
 
-            // Keep segments in absolute coordinates (like temporary preview)
-            // This ensures the wall appears at the same size as during drawing
-            // Convert wall segments to relative coordinates
-            const relativeSegments = state.currentWallSegments.map(segment => ({
-              start: {
-                x: segment.start.x - centerX,
-                y: segment.start.y - centerY
-              },
-              end: {
-                x: segment.end.x - centerX,
-                y: segment.end.y - centerY
-              }
-            }));
+            // Build node list and edges from path endpoints
+            const nodes: { x: number; y: number }[] = [];
+            const edges: { a: number; b: number }[] = [];
+            const addNode = (pt: { x: number; y: number }) => {
+              const idx = nodes.findIndex(n => Math.hypot(n.x - pt.x, n.y - pt.y) <= 0.5);
+              if (idx >= 0) return idx;
+              nodes.push({ x: pt.x, y: pt.y });
+              return nodes.length - 1;
+            };
+            segmentsToUse.forEach(seg => {
+              const ai = addNode(seg.start);
+              const bi = addNode(seg.end);
+              if (!(ai === bi)) edges.push({ a: ai, b: bi });
+            });
 
             const wallAsset: AssetInstance = {
               id: `wall-segments-${Date.now()}`,
@@ -752,7 +1122,9 @@ export const useSceneStore = create<SceneState>()(
               y: centerY,
               scale: 2, // Default scale of 2 for proper wall size
               rotation: 0,
-              wallSegments: relativeSegments, // Store relative coordinates
+              wallSegments: undefined,
+              wallNodes: nodes,
+              wallEdges: edges,
               wallThickness: 1, // Default wall thickness of 1
               wallGap: 8,
               lineColor: "#000000",
@@ -766,7 +1138,8 @@ export const useSceneStore = create<SceneState>()(
               wallDrawingMode: false,
               currentWallSegments: [],
               currentWallStart: null,
-              currentWallTempEnd: null
+              currentWallTempEnd: null,
+              firstHorizontalWallLength: null
             }));
           }
         }
