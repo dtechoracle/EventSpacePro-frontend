@@ -39,6 +39,11 @@ export default function AssetRenderer({
   onScaleHandleMouseDown,
   onRotationHandleMouseDown,
 }: AssetRendererProps) {
+  // Early return if asset is undefined (prevents SSR errors)
+  if (!asset) {
+    return null;
+  }
+
   const def = ASSET_LIBRARY.find((a) => a.id === asset.type);
 
   // Handle square and circle assets

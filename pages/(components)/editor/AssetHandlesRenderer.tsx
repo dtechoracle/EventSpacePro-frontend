@@ -16,6 +16,11 @@ export default function AssetHandlesRenderer({
   onScaleHandleMouseDown,
   onRotationHandleMouseDown,
 }: AssetHandlesRendererProps) {
+  // Early return if asset is undefined (prevents SSR errors)
+  if (!asset) {
+    return null;
+  }
+
   const handleSize = 12;
   
   // Calculate handle positions directly in pixel coordinates relative to asset center

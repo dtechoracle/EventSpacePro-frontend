@@ -7,6 +7,49 @@ import { useToolbarTools, ToolOption } from "@/hooks/useToolBarTools";
 import { useSceneStore } from "@/store/sceneStore";
 // import AssetsModal from "./AssetsModal";
 
+// Tooltip Component
+interface TooltipProps {
+  children: React.ReactNode;
+  content: string;
+  position?: "top" | "bottom";
+}
+
+function Tooltip({ children, content, position = "top" }: TooltipProps) {
+  const [isVisible, setIsVisible] = useState(false);
+
+  return (
+    <div
+      className="relative inline-block"
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
+    >
+      {children}
+      <AnimatePresence>
+        {isVisible && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: position === "top" ? 10 : -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: position === "top" ? 10 : -10 }}
+            transition={{ duration: 0.15 }}
+            className={`absolute z-[10001] px-2 py-1 text-xs text-white bg-gray-900 rounded shadow-lg whitespace-nowrap ${
+              position === "top" ? "bottom-full mb-2" : "top-full mt-2"
+            } left-1/2 -translate-x-1/2`}
+          >
+            {content}
+            <div
+              className={`absolute left-1/2 -translate-x-1/2 w-0 h-0 ${
+                position === "top"
+                  ? "top-full border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"
+                  : "bottom-full border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-900"
+              }`}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 
 interface BarProps{
   setShowAssetsModal: React.Dispatch<React.SetStateAction<boolean>>
@@ -200,21 +243,23 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
       >
         {tools.map((tool, index) => (
           <div key={index} className="flex items-center relative">
-            {/* Main Button */}
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              whileHover={{ scale: 1.03 }}
-              className={`w-8 h-8 flex items-center justify-center rounded-md ${
-                (tool.options.some(opt => opt.id === "draw-line") && isPenMode) || 
-                (tool.options.some(opt => opt.id === "draw-wall") && (isWallMode || wallDrawingMode))
-                  ? "bg-green-600 text-white" 
-                  : "bg-[var(--accent)] text-white"
-              }`}
-              aria-expanded={openIndex === index}
-              aria-haspopup="menu"
-            >
-              {tool.icon}
-            </motion.button>
+            {/* Main Button with Tooltip */}
+            <Tooltip content={tool.label} position="top">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.03 }}
+                className={`w-8 h-8 flex items-center justify-center rounded-md ${
+                  (tool.options.some(opt => opt.id === "draw-line") && isPenMode) || 
+                  (tool.options.some(opt => opt.id === "draw-wall") && (isWallMode || wallDrawingMode))
+                    ? "bg-green-600 text-white" 
+                    : "bg-[var(--accent)] text-white"
+                }`}
+                aria-expanded={openIndex === index}
+                aria-haspopup="menu"
+              >
+                {tool.icon}
+              </motion.button>
+            </Tooltip>
 
             {/* Dropdown Toggle */}
             <button

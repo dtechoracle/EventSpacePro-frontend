@@ -10,6 +10,11 @@ type WallRenderingProps = {
 };
 
 export default function WallRendering({ asset, leftPx, topPx, totalRotation }: WallRenderingProps) {
+  // Early return if asset is undefined (prevents SSR errors)
+  if (!asset) {
+    return null;
+  }
+
   return (
     <div
       style={{
