@@ -13,27 +13,34 @@ interface ApiError {
   errors?: { path: string; message: string; code: string }[];
 }
 
-export default function CreateProjectModal({ onClose }: { onClose: () => void }) {
+export default function CreateProjectModal({
+  onClose,
+}: {
+  onClose: () => void;
+}) {
   const [phase, setPhase] = useState(1);
   const [projectName, setProjectName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("owner");
-  const [loading, setLoading] = useState(false);
-  
+  const [role] = useState("owner");
+  const [, setLoading] = useState(false);
+
   const queryClient = useQueryClient();
 
   const mutation = useMutation<{ message: string }, ApiError>({
     mutationKey: ["create-project"],
     mutationFn: () => {
-      const payload: { name: string; users?: { email: string; role: string }[] } = {
+      const payload: {
+        name: string;
+        users?: { email: string; role: string }[];
+      } = {
         name: projectName,
       };
-      
+
       // Only include users if email is provided
       if (email && email.trim()) {
         payload.users = [{ email: email, role: role }];
       }
-      
+
       return apiRequest("/projects", "POST", payload, true);
     },
     onSuccess: () => {
@@ -160,10 +167,8 @@ export default function CreateProjectModal({ onClose }: { onClose: () => void })
                 <h2 className="text-[2rem] font-semibold text-[#272235]">
                   Creating a new Project
                 </h2>
-                <div
-                  className="w-16 h-16 flex justify-center items-center rounded-full bg-[var(--accent)]"
-                >
-                <ImSpinner8 size={30} className="text-white animate-spin"/>
+                <div className="w-16 h-16 flex justify-center items-center rounded-full bg-[var(--accent)]">
+                  <ImSpinner8 size={30} className="text-white animate-spin" />
                 </div>
               </motion.div>
             )}
@@ -173,4 +178,3 @@ export default function CreateProjectModal({ onClose }: { onClose: () => void })
     </AnimatePresence>
   );
 }
-

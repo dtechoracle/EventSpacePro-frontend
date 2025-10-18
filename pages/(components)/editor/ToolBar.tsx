@@ -1,10 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { FiChevronDown, FiChevronRight, FiPlus, FiBox, FiSave } from "react-icons/fi";
-import { LuFocus } from "react-icons/lu";
+import Image from "next/image";
+import {
+  FiChevronDown,
+  FiChevronRight,
+  FiPlus,
+  FiBox,
+  FiSave,
+} from "react-icons/fi";
 import { useSceneStore, AssetInstance } from "@/store/sceneStore";
-import { ASSET_LIBRARY, AssetDef } from "@/lib/assets";
+import { ASSET_LIBRARY } from "@/lib/assets";
 
 interface ToolbarProps {
   onSave?: () => void;
@@ -30,42 +36,44 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
 
   // Helper function to get asset display information
   const getAssetDisplayInfo = (asset: AssetInstance) => {
-    const assetDef = ASSET_LIBRARY.find(def => def.id === asset.type);
+    const assetDef = ASSET_LIBRARY.find((def) => def.id === asset.type);
     if (assetDef) {
       return {
         name: assetDef.label,
         icon: assetDef.icon,
         isCustom: assetDef.isCustom,
-        path: assetDef.path
+        path: assetDef.path,
       };
     }
-    
+
     // Fallback for unknown asset types
     return {
       name: asset.type.charAt(0).toUpperCase() + asset.type.slice(1),
       icon: FiBox,
       isCustom: false,
-      path: undefined
+      path: undefined,
     };
   };
 
   // Helper function to render asset icon
   const renderAssetIcon = (asset: AssetInstance, size = 12) => {
     const displayInfo = getAssetDisplayInfo(asset);
-    
+
     if (displayInfo.isCustom && displayInfo.path) {
       return (
-        <img 
-          src={displayInfo.path} 
+        <Image
+          src={displayInfo.path}
           alt={displayInfo.name}
-          className="w-3 h-3 object-contain"
+          width={12}
+          height={12}
+          className="object-contain"
         />
       );
     } else if (displayInfo.icon) {
       const IconComponent = displayInfo.icon;
       return <IconComponent size={size} />;
     }
-    
+
     return <FiBox size={size} />;
   };
 
@@ -95,9 +103,9 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
           <button
             onClick={onSave}
             className={`flex items-center gap-1 px-2 py-1 text-white text-xs rounded transition-colors invisible ${
-              hasUnsavedChanges 
-                ? 'bg-orange-500 hover:bg-orange-600 animate-pulse' 
-                : 'bg-green-500 hover:bg-green-600'
+              hasUnsavedChanges
+                ? "bg-orange-500 hover:bg-orange-600 animate-pulse"
+                : "bg-green-500 hover:bg-green-600"
             }`}
             title={hasUnsavedChanges ? "Save changes" : "No changes to save"}
             disabled={!hasUnsavedChanges}
@@ -162,7 +170,7 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
             </span>
           </div>
           <div className="flex gap-1 items-center">
-            <div onClick={() => setShowLayers((p) => !p)} >
+            <div onClick={() => setShowLayers((p) => !p)}>
               {showLayers ? <FiChevronDown /> : <FiChevronRight />}
             </div>
 
@@ -180,10 +188,7 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
             {layers.map((layer) => (
               <div key={layer.id} className="">
                 <div className="flex items-center gap-1">
-                  <button
-                    className="p-1"
-                    onClick={() => toggleLayer(layer.id)}
-                  >
+                  <button className="p-1" onClick={() => toggleLayer(layer.id)}>
                     {layer.open ? (
                       <FiChevronDown size={12} />
                     ) : (
@@ -266,14 +271,14 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
               assets.map((asset, index) => {
                 const displayInfo = getAssetDisplayInfo(asset);
                 const isSelected = selectedAssetId === asset.id;
-                
+
                 return (
                   <div
                     key={asset.id}
                     className={`flex items-center gap-1 px-2 py-1 rounded cursor-pointer transition-colors ${
-                      isSelected 
-                        ? 'bg-[var(--accent)] text-white' 
-                        : 'hover:bg-gray-100 text-black/65'
+                      isSelected
+                        ? "bg-[var(--accent)] text-white"
+                        : "hover:bg-gray-100 text-black/65"
                     }`}
                     onClick={() => selectAsset(asset.id)}
                     title={`${displayInfo.name} (${asset.type})`}
@@ -294,4 +299,3 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
     </div>
   );
 }
-

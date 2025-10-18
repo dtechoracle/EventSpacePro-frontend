@@ -13,7 +13,7 @@ const Sidebar = () => {
   const [open, setOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const { user, fetchUser, isLoading } = useUserStore();
+  const { user, fetchUser } = useUserStore();
 
   useEffect(() => {
     fetchUser();
@@ -22,14 +22,14 @@ const Sidebar = () => {
   // Load persisted state from localStorage on component mount
   useEffect(() => {
     // Check if we're on the client side
-    if (typeof window !== 'undefined') {
-      const savedCollapsedState = localStorage.getItem('sidebar-collapsed');
-      const savedMobileState = localStorage.getItem('sidebar-mobile-open');
-      
+    if (typeof window !== "undefined") {
+      const savedCollapsedState = localStorage.getItem("sidebar-collapsed");
+      const savedMobileState = localStorage.getItem("sidebar-mobile-open");
+
       if (savedCollapsedState !== null) {
         setIsCollapsed(JSON.parse(savedCollapsedState));
       }
-      
+
       if (savedMobileState !== null) {
         setOpen(JSON.parse(savedMobileState));
       }
@@ -38,15 +38,15 @@ const Sidebar = () => {
 
   // Save desktop collapse state to localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sidebar-collapsed', JSON.stringify(isCollapsed));
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sidebar-collapsed", JSON.stringify(isCollapsed));
     }
   }, [isCollapsed]);
 
   // Save mobile open state to localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sidebar-mobile-open', JSON.stringify(open));
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sidebar-mobile-open", JSON.stringify(open));
     }
   }, [open]);
 
@@ -110,8 +110,9 @@ const Sidebar = () => {
             {links.map((item, index) => (
               <div
                 key={index}
-                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${item.route === pathname ? "bg-black/5" : ""
-                  }`}
+                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${
+                  item.route === pathname ? "bg-black/5" : ""
+                }`}
                 onClick={() => router.push(item.route)}
               >
                 <Image src={item.icon} alt={item.text} width={20} height={20} />
@@ -135,10 +136,16 @@ const Sidebar = () => {
 
         <div className="w-full gap-2">
           <div
-            className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${pathname === "dashboard/settings" ? "bg-black/5" : ""
-              }`}
+            className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${
+              pathname === "dashboard/settings" ? "bg-black/5" : ""
+            }`}
           >
-            <Image src={"/assets/sidebar/Gear.svg"} alt="Settings" width={20} height={20} />
+            <Image
+              src={"/assets/sidebar/Gear.svg"}
+              alt="Settings"
+              width={20}
+              height={20}
+            />
             <AnimatePresence>
               {!isCollapsed && (
                 <motion.h1
@@ -155,7 +162,12 @@ const Sidebar = () => {
           </div>
 
           <div className="flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer">
-            <Image src={"/assets/sidebar/SignOut.svg"} alt="Logout" width={20} height={20} />
+            <Image
+              src={"/assets/sidebar/SignOut.svg"}
+              alt="Logout"
+              width={20}
+              height={20}
+            />
             <AnimatePresence>
               {!isCollapsed && (
                 <motion.h1
@@ -187,7 +199,9 @@ const Sidebar = () => {
                     exit={{ opacity: 0, x: -10 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <h1 className="font-semibold text-sm">{user?.firstName} {user?.lastName}</h1>
+                    <h1 className="font-semibold text-sm">
+                      {user?.firstName} {user?.lastName}
+                    </h1>
                     <p className="text-xs">Basic plan</p>
                   </motion.div>
                 )}
@@ -216,8 +230,9 @@ const Sidebar = () => {
       {/* Mobile Sidebar (unchanged) */}
       <button
         onClick={() => setOpen(!open)}
-        className={`fixed top-1 left-1 z-50 p-3 rounded-lg shadow-lg bg-[var(--accent)] text-white lg:hidden transition-transform ${open ? "translate-x-52" : "translate-x-0"
-          }`}
+        className={`fixed top-1 left-1 z-50 p-3 rounded-lg shadow-lg bg-[var(--accent)] text-white lg:hidden transition-transform ${
+          open ? "translate-x-52" : "translate-x-0"
+        }`}
       >
         {open ? <X size={24} /> : <Menu size={24} />}
       </button>
@@ -233,20 +248,31 @@ const Sidebar = () => {
           >
             <div>
               <div className="w-full flex">
-                <Image alt="" src={"/assets/mainLogo.svg"} width={150} height={150} />
+                <Image
+                  alt=""
+                  src={"/assets/mainLogo.svg"}
+                  width={150}
+                  height={150}
+                />
               </div>
               <div className="pt-8 space-y-1">
                 {links.map((item, index) => (
                   <div
                     key={index}
-                    className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${item.route === pathname ? "bg-black/5" : ""
-                      }`}
+                    className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${
+                      item.route === pathname ? "bg-black/5" : ""
+                    }`}
                     onClick={() => {
                       router.push(item.route);
                       setOpen(false);
                     }}
                   >
-                    <Image src={item.icon} alt={item.text} width={20} height={20} />
+                    <Image
+                      src={item.icon}
+                      alt={item.text}
+                      width={20}
+                      height={20}
+                    />
                     <h1 className="text-sm text-[#272235] group-hover:text-black font-medium">
                       {item.text}
                     </h1>
@@ -257,17 +283,28 @@ const Sidebar = () => {
 
             <div className="w-full gap-2">
               <div
-                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${pathname === "dashboard/settings" ? "bg-black/5" : ""
-                  }`}
+                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${
+                  pathname === "dashboard/settings" ? "bg-black/5" : ""
+                }`}
               >
-                <Image src={"/assets/sidebar/Gear.svg"} alt="Settings" width={20} height={20} />
+                <Image
+                  src={"/assets/sidebar/Gear.svg"}
+                  alt="Settings"
+                  width={20}
+                  height={20}
+                />
                 <h1 className="text-sm text-[#272235] group-hover:text-black font-medium">
                   Settings
                 </h1>
               </div>
 
               <div className="flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer">
-                <Image src={"/assets/sidebar/SignOut.svg"} alt="Logout" width={20} height={20} />
+                <Image
+                  src={"/assets/sidebar/SignOut.svg"}
+                  alt="Logout"
+                  width={20}
+                  height={20}
+                />
                 <h1 className="text-sm text-[#272235] group-hover:text-black font-medium">
                   Logout
                 </h1>
@@ -282,7 +319,9 @@ const Sidebar = () => {
                     height={40}
                   />
                   <div>
-                    <h1 className="font-semibold text-sm">{user?.firstName} {user?.lastName}</h1>
+                    <h1 className="font-semibold text-sm">
+                      {user?.firstName} {user?.lastName}
+                    </h1>
                     <p className="text-xs">Basic plan</p>
                   </div>
                 </div>
@@ -302,4 +341,3 @@ const Sidebar = () => {
 };
 
 export default Sidebar;
-
