@@ -10,6 +10,7 @@ export type AssetInstance = {
   y: number;
   scale: number;
   rotation: number;
+  zIndex: number; // for proper layering - higher values appear on top
 
   // Universal sizing properties
   width?: number; // for all assets
@@ -192,26 +193,31 @@ export const useSceneStore = create<SceneState>()(
         if (!state.canvas) return;
         const id = `${type}-${Date.now()}`;
 
+        // Get the next zIndex (highest existing zIndex + 1, or 1 if no assets exist)
+        const nextZIndex = state.assets.length > 0 
+          ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1 
+          : 1;
+
         // Default properties for shapes
         const shapeDefaults: Partial<AssetInstance> =
           type === "square" || type === "circle"
-            ? { width: 50, height: 50, backgroundColor: "transparent" }
+            ? { width: 50, height: 50, backgroundColor: "#FFFFFF" }
             : type === "line"
-              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#000000", backgroundColor: "transparent" }
+              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#000000", backgroundColor: "#FFFFFF" }
               : type === "double-line"
-                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#000000", lineGap: 8, lineColor: "#000000", backgroundColor: "transparent" }
+                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#000000", lineGap: 8, lineColor: "#000000", backgroundColor: "#FFFFFF" }
                 : type === "drawn-line"
-                  ? { strokeWidth: 2, strokeColor: "#000000", backgroundColor: "transparent" }
+                  ? { strokeWidth: 2, strokeColor: "#000000", backgroundColor: "#FFFFFF" }
                   : type === "wall-segments"
-                    ? { wallThickness: 1, wallGap: 8, lineColor: "#000000", backgroundColor: "transparent" }
+                    ? { wallThickness: 1, wallGap: 8, lineColor: "#000000", backgroundColor: "#FFFFFF" }
                     : type === "text"
-                      ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: "transparent" }
-                      : { width: 24, height: 24, backgroundColor: "transparent" }; // Default for icons
+                      ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: "#FFFFFF" }
+                      : { width: 24, height: 24, backgroundColor: "#FFFFFF" }; // Default for icons
 
         set({
           assets: [
             ...state.assets,
-            { id, type, x, y, scale: 1, rotation: 0, ...shapeDefaults },
+            { id, type, x, y, scale: 1, rotation: 0, zIndex: nextZIndex, ...shapeDefaults },
           ],
           selectedAssetId: id,
           hasUnsavedChanges: true,
@@ -224,8 +230,17 @@ export const useSceneStore = create<SceneState>()(
           if (state.wallDrawingMode && assetObj.type !== "wall-segments") {
             return { hasUnsavedChanges: state.hasUnsavedChanges } as any;
           }
+          
+          // Ensure the asset has a zIndex (use existing or assign next available)
+          const assetWithZIndex = {
+            ...assetObj,
+            zIndex: assetObj.zIndex ?? (state.assets.length > 0 
+              ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1 
+              : 1)
+          };
+          
           return {
-            assets: [...state.assets, assetObj],
+            assets: [...state.assets, assetWithZIndex],
             selectedAssetId: assetObj.id,
             hasUnsavedChanges: true,
           };
@@ -476,6 +491,11 @@ export const useSceneStore = create<SceneState>()(
         nodes.forEach(n => { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); });
         const cx = (minX + maxX) / 2; const cy = (minY + maxY) / 2;
 
+        // Get the next zIndex for the wall asset
+        const nextZIndex = state.assets.length > 0 
+          ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1 
+          : 1;
+
         const wallAsset: AssetInstance = {
           id: `wall-segments-${Date.now()}`,
           type: "wall-segments",
@@ -483,12 +503,13 @@ export const useSceneStore = create<SceneState>()(
           y: cy,
           scale: 2,
           rotation: 0,
+          zIndex: nextZIndex,
           wallNodes: nodes,
           wallEdges: edges,
           wallThickness: 1,
           wallGap: 8,
           lineColor: "#000000",
-          backgroundColor: "transparent"
+          backgroundColor: "#FFFFFF"
         };
 
         set((state) => ({
@@ -1115,6 +1136,11 @@ export const useSceneStore = create<SceneState>()(
               if (!(ai === bi)) edges.push({ a: ai, b: bi });
             });
 
+            // Get the next zIndex for the wall asset
+            const nextZIndex = state.assets.length > 0 
+              ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1 
+              : 1;
+
             const wallAsset: AssetInstance = {
               id: `wall-segments-${Date.now()}`,
               type: "wall-segments",
@@ -1122,13 +1148,14 @@ export const useSceneStore = create<SceneState>()(
               y: centerY,
               scale: 2, // Default scale of 2 for proper wall size
               rotation: 0,
+              zIndex: nextZIndex,
               wallSegments: undefined,
               wallNodes: nodes,
               wallEdges: edges,
               wallThickness: 1, // Default wall thickness of 1
               wallGap: 8,
               lineColor: "#000000",
-              backgroundColor: "transparent"
+              backgroundColor: "#FFFFFF"
             };
 
             set((state) => ({
@@ -1165,11 +1192,17 @@ export const useSceneStore = create<SceneState>()(
         const state = get();
         if (!state.clipboard || !state.canvas) return;
 
+        // Get the next zIndex for the pasted asset
+        const nextZIndex = state.assets.length > 0 
+          ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1 
+          : 1;
+
         const newAsset: AssetInstance = {
           ...state.clipboard,
           id: `${state.clipboard.type}-${Date.now()}`,
           x: state.clipboard.x + offsetX,
           y: state.clipboard.y + offsetY,
+          zIndex: nextZIndex,
         };
 
         set({
