@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800.000" height="600.000" viewBox="0.0 0.0 800.000 600.000" version="1.1">
+  <desc>Produce by Acme CAD Converter</desc>
+<path d="M 383.85 386.93 A 8.831 8.831 0 0 0 392.68 378.1"
+fill="none" stroke="black" stroke-width="0.5"/>
+<path d="M 392.68 236.8 A 8.831 8.831 0 0 0 383.85 227.97"
+fill="none" stroke="black" stroke-width="0.5"/>
+<path d="M251.38 369.27L251.38 245.63Z"
+fill="none" stroke="black" stroke-width="0.5"/>
+<path d="M233.71 378.1L233.71 236.8Z"
+fill="none" stroke="black" stroke-width="0.5"/>
+<path d="M375.02 369.27L375.02 245.63Z"
+fill="none" stroke="black" stroke-width="0.5"/>
+<path d="M375.02 264.13L252.86 335.83"
+fill="none" stroke="black" stroke-width="0.5"/>
+<path d="M375.02 369.27L251.38 369.27"
+fill="none" stroke="black" stroke-width="0.5"/>
+<path d="M383.85 386.93L242.55 386.93"
+fill="none" stroke="black" stroke-width="0.5"/>
+<path d="M375.02 272.61L251.54 345.08"
+fill="none" stroke="black" stroke-width="0.5"/>
+<path d="M 233.71 378.1 A 8.831 8.831 0 0 0 242.55 386.93"
+fill="none" stroke="black" stroke-width="0.5"/>
+<path d="M383.85 227.97L242.55 227.97"
+fill="none" stroke="black" stroke-width="0.5"/>
+<path d="M375.02 245.63L251.38 245.63"
+fill="none" stroke="black" stroke-width="0.5"/>
+<path d="M 242.55 227.97 A 8.831 8.831 0 0 0 233.71 236.8"
+fill="none" stroke="black" stroke-width="0.5"/>
+<path d="M392.68 378.1L392.68 236.8Z"
+fill="none" stroke="black" stroke-width="0.5"/>
+</svg>

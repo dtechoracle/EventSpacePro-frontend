@@ -1,8 +1,8 @@
-import React from 'react';
-import { AssetInstance } from '@/store/sceneStore';
-import { ASSET_LIBRARY } from '@/lib/assets';
-import AssetHandlesRenderer from './AssetHandlesRenderer';
-import WallRendering from './WallRendering';
+import React from "react";
+import { AssetInstance } from "@/store/sceneStore";
+import { ASSET_LIBRARY } from "@/lib/assets";
+import AssetHandlesRenderer from "./AssetHandlesRenderer";
+import WallRendering from "./WallRendering";
 
 type AssetRendererProps = {
   asset: AssetInstance;
@@ -18,7 +18,11 @@ type AssetRendererProps = {
   onTextEditKeyDown: (e: React.KeyboardEvent, assetId: string) => void;
   onTextEditBlur: (assetId: string) => void;
   onTextEditChange: (text: string) => void;
-  onScaleHandleMouseDown: (e: React.MouseEvent, assetId: string, handleType: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') => void;
+  onScaleHandleMouseDown: (
+    e: React.MouseEvent,
+    assetId: string,
+    handleType: "top-left" | "top-right" | "bottom-left" | "bottom-right"
+  ) => void;
   onRotationHandleMouseDown: (e: React.MouseEvent, assetId: string) => void;
 };
 
@@ -49,7 +53,7 @@ export default function AssetRenderer({
   // Handle square and circle assets
   if (asset.type === "square" || asset.type === "circle") {
     return (
-      <div className="relative">
+      <div className='relative'>
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -62,11 +66,11 @@ export default function AssetRenderer({
               backgroundColor: asset.backgroundColor,
               borderRadius: asset.type === "circle" ? "50%" : "0%",
               transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
-              zIndex: -1,
+              zIndex: (asset.zIndex || 0) - 1,
             }}
           />
         )}
-        
+
         {/* Main shape */}
         <div
           onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
@@ -77,15 +81,18 @@ export default function AssetRenderer({
             width: (asset.width ?? 50) * asset.scale,
             height: (asset.height ?? 50) * asset.scale,
             backgroundColor: asset.fillColor ?? "transparent",
-            border: `${asset.strokeWidth ?? 2}px solid ${asset.strokeColor ?? "#000000"}`,
+            border: `${asset.strokeWidth ?? 2}px solid ${
+              asset.strokeColor ?? "#000000"
+            }`,
             borderRadius: asset.type === "circle" ? "50%" : "0%",
             transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
             cursor: "move",
+            zIndex: asset.zIndex || 0,
             boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
             transition: isCopied ? "box-shadow 0.3s ease" : undefined,
           }}
         />
-        
+
         {/* Handles */}
         {isSelected && (
           <AssetHandlesRenderer
@@ -103,7 +110,7 @@ export default function AssetRenderer({
   // Handle line assets
   if (asset.type === "line") {
     return (
-      <div className="relative">
+      <div className='relative'>
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -115,11 +122,11 @@ export default function AssetRenderer({
               height: (asset.strokeWidth ?? 2) * asset.scale,
               backgroundColor: asset.backgroundColor,
               transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
-              zIndex: -1,
+              zIndex: (asset.zIndex || 0) - 1,
             }}
           />
         )}
-        
+
         {/* Main line */}
         <div
           onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
@@ -132,11 +139,12 @@ export default function AssetRenderer({
             backgroundColor: asset.strokeColor,
             transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
             cursor: "move",
+            zIndex: asset.zIndex || 0,
             boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
             transition: isCopied ? "box-shadow 0.3s ease" : undefined,
           }}
         />
-        
+
         {/* Handles */}
         {isSelected && (
           <AssetHandlesRenderer
@@ -155,16 +163,20 @@ export default function AssetRenderer({
   if (asset.type === "double-line") {
     const lineGap = (asset.lineGap ?? 8) * asset.scale;
     const isHorizontal = asset.isHorizontal ?? true;
-    
+
     // Get the line thickness and length
     const lineThickness = 2; // Fixed thickness for now
-    const lineLength = isHorizontal ? (asset.width ?? 100) : (asset.height ?? 100);
-    
-    const containerWidth = isHorizontal ? lineLength * asset.scale : (lineThickness + lineGap);
-    const containerHeight = isHorizontal ? (lineThickness + lineGap) : lineLength * asset.scale;
-    
+    const lineLength = isHorizontal ? asset.width ?? 100 : asset.height ?? 100;
+
+    const containerWidth = isHorizontal
+      ? lineLength * asset.scale
+      : lineThickness + lineGap;
+    const containerHeight = isHorizontal
+      ? lineThickness + lineGap
+      : lineLength * asset.scale;
+
     return (
-      <div className="relative">
+      <div className='relative'>
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -176,11 +188,11 @@ export default function AssetRenderer({
               height: containerHeight,
               backgroundColor: asset.backgroundColor,
               transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
-              zIndex: -1,
+              zIndex: (asset.zIndex || 0) - 1,
             }}
           />
         )}
-        
+
         {/* Main double-line container */}
         <div
           onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
@@ -192,6 +204,7 @@ export default function AssetRenderer({
             height: containerHeight,
             transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
             cursor: "move",
+            zIndex: asset.zIndex || 0,
             boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
             transition: isCopied ? "box-shadow 0.3s ease" : undefined,
           }}
@@ -248,7 +261,7 @@ export default function AssetRenderer({
             </>
           )}
         </div>
-        
+
         {/* Handles */}
         {isSelected && (
           <AssetHandlesRenderer
@@ -266,7 +279,7 @@ export default function AssetRenderer({
   // Handle drawn-line assets
   if (asset.type === "drawn-line") {
     return (
-      <div className="relative">
+      <div className='relative'>
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -278,11 +291,11 @@ export default function AssetRenderer({
               height: 100,
               backgroundColor: asset.backgroundColor,
               transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
-              zIndex: -1,
+              zIndex: (asset.zIndex || 0) - 1,
             }}
           />
         )}
-        
+
         {/* Main drawn line */}
         <div
           onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
@@ -292,29 +305,33 @@ export default function AssetRenderer({
             top: topPx,
             transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
             cursor: "move",
+            zIndex: asset.zIndex || 0,
             boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
             transition: isCopied ? "box-shadow 0.3s ease" : undefined,
           }}
         >
           <svg
-            width="200"
-            height="200"
-            viewBox="-100 -100 200 200"
+            width='200'
+            height='200'
+            viewBox='-100 -100 200 200'
             style={{ overflow: "visible" }}
           >
             {asset.path && asset.path.length > 1 && (
               <path
-                d={`M ${asset.path[0].x} ${asset.path[0].y} ${asset.path.slice(1).map(point => `L ${point.x} ${point.y}`).join(' ')}`}
+                d={`M ${asset.path[0].x} ${asset.path[0].y} ${asset.path
+                  .slice(1)
+                  .map((point) => `L ${point.x} ${point.y}`)
+                  .join(" ")}`}
                 stroke={asset.strokeColor ?? "#000000"}
                 strokeWidth={(asset.strokeWidth ?? 2) * asset.scale}
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                fill='none'
+                strokeLinecap='round'
+                strokeLinejoin='round'
               />
             )}
           </svg>
         </div>
-        
+
         {/* Handles */}
         {isSelected && (
           <AssetHandlesRenderer
@@ -332,7 +349,7 @@ export default function AssetRenderer({
   // Handle wall-segments assets
   if (asset.type === "wall-segments") {
     return (
-      <div className="relative">
+      <div className='relative'>
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -344,11 +361,11 @@ export default function AssetRenderer({
               height: 200,
               backgroundColor: asset.backgroundColor,
               transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
-              zIndex: -1,
+              zIndex: (asset.zIndex || 0) - 1,
             }}
           />
         )}
-        
+
         {/* Main wall segments */}
         <div
           onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
@@ -358,18 +375,14 @@ export default function AssetRenderer({
             top: topPx,
             transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
             cursor: "move",
+            zIndex: asset.zIndex || 0,
             boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
             transition: isCopied ? "box-shadow 0.3s ease" : undefined,
           }}
         >
-          <WallRendering
-            asset={asset}
-            leftPx={0}
-            topPx={0}
-            totalRotation={0}
-          />
+          <WallRendering asset={asset} leftPx={0} topPx={0} totalRotation={0} />
         </div>
-        
+
         {/* Handles */}
         {isSelected && (
           <AssetHandlesRenderer
@@ -387,9 +400,9 @@ export default function AssetRenderer({
   // Handle text assets
   if (asset.type === "text") {
     const isEditing = editingTextId === asset.id;
-    
+
     return (
-      <div className="relative">
+      <div className='relative'>
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -401,14 +414,14 @@ export default function AssetRenderer({
               backgroundColor: asset.backgroundColor,
               padding: "4px 8px",
               borderRadius: "4px",
-              zIndex: -1,
+              zIndex: (asset.zIndex || 0) - 1,
             }}
           />
         )}
-        
+
         {isEditing ? (
           <input
-            type="text"
+            type='text'
             value={editingText}
             onChange={(e) => onTextEditChange(e.target.value)}
             onKeyDown={(e) => onTextEditKeyDown(e, asset.id)}
@@ -422,15 +435,22 @@ export default function AssetRenderer({
               fontSize: `${asset.fontSize ?? 16}px`,
               color: asset.textColor ?? "#000000",
               fontFamily: asset.fontFamily ?? "Arial",
-              background: asset.backgroundColor && asset.backgroundColor !== "transparent" ? asset.backgroundColor : "transparent",
+              background:
+                asset.backgroundColor && asset.backgroundColor !== "transparent"
+                  ? asset.backgroundColor
+                  : "transparent",
               border: "none",
               outline: "none",
-              padding: asset.backgroundColor && asset.backgroundColor !== "transparent" ? "4px 8px" : "0",
+              padding:
+                asset.backgroundColor && asset.backgroundColor !== "transparent"
+                  ? "4px 8px"
+                  : "0",
               margin: 0,
               minWidth: "100px",
               borderRadius: "4px",
+              zIndex: asset.zIndex || 0,
             }}
-            className="text-center"
+            className='text-center'
           />
         ) : (
           <div
@@ -444,20 +464,29 @@ export default function AssetRenderer({
               fontSize: `${asset.fontSize ?? 16}px`,
               color: asset.textColor ?? "#000000",
               fontFamily: asset.fontFamily ?? "Arial",
-              backgroundColor: asset.backgroundColor && asset.backgroundColor !== "transparent" ? asset.backgroundColor : "transparent",
-              padding: asset.backgroundColor && asset.backgroundColor !== "transparent" ? "4px 8px" : "0",
+              backgroundColor:
+                asset.backgroundColor && asset.backgroundColor !== "transparent"
+                  ? asset.backgroundColor
+                  : "transparent",
+              padding:
+                asset.backgroundColor && asset.backgroundColor !== "transparent"
+                  ? "4px 8px"
+                  : "0",
               borderRadius: "4px",
               whiteSpace: "nowrap",
               userSelect: "none",
               cursor: "move",
-              boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
+              zIndex: asset.zIndex || 0,
+              boxShadow: isCopied
+                ? "0 0 10px rgba(34, 197, 94, 0.8)"
+                : undefined,
               transition: isCopied ? "box-shadow 0.3s ease" : undefined,
             }}
           >
             {asset.text ?? "Enter text"}
           </div>
         )}
-        
+
         {/* Handles */}
         {isSelected && !isEditing && (
           <AssetHandlesRenderer
@@ -473,11 +502,27 @@ export default function AssetRenderer({
   }
 
   if (!def) return null;
-  
+
   // Handle custom SVG assets
   if (def.isCustom && def.path) {
     return (
-      <div className="relative">
+      <div className='relative'>
+        {/* Background layer */}
+        {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
+          <div
+            style={{
+              position: "absolute",
+              left: leftPx,
+              top: topPx,
+              width: (asset.width ?? 24) * asset.scale,
+              height: (asset.height ?? 24) * asset.scale,
+              backgroundColor: asset.backgroundColor,
+              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+              zIndex: (asset.zIndex || 0) - 1,
+            }}
+          />
+        )}
+
         <div
           onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
           style={{
@@ -487,17 +532,19 @@ export default function AssetRenderer({
             width: (asset.width ?? 24) * asset.scale,
             height: (asset.height ?? 24) * asset.scale,
             transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+            cursor: "move",
+            zIndex: asset.zIndex || 0,
             boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
             transition: isCopied ? "box-shadow 0.3s ease" : undefined,
           }}
         >
-          <img 
-            src={def.path} 
+          <img
+            src={def.path}
             alt={def.label}
             style={{ width: "100%", height: "100%", objectFit: "contain" }}
           />
         </div>
-        
+
         {/* Handles */}
         {isSelected && (
           <AssetHandlesRenderer
@@ -511,13 +558,29 @@ export default function AssetRenderer({
       </div>
     );
   }
-  
+
   // Handle regular icon assets
   const Icon = def.icon;
   if (!Icon) return null;
-  
+
   return (
-    <div className="relative">
+    <div className='relative'>
+      {/* Background layer */}
+      {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
+        <div
+          style={{
+            position: "absolute",
+            left: leftPx,
+            top: topPx,
+            width: (asset.width ?? 24) * asset.scale,
+            height: (asset.height ?? 24) * asset.scale,
+            backgroundColor: asset.backgroundColor,
+            transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+            zIndex: (asset.zIndex || 0) - 1,
+          }}
+        />
+      )}
+
       <div
         onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
         style={{
@@ -530,14 +593,21 @@ export default function AssetRenderer({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          cursor: "move",
+          zIndex: asset.zIndex,
           boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
           transition: isCopied ? "box-shadow 0.3s ease" : undefined,
         }}
-        className="text-[var(--accent)]"
+        className='text-[var(--accent)]'
       >
-        <Icon size={Math.min((asset.width ?? 24) * asset.scale, (asset.height ?? 24) * asset.scale)} />
+        <Icon
+          size={Math.min(
+            (asset.width ?? 24) * asset.scale,
+            (asset.height ?? 24) * asset.scale
+          )}
+        />
       </div>
-      
+
       {/* Handles */}
       {isSelected && (
         <AssetHandlesRenderer
