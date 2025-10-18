@@ -8,7 +8,7 @@ import { useUserStore } from "@/store/userStore";
 import { useEffect } from "react";
 
 const Dashboard = () => {
-  const { user, fetchUser, isLoading } = useUserStore();
+  const { user, fetchUser } = useUserStore();
 
   useEffect(() => {
     fetchUser();

@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import Canvas from "./Canvas";
-import { useSceneStore, EventData } from "@/store/sceneStore";
+import { EventData } from "@/store/sceneStore";
 
 // Type for API response that wraps EventData
-type EventDataResponse = {
-  data: EventData;
-} | EventData;
+type EventDataResponse =
+  | {
+      data: EventData;
+    }
+  | EventData;
 
 const MM_TO_PX = 2; // must match the constant used in Canvas for mm -> px
 
@@ -50,15 +52,17 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
   // The eventData has a 'data' wrapper based on the API response
   const actualData = useMemo(() => {
     if (!eventData) return null;
-    return 'data' in eventData ? eventData.data : eventData;
+    return "data" in eventData ? eventData.data : eventData;
   }, [eventData]);
-  
+
   const canvas = useMemo(() => {
-    return actualData?.canvases?.[0] ? {
-      size: actualData.canvases[0].size,
-      width: actualData.canvases[0].width,
-      height: actualData.canvases[0].height,
-    } : null;
+    return actualData?.canvases?.[0]
+      ? {
+          size: actualData.canvases[0].size,
+          width: actualData.canvases[0].width,
+          height: actualData.canvases[0].height,
+        }
+      : null;
   }, [actualData]);
 
   // Calculate canvas dimensions in pixels
@@ -77,7 +81,7 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
       x: rect.width / 2,
       y: rect.height / 2,
     });
-    
+
     // Reset offset to zero (no initial pan)
     setOffset({
       x: 0,
@@ -109,12 +113,11 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         const delta = -e.deltaY * 0.001;
-        const oldZoom = targetZoom.current;
         targetZoom.current = Math.min(
           3,
           Math.max(0.2, targetZoom.current + delta)
         );
-        
+
         // Keep offset at zero to maintain canvas center during zoom
         // The canvas positioning handles the centering
       }
@@ -184,11 +187,9 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
             setCanvasPos={setCanvasPos}
             canvas={canvas}
             assets={actualData?.canvasAssets || []}
-            eventData={actualData}
           />
         </div>
       </div>
     </div>
   );
 }
-

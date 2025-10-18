@@ -5,12 +5,17 @@ import BottomToolbar from "@/pages/(components)/editor/BottomToolBar";
 import PropertiesSidebar from "@/pages/(components)/editor/PropertiesSidebar";
 import Toolbar from "@/pages/(components)/editor/ToolBar";
 import MainLayout from "@/pages/layouts/MainLayout";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import CanvasWorkspace from "@/pages/(components)/editor/CanvasWorkspace";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
-import { useSceneStore, EventData, AssetInstance, CanvasData } from "@/store/sceneStore";
+import {
+  useSceneStore,
+  EventData,
+  AssetInstance,
+  CanvasData,
+} from "@/store/sceneStore";
 
 // Type for the payload we send to the API
 type UpdateEventPayload = {
@@ -24,26 +29,35 @@ export default function Editor() {
   const [showAssetsModal, setShowAssetsModal] = useState(false);
   const router = useRouter();
   const { slug, id } = router.query;
-  
+
   // Scene store methods
-  const reset = useSceneStore((s) => s.reset);
+  // const reset = useSceneStore((s) => s.reset);
   const hasUnsavedChanges = useSceneStore((s) => s.hasUnsavedChanges);
   const syncToEventData = useSceneStore((s) => s.syncToEventData);
   const markAsSaved = useSceneStore((s) => s.markAsSaved);
-  const queryClient = useQueryClient();
+  // const queryClient = useQueryClient();
 
   // Local state for current event data
-  const [currentEventData, setCurrentEventData] = useState<EventData | null>(null);
+  const [currentEventData, setCurrentEventData] = useState<EventData | null>(
+    null
+  );
 
-  const { data: eventData, isLoading, error } = useQuery<EventData>({
+  const {
+    data: eventData,
+    isLoading,
+    error,
+  } = useQuery<EventData>({
     queryKey: ["event", slug, id],
-    queryFn: () => apiRequest(`/projects/${slug}/events/${id}`, "GET", null, true),
+    queryFn: () =>
+      apiRequest(`/projects/${slug}/events/${id}`, "GET", null, true),
     enabled: !!(slug && id), // Only run query when both slug and id are available
   });
 
   // Mutation to save canvas assets
   const saveCanvasAssets = useMutation({
-    mutationFn: async (payload: UpdateEventPayload | { canvasAssets: AssetInstance[] }) => {
+    mutationFn: async (
+      payload: UpdateEventPayload | { canvasAssets: AssetInstance[] }
+    ) => {
       return apiRequest(`/projects/${slug}/events/${id}`, "PUT", payload, true);
     },
     onSuccess: (savedData) => {
@@ -53,7 +67,7 @@ export default function Editor() {
       // Don't invalidate queries - we already have the updated data
     },
     onError: (error) => {
-      console.error('Failed to save canvas assets:', error);
+      console.error("Failed to save canvas assets:", error);
     },
   });
 
@@ -71,7 +85,7 @@ export default function Editor() {
     const timeoutId = setTimeout(() => {
       // Double-check if there are still unsaved changes before making the request
       const currentHasChanges = useSceneStore.getState().hasUnsavedChanges;
-      
+
       if (currentHasChanges) {
         const updatedAssets = useSceneStore.getState().assets;
         // Only send canvasAssets for auto-save since that's what we're primarily updating
@@ -86,11 +100,11 @@ export default function Editor() {
   }, [hasUnsavedChanges, currentEventData, saveCanvasAssets]);
 
   // Manual save function
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (!hasUnsavedChanges || !currentEventData) {
       return;
     }
-    
+
     const updatedAssets = syncToEventData();
     // Send only the fields that can be updated: name, type, canvases, canvasAssets
     const payload = {
@@ -100,19 +114,19 @@ export default function Editor() {
       canvasAssets: updatedAssets,
     };
     saveCanvasAssets.mutate(payload);
-  };
-  
+  }, [hasUnsavedChanges, currentEventData, syncToEventData, saveCanvasAssets]);
+
   // Keyboard shortcut for saving (Ctrl+S)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
         handleSave();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleSave]);
 
   if (isLoading) {
@@ -129,7 +143,9 @@ export default function Editor() {
     return (
       <MainLayout>
         <div className="h-screen flex items-center justify-center">
-          <div className="text-lg text-red-600">Error loading event: {error.message}</div>
+          <div className="text-lg text-red-600">
+            Error loading event: {error.message}
+          </div>
         </div>
       </MainLayout>
     );
@@ -144,7 +160,6 @@ export default function Editor() {
       </MainLayout>
     );
   }
-
 
   return (
     <MainLayout>

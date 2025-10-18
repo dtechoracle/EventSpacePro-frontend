@@ -1,8 +1,8 @@
 "use client";
 
 import { IoClose } from "react-icons/io5";
+import Image from "next/image";
 import { ASSET_LIBRARY, AssetDef } from "@/lib/assets";
-import { useSceneStore } from "@/store/sceneStore";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -13,24 +13,28 @@ type AssetsModalProps = {
 
 // Define asset categories for the full library tabs
 const ASSET_CATEGORIES = {
-  architectural: ASSET_LIBRARY.filter(a => 
-    a.id.includes("wall") || 
-    a.id.includes("door") ||
-    a.id.includes("stairs") ||
-    a.id.includes("bathtub") ||
-    a.id.includes("shower") ||
-    a.id.includes("wc")
+  architectural: ASSET_LIBRARY.filter(
+    (a) =>
+      a.id.includes("wall") ||
+      a.id.includes("door") ||
+      a.id.includes("stairs") ||
+      a.id.includes("bathtub") ||
+      a.id.includes("shower") ||
+      a.id.includes("wc")
   ),
-  event: ASSET_LIBRARY.filter(a => 
-    !a.id.includes("wall") && 
-    !a.id.includes("door") && 
-    !a.id.includes("stairs") &&
-    !a.id.includes("bathtub") &&
-    !a.id.includes("shower") &&
-    !a.id.includes("wc") &&
-    !["square", "circle", "line"].includes(a.id)
+  event: ASSET_LIBRARY.filter(
+    (a) =>
+      !a.id.includes("wall") &&
+      !a.id.includes("door") &&
+      !a.id.includes("stairs") &&
+      !a.id.includes("bathtub") &&
+      !a.id.includes("shower") &&
+      !a.id.includes("wc") &&
+      !["square", "circle", "line"].includes(a.id)
   ),
-  shapes: ASSET_LIBRARY.filter(a => ["square", "circle", "line"].includes(a.id)),
+  shapes: ASSET_LIBRARY.filter((a) =>
+    ["square", "circle", "line"].includes(a.id)
+  ),
 };
 
 export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
@@ -43,7 +47,8 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
   const offset = useRef({ x: 0, y: 0 });
 
   const [showAll, setShowAll] = useState(false);
-  const [activeTab, setActiveTab] = useState<keyof typeof ASSET_CATEGORIES>("architectural");
+  const [activeTab, setActiveTab] =
+    useState<keyof typeof ASSET_CATEGORIES>("architectural");
   const [searchTerm, setSearchTerm] = useState("");
 
   // Hydration + initial modal position
@@ -61,7 +66,10 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
 
   const handleMouseMove = (e: MouseEvent) => {
     if (!isDragging.current) return;
-    setPosition({ x: e.clientX - offset.current.x, y: e.clientY - offset.current.y });
+    setPosition({
+      x: e.clientX - offset.current.x,
+      y: e.clientY - offset.current.y,
+    });
   };
 
   const handleMouseUp = () => {
@@ -89,12 +97,14 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
         onDragStart={(e) => e.dataTransfer.setData("assetType", asset.id)}
         className="w-[4.5rem] h-[4.5rem] rounded-2xl bg-[#0933BB08] p-2 flex flex-col items-center justify-center"
       >
-        <div className="text-[var(--accent)] w-6 h-6 flex items-center justify-center">
+        <div className="text-[var(--accent)] w-6 h-6 flex items-center justify-center relative">
           {asset.isCustom && asset.path ? (
-            <img 
-              src={asset.path} 
+            <Image
+              src={asset.path}
               alt={asset.label}
-              className="w-6 h-6 object-contain"
+              width={24}
+              height={24}
+              className="object-contain"
             />
           ) : asset.icon ? (
             <asset.icon size={24} />
@@ -110,8 +120,8 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
   // Filter assets based on search term
   const filteredAssets = searchTerm
     ? ASSET_LIBRARY.filter((a) =>
-      a.label.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+        a.label.toLowerCase().includes(searchTerm.toLowerCase())
+      )
     : [];
 
   return (
@@ -125,7 +135,9 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
         className="flex items-center justify-between mb-4 cursor-grab active:cursor-grabbing"
         onMouseDown={handleMouseDown}
       >
-        <span className="text-[1.25rem] font-medium text-[#272235]">Assets</span>
+        <span className="text-[1.25rem] font-medium text-[#272235]">
+          Assets
+        </span>
         <div className="flex items-center gap-2">
           <select className="w-[16.5rem] h-[2.125rem] rounded-lg px-3 text-sm bg-[#00000008] outline-none">
             <option>Starter Layouts</option>
@@ -157,10 +169,13 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
             exit={{ opacity: 0, y: 20 }}
             className="grid grid-cols-5 gap-3 overflow-y-auto flex-1"
           >
-            {filteredAssets.length > 0
-              ? filteredAssets?.map(renderAssetButton)
-              : <span className="col-span-5 text-center text-gray-400">No assets found</span>
-            }
+            {filteredAssets.length > 0 ? (
+              filteredAssets?.map(renderAssetButton)
+            ) : (
+              <span className="col-span-5 text-center text-gray-400">
+                No assets found
+              </span>
+            )}
           </motion.div>
         ) : !showAll ? (
           <motion.div
@@ -189,19 +204,23 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
             {/* Tabs */}
             <div className="flex gap-2 mb-2">
               {Object.keys(ASSET_CATEGORIES).map((cat) => {
-                const tabLabels: Record<keyof typeof ASSET_CATEGORIES, string> = {
-                  architectural: "Architectural",
-                  event: "Event Assets",
-                  shapes: "Shapes",
-                };
+                const tabLabels: Record<keyof typeof ASSET_CATEGORIES, string> =
+                  {
+                    architectural: "Architectural",
+                    event: "Event Assets",
+                    shapes: "Shapes",
+                  };
                 return (
                   <button
                     key={cat}
-                    onClick={() => setActiveTab(cat as keyof typeof ASSET_CATEGORIES)}
-                    className={`px-3 py-1 rounded text-sm ${activeTab === cat
+                    onClick={() =>
+                      setActiveTab(cat as keyof typeof ASSET_CATEGORIES)
+                    }
+                    className={`px-3 py-1 rounded text-sm ${
+                      activeTab === cat
                         ? "bg-[var(--accent)] text-white"
                         : "bg-gray-200 text-gray-700"
-                      }`}
+                    }`}
                   >
                     {tabLabels[cat as keyof typeof ASSET_CATEGORIES]}
                   </button>
@@ -219,4 +238,3 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
     </div>
   );
 }
-

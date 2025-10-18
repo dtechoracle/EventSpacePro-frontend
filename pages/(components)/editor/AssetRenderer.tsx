@@ -1,4 +1,5 @@
 import React from "react";
+import Image from "next/image";
 import { AssetInstance } from "@/store/sceneStore";
 import { ASSET_LIBRARY } from "@/lib/assets";
 import AssetHandlesRenderer from "./AssetHandlesRenderer";
@@ -53,7 +54,7 @@ export default function AssetRenderer({
   // Handle square and circle assets
   if (asset.type === "square" || asset.type === "circle") {
     return (
-      <div className='relative'>
+      <div className="relative">
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -110,7 +111,7 @@ export default function AssetRenderer({
   // Handle line assets
   if (asset.type === "line") {
     return (
-      <div className='relative'>
+      <div className="relative">
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -176,7 +177,7 @@ export default function AssetRenderer({
       : lineLength * asset.scale;
 
     return (
-      <div className='relative'>
+      <div className="relative">
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -279,7 +280,7 @@ export default function AssetRenderer({
   // Handle drawn-line assets
   if (asset.type === "drawn-line") {
     return (
-      <div className='relative'>
+      <div className="relative">
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -311,9 +312,9 @@ export default function AssetRenderer({
           }}
         >
           <svg
-            width='200'
-            height='200'
-            viewBox='-100 -100 200 200'
+            width="200"
+            height="200"
+            viewBox="-100 -100 200 200"
             style={{ overflow: "visible" }}
           >
             {asset.path && asset.path.length > 1 && (
@@ -324,9 +325,9 @@ export default function AssetRenderer({
                   .join(" ")}`}
                 stroke={asset.strokeColor ?? "#000000"}
                 strokeWidth={(asset.strokeWidth ?? 2) * asset.scale}
-                fill='none'
-                strokeLinecap='round'
-                strokeLinejoin='round'
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
             )}
           </svg>
@@ -349,7 +350,7 @@ export default function AssetRenderer({
   // Handle wall-segments assets
   if (asset.type === "wall-segments") {
     return (
-      <div className='relative'>
+      <div className="relative">
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -402,7 +403,7 @@ export default function AssetRenderer({
     const isEditing = editingTextId === asset.id;
 
     return (
-      <div className='relative'>
+      <div className="relative">
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -421,7 +422,7 @@ export default function AssetRenderer({
 
         {isEditing ? (
           <input
-            type='text'
+            type="text"
             value={editingText}
             onChange={(e) => onTextEditChange(e.target.value)}
             onKeyDown={(e) => onTextEditKeyDown(e, asset.id)}
@@ -450,7 +451,7 @@ export default function AssetRenderer({
               borderRadius: "4px",
               zIndex: asset.zIndex || 0,
             }}
-            className='text-center'
+            className="text-center"
           />
         ) : (
           <div
@@ -506,7 +507,7 @@ export default function AssetRenderer({
   // Handle custom SVG assets
   if (def.isCustom && def.path) {
     return (
-      <div className='relative'>
+      <div className="relative">
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -538,10 +539,11 @@ export default function AssetRenderer({
             transition: isCopied ? "box-shadow 0.3s ease" : undefined,
           }}
         >
-          <img
+          <Image
             src={def.path}
             alt={def.label}
-            style={{ width: "100%", height: "100%", objectFit: "contain" }}
+            fill
+            style={{ objectFit: "contain" }}
           />
         </div>
 
@@ -564,7 +566,7 @@ export default function AssetRenderer({
   if (!Icon) return null;
 
   return (
-    <div className='relative'>
+    <div className="relative">
       {/* Background layer */}
       {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
         <div
@@ -598,7 +600,7 @@ export default function AssetRenderer({
           boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
           transition: isCopied ? "box-shadow 0.3s ease" : undefined,
         }}
-        className='text-[var(--accent)]'
+        className="text-[var(--accent)]"
       >
         <Icon
           size={Math.min(

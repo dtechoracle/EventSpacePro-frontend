@@ -27,7 +27,11 @@ function Tooltip({ children, content, position = "top" }: TooltipProps) {
       <AnimatePresence>
         {isVisible && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.8, y: position === "top" ? 10 : -10 }}
+            initial={{
+              opacity: 0,
+              scale: 0.8,
+              y: position === "top" ? 10 : -10,
+            }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.8, y: position === "top" ? 10 : -10 }}
             transition={{ duration: 0.15 }}
@@ -50,20 +54,30 @@ function Tooltip({ children, content, position = "top" }: TooltipProps) {
   );
 }
 
-
-interface BarProps{
-  setShowAssetsModal: React.Dispatch<React.SetStateAction<boolean>>
+interface BarProps {
+  setShowAssetsModal: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-export default function BottomToolbar({setShowAssetsModal}: BarProps) {
+export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
   const tools = useToolbarTools();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const { isPenMode, isWallMode, setPenMode, setWallMode, wallDrawingMode, setWallDrawingMode, finishWallDrawing, cancelWallDrawing, currentWallSegments, setShapeMode } = useSceneStore();
+  const {
+    isPenMode,
+    isWallMode,
+    setPenMode,
+    setWallMode,
+    wallDrawingMode,
+    setWallDrawingMode,
+    finishWallDrawing,
+    cancelWallDrawing,
+    currentWallSegments,
+    setShapeMode,
+  } = useSceneStore();
 
-  // Example states to toggle
-  const [isPreviewOn, setIsPreviewOn] = useState(false);
-  const [isGridVisible, setIsGridVisible] = useState(true);
-  const [isEditMode, setIsEditMode] = useState(false);
+  // Example states to toggle (keeping for future use)
+  // const [isPreviewOn, setIsPreviewOn] = useState(false);
+  // const [isGridVisible, setIsGridVisible] = useState(true);
+  // const [isEditMode, setIsEditMode] = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -77,26 +91,26 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
       case "rectangular-select":
         console.log("Rectangular selection mode activated");
         break;
-      
+
       // Assets
       case "open-assets":
         setShowAssetsModal(true);
         break;
-      
+
       // Shape tools
       case "rectangle":
-        setShapeMode('rectangle');
+        setShapeMode("rectangle");
         break;
       case "circle":
-        setShapeMode('ellipse');
+        setShapeMode("ellipse");
         break;
       case "arrow":
-        setShapeMode('line');
+        setShapeMode("line");
         break;
       case "polygon":
         console.log("Polygon tool activated");
         break;
-      
+
       // Drawing tools
       case "draw-line":
         setPenMode(!isPenMode);
@@ -121,10 +135,12 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
         // Add text at center of canvas
         const canvas = useSceneStore.getState().canvas;
         if (canvas) {
-          useSceneStore.getState().addAsset("text", canvas.width / 2, canvas.height / 2);
+          useSceneStore
+            .getState()
+            .addAsset("text", canvas.width / 2, canvas.height / 2);
         }
         break;
-      
+
       // Modify tools
       case "trim":
         console.log("Trim tool activated");
@@ -150,7 +166,7 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
       case "array":
         console.log("Array objects");
         break;
-      
+
       // Annotation tools
       case "label-arrow":
         console.log("Label with arrow tool activated");
@@ -161,7 +177,7 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
       case "text-annotation":
         console.log("Text annotation tool activated");
         break;
-      
+
       // Snapping tools
       case "snap-toggle":
         console.log("Toggle snapping mode");
@@ -184,12 +200,12 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
       case "snap-grid":
         console.log("Snap to grid");
         break;
-      
+
       // Export
       case "export-project":
         console.log("Exporting project...");
         break;
-      
+
       default:
         console.log("Clicked:", option.id);
     }
@@ -225,15 +241,15 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
           exit={{ opacity: 0, y: 20 }}
           className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap"
         >
-          {currentWallSegments.length === 0 
-            ? "Click to start wall segment" 
-            : currentWallSegments.length === 1 
-              ? "Click to continue wall or finish" 
-              : `Wall with ${currentWallSegments.length} segments - Click to continue or finish`}
+          {currentWallSegments.length === 0
+            ? "Click to start wall segment"
+            : currentWallSegments.length === 1
+            ? "Click to continue wall or finish"
+            : `Wall with ${currentWallSegments.length} segments - Click to continue or finish`}
           <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-blue-600"></div>
         </motion.div>
       )}
-      
+
       <motion.div
         ref={containerRef}
         initial={{ y: 100, opacity: 0 }}
@@ -249,9 +265,11 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
                 whileTap={{ scale: 0.95 }}
                 whileHover={{ scale: 1.03 }}
                 className={`w-8 h-8 flex items-center justify-center rounded-md ${
-                  (tool.options.some(opt => opt.id === "draw-line") && isPenMode) || 
-                  (tool.options.some(opt => opt.id === "draw-wall") && (isWallMode || wallDrawingMode))
-                    ? "bg-green-600 text-white" 
+                  (tool.options.some((opt) => opt.id === "draw-line") &&
+                    isPenMode) ||
+                  (tool.options.some((opt) => opt.id === "draw-wall") &&
+                    (isWallMode || wallDrawingMode))
+                    ? "bg-green-600 text-white"
                     : "bg-[var(--accent)] text-white"
                 }`}
                 aria-expanded={openIndex === index}
@@ -284,14 +302,20 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
                       <li
                         key={option.id}
                         className={`px-2 py-1.5 rounded hover:bg-gray-100 cursor-pointer flex items-center justify-between ${
-                          (option.id === "draw-line" && isPenMode) || (option.id === "draw-wall" && (isWallMode || wallDrawingMode)) ? "bg-green-100 text-green-800" : ""
+                          (option.id === "draw-line" && isPenMode) ||
+                          (option.id === "draw-wall" &&
+                            (isWallMode || wallDrawingMode))
+                            ? "bg-green-100 text-green-800"
+                            : ""
                         }`}
                         onClick={() => handleOptionClick(option)}
                       >
                         <span>{option.label}</span>
-                        {(option.id === "draw-line" && isPenMode) || (option.id === "draw-wall" && (isWallMode || wallDrawingMode)) && (
-                          <div className="w-2 h-2 bg-green-600 rounded-full"></div>
-                        )}
+                        {(option.id === "draw-line" && isPenMode) ||
+                          (option.id === "draw-wall" &&
+                            (isWallMode || wallDrawingMode) && (
+                              <div className="w-2 h-2 bg-green-600 rounded-full"></div>
+                            ))}
                       </li>
                     ))}
                   </ul>
@@ -309,4 +333,3 @@ export default function BottomToolbar({setShowAssetsModal}: BarProps) {
     </div>
   );
 }
-
