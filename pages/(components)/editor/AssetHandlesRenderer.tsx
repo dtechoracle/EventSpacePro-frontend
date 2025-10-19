@@ -151,10 +151,25 @@ export default function AssetHandlesRenderer({
             cursor: "grab",
             zIndex: 10,
             transform: "translate(-50%, -50%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
           className="hover:bg-blue-600 transition-colors"
           title="Rotate"
-        />
+        >
+          {/* Rotation icon - curved arrow */}
+          <svg
+            width="8"
+            height="8"
+            viewBox="0 0 16 16"
+            fill="white"
+            style={{ pointerEvents: "none" }}
+          >
+            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
+            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
+          </svg>
+        </div>
       </>
     );
   } else if (asset.type === "line") {
@@ -282,10 +297,25 @@ export default function AssetHandlesRenderer({
             cursor: "grab",
             zIndex: 10,
             transform: "translate(-50%, -50%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
           className="hover:bg-blue-600 transition-colors"
           title="Rotate"
-        />
+        >
+          {/* Rotation icon - curved arrow */}
+          <svg
+            width="8"
+            height="8"
+            viewBox="0 0 16 16"
+            fill="white"
+            style={{ pointerEvents: "none" }}
+          >
+            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
+            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
+          </svg>
+        </div>
       </>
     );
   } else if (asset.type === "double-line") {
@@ -417,10 +447,25 @@ export default function AssetHandlesRenderer({
             cursor: "grab",
             zIndex: 10,
             transform: "translate(-50%, -50%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
           className="hover:bg-blue-600 transition-colors"
           title="Rotate"
-        />
+        >
+          {/* Rotation icon - curved arrow */}
+          <svg
+            width="8"
+            height="8"
+            viewBox="0 0 16 16"
+            fill="white"
+            style={{ pointerEvents: "none" }}
+          >
+            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
+            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
+          </svg>
+        </div>
       </>
     );
   } else if (asset.type === "drawn-line") {
@@ -548,10 +593,25 @@ export default function AssetHandlesRenderer({
             cursor: "grab",
             zIndex: 10,
             transform: "translate(-50%, -50%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
           className="hover:bg-blue-600 transition-colors"
           title="Rotate"
-        />
+        >
+          {/* Rotation icon - curved arrow */}
+          <svg
+            width="8"
+            height="8"
+            viewBox="0 0 16 16"
+            fill="white"
+            style={{ pointerEvents: "none" }}
+          >
+            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
+            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
+          </svg>
+        </div>
       </>
     );
   } else if (asset.type === "wall-segments") {
@@ -681,10 +741,25 @@ export default function AssetHandlesRenderer({
             cursor: "grab",
             zIndex: 10,
             transform: "translate(-50%, -50%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
           className="hover:bg-blue-600 transition-colors"
           title="Rotate"
-        />
+        >
+          {/* Rotation icon - curved arrow */}
+          <svg
+            width="8"
+            height="8"
+            viewBox="0 0 16 16"
+            fill="white"
+            style={{ pointerEvents: "none" }}
+          >
+            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
+            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
+          </svg>
+        </div>
       </>
     );
   } else if (asset.type === "text") {
@@ -815,10 +890,25 @@ export default function AssetHandlesRenderer({
             cursor: "grab",
             zIndex: 10,
             transform: "translate(-50%, -50%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
           className="hover:bg-blue-600 transition-colors"
           title="Rotate"
-        />
+        >
+          {/* Rotation icon - curved arrow */}
+          <svg
+            width="8"
+            height="8"
+            viewBox="0 0 16 16"
+            fill="white"
+            style={{ pointerEvents: "none" }}
+          >
+            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
+            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
+          </svg>
+        </div>
       </>
     );
   } else {
@@ -947,10 +1037,25 @@ export default function AssetHandlesRenderer({
             cursor: "grab",
             zIndex: 10,
             transform: "translate(-50%, -50%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
           className="hover:bg-blue-600 transition-colors"
           title="Rotate"
-        />
+        >
+          {/* Rotation icon - curved arrow */}
+          <svg
+            width="8"
+            height="8"
+            viewBox="0 0 16 16"
+            fill="white"
+            style={{ pointerEvents: "none" }}
+          >
+            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
+            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
+          </svg>
+        </div>
       </>
     );
   }

@@ -8,6 +8,7 @@ import WallRendering from "./WallRendering";
 type AssetRendererProps = {
   asset: AssetInstance;
   isSelected: boolean;
+  isMultiSelected: boolean;
   isCopied: boolean;
   leftPx: number;
   topPx: number;
@@ -30,6 +31,7 @@ type AssetRendererProps = {
 export default function AssetRenderer({
   asset,
   isSelected,
+  isMultiSelected,
   isCopied,
   leftPx,
   topPx,
@@ -65,7 +67,7 @@ export default function AssetRenderer({
               width: (asset.width ?? 50) * asset.scale,
               height: (asset.height ?? 50) * asset.scale,
               backgroundColor: asset.backgroundColor,
-              borderRadius: asset.type === "circle" ? "50%" : "0%",
+              borderRadius: "0%",
               transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
               zIndex: (asset.zIndex || 0) - 1,
             }}
@@ -85,7 +87,7 @@ export default function AssetRenderer({
             border: `${asset.strokeWidth ?? 2}px solid ${
               asset.strokeColor ?? "#000000"
             }`,
-            borderRadius: asset.type === "circle" ? "50%" : "0%",
+            borderRadius: "0%",
             transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
             cursor: "move",
             zIndex: asset.zIndex || 0,
@@ -94,8 +96,26 @@ export default function AssetRenderer({
           }}
         />
 
+        {/* Multi-select indicator */}
+        {isMultiSelected && !isSelected && (
+          <div
+            style={{
+              position: "absolute",
+              left: leftPx,
+              top: topPx,
+              width: (asset.width ?? 50) * asset.scale,
+              height: (asset.height ?? 50) * asset.scale,
+              border: "2px dashed #3B82F6",
+              borderRadius: "0px",
+              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+              pointerEvents: "none",
+              zIndex: (asset.zIndex || 0) + 1,
+            }}
+          />
+        )}
+
         {/* Handles */}
-        {isSelected && (
+        {(isSelected || isMultiSelected) && (
           <AssetHandlesRenderer
             asset={asset}
             leftPx={leftPx}
@@ -146,8 +166,26 @@ export default function AssetRenderer({
           }}
         />
 
+        {/* Multi-select indicator */}
+        {isMultiSelected && !isSelected && (
+          <div
+            style={{
+              position: "absolute",
+              left: leftPx,
+              top: topPx,
+              width: (asset.width ?? 100) * asset.scale,
+              height: (asset.strokeWidth ?? 2) * asset.scale,
+              border: "2px dashed #3B82F6",
+              borderRadius: "0px",
+              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+              pointerEvents: "none",
+              zIndex: (asset.zIndex || 0) + 1,
+            }}
+          />
+        )}
+
         {/* Handles */}
-        {isSelected && (
+        {(isSelected || isMultiSelected) && (
           <AssetHandlesRenderer
             asset={asset}
             leftPx={leftPx}
@@ -263,8 +301,26 @@ export default function AssetRenderer({
           )}
         </div>
 
+        {/* Multi-select indicator */}
+        {isMultiSelected && !isSelected && (
+          <div
+            style={{
+              position: "absolute",
+              left: leftPx,
+              top: topPx,
+              width: (asset.width ?? 50) * asset.scale,
+              height: (asset.height ?? 50) * asset.scale,
+              border: "2px dashed #3B82F6",
+              borderRadius: "0px",
+              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+              pointerEvents: "none",
+              zIndex: (asset.zIndex || 0) + 1,
+            }}
+          />
+        )}
+
         {/* Handles */}
-        {isSelected && (
+        {(isSelected || isMultiSelected) && (
           <AssetHandlesRenderer
             asset={asset}
             leftPx={leftPx}
@@ -333,8 +389,26 @@ export default function AssetRenderer({
           </svg>
         </div>
 
+        {/* Multi-select indicator */}
+        {isMultiSelected && !isSelected && (
+          <div
+            style={{
+              position: "absolute",
+              left: leftPx,
+              top: topPx,
+              width: (asset.width ?? 50) * asset.scale,
+              height: (asset.height ?? 50) * asset.scale,
+              border: "2px dashed #3B82F6",
+              borderRadius: "0px",
+              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+              pointerEvents: "none",
+              zIndex: (asset.zIndex || 0) + 1,
+            }}
+          />
+        )}
+
         {/* Handles */}
-        {isSelected && (
+        {(isSelected || isMultiSelected) && (
           <AssetHandlesRenderer
             asset={asset}
             leftPx={leftPx}
@@ -384,8 +458,26 @@ export default function AssetRenderer({
           <WallRendering asset={asset} leftPx={0} topPx={0} totalRotation={0} />
         </div>
 
+        {/* Multi-select indicator */}
+        {isMultiSelected && !isSelected && (
+          <div
+            style={{
+              position: "absolute",
+              left: leftPx,
+              top: topPx,
+              width: (asset.width ?? 50) * asset.scale,
+              height: (asset.height ?? 50) * asset.scale,
+              border: "2px dashed #3B82F6",
+              borderRadius: "0px",
+              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+              pointerEvents: "none",
+              zIndex: (asset.zIndex || 0) + 1,
+            }}
+          />
+        )}
+
         {/* Handles */}
-        {isSelected && (
+        {(isSelected || isMultiSelected) && (
           <AssetHandlesRenderer
             asset={asset}
             leftPx={leftPx}
@@ -489,7 +581,7 @@ export default function AssetRenderer({
         )}
 
         {/* Handles */}
-        {isSelected && !isEditing && (
+        {(isSelected || isMultiSelected) && !isEditing && (
           <AssetHandlesRenderer
             asset={asset}
             leftPx={leftPx}
@@ -547,8 +639,26 @@ export default function AssetRenderer({
           />
         </div>
 
+        {/* Multi-select indicator */}
+        {isMultiSelected && !isSelected && (
+          <div
+            style={{
+              position: "absolute",
+              left: leftPx,
+              top: topPx,
+              width: (asset.width ?? 50) * asset.scale,
+              height: (asset.height ?? 50) * asset.scale,
+              border: "2px dashed #3B82F6",
+              borderRadius: "0px",
+              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+              pointerEvents: "none",
+              zIndex: (asset.zIndex || 0) + 1,
+            }}
+          />
+        )}
+
         {/* Handles */}
-        {isSelected && (
+        {(isSelected || isMultiSelected) && (
           <AssetHandlesRenderer
             asset={asset}
             leftPx={leftPx}
@@ -611,7 +721,7 @@ export default function AssetRenderer({
       </div>
 
       {/* Handles */}
-      {isSelected && (
+      {(isSelected || isMultiSelected) && (
         <AssetHandlesRenderer
           asset={asset}
           leftPx={leftPx}

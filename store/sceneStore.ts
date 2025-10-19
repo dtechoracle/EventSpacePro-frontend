@@ -45,6 +45,11 @@ export type AssetInstance = {
 
   // Universal background properties
   backgroundColor?: string; // for all assets, default transparent
+
+  // Group properties
+  isGroup?: boolean; // indicates if this asset is a group
+  groupAssets?: AssetInstance[]; // assets contained within this group
+  groupExpanded?: boolean; // whether the group is expanded in the UI
 };
 
 export type CanvasData = {
@@ -77,6 +82,8 @@ type SceneState = {
   hasUnsavedChanges: boolean;
   showGrid: boolean;
   showDebugOutlines?: boolean;
+  gridSize: number; // Grid size in mm
+  snapToGridEnabled: boolean; // Whether to snap to grid
   // Shape drawing
   shapeMode: 'rectangle' | 'ellipse' | 'line' | null;
   shapeStart: { x: number; y: number } | null;
@@ -102,6 +109,36 @@ type SceneState = {
   // Copy/paste state
   clipboard: AssetInstance | null;
 
+  // Undo/Redo state
+  history: AssetInstance[][];
+  historyIndex: number;
+
+  // Smart duplication state
+  lastDuplicatedAsset: AssetInstance | null;
+  duplicationPattern: {
+    type: 'linear' | 'circular' | 'grid' | null;
+    center?: { x: number; y: number };
+    angle?: number;
+    distance?: number;
+    direction?: { x: number; y: number };
+  } | null;
+
+  // Multi-select state
+  selectedAssetIds: string[];
+  isRectangularSelecting: boolean;
+  isRectangularSelectionMode: boolean;
+  rectangularSelectionStart: { x: number; y: number } | null;
+  rectangularSelectionEnd: { x: number; y: number } | null;
+  selectionBox: {
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+  } | null;
+
+  // Group management state
+  createGroupFromSelection: boolean;
+
   // Methods
   setCanvas: (size: PaperSize) => void;
   addAsset: (type: string, x: number, y: number) => void;
@@ -111,6 +148,9 @@ type SceneState = {
   selectAsset: (id: string | null) => void;
   toggleGrid: () => void;
   toggleDebugOutlines: () => void;
+  setGridSize: (size: number) => void;
+  toggleSnapToGrid: () => void;
+  snapToGrid: (x: number, y: number) => { x: number; y: number };
   setShapeMode: (mode: 'rectangle' | 'ellipse' | 'line' | null) => void;
   startShape: (start: { x: number; y: number }) => void;
   updateShapeTempEnd: (end: { x: number; y: number }) => void;
@@ -146,6 +186,33 @@ type SceneState = {
   copyAsset: (id: string) => void;
   pasteAsset: (offsetX?: number, offsetY?: number) => void;
   clearClipboard: () => void;
+
+  // Undo/Redo methods
+  undo: () => void;
+  redo: () => void;
+  saveToHistory: () => void;
+
+  // Smart duplication methods
+  smartDuplicate: (id: string) => void;
+  detectDuplicationPattern: (originalAsset: AssetInstance, duplicatedAsset: AssetInstance) => void;
+
+  // Multi-select methods
+  startRectangularSelection: (startX: number, startY: number) => void;
+  updateRectangularSelection: (endX: number, endY: number) => void;
+  finishRectangularSelection: () => void;
+  selectMultipleAssets: (ids: string[]) => void;
+  clearSelection: () => void;
+  moveSelectedAssets: (deltaX: number, deltaY: number) => void;
+  duplicateSelectedAssets: () => void;
+  deleteSelectedAssets: () => void;
+  setRectangularSelectionMode: (enabled: boolean) => void;
+  startRectangularSelectionDrag: (startX: number, startY: number) => void;
+  updateRectangularSelectionDrag: (endX: number, endY: number) => void;
+  finishRectangularSelectionDrag: () => void;
+  setCreateGroupFromSelection: (enabled: boolean) => void;
+  createGroupFromSelectedAssets: () => void;
+  groupSelectedAssets: () => void;
+  ungroupAsset: (groupId: string) => void;
 };
 
 export const useSceneStore = create<SceneState>()(
@@ -160,6 +227,8 @@ export const useSceneStore = create<SceneState>()(
       hasHydrated: false,
       showGrid: false,
       showDebugOutlines: false,
+      gridSize: 10, // Default 10mm grid
+      snapToGridEnabled: false,
       shapeMode: null,
       shapeStart: null,
       shapeTempEnd: null,
@@ -175,6 +244,17 @@ export const useSceneStore = create<SceneState>()(
       firstHorizontalWallLength: null,
       wallDraftNodes: [],
       clipboard: null,
+      history: [[]],
+      historyIndex: 0,
+      lastDuplicatedAsset: null,
+      duplicationPattern: null,
+      selectedAssetIds: [],
+      isRectangularSelecting: false,
+      isRectangularSelectionMode: false,
+      rectangularSelectionStart: null,
+      rectangularSelectionEnd: null,
+      selectionBox: null,
+      createGroupFromSelection: false,
 
       setCanvas: (size) => {
         const { width, height } = PAPER_SIZES[size];
@@ -201,18 +281,18 @@ export const useSceneStore = create<SceneState>()(
         // Default properties for shapes
         const shapeDefaults: Partial<AssetInstance> =
           type === "square" || type === "circle"
-            ? { width: 50, height: 50, backgroundColor: "#FFFFFF" }
+            ? { width: 50, height: 50, backgroundColor: "transparent" }
             : type === "line"
-              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#000000", backgroundColor: "#FFFFFF" }
+              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#000000", backgroundColor: "transparent" }
               : type === "double-line"
-                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#000000", lineGap: 8, lineColor: "#000000", backgroundColor: "#FFFFFF" }
+                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#000000", lineGap: 8, lineColor: "#000000", backgroundColor: "transparent" }
                 : type === "drawn-line"
-                  ? { strokeWidth: 2, strokeColor: "#000000", backgroundColor: "#FFFFFF" }
+                  ? { strokeWidth: 2, strokeColor: "#000000", backgroundColor: "transparent" }
                   : type === "wall-segments"
-                    ? { wallThickness: 1, wallGap: 8, lineColor: "#000000", backgroundColor: "#FFFFFF" }
+                    ? { wallThickness: 1, wallGap: 8, lineColor: "#000000", backgroundColor: "transparent" }
                     : type === "text"
-                      ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: "#FFFFFF" }
-                      : { width: 24, height: 24, backgroundColor: "#FFFFFF" }; // Default for icons
+                      ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: "transparent" }
+                      : { width: 24, height: 24, backgroundColor: "transparent" }; // Default for icons
 
         set({
           assets: [
@@ -222,6 +302,9 @@ export const useSceneStore = create<SceneState>()(
           selectedAssetId: id,
           hasUnsavedChanges: true,
         });
+        
+        // Save to history after adding asset
+        setTimeout(() => get().saveToHistory(), 0);
       },
 
       addAssetObject: (assetObj: AssetInstance) => {
@@ -245,12 +328,62 @@ export const useSceneStore = create<SceneState>()(
             hasUnsavedChanges: true,
           };
         });
+        
+        // Save to history after adding asset object
+        setTimeout(() => get().saveToHistory(), 0);
       },
 
       updateAsset: (id, updates) => {
         const state = get();
-        const updatedAssets = state.assets.map((a) => (a.id === id ? { ...a, ...updates } : a));
+        const updatedAssets = state.assets.map((a) => {
+          if (a.id === id) {
+            const updatedAsset = { ...a, ...updates };
+            
+            // If this is a group and we're updating scale/width/height/rotation, update all child assets
+            if (a.isGroup && a.groupAssets && (updates.scale !== undefined || updates.width !== undefined || updates.height !== undefined || updates.rotation !== undefined)) {
+              let scaleRatio = 1;
+              
+              if (updates.scale !== undefined) {
+                scaleRatio = updates.scale / a.scale;
+              } else if (updates.width !== undefined) {
+                scaleRatio = a.width ? updates.width / a.width : 1;
+              } else if (updates.height !== undefined) {
+                scaleRatio = a.height ? updates.height / a.height : 1;
+              }
+              
+              const updatedGroupAssets = a.groupAssets.map(childAsset => {
+                let updatedChild = { ...childAsset };
+                
+                // Apply scaling if needed
+                if (scaleRatio !== 1) {
+                  updatedChild = {
+                    ...updatedChild,
+                    scale: childAsset.scale * scaleRatio,
+                    x: childAsset.x * scaleRatio,
+                    y: childAsset.y * scaleRatio,
+                  };
+                }
+                
+                // Don't apply rotation to child assets - they should rotate as a group
+                // The group rotation will be applied during rendering
+                
+                return updatedChild;
+              });
+              
+              return {
+                ...updatedAsset,
+                groupAssets: updatedGroupAssets,
+              };
+            }
+            
+            return updatedAsset;
+          }
+          return a;
+        });
         set({ assets: updatedAssets, hasUnsavedChanges: true });
+        
+        // Save to history after updating asset
+        setTimeout(() => get().saveToHistory(), 0);
 
         // Automatic wall opening for double doors when moved/scaled
         const moved = updates.x !== undefined || updates.y !== undefined || updates.rotation !== undefined || updates.width !== undefined || updates.scale !== undefined;
@@ -311,18 +444,38 @@ export const useSceneStore = create<SceneState>()(
         }
       },
 
-      removeAsset: (id) =>
+      removeAsset: (id) => {
         set((state) => ({
           assets: state.assets.filter((a) => a.id !== id),
           selectedAssetId: state.selectedAssetId === id ? null : state.selectedAssetId,
           hasUnsavedChanges: true,
-        })),
+        }));
+        
+        // Save to history after removing asset
+        setTimeout(() => get().saveToHistory(), 0);
+      },
 
       selectAsset: (id) => set({ selectedAssetId: id }),
 
       toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
 
       toggleDebugOutlines: () => set((state) => ({ showDebugOutlines: !state.showDebugOutlines })),
+
+      setGridSize: (size: number) => set({ gridSize: size }),
+
+      toggleSnapToGrid: () => set((state) => ({ snapToGridEnabled: !state.snapToGridEnabled })),
+
+      // Grid snapping utility
+      snapToGrid: (x: number, y: number) => {
+        const state = get();
+        if (!state.snapToGridEnabled) return { x, y };
+        
+        const gridSize = state.gridSize;
+        return {
+          x: Math.round(x / gridSize) * gridSize,
+          y: Math.round(y / gridSize) * gridSize,
+        };
+      },
 
       setShapeMode: (mode) => set({ shapeMode: mode, shapeStart: null, shapeTempEnd: null }),
       startShape: (start) => set({ shapeStart: start, shapeTempEnd: null }),
@@ -1210,9 +1363,582 @@ export const useSceneStore = create<SceneState>()(
           selectedAssetId: newAsset.id,
           hasUnsavedChanges: true,
         });
+        
+        // Save to history after pasting asset
+        setTimeout(() => get().saveToHistory(), 0);
       },
 
       clearClipboard: () => set({ clipboard: null }),
+
+      // Undo/Redo methods
+      saveToHistory: () => {
+        const state = get();
+        const newHistory = state.history.slice(0, state.historyIndex + 1);
+        newHistory.push([...state.assets]);
+        
+        set({
+          history: newHistory,
+          historyIndex: newHistory.length - 1,
+        });
+      },
+
+      undo: () => {
+        const state = get();
+        if (state.historyIndex > 0) {
+          const newIndex = state.historyIndex - 1;
+          set({
+            assets: [...state.history[newIndex]],
+            historyIndex: newIndex,
+            hasUnsavedChanges: true,
+          });
+        }
+      },
+
+      redo: () => {
+        const state = get();
+        if (state.historyIndex < state.history.length - 1) {
+          const newIndex = state.historyIndex + 1;
+          set({
+            assets: [...state.history[newIndex]],
+            historyIndex: newIndex,
+            hasUnsavedChanges: true,
+          });
+        }
+      },
+
+      // Smart duplication methods
+      smartDuplicate: (id) => {
+        const state = get();
+        const originalAsset = state.assets.find(a => a.id === id);
+        if (!originalAsset) return;
+
+        // If we have a pattern and this is the same type of asset, continue the pattern
+        if (state.duplicationPattern && state.lastDuplicatedAsset && 
+            originalAsset.type === state.lastDuplicatedAsset.type) {
+          
+          let newX = originalAsset.x;
+          let newY = originalAsset.y;
+          
+          switch (state.duplicationPattern.type) {
+            case 'linear':
+              if (state.duplicationPattern.direction) {
+                newX += state.duplicationPattern.direction.x;
+                newY += state.duplicationPattern.direction.y;
+              }
+              break;
+              
+            case 'circular':
+              if (state.duplicationPattern.center && state.duplicationPattern.angle !== undefined) {
+                const angle = state.duplicationPattern.angle;
+                const distance = state.duplicationPattern.distance || 100;
+                newX = state.duplicationPattern.center.x + Math.cos(angle) * distance;
+                newY = state.duplicationPattern.center.y + Math.sin(angle) * distance;
+                // Update pattern for next duplication
+                set({
+                  duplicationPattern: {
+                    ...state.duplicationPattern,
+                    angle: angle + (Math.PI / 6) // 30 degree increments
+                  }
+                });
+              }
+              break;
+              
+            case 'grid':
+              // Simple grid pattern - could be enhanced
+              newX += 50;
+              break;
+          }
+          
+          // Create the duplicated asset
+          const newAsset: AssetInstance = {
+            ...originalAsset,
+            id: `${originalAsset.type}-${Date.now()}`,
+            x: newX,
+            y: newY,
+            zIndex: Math.max(...state.assets.map(a => a.zIndex || 0)) + 1,
+          };
+          
+          set({
+            assets: [...state.assets, newAsset],
+            selectedAssetId: newAsset.id,
+            lastDuplicatedAsset: newAsset,
+            hasUnsavedChanges: true,
+          });
+          
+          // Save to history
+          setTimeout(() => get().saveToHistory(), 0);
+          return;
+        }
+        
+        // Fallback to regular duplication
+        const newAsset: AssetInstance = {
+          ...originalAsset,
+          id: `${originalAsset.type}-${Date.now()}`,
+          x: originalAsset.x + 20,
+          y: originalAsset.y + 20,
+          zIndex: Math.max(...state.assets.map(a => a.zIndex || 0)) + 1,
+        };
+        
+        set({
+          assets: [...state.assets, newAsset],
+          selectedAssetId: newAsset.id,
+          lastDuplicatedAsset: newAsset,
+          hasUnsavedChanges: true,
+        });
+        
+        // Save to history
+        setTimeout(() => get().saveToHistory(), 0);
+      },
+
+      detectDuplicationPattern: (originalAsset, duplicatedAsset) => {
+        const state = get();
+        const dx = duplicatedAsset.x - originalAsset.x;
+        const dy = duplicatedAsset.y - originalAsset.y;
+        const distance = Math.hypot(dx, dy);
+        
+        // Detect circular pattern around a center point
+        const nearbyAssets = state.assets.filter(asset => 
+          asset.id !== originalAsset.id && 
+          asset.id !== duplicatedAsset.id &&
+          Math.hypot(asset.x - originalAsset.x, asset.y - originalAsset.y) < 300
+        );
+        
+        if (nearbyAssets.length > 0) {
+          // Try to find a center point that makes sense
+          const potentialCenters = nearbyAssets.map(asset => ({
+            x: asset.x,
+            y: asset.y,
+            distance: Math.hypot(asset.x - originalAsset.x, asset.y - originalAsset.y)
+          }));
+          
+          // Find the center that's most equidistant from both assets
+          let bestCenter = null;
+          let bestScore = Infinity;
+          
+          for (const center of potentialCenters) {
+            const dist1 = Math.hypot(originalAsset.x - center.x, originalAsset.y - center.y);
+            const dist2 = Math.hypot(duplicatedAsset.x - center.x, duplicatedAsset.y - center.y);
+            const score = Math.abs(dist1 - dist2);
+            
+            if (score < bestScore && score < 30) {
+              bestScore = score;
+              bestCenter = center;
+            }
+          }
+          
+          if (bestCenter) {
+            // Circular pattern detected
+            const angle = Math.atan2(duplicatedAsset.y - bestCenter.y, duplicatedAsset.x - bestCenter.x);
+            const distance = Math.hypot(originalAsset.x - bestCenter.x, originalAsset.y - bestCenter.y);
+            
+            set({
+              duplicationPattern: {
+                type: 'circular',
+                center: { x: bestCenter.x, y: bestCenter.y },
+                angle: angle + (Math.PI / 6), // Next position (30 degrees)
+                distance
+              }
+            });
+            return;
+          }
+        }
+        
+        // Detect linear pattern
+        if (Math.abs(dx) > Math.abs(dy)) {
+          // Horizontal line
+          set({
+            duplicationPattern: {
+              type: 'linear',
+              direction: { x: dx, y: 0 },
+              distance
+            }
+          });
+        } else if (Math.abs(dy) > Math.abs(dx)) {
+          // Vertical line
+          set({
+            duplicationPattern: {
+              type: 'linear',
+              direction: { x: 0, y: dy },
+              distance
+            }
+          });
+        } else {
+          // Diagonal line
+          set({
+            duplicationPattern: {
+              type: 'linear',
+              direction: { x: dx, y: dy },
+              distance
+            }
+          });
+        }
+      },
+
+      // Multi-select methods
+      startRectangularSelection: (startX, startY) => {
+        set({
+          isRectangularSelecting: true,
+          selectionBox: { startX, startY, endX: startX, endY: startY },
+          selectedAssetIds: [],
+        });
+      },
+
+      updateRectangularSelection: (endX, endY) => {
+        const state = get();
+        if (state.isRectangularSelecting && state.selectionBox) {
+          set({
+            selectionBox: { ...state.selectionBox, endX, endY },
+          });
+        }
+      },
+
+      finishRectangularSelection: () => {
+        const state = get();
+        if (!state.isRectangularSelecting || !state.selectionBox) return;
+
+        const { startX, startY, endX, endY } = state.selectionBox;
+        const minX = Math.min(startX, endX);
+        const maxX = Math.max(startX, endX);
+        const minY = Math.min(startY, endY);
+        const maxY = Math.max(startY, endY);
+
+        // Find assets that intersect with the selection box
+        const selectedIds = state.assets
+          .filter(asset => {
+            const assetLeft = asset.x - (asset.width || 24) * (asset.scale || 1) / 2;
+            const assetRight = asset.x + (asset.width || 24) * (asset.scale || 1) / 2;
+            const assetTop = asset.y - (asset.height || 24) * (asset.scale || 1) / 2;
+            const assetBottom = asset.y + (asset.height || 24) * (asset.scale || 1) / 2;
+
+            return !(assetRight < minX || assetLeft > maxX || assetBottom < minY || assetTop > maxY);
+          })
+          .map(asset => asset.id);
+
+        set({
+          isRectangularSelecting: false,
+          selectionBox: null,
+          selectedAssetIds: selectedIds,
+          selectedAssetId: selectedIds.length === 1 ? selectedIds[0] : null,
+        });
+      },
+
+      selectMultipleAssets: (ids) => {
+        set({
+          selectedAssetIds: ids,
+          selectedAssetId: ids.length === 1 ? ids[0] : null,
+        });
+      },
+
+      clearSelection: () => {
+        set({
+          selectedAssetIds: [],
+          selectedAssetId: null,
+        });
+      },
+
+      moveSelectedAssets: (deltaX, deltaY) => {
+        const state = get();
+        const updatedAssets = state.assets.map(asset => {
+          if (state.selectedAssetIds.includes(asset.id)) {
+            return { ...asset, x: asset.x + deltaX, y: asset.y + deltaY };
+          }
+          return asset;
+        });
+
+        set({
+          assets: updatedAssets,
+          hasUnsavedChanges: true,
+        });
+
+        // Save to history
+        setTimeout(() => get().saveToHistory(), 0);
+      },
+
+      duplicateSelectedAssets: () => {
+        const state = get();
+        if (state.selectedAssetIds.length === 0) return;
+
+        const duplicatedAssets: AssetInstance[] = [];
+        const offsetX = 20;
+        const offsetY = 20;
+
+        state.selectedAssetIds.forEach((id, index) => {
+          const originalAsset = state.assets.find(a => a.id === id);
+          if (originalAsset) {
+            const newAsset: AssetInstance = {
+              ...originalAsset,
+              id: `${originalAsset.type}-${Date.now()}-${index}`,
+              x: originalAsset.x + offsetX,
+              y: originalAsset.y + offsetY,
+              zIndex: Math.max(...state.assets.map(a => a.zIndex || 0)) + index + 1,
+            };
+            duplicatedAssets.push(newAsset);
+          }
+        });
+
+        set({
+          assets: [...state.assets, ...duplicatedAssets],
+          selectedAssetIds: duplicatedAssets.map(a => a.id),
+          selectedAssetId: duplicatedAssets.length === 1 ? duplicatedAssets[0].id : null,
+          hasUnsavedChanges: true,
+        });
+
+        // Save to history
+        setTimeout(() => get().saveToHistory(), 0);
+      },
+
+      deleteSelectedAssets: () => {
+        const state = get();
+        if (state.selectedAssetIds.length === 0) return;
+
+        const remainingAssets = state.assets.filter(asset => 
+          !state.selectedAssetIds.includes(asset.id)
+        );
+
+        set({
+          assets: remainingAssets,
+          selectedAssetIds: [],
+          selectedAssetId: null,
+          hasUnsavedChanges: true,
+        });
+
+        // Save to history
+        setTimeout(() => get().saveToHistory(), 0);
+      },
+
+      setRectangularSelectionMode: (enabled) => {
+        console.log("Store: setRectangularSelectionMode called with enabled:", enabled);
+        set({ 
+          isRectangularSelectionMode: enabled,
+          createGroupFromSelection: enabled, // Enable group creation when using rectangular selection
+        });
+        console.log("Store: After setting, createGroupFromSelection:", get().createGroupFromSelection);
+      },
+
+      startRectangularSelectionDrag: (startX, startY) => {
+        console.log("Store: Starting rectangular selection drag at:", startX, startY);
+        set({
+          rectangularSelectionStart: { x: startX, y: startY },
+          rectangularSelectionEnd: { x: startX, y: startY },
+          isRectangularSelecting: true,
+        });
+      },
+
+      updateRectangularSelectionDrag: (endX, endY) => {
+        console.log("Store: Updating rectangular selection drag to:", endX, endY);
+        set({
+          rectangularSelectionEnd: { x: endX, y: endY },
+        });
+      },
+
+      finishRectangularSelectionDrag: () => {
+        console.log("Store: Finishing rectangular selection drag");
+        const state = get();
+        if (!state.rectangularSelectionStart || !state.rectangularSelectionEnd) {
+          console.log("Store: No start or end point, returning");
+          return;
+        }
+
+        const { rectangularSelectionStart, rectangularSelectionEnd } = state;
+        const minX = Math.min(rectangularSelectionStart.x, rectangularSelectionEnd.x);
+        const maxX = Math.max(rectangularSelectionStart.x, rectangularSelectionEnd.x);
+        const minY = Math.min(rectangularSelectionStart.y, rectangularSelectionEnd.y);
+        const maxY = Math.max(rectangularSelectionStart.y, rectangularSelectionEnd.y);
+
+        // Find assets that intersect with the selection box
+        console.log("Store: Selection box bounds:", { minX, maxX, minY, maxY });
+        console.log("Store: Available assets:", state.assets.length);
+        
+        const selectedIds = state.assets
+          .filter(asset => {
+            // Get asset dimensions based on type
+            let assetWidth = asset.width || 24;
+            let assetHeight = asset.height || 24;
+            
+            // Handle special cases for different asset types
+            if (asset.type === 'square' || asset.type === 'circle') {
+              assetWidth = asset.width || 50;
+              assetHeight = asset.height || 50;
+            } else if (asset.type === 'line') {
+              assetWidth = asset.width || 100;
+              assetHeight = asset.height || 2;
+            } else if (asset.type === 'double-line') {
+              assetWidth = asset.width || 2;
+              assetHeight = asset.height || 100;
+            } else if (asset.type === 'text') {
+              assetWidth = asset.width || 100;
+              assetHeight = asset.height || 20;
+            }
+            
+            // Apply scale
+            const scaledWidth = assetWidth * (asset.scale || 1);
+            const scaledHeight = assetHeight * (asset.scale || 1);
+            
+            // Calculate bounds
+            const assetLeft = asset.x - scaledWidth / 2;
+            const assetRight = asset.x + scaledWidth / 2;
+            const assetTop = asset.y - scaledHeight / 2;
+            const assetBottom = asset.y + scaledHeight / 2;
+
+            const intersects = !(assetRight < minX || assetLeft > maxX || assetBottom < minY || assetTop > maxY);
+            
+            console.log(`Store: Asset ${asset.id} (${asset.type}):`, {
+              position: { x: asset.x, y: asset.y },
+              originalSize: { width: assetWidth, height: assetHeight },
+              scaledSize: { width: scaledWidth, height: scaledHeight },
+              bounds: { left: assetLeft, right: assetRight, top: assetTop, bottom: assetBottom },
+              selectionBox: { minX, maxX, minY, maxY },
+              intersects
+            });
+
+            return intersects;
+          })
+          .map(asset => asset.id);
+
+        console.log("Store: Selected assets:", selectedIds.length, selectedIds);
+        console.log("Store: createGroupFromSelection:", state.createGroupFromSelection);
+        
+        // If we have multiple assets selected, automatically create a group
+        if (selectedIds.length >= 2) {
+          console.log("Store: Auto-creating group from rectangular selection");
+          set({
+            isRectangularSelecting: false,
+            rectangularSelectionStart: null,
+            rectangularSelectionEnd: null,
+            selectedAssetIds: selectedIds,
+            selectedAssetId: null,
+          });
+          
+          // Create group from selected assets
+          setTimeout(() => {
+            console.log("Store: About to create group, selectedAssetIds:", get().selectedAssetIds);
+            get().createGroupFromSelectedAssets();
+          }, 0);
+        } else {
+          // Single asset or no assets - just select normally
+          set({
+            isRectangularSelecting: false,
+            rectangularSelectionStart: null,
+            rectangularSelectionEnd: null,
+            selectedAssetIds: selectedIds,
+            selectedAssetId: selectedIds.length === 1 ? selectedIds[0] : null,
+          });
+        }
+      },
+
+      setCreateGroupFromSelection: (enabled) => {
+        set({ createGroupFromSelection: enabled });
+      },
+
+      groupSelectedAssets: () => {
+        const state = get();
+        console.log("Store: groupSelectedAssets called with selectedAssetIds:", state.selectedAssetIds);
+        if (state.selectedAssetIds.length < 2) {
+          console.log("Store: Not enough assets to create group (need at least 2)");
+          return; // Need at least 2 assets to create a group
+        }
+        
+        // Get the selected assets
+        const selectedAssets = state.assets.filter(asset => 
+          state.selectedAssetIds.includes(asset.id)
+        );
+
+        if (selectedAssets.length === 0) return;
+
+        // Calculate group bounds with proper asset dimensions
+        const minX = Math.min(...selectedAssets.map(a => {
+          const assetWidth = (a.width || 24) * (a.scale || 1);
+          return a.x - assetWidth / 2;
+        }));
+        const maxX = Math.max(...selectedAssets.map(a => {
+          const assetWidth = (a.width || 24) * (a.scale || 1);
+          return a.x + assetWidth / 2;
+        }));
+        const minY = Math.min(...selectedAssets.map(a => {
+          const assetHeight = (a.height || 24) * (a.scale || 1);
+          return a.y - assetHeight / 2;
+        }));
+        const maxY = Math.max(...selectedAssets.map(a => {
+          const assetHeight = (a.height || 24) * (a.scale || 1);
+          return a.y + assetHeight / 2;
+        }));
+
+        const groupCenterX = (minX + maxX) / 2;
+        const groupCenterY = (minY + maxY) / 2;
+        const groupWidth = Math.max(50, maxX - minX); // Minimum width of 50mm
+        const groupHeight = Math.max(50, maxY - minY); // Minimum height of 50mm
+
+        // Create group asset
+        const groupId = `group-${Date.now()}`;
+        const groupAsset: AssetInstance = {
+          id: groupId,
+          type: 'group',
+          x: groupCenterX,
+          y: groupCenterY,
+          scale: 1,
+          rotation: 0,
+          zIndex: Math.max(...state.assets.map(a => a.zIndex || 0)) + 1,
+          width: groupWidth,
+          height: groupHeight,
+          isGroup: true,
+          groupAssets: selectedAssets.map(asset => ({
+            ...asset,
+            // Convert to relative positions within the group
+            x: asset.x - groupCenterX,
+            y: asset.y - groupCenterY,
+          })),
+          groupExpanded: false,
+          backgroundColor: 'transparent',
+        };
+
+        // Keep all assets and add group (don't remove individual assets)
+        console.log("Store: Creating group with ID:", groupId);
+        console.log("Store: Group contains assets:", groupAsset.groupAssets?.length);
+        console.log("Store: Total assets after group creation:", state.assets.length + 1);
+
+        set({
+          assets: [...state.assets, groupAsset],
+          selectedAssetIds: [groupId],
+          selectedAssetId: groupId,
+          hasUnsavedChanges: true,
+        });
+
+        // Save to history
+        setTimeout(() => get().saveToHistory(), 0);
+      },
+
+      createGroupFromSelectedAssets: () => {
+        // Use the new groupSelectedAssets method
+        get().groupSelectedAssets();
+      },
+
+      ungroupAsset: (groupId) => {
+        const state = get();
+        const groupAsset = state.assets.find(asset => asset.id === groupId);
+        
+        if (!groupAsset || !groupAsset.isGroup || !groupAsset.groupAssets) return;
+
+        // Convert group assets back to absolute positions
+        const ungroupedAssets = groupAsset.groupAssets.map(asset => ({
+          ...asset,
+          x: asset.x + groupAsset.x,
+          y: asset.y + groupAsset.y,
+          zIndex: Math.max(...state.assets.map(a => a.zIndex || 0)) + 1,
+        }));
+
+        // Remove group and add ungrouped assets
+        const remainingAssets = state.assets.filter(asset => asset.id !== groupId);
+        
+        set({
+          assets: [...remainingAssets, ...ungroupedAssets],
+          selectedAssetIds: ungroupedAssets.map(a => a.id),
+          selectedAssetId: ungroupedAssets[0]?.id || null,
+          hasUnsavedChanges: true,
+        });
+
+        // Save to history
+        setTimeout(() => get().saveToHistory(), 0);
+      },
     }),
     { name: "scene-storage" }
   )

@@ -25,6 +25,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
   const showGrid = useSceneStore((s) => s.showGrid);
   const toggleGrid = useSceneStore((s) => s.toggleGrid);
+  const gridSize = useSceneStore((s) => s.gridSize);
+  const setGridSize = useSceneStore((s) => s.setGridSize);
+  const snapToGridEnabled = useSceneStore((s) => s.snapToGridEnabled);
+  const toggleSnapToGrid = useSceneStore((s) => s.toggleSnapToGrid);
   // const addAsset = useSceneStore((s) => s.addAsset);
 
   // Wall drawing state
@@ -152,6 +156,53 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 </button>
               </div>
             </div>
+
+            {/* Grid Size */}
+            {showGrid && (
+              <div className="py-2">
+                <label className="block text-xs text-gray-600 mb-1">Grid Size</label>
+                <select 
+                  value={gridSize} 
+                  onChange={(e) => setGridSize(Number(e.target.value))}
+                  className="w-full text-xs border rounded px-2 py-1 bg-white"
+                >
+                  <option value={5}>5mm</option>
+                  <option value={10}>10mm</option>
+                  <option value={20}>20mm</option>
+                  <option value={50}>50mm</option>
+                  <option value={100}>100mm</option>
+                </select>
+              </div>
+            )}
+
+            {/* Snap to Grid - only show when grid is enabled */}
+            {showGrid && (
+              <div className="flex justify-between items-center py-2">
+                <span>Snap to Grid</span>
+                <div className="inline-flex rounded-lg bg-[#0000000D] p-1">
+                  <button
+                    onClick={() => !snapToGridEnabled && toggleSnapToGrid()}
+                    className={`px-4 py-1 text-xs rounded-md transition-all ${
+                      snapToGridEnabled
+                        ? "bg-white text-gray-900 shadow-sm font-medium"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    On
+                  </button>
+                  <button
+                    onClick={() => snapToGridEnabled && toggleSnapToGrid()}
+                    className={`px-4 py-1 text-xs rounded-md transition-all ${
+                      !snapToGridEnabled
+                        ? "bg-white text-gray-900 shadow-sm font-medium"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    Off
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Wall Drawing Controls */}
             {wallDrawingMode && (

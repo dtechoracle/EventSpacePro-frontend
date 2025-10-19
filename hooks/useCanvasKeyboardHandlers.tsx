@@ -12,8 +12,42 @@ export function useCanvasKeyboardHandlers() {
   const currentWallSegments = useSceneStore((s) => s.currentWallSegments);
   const finishWallDrawing = useSceneStore((s) => s.finishWallDrawing);
   const cancelWallDrawing = useSceneStore((s) => s.cancelWallDrawing);
+  const undo = useSceneStore((s) => s.undo);
+  const redo = useSceneStore((s) => s.redo);
+  const history = useSceneStore((s) => s.history);
+  const historyIndex = useSceneStore((s) => s.historyIndex);
+  const smartDuplicate = useSceneStore((s) => s.smartDuplicate);
+  const detectDuplicationPattern = useSceneStore((s) => s.detectDuplicationPattern);
+  const lastDuplicatedAsset = useSceneStore((s) => s.lastDuplicatedAsset);
+  const selectedAssetIds = useSceneStore((s) => s.selectedAssetIds);
+  const duplicateSelectedAssets = useSceneStore((s) => s.duplicateSelectedAssets);
+  const deleteSelectedAssets = useSceneStore((s) => s.deleteSelectedAssets);
+  const clearSelection = useSceneStore((s) => s.clearSelection);
 
   const [copiedAssetId, setCopiedAssetId] = useState<string | null>(null);
+
+  // Detect pattern when assets are moved
+  useEffect(() => {
+    if (lastDuplicatedAsset && selectedAssetId) {
+      const currentAsset = assets.find(a => a.id === selectedAssetId);
+      if (currentAsset && currentAsset.id !== lastDuplicatedAsset.id) {
+        // Check if this is the same type as the last duplicated asset
+        if (currentAsset.type === lastDuplicatedAsset.type) {
+          // Find the original asset that was duplicated
+          const originalAsset = assets.find(a => 
+            a.type === currentAsset.type && 
+            a.id !== currentAsset.id && 
+            a.id !== lastDuplicatedAsset.id
+          );
+          
+          if (originalAsset) {
+            // Detect pattern between original and current position
+            detectDuplicationPattern(originalAsset, currentAsset);
+          }
+        }
+      }
+    }
+  }, [selectedAssetId, assets, lastDuplicatedAsset, detectDuplicationPattern]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -48,25 +82,107 @@ export function useCanvasKeyboardHandlers() {
           e.preventDefault();
           copyAsset(selectedAssetId);
           removeAsset(selectedAssetId);
-        } else if (e.key === 'd' && selectedAssetId) {
-          // Duplicate (Ctrl/⌘+D)
+        } else if (e.key === 'd') {
+          // Smart Duplicate (Ctrl/⌘+D)
           e.preventDefault();
-          copyAsset(selectedAssetId);
-          pasteAsset(10, 10);
+          if (selectedAssetIds.length > 0) {
+            // Multi-select duplication
+            duplicateSelectedAssets();
+          } else if (selectedAssetId) {
+            // Single asset duplication
+            smartDuplicate(selectedAssetId);
+          }
         } else if (e.key === 'z') {
-          // Undo/Redo placeholders (wire to history if available)
+          // Undo (Ctrl/⌘+Z)
           e.preventDefault();
-          console.debug('Undo requested - integrate with history stack');
+          if (historyIndex > 0) {
+            undo();
+          }
         } else if (e.key === 'y') {
+          // Redo (Ctrl/⌘+Y)
           e.preventDefault();
-          console.debug('Redo requested - integrate with history stack');
+          if (historyIndex < history.length - 1) {
+            redo();
+          }
+        } else if (e.key === 'a') {
+          // Select All (Ctrl/⌘+A)
+          e.preventDefault();
+          // TODO: Implement select all functionality
+          console.log('Select All requested');
         }
       }
 
-      // Delete/Backspace to remove selected asset
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedAssetId) {
+      // Delete/Backspace to remove selected assets
+      if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
-        removeAsset(selectedAssetId);
+        if (selectedAssetIds.length > 0) {
+          // Multi-select deletion
+          deleteSelectedAssets();
+        } else if (selectedAssetId) {
+          // Single asset deletion
+          removeAsset(selectedAssetId);
+        }
+      }
+
+      // Escape to deselect or cancel operations
+      if (e.key === 'Escape') {
+        if (selectedAssetIds.length > 0 || selectedAssetId) {
+          // Clear all selections
+          clearSelection();
+        }
+      }
+
+      // Arrow keys for fine movement (when assets are selected)
+      if ((selectedAssetId || selectedAssetIds.length > 0) && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        const moveDistance = e.shiftKey ? 10 : 1; // Shift for larger steps
+        
+        if (selectedAssetIds.length > 0) {
+          // Multi-select movement
+          let deltaX = 0;
+          let deltaY = 0;
+          
+          switch (e.key) {
+            case 'ArrowUp':
+              deltaY = -moveDistance;
+              break;
+            case 'ArrowDown':
+              deltaY = moveDistance;
+              break;
+            case 'ArrowLeft':
+              deltaX = -moveDistance;
+              break;
+            case 'ArrowRight':
+              deltaX = moveDistance;
+              break;
+          }
+          
+          useSceneStore.getState().moveSelectedAssets(deltaX, deltaY);
+        } else if (selectedAssetId) {
+          // Single asset movement
+          const asset = assets.find(a => a.id === selectedAssetId);
+          if (asset) {
+            let newX = asset.x;
+            let newY = asset.y;
+            
+            switch (e.key) {
+              case 'ArrowUp':
+                newY -= moveDistance;
+                break;
+              case 'ArrowDown':
+                newY += moveDistance;
+                break;
+              case 'ArrowLeft':
+                newX -= moveDistance;
+                break;
+              case 'ArrowRight':
+                newX += moveDistance;
+                break;
+            }
+            
+            useSceneStore.getState().updateAsset(selectedAssetId, { x: newX, y: newY });
+          }
+        }
       }
     };
 
@@ -83,6 +199,17 @@ export function useCanvasKeyboardHandlers() {
     currentWallSegments,
     finishWallDrawing,
     cancelWallDrawing,
+    undo,
+    redo,
+    history,
+    historyIndex,
+    smartDuplicate,
+    detectDuplicationPattern,
+    lastDuplicatedAsset,
+    selectedAssetIds,
+    duplicateSelectedAssets,
+    deleteSelectedAssets,
+    clearSelection,
   ]);
 
   return { copiedAssetId };

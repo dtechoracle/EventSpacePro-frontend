@@ -20,6 +20,9 @@ interface DrawingPathProps {
   mmToPx: number;
   lastMousePosition: { x: number; y: number };
   clientToCanvasMM: (clientX: number, clientY: number) => { x: number; y: number };
+  isRectangularSelectionMode: boolean;
+  rectangularSelectionStart: { x: number; y: number } | null;
+  rectangularSelectionEnd: { x: number; y: number } | null;
 }
 
 export default function DrawingPath({
@@ -34,15 +37,23 @@ export default function DrawingPath({
   canvasPxH,
   mmToPx,
   lastMousePosition,
-  clientToCanvasMM
+  clientToCanvasMM,
+  isRectangularSelectionMode,
+  rectangularSelectionStart,
+  rectangularSelectionEnd
 }: DrawingPathProps) {
   // Read ALL hooks unconditionally to keep hook order stable across renders
   const shapeMode = useSceneStore((s) => s.shapeMode);
   const shapeStart = useSceneStore((s) => s.shapeStart);
   const shapeTempEnd = useSceneStore((s) => s.shapeTempEnd);
 
+  // Debug logging
+  console.log("DrawingPath - isRectangularSelectionMode:", isRectangularSelectionMode);
+  console.log("DrawingPath - rectangularSelectionStart:", rectangularSelectionStart);
+  console.log("DrawingPath - rectangularSelectionEnd:", rectangularSelectionEnd);
+  
   // Now gate rendering
-  if (!isDrawing && !wallDrawingMode && !shapeMode) return null;
+  if (!isDrawing && !wallDrawingMode && !shapeMode && !isRectangularSelectionMode) return null;
 
   return (
     <svg
@@ -305,6 +316,58 @@ export default function DrawingPath({
               strokeWidth="1"
             />
           )}
+        </>
+      )}
+
+      {/* Rectangular Selection Visual Feedback */}
+      {(() => {
+        console.log("DrawingPath - Rendering check:", {
+          isRectangularSelectionMode,
+          hasStart: !!rectangularSelectionStart,
+          hasEnd: !!rectangularSelectionEnd,
+          start: rectangularSelectionStart,
+          end: rectangularSelectionEnd
+        });
+        return null;
+      })()}
+      {isRectangularSelectionMode && rectangularSelectionStart && rectangularSelectionEnd && (
+        <>
+          {/* Selection box */}
+          {(() => {
+            const startX = rectangularSelectionStart.x * mmToPx;
+            const startY = rectangularSelectionStart.y * mmToPx;
+            const endX = rectangularSelectionEnd.x * mmToPx;
+            const endY = rectangularSelectionEnd.y * mmToPx;
+            
+            const left = Math.min(startX, endX);
+            const top = Math.min(startY, endY);
+            const width = Math.abs(endX - startX);
+            const height = Math.abs(endY - startY);
+            
+            return (
+              <rect
+                x={left}
+                y={top}
+                width={width}
+                height={height}
+                fill="rgba(59, 130, 246, 0.1)"
+                stroke="#3B82F6"
+                strokeWidth="2"
+                strokeDasharray="5,5"
+                opacity="0.8"
+              />
+            );
+          })()}
+          
+          {/* Start point indicator */}
+          <circle
+            cx={rectangularSelectionStart.x * mmToPx}
+            cy={rectangularSelectionStart.y * mmToPx}
+            r="3"
+            fill="#3B82F6"
+            stroke="white"
+            strokeWidth="1"
+          />
         </>
       )}
     </svg>

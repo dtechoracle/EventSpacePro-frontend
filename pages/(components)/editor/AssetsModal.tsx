@@ -95,7 +95,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
         key={asset.id}
         draggable
         onDragStart={(e) => e.dataTransfer.setData("assetType", asset.id)}
-        className="w-[4.5rem] h-[4.5rem] rounded-2xl bg-[#0933BB08] p-2 flex flex-col items-center justify-center"
+        className="w-[4.5rem] h-[4.5rem] rounded-2xl bg-transparent hover:bg-[#0933BB08] p-2 flex flex-col items-center justify-center transition-colors"
       >
         <div className="text-[var(--accent)] w-6 h-6 flex items-center justify-center relative">
           {asset.isCustom && asset.path ? (
@@ -127,12 +127,12 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
   return (
     <div
       ref={modalRef}
-      className="fixed w-[27.75rem] min-h-[19.5rem] bg-[#FDFDFF] rounded-[2rem] p-5 shadow-2xl z-[9999] cursor-move"
+      className="fixed w-[27.75rem] h-[32rem] bg-[#FDFDFF] rounded-[2rem] p-5 shadow-2xl z-[9999] cursor-move flex flex-col"
       style={{ left: position.x, top: position.y }}
     >
       {/* Header */}
       <div
-        className="flex items-center justify-between mb-4 cursor-grab active:cursor-grabbing"
+        className="flex items-center justify-between mb-4 cursor-grab active:cursor-grabbing flex-shrink-0"
         onMouseDown={handleMouseDown}
       >
         <span className="text-[1.25rem] font-medium text-[#272235]">
@@ -156,7 +156,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
         placeholder="Search for Assets"
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
-        className="w-full h-[2.125rem] rounded-lg px-3 text-sm bg-[#00000008] outline-none mb-4"
+        className="w-full h-[2.125rem] rounded-lg px-3 text-sm bg-[#00000008] outline-none mb-4 flex-shrink-0"
       />
 
       {/* Assets Grid */}
@@ -167,7 +167,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="grid grid-cols-5 gap-3 overflow-y-auto flex-1"
+            className="grid grid-cols-5 gap-3 overflow-y-auto flex-1 max-h-[20rem]"
           >
             {filteredAssets.length > 0 ? (
               filteredAssets?.map(renderAssetButton)
@@ -229,7 +229,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
             </div>
 
             {/* Tab content */}
-            <div className="grid grid-cols-5 gap-3 overflow-y-auto flex-1">
+            <div className="grid grid-cols-5 gap-3 overflow-y-auto flex-1 max-h-[20rem]">
               {ASSET_CATEGORIES[activeTab].map(renderAssetButton)}
             </div>
           </motion.div>

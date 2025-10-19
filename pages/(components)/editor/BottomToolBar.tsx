@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { useToolbarTools, ToolOption } from "@/hooks/useToolBarTools";
-import { useSceneStore } from "@/store/sceneStore";
+import { useSceneStore, AssetInstance } from "@/store/sceneStore";
 // import AssetsModal from "./AssetsModal";
 
 // Tooltip Component
@@ -61,6 +61,7 @@ interface BarProps {
 export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
   const tools = useToolbarTools();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [activeTool, setActiveTool] = useState<string | null>(null);
   const {
     isPenMode,
     isWallMode,
@@ -72,12 +73,33 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     cancelWallDrawing,
     currentWallSegments,
     setShapeMode,
+    selectedAssetId,
+    assets,
+    groupSelectedAssets,
+    ungroupAsset,
   } = useSceneStore();
 
   // Example states to toggle (keeping for future use)
   // const [isPreviewOn, setIsPreviewOn] = useState(false);
   // const [isGridVisible, setIsGridVisible] = useState(true);
   // const [isEditMode, setIsEditMode] = useState(false);
+
+  // Manual clearSelection function
+  const clearSelection = () => {
+    useSceneStore.setState({
+      selectedAssetIds: [],
+      selectedAssetId: null,
+    });
+  };
+
+  // Manual setRectangularSelectionMode function
+  const setRectangularSelectionMode = (enabled: boolean) => {
+    console.log("Setting rectangular selection mode to:", enabled);
+    useSceneStore.setState({
+      isRectangularSelectionMode: enabled,
+    });
+    console.log("Store state after setting:", useSceneStore.getState().isRectangularSelectionMode);
+  };
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -87,9 +109,16 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
       // Selection tools
       case "pointer-select":
         console.log("Pointer selection mode activated");
+        setRectangularSelectionMode(false);
+        setActiveTool("pointer-select");
         break;
       case "rectangular-select":
         console.log("Rectangular selection mode activated");
+        // Clear any existing selections and enable rectangular selection mode
+        clearSelection();
+        setRectangularSelectionMode(true);
+        setActiveTool("rectangular-select");
+        console.log("Rectangular selection mode set to true");
         break;
 
       // Assets
@@ -156,9 +185,13 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
         break;
       case "group":
         console.log("Group objects");
+        groupSelectedAssets();
         break;
       case "ungroup":
         console.log("Ungroup objects");
+        if (selectedAssetId && assets.find((a: AssetInstance) => a.id === selectedAssetId)?.isGroup) {
+          ungroupAsset(selectedAssetId);
+        }
         break;
       case "align":
         console.log("Align objects");
@@ -268,7 +301,9 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                   (tool.options.some((opt) => opt.id === "draw-line") &&
                     isPenMode) ||
                   (tool.options.some((opt) => opt.id === "draw-wall") &&
-                    (isWallMode || wallDrawingMode))
+                    (isWallMode || wallDrawingMode)) ||
+                  (tool.options.some((opt) => opt.id === "rectangular-select") &&
+                    activeTool === "rectangular-select")
                     ? "bg-green-600 text-white"
                     : "bg-[var(--accent)] text-white"
                 }`}
@@ -304,18 +339,20 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                         className={`px-2 py-1.5 rounded hover:bg-gray-100 cursor-pointer flex items-center justify-between ${
                           (option.id === "draw-line" && isPenMode) ||
                           (option.id === "draw-wall" &&
-                            (isWallMode || wallDrawingMode))
+                            (isWallMode || wallDrawingMode)) ||
+                          (option.id === "rectangular-select" && activeTool === "rectangular-select")
                             ? "bg-green-100 text-green-800"
                             : ""
                         }`}
                         onClick={() => handleOptionClick(option)}
                       >
                         <span>{option.label}</span>
-                        {(option.id === "draw-line" && isPenMode) ||
+                        {((option.id === "draw-line" && isPenMode) ||
                           (option.id === "draw-wall" &&
-                            (isWallMode || wallDrawingMode) && (
+                            (isWallMode || wallDrawingMode)) ||
+                          (option.id === "rectangular-select" && activeTool === "rectangular-select")) && (
                               <div className="w-2 h-2 bg-green-600 rounded-full"></div>
-                            ))}
+                            )}
                       </li>
                     ))}
                   </ul>

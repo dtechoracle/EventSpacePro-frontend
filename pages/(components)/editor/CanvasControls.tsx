@@ -16,6 +16,7 @@ export default function CanvasControls({
 }: CanvasControlsProps) {
   return (
     <>
+
       {/* Rotate Buttons */}
       {selectedAssetId === null && (
         <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-2 z-10 pointer-events-auto">
