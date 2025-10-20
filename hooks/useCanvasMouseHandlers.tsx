@@ -44,10 +44,18 @@ export function useCanvasMouseHandlers({
   const wallDraftNodes = useSceneStore((s) => s.wallDraftNodes);
   const selectedAssetIds = useSceneStore((s) => s.selectedAssetIds);
   const isRectangularSelecting = useSceneStore((s) => s.isRectangularSelecting);
-  const isRectangularSelectionMode = useSceneStore((s) => s.isRectangularSelectionMode);
-  const rectangularSelectionStart = useSceneStore((s) => s.rectangularSelectionStart);
-  const updateRectangularSelectionDrag = useSceneStore((s) => s.updateRectangularSelectionDrag);
-  const finishRectangularSelectionDrag = useSceneStore((s) => s.finishRectangularSelectionDrag);
+  const isRectangularSelectionMode = useSceneStore(
+    (s) => s.isRectangularSelectionMode
+  );
+  const rectangularSelectionStart = useSceneStore(
+    (s) => s.rectangularSelectionStart
+  );
+  const updateRectangularSelectionDrag = useSceneStore(
+    (s) => s.updateRectangularSelectionDrag
+  );
+  const finishRectangularSelectionDrag = useSceneStore(
+    (s) => s.finishRectangularSelectionDrag
+  );
 
   // Store actions
   const updateAsset = useSceneStore((s) => s.updateAsset);
@@ -70,9 +78,15 @@ export function useCanvasMouseHandlers({
   const finishShapeAction = useSceneStore((s) => s.finishShape);
   const addAssetObject = useSceneStore((s) => s.addAssetObject);
   const selectAsset = useSceneStore((s) => s.selectAsset);
-  const startRectangularSelection = useSceneStore((s) => s.startRectangularSelection);
-  const updateRectangularSelection = useSceneStore((s) => s.updateRectangularSelection);
-  const finishRectangularSelection = useSceneStore((s) => s.finishRectangularSelection);
+  const startRectangularSelection = useSceneStore(
+    (s) => s.startRectangularSelection
+  );
+  const updateRectangularSelection = useSceneStore(
+    (s) => s.updateRectangularSelection
+  );
+  const finishRectangularSelection = useSceneStore(
+    (s) => s.finishRectangularSelection
+  );
   const moveSelectedAssets = useSceneStore((s) => s.moveSelectedAssets);
   const clearSelection = useSceneStore((s) => s.clearSelection);
 
@@ -123,15 +137,15 @@ export function useCanvasMouseHandlers({
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       if (e.button !== 0) return; // Only handle left mouse button
-      
+
       const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-      
+
       // Check if clicking on a multi-selected asset
       if (selectedAssetIds.length > 1) {
         // Find if we clicked on any of the selected assets
-        const clickedAsset = assets.find(asset => {
+        const clickedAsset = assets.find((asset) => {
           if (!selectedAssetIds.includes(asset.id)) return false;
-          
+
           // Check if click is within asset bounds
           const assetWidth = (asset.width || 24) * (asset.scale || 1);
           const assetHeight = (asset.height || 24) * (asset.scale || 1);
@@ -139,10 +153,15 @@ export function useCanvasMouseHandlers({
           const assetRight = asset.x + assetWidth / 2;
           const assetTop = asset.y - assetHeight / 2;
           const assetBottom = asset.y + assetHeight / 2;
-          
-          return x >= assetLeft && x <= assetRight && y >= assetTop && y <= assetBottom;
+
+          return (
+            x >= assetLeft &&
+            x <= assetRight &&
+            y >= assetTop &&
+            y <= assetBottom
+          );
         });
-        
+
         if (clickedAsset) {
           console.log("Starting multi-asset drag for:", selectedAssetIds);
           isDraggingMultiple.current = true;
@@ -150,15 +169,19 @@ export function useCanvasMouseHandlers({
           return;
         }
       }
-
     };
 
     const onMove = (e: MouseEvent) => {
       // Store mouse position for use in mouse up handler
       lastMousePosition.current = { x: e.clientX, y: e.clientY };
       const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-      
-      console.log("Mouse move - isRectangularSelectionMode:", isRectangularSelectionMode, "rectangularSelectionStart:", rectangularSelectionStart);
+
+      console.log(
+        "Mouse move - isRectangularSelectionMode:",
+        isRectangularSelectionMode,
+        "rectangularSelectionStart:",
+        rectangularSelectionStart
+      );
 
       // Handle rectangular selection dragging
       if (isRectangularSelectionMode && rectangularSelectionStart) {
@@ -576,6 +599,17 @@ export function useCanvasMouseHandlers({
       if (shapeMode && shapeStart) {
         finishShapeAction();
         return;
+      }
+
+      // Handle door wall opening when dragging is complete
+      if (draggingAssetRef.current) {
+        const draggedAsset = assets.find(
+          (a) => a.id === draggingAssetRef.current
+        );
+        if (draggedAsset && draggedAsset.type === "double-door") {
+          const { processDoorWallOpening } = useSceneStore.getState();
+          processDoorWallOpening(draggedAsset.id);
+        }
       }
 
       // Reset all interaction states

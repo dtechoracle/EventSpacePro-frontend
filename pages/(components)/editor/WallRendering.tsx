@@ -34,6 +34,8 @@ export default function WallRendering({
         top: topPx,
         transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
         cursor: "move",
+        zIndex: asset.zIndex || -100, // Ensure walls render behind other assets
+        isolation: "isolate", // Create a new stacking context to prevent rendering issues
       }}
     >
       {(() => {
@@ -95,19 +97,19 @@ export default function WallRendering({
                   <>
                     <path
                       d={compound}
-                      fill="none"
+                      fill='none'
                       stroke={asset.lineColor ?? "#000000"}
                       strokeWidth={wallThickness}
-                      strokeLinejoin="round"
-                      strokeLinecap="square"
+                      strokeLinejoin='round'
+                      strokeLinecap='square'
                     />
                     {showDebugOutlines && (
                       <path
                         d={compound}
-                        fill="none"
-                        stroke="#FF00FF"
+                        fill='none'
+                        stroke='#FF00FF'
                         strokeWidth={1}
-                        strokeDasharray="4,4"
+                        strokeDasharray='4,4'
                       />
                     )}
                   </>
@@ -155,11 +157,11 @@ export default function WallRendering({
                 return (
                   <path
                     d={compound}
-                    fill="none"
+                    fill='none'
                     stroke={asset.lineColor ?? "#000000"}
                     strokeWidth={wallThickness}
-                    strokeLinejoin="round"
-                    strokeLinecap="square"
+                    strokeLinejoin='round'
+                    strokeLinecap='square'
                   />
                 );
               })()}
