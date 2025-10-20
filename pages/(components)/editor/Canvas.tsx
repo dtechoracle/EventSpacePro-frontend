@@ -48,9 +48,9 @@ export default function Canvas({
   const markAsSaved = useSceneStore((s) => s.markAsSaved);
   const showGrid = useSceneStore((s) => s.showGrid);
   const gridSize = useSceneStore((s) => s.gridSize);
-  
+
   // Debug logging
-  console.log('Canvas grid state:', { showGrid, gridSize });
+  console.log("Canvas grid state:", { showGrid, gridSize });
   const isPenMode = useSceneStore((s) => s.isPenMode);
   const isWallMode = useSceneStore((s) => s.isWallMode);
   const isDrawing = useSceneStore((s) => s.isDrawing);
@@ -69,17 +69,34 @@ export default function Canvas({
   const setTempPath = useSceneStore((s) => s.setTempPath);
   const shapeMode = useSceneStore((s) => s.shapeMode);
   const startWallSegment = useSceneStore((s) => s.startWallSegment);
-  const startRectangularSelection = useSceneStore((s) => s.startRectangularSelection);
+  const startRectangularSelection = useSceneStore(
+    (s) => s.startRectangularSelection
+  );
   const selectedAssetIds = useSceneStore((s) => s.selectedAssetIds);
-  const isRectangularSelectionMode = useSceneStore((s) => s.isRectangularSelectionMode);
-  
+  const isRectangularSelectionMode = useSceneStore(
+    (s) => s.isRectangularSelectionMode
+  );
+
   // Debug logging
-  console.log("Canvas - isRectangularSelectionMode:", isRectangularSelectionMode);
-  const rectangularSelectionStart = useSceneStore((s) => s.rectangularSelectionStart);
-  const rectangularSelectionEnd = useSceneStore((s) => s.rectangularSelectionEnd);
-  const startRectangularSelectionDrag = useSceneStore((s) => s.startRectangularSelectionDrag);
-  const updateRectangularSelectionDrag = useSceneStore((s) => s.updateRectangularSelectionDrag);
-  const finishRectangularSelectionDrag = useSceneStore((s) => s.finishRectangularSelectionDrag);
+  console.log(
+    "Canvas - isRectangularSelectionMode:",
+    isRectangularSelectionMode
+  );
+  const rectangularSelectionStart = useSceneStore(
+    (s) => s.rectangularSelectionStart
+  );
+  const rectangularSelectionEnd = useSceneStore(
+    (s) => s.rectangularSelectionEnd
+  );
+  const startRectangularSelectionDrag = useSceneStore(
+    (s) => s.startRectangularSelectionDrag
+  );
+  const updateRectangularSelectionDrag = useSceneStore(
+    (s) => s.updateRectangularSelectionDrag
+  );
+  const finishRectangularSelectionDrag = useSceneStore(
+    (s) => s.finishRectangularSelectionDrag
+  );
 
   // Sync props data to store when props change (only once per data change)
   const hasSyncedRef = useRef(false);
@@ -196,7 +213,11 @@ export default function Canvas({
       className={`relative ${
         canvas ? "bg-white border shadow-md" : "bg-transparent"
       } ${
-        isPenMode || isWallMode || wallDrawingMode || shapeMode || isRectangularSelectionMode
+        isPenMode ||
+        isWallMode ||
+        wallDrawingMode ||
+        shapeMode ||
+        isRectangularSelectionMode
           ? "cursor-crosshair"
           : ""
       }`}
@@ -213,13 +234,19 @@ export default function Canvas({
         if (e.button !== 0) return;
         if (e.target === canvasRef.current) {
           // Handle rectangular selection (when in rectangular selection mode and not in drawing modes)
-          if (isRectangularSelectionMode && !isPenMode && !isWallMode && !wallDrawingMode && !shapeMode) {
+          if (
+            isRectangularSelectionMode &&
+            !isPenMode &&
+            !isWallMode &&
+            !wallDrawingMode &&
+            !shapeMode
+          ) {
             console.log("Starting rectangular selection drag");
             const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
             startRectangularSelectionDrag(x, y);
             return;
           }
-          
+
           if (isPenMode || isWallMode) {
             e.stopPropagation();
             const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
@@ -355,76 +382,95 @@ export default function Canvas({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
-          className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap z-50"
+          className='absolute top-4 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap z-50'
         >
           Click and drag to select multiple assets
-          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-blue-600"></div>
+          <div className='absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-blue-600'></div>
         </motion.div>
       )}
 
       {/* Selection Box */}
       <SelectionBox mmToPx={mmToPx} />
 
-      {/* Render Assets */}
-      {assets.map((asset) => {
-        const isSelected = asset.id === selectedAssetId;
-        const isMultiSelected = selectedAssetIds.includes(asset.id);
-        const isCopied = asset.id === copiedAssetId;
-        const leftPx = asset.x * mmToPx;
-        const topPx = asset.y * mmToPx;
-        const totalRotation = asset.rotation;
+      {/* Render Assets - Sort by zIndex to ensure proper layering */}
+      {assets
+        .slice()
+        .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
+        .map((asset) => {
+          const isSelected = asset.id === selectedAssetId;
+          const isMultiSelected = selectedAssetIds.includes(asset.id);
+          const isCopied = asset.id === copiedAssetId;
+          const leftPx = asset.x * mmToPx;
+          const topPx = asset.y * mmToPx;
+          const totalRotation = asset.rotation;
 
-        // Use GroupRenderer for group assets, AssetRenderer for regular assets
-        if (asset.isGroup) {
+          // Use GroupRenderer for group assets, AssetRenderer for regular assets
+          if (asset.isGroup) {
+            return (
+              <GroupRenderer
+                key={asset.id}
+                group={asset}
+                isSelected={isSelected}
+                isMultiSelected={isMultiSelected}
+                leftPx={leftPx}
+                topPx={topPx}
+                mmToPx={mmToPx}
+                onAssetClick={(id) => selectAsset(id)}
+                onAssetDoubleClick={(id) =>
+                  console.log("Double click group:", id)
+                }
+                onAssetMouseDown={assetHandlers.onAssetMouseDown}
+                onAssetMouseMove={(e, id) =>
+                  console.log("Mouse move group:", id)
+                }
+                onAssetMouseUp={(e, id) => console.log("Mouse up group:", id)}
+                onAssetMouseLeave={(e, id) =>
+                  console.log("Mouse leave group:", id)
+                }
+                onAssetMouseEnter={(e, id) =>
+                  console.log("Mouse enter group:", id)
+                }
+                onAssetMouseOver={(e, id) =>
+                  console.log("Mouse over group:", id)
+                }
+                onAssetMouseOut={(e, id) => console.log("Mouse out group:", id)}
+                onAssetContextMenu={(e, id) =>
+                  console.log("Context menu group:", id)
+                }
+                onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
+                onRotationHandleMouseDown={
+                  assetHandlers.onRotationHandleMouseDown
+                }
+                selectedAssetId={selectedAssetId}
+                selectedAssetIds={selectedAssetIds}
+              />
+            );
+          }
+
           return (
-            <GroupRenderer
+            <AssetRenderer
               key={asset.id}
-              group={asset}
+              asset={asset}
               isSelected={isSelected}
               isMultiSelected={isMultiSelected}
+              isCopied={isCopied}
               leftPx={leftPx}
               topPx={topPx}
-              mmToPx={mmToPx}
-              onAssetClick={(id) => selectAsset(id)}
-              onAssetDoubleClick={(id) => console.log('Double click group:', id)}
+              totalRotation={totalRotation}
+              editingTextId={assetHandlers.editingTextId}
+              editingText={assetHandlers.editingText}
               onAssetMouseDown={assetHandlers.onAssetMouseDown}
-              onAssetMouseMove={(e, id) => console.log('Mouse move group:', id)}
-              onAssetMouseUp={(e, id) => console.log('Mouse up group:', id)}
-              onAssetMouseLeave={(e, id) => console.log('Mouse leave group:', id)}
-              onAssetMouseEnter={(e, id) => console.log('Mouse enter group:', id)}
-              onAssetMouseOver={(e, id) => console.log('Mouse over group:', id)}
-              onAssetMouseOut={(e, id) => console.log('Mouse out group:', id)}
-              onAssetContextMenu={(e, id) => console.log('Context menu group:', id)}
+              onTextDoubleClick={assetHandlers.onTextDoubleClick}
+              onTextEditKeyDown={assetHandlers.onTextEditKeyDown}
+              onTextEditBlur={assetHandlers.onTextEditBlur}
+              onTextEditChange={assetHandlers.setEditingText}
               onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
-              onRotationHandleMouseDown={assetHandlers.onRotationHandleMouseDown}
-              selectedAssetId={selectedAssetId}
-              selectedAssetIds={selectedAssetIds}
+              onRotationHandleMouseDown={
+                assetHandlers.onRotationHandleMouseDown
+              }
             />
           );
-        }
-
-        return (
-          <AssetRenderer
-            key={asset.id}
-            asset={asset}
-            isSelected={isSelected}
-            isMultiSelected={isMultiSelected}
-            isCopied={isCopied}
-            leftPx={leftPx}
-            topPx={topPx}
-            totalRotation={totalRotation}
-            editingTextId={assetHandlers.editingTextId}
-            editingText={assetHandlers.editingText}
-            onAssetMouseDown={assetHandlers.onAssetMouseDown}
-            onTextDoubleClick={assetHandlers.onTextDoubleClick}
-            onTextEditKeyDown={assetHandlers.onTextEditKeyDown}
-            onTextEditBlur={assetHandlers.onTextEditBlur}
-            onTextEditChange={assetHandlers.setEditingText}
-            onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
-            onRotationHandleMouseDown={assetHandlers.onRotationHandleMouseDown}
-          />
-        );
-      })}
+        })}
     </div>
   );
 }

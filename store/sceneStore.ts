@@ -44,7 +44,7 @@ export type AssetInstance = {
   fontFamily?: string; // for text
 
   // Universal background properties
-  backgroundColor?: string; // for all assets, default transparent
+  backgroundColor?: string; // for all assets, default white
 
   // Group properties
   isGroup?: boolean; // indicates if this asset is a group
@@ -145,6 +145,7 @@ type SceneState = {
   addAssetObject: (assetObj: AssetInstance) => void;
   updateAsset: (id: string, updates: Partial<AssetInstance>) => void;
   removeAsset: (id: string) => void;
+  processDoorWallOpening: (doorId: string) => void;
   selectAsset: (id: string | null) => void;
   toggleGrid: () => void;
   toggleDebugOutlines: () => void;
@@ -281,18 +282,18 @@ export const useSceneStore = create<SceneState>()(
         // Default properties for shapes
         const shapeDefaults: Partial<AssetInstance> =
           type === "square" || type === "circle"
-            ? { width: 50, height: 50, backgroundColor: "transparent" }
+            ? { width: 50, height: 50, backgroundColor: "#FFFFFF" }
             : type === "line"
-              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#000000", backgroundColor: "transparent" }
+              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#000000", backgroundColor: "#FFFFFF" }
               : type === "double-line"
-                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#000000", lineGap: 8, lineColor: "#000000", backgroundColor: "transparent" }
+                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#000000", lineGap: 8, lineColor: "#000000", backgroundColor: "#FFFFFF" }
                 : type === "drawn-line"
-                  ? { strokeWidth: 2, strokeColor: "#000000", backgroundColor: "transparent" }
+                  ? { strokeWidth: 2, strokeColor: "#000000", backgroundColor: "#FFFFFF" }
                   : type === "wall-segments"
-                    ? { wallThickness: 1, wallGap: 8, lineColor: "#000000", backgroundColor: "transparent" }
+                    ? { wallThickness: 1, wallGap: 8, lineColor: "#000000", backgroundColor: "#FFFFFF" }
                     : type === "text"
-                      ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: "transparent" }
-                      : { width: 24, height: 24, backgroundColor: "transparent" }; // Default for icons
+                      ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: "#FFFFFF" }
+                      : { width: 24, height: 24, backgroundColor: "#FFFFFF" }; // Default for icons
 
         set({
           assets: [
@@ -386,9 +387,32 @@ export const useSceneStore = create<SceneState>()(
         setTimeout(() => get().saveToHistory(), 0);
 
         // Automatic wall opening for double doors when moved/scaled
+        // Only apply wall opening logic when dragging is complete (not during active dragging)
         const moved = updates.x !== undefined || updates.y !== undefined || updates.rotation !== undefined || updates.width !== undefined || updates.scale !== undefined;
         const door = updatedAssets.find(a => a.id === id);
         if (!door || door.type !== 'double-door' || !moved) return;
+        
+        // Skip wall opening during active dragging to prevent visual artifacts
+        // This will be handled by a separate method when dragging completes
+        return;
+      },
+
+      removeAsset: (id) => {
+        set((state) => ({
+          assets: state.assets.filter((a) => a.id !== id),
+          selectedAssetId: state.selectedAssetId === id ? null : state.selectedAssetId,
+          hasUnsavedChanges: true,
+        }));
+        
+        // Save to history after removing asset
+        setTimeout(() => get().saveToHistory(), 0);
+      },
+
+      // Handle wall opening for double doors when dragging is complete
+      processDoorWallOpening: (doorId: string) => {
+        const state = get();
+        const door = state.assets.find(a => a.id === doorId);
+        if (!door || door.type !== 'double-door') return;
 
         const doorCenter = { x: door.x, y: door.y };
         // Door width is adjustable; assume it's stored in mm on the asset
@@ -444,17 +468,6 @@ export const useSceneStore = create<SceneState>()(
         }
       },
 
-      removeAsset: (id) => {
-        set((state) => ({
-          assets: state.assets.filter((a) => a.id !== id),
-          selectedAssetId: state.selectedAssetId === id ? null : state.selectedAssetId,
-          hasUnsavedChanges: true,
-        }));
-        
-        // Save to history after removing asset
-        setTimeout(() => get().saveToHistory(), 0);
-      },
-
       selectAsset: (id) => set({ selectedAssetId: id }),
 
       toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
@@ -500,7 +513,7 @@ export const useSceneStore = create<SceneState>()(
             rotation: 0,
             width,
             height,
-            backgroundColor: 'transparent',
+            backgroundColor: '#FFFFFF',
             fillColor: 'transparent',
             strokeColor: '#000000',
             strokeWidth: 2,
@@ -515,7 +528,7 @@ export const useSceneStore = create<SceneState>()(
             rotation: 0,
             width,
             height,
-            backgroundColor: 'transparent',
+            backgroundColor: '#FFFFFF',
             fillColor: 'transparent',
             strokeColor: '#000000',
             strokeWidth: 2,
@@ -644,10 +657,8 @@ export const useSceneStore = create<SceneState>()(
         nodes.forEach(n => { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); });
         const cx = (minX + maxX) / 2; const cy = (minY + maxY) / 2;
 
-        // Get the next zIndex for the wall asset
-        const nextZIndex = state.assets.length > 0 
-          ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1 
-          : 1;
+        // Get a low zIndex for wall assets to ensure they render behind other assets
+        const nextZIndex = -100; // Walls should render behind other assets
 
         const wallAsset: AssetInstance = {
           id: `wall-segments-${Date.now()}`,
@@ -1289,10 +1300,8 @@ export const useSceneStore = create<SceneState>()(
               if (!(ai === bi)) edges.push({ a: ai, b: bi });
             });
 
-            // Get the next zIndex for the wall asset
-            const nextZIndex = state.assets.length > 0 
-              ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1 
-              : 1;
+            // Get a low zIndex for wall assets to ensure they render behind other assets
+            const nextZIndex = -100; // Walls should render behind other assets
 
             const wallAsset: AssetInstance = {
               id: `wall-segments-${Date.now()}`,
@@ -1888,7 +1897,7 @@ export const useSceneStore = create<SceneState>()(
             y: asset.y - groupCenterY,
           })),
           groupExpanded: false,
-          backgroundColor: 'transparent',
+          backgroundColor: '#FFFFFF',
         };
 
         // Keep all assets and add group (don't remove individual assets)

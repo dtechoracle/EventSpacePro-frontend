@@ -290,6 +290,196 @@ const CUSTOM_SVG_ASSETS: AssetDef[] = [
     path: "/assets/canvas/stairs.svg",
     isCustom: true,
   },
+
+  // Sitting Styles
+  {
+    id: "banquet",
+    label: "Banquet",
+    path: "/assets/canvas/sitting-styles/banquet.svg",
+    isCustom: true,
+  },
+  {
+    id: "boardroom",
+    label: "Boardroom",
+    path: "/assets/canvas/sitting-styles/boardroom.svg",
+    isCustom: true,
+  },
+  {
+    id: "chevron",
+    label: "Chevron",
+    path: "/assets/canvas/sitting-styles/chevron.svg",
+    isCustom: true,
+  },
+  {
+    id: "circle-sitting",
+    label: "Circle",
+    path: "/assets/canvas/sitting-styles/circle.svg",
+    isCustom: true,
+  },
+  {
+    id: "classroom",
+    label: "Classroom",
+    path: "/assets/canvas/sitting-styles/classroom.svg",
+    isCustom: true,
+  },
+  {
+    id: "crescent-cabaret",
+    label: "Crescent or Cabaret",
+    path: "/assets/canvas/sitting-styles/crescent or cabaret.svg",
+    isCustom: true,
+  },
+  {
+    id: "horseshoe",
+    label: "Horseshoe",
+    path: "/assets/canvas/sitting-styles/horseshoe.svg",
+    isCustom: true,
+  },
+  {
+    id: "oval-boardroom",
+    label: "Oval Boardroom",
+    path: "/assets/canvas/sitting-styles/oval boardroom.svg",
+    isCustom: true,
+  },
+  {
+    id: "semi-circle",
+    label: "Semi Circle",
+    path: "/assets/canvas/sitting-styles/semi - circle.svg",
+    isCustom: true,
+  },
+  {
+    id: "seminar",
+    label: "Seminar",
+    path: "/assets/canvas/sitting-styles/seminar.svg",
+    isCustom: true,
+  },
+  {
+    id: "theatre-auditorium",
+    label: "Theatre or Auditorium",
+    path: "/assets/canvas/sitting-styles/theatre or auditorium.svg",
+    isCustom: true,
+  },
+  {
+    id: "u-shape",
+    label: "U Shape",
+    path: "/assets/canvas/sitting-styles/u-shape.svg",
+    isCustom: true,
+  },
+
+  // Space Elements
+  {
+    id: "swing-door-1100mm",
+    label: "1100mm Swing Door",
+    path: "/assets/canvas/space-elements/1100mm Swing Door.svg",
+    isCustom: true,
+  },
+  {
+    id: "double-swing-door-1200mm",
+    label: "1200mm Double Swing Door",
+    path: "/assets/canvas/space-elements/1200mm Double Swing Door.svg",
+    isCustom: true,
+  },
+  {
+    id: "swing-door-1200mm",
+    label: "1200mm Swing Door",
+    path: "/assets/canvas/space-elements/1200mm Swing Door.svg",
+    isCustom: true,
+  },
+  {
+    id: "window-1200mm",
+    label: "1200mm Window",
+    path: "/assets/canvas/space-elements/1200mm Window.svg",
+    isCustom: true,
+  },
+  {
+    id: "double-swing-door-1500mm",
+    label: "1500mm Double Swing Door",
+    path: "/assets/canvas/space-elements/1500mm Double Swing Door.svg",
+    isCustom: true,
+  },
+  {
+    id: "window-1500mm",
+    label: "1500mm Window",
+    path: "/assets/canvas/space-elements/1500mm Window.svg",
+    isCustom: true,
+  },
+  {
+    id: "double-swing-door-1800mm",
+    label: "1800mm Double Swing Door",
+    path: "/assets/canvas/space-elements/1800mm Double Swing Door.svg",
+    isCustom: true,
+  },
+  {
+    id: "double-swing-door-1800mm-alt",
+    label: "1800mm Double Swing Door (Alt)",
+    path: "/assets/canvas/space-elements/1800mm Double Swing Door (1).svg",
+    isCustom: true,
+  },
+  {
+    id: "window-1800mm",
+    label: "1800mm Window",
+    path: "/assets/canvas/space-elements/1800mm Window.svg",
+    isCustom: true,
+  },
+  {
+    id: "window-2400mm",
+    label: "2400mm Window",
+    path: "/assets/canvas/space-elements/2400mm Window.svg",
+    isCustom: true,
+  },
+  {
+    id: "round-column-30mm",
+    label: "30mm Round Column",
+    path: "/assets/canvas/space-elements/30mm Round Coloumn.svg",
+    isCustom: true,
+  },
+  {
+    id: "round-column-30mm-alt",
+    label: "30mm Round Column (Alt)",
+    path: "/assets/canvas/space-elements/30mm Round Coloumn (1).svg",
+    isCustom: true,
+  },
+  {
+    id: "square-column-600mm",
+    label: "600mm Square Column",
+    path: "/assets/canvas/space-elements/600mm Square Coloumn.svg",
+    isCustom: true,
+  },
+  {
+    id: "square-column-600mm-alt",
+    label: "600mm Square Column (Alt)",
+    path: "/assets/canvas/space-elements/600mm Square Coloumn (1).svg",
+    isCustom: true,
+  },
+  {
+    id: "swing-door-700mm",
+    label: "700mm Swing Door",
+    path: "/assets/canvas/space-elements/700mm Swing Door.svg",
+    isCustom: true,
+  },
+  {
+    id: "swing-door-900mm",
+    label: "900mm Swing Door",
+    path: "/assets/canvas/space-elements/900mm Swing Door.svg",
+    isCustom: true,
+  },
+  {
+    id: "swing-door-900mm-alt",
+    label: "900mm Swing Door (Alt)",
+    path: "/assets/canvas/space-elements/900mm Swing Door (1).svg",
+    isCustom: true,
+  },
+  {
+    id: "window-900mm",
+    label: "900mm Window",
+    path: "/assets/canvas/space-elements/900mm Window.svg",
+    isCustom: true,
+  },
+  {
+    id: "window-900mm-alt",
+    label: "900mm Window (Alt)",
+    path: "/assets/canvas/space-elements/900mm Window (1).svg",
+    isCustom: true,
+  },
 ];
 
 export const ASSET_LIBRARY: AssetDef[] = [
