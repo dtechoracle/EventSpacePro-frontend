@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { useSceneStore, AssetInstance } from "@/store/sceneStore";
 import { snapTo90Degrees } from "@/lib/wallGeometry";
 
@@ -60,12 +60,14 @@ export function useCanvasMouseHandlers({
   // Store actions
   const updateAsset = useSceneStore((s) => s.updateAsset);
   const snapToGrid = useSceneStore((s) => s.snapToGrid);
+  const snapToGridEnabled = useSceneStore((s) => s.snapToGridEnabled);
   const setIsDrawing = useSceneStore((s) => s.setIsDrawing);
   const setCurrentPath = useSceneStore((s) => s.setCurrentPath);
   const setTempPath = useSceneStore((s) => s.setTempPath);
   const setPenMode = useSceneStore((s) => s.setPenMode);
   const setWallMode = useSceneStore((s) => s.setWallMode);
   const clearPath = useSceneStore((s) => s.clearPath);
+  const addPointToPath = useSceneStore((s) => s.addPointToPath);
   const updateWallTempEnd = useSceneStore((s) => s.updateWallTempEnd);
   const commitWallSegment = useSceneStore((s) => s.commitWallSegment);
   const finishWallDrawingAction = useSceneStore((s) => s.finishWallDrawing);

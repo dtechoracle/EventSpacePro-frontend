@@ -62,17 +62,21 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
           width: actualData.canvases[0].width,
           height: actualData.canvases[0].height,
         }
-      : null;
+      : {
+          size: "layout",
+          width: 2000, // Default 2000mm width for plain layout
+          height: 2000, // Default 2000mm height for plain layout
+        };
   }, [actualData]);
 
   // Calculate canvas dimensions in pixels
-  const canvasPxW = canvas ? canvas.width * MM_TO_PX : 0;
-  const canvasPxH = canvas ? canvas.height * MM_TO_PX : 0;
+  const canvasPxW = canvas.width * MM_TO_PX;
+  const canvasPxH = canvas.height * MM_TO_PX;
 
   // center the canvas inside the viewport on first mount
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !canvas) return;
+    if (!el) return;
 
     const rect = el.getBoundingClientRect();
 
@@ -87,7 +91,7 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
       x: 0,
       y: 0,
     });
-  }, [canvas]);
+  }, [canvas, actualData]);
 
   // Smooth zoom animation using requestAnimationFrame
   useEffect(() => {
@@ -156,17 +160,17 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
   return (
     <div
       ref={containerRef}
-      className="w-full h-full overflow-hidden bg-gray-100"
+      className='w-full h-full overflow-hidden bg-gray-100'
       onMouseDown={handlePointerDown}
-      style={{
-        backgroundImage:
-          "linear-gradient(to right, #e5e7eb 1px, transparent 1px), linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)",
-        backgroundSize: "20px 20px",
-      }}
+      // style={{
+      //   backgroundImage:
+      //     "linear-gradient(to right, #e5e7eb 1px, transparent 1px), linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)",
+      //   backgroundSize: "20px 20px",
+      // }}
     >
       {/* Scene container */}
       <div
-        className="relative w-full h-full"
+        className='relative w-full h-full'
         style={{
           transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
           transformOrigin: "top left",
@@ -176,8 +180,8 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
         <div
           style={{
             position: "absolute",
-            left: canvasPos.x - (canvasPxW || 0) / 2,
-            top: canvasPos.y - (canvasPxH || 0) / 2,
+            left: canvasPos.x - canvasPxW / 2,
+            top: canvasPos.y - canvasPxH / 2,
           }}
         >
           <Canvas

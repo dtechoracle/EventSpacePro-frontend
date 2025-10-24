@@ -42,6 +42,7 @@ export default function Canvas({
   // Use store data for rendering (synced from props)
   const canvas = useSceneStore((s) => s.canvas);
   const assets = useSceneStore((s) => s.assets);
+
   const addAsset = useSceneStore((s) => s.addAsset);
   const addAssetObject = useSceneStore((s) => s.addAssetObject);
   const reset = useSceneStore((s) => s.reset);
@@ -62,6 +63,7 @@ export default function Canvas({
   const currentWallTempEnd = useSceneStore((s) => s.currentWallTempEnd);
   const selectedAssetId = useSceneStore((s) => s.selectedAssetId);
   const selectAsset = useSceneStore((s) => s.selectAsset);
+  const clearSelection = useSceneStore((s) => s.clearSelection);
   // const setPenMode = useSceneStore((s) => s.setPenMode);
   // const setWallMode = useSceneStore((s) => s.setWallMode);
   const setIsDrawing = useSceneStore((s) => s.setIsDrawing);
@@ -103,7 +105,7 @@ export default function Canvas({
   const lastDataRef = useRef<string>("");
 
   useEffect(() => {
-    if (propCanvas && propAssets) {
+    if (propCanvas && propAssets && propAssets.length > 0) {
       // Create a unique identifier for this data set
       const dataId = JSON.stringify({ canvas: propCanvas, assets: propAssets });
 
@@ -199,7 +201,7 @@ export default function Canvas({
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const type = e.dataTransfer.getData("assetType");
-    if (!type || !canvasRef.current || !canvas) return;
+    if (!type || !canvasRef.current) return;
     const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
     addAsset(type, x, y);
   };
@@ -210,9 +212,7 @@ export default function Canvas({
   return (
     <div
       ref={canvasRef}
-      className={`relative ${
-        canvas ? "bg-white border shadow-md" : "bg-transparent"
-      } ${
+      className={`relative ${canvas ? "bg-gray-100" : "bg-transparent"} ${
         isPenMode ||
         isWallMode ||
         wallDrawingMode ||
@@ -268,14 +268,8 @@ export default function Canvas({
             e.stopPropagation();
             const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
 
-            // Check if click is within canvas bounds
-            if (
-              canvas &&
-              (x < 0 || y < 0 || x > canvas.width || y > canvas.height)
-            ) {
-              console.log("Click outside canvas bounds, ignoring");
-              return; // Don't create wall segments outside canvas
-            }
+            // For very large canvas, allow wall creation anywhere
+            // No bounds checking needed for large canvas
 
             if (!currentWallStart) {
               // Start new wall segment, snapping to nearest existing wall endpoint if close
@@ -326,7 +320,7 @@ export default function Canvas({
             useSceneStore.getState().startShape({ x, y });
             return;
           } else {
-            selectAsset(null);
+            clearSelection();
             e.stopPropagation();
             mouseRefs.isMovingCanvas.current = true;
             mouseRefs.lastCanvasPointer.current = {
@@ -395,6 +389,7 @@ export default function Canvas({
       {/* Render Assets - Sort by zIndex to ensure proper layering */}
       {assets
         .slice()
+        .filter((asset) => asset != null) // Filter out null/undefined assets
         .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
         .map((asset) => {
           const isSelected = asset.id === selectedAssetId;
