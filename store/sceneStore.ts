@@ -271,7 +271,6 @@ export const useSceneStore = create<SceneState>()(
         const state = get();
         // Prevent any non-wall asset creation while wall drawing is active (avoids ghost assets)
         if (state.wallDrawingMode && type !== "wall-segments") return;
-        if (!state.canvas) return;
         const id = `${type}-${Date.now()}`;
 
         // Get the next zIndex (highest existing zIndex + 1, or 1 if no assets exist)
@@ -279,21 +278,24 @@ export const useSceneStore = create<SceneState>()(
           ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1 
           : 1;
 
+        // Use universal bg-gray-100 background for all assets
+        const defaultBackgroundColor = "#f3f4f6"; // bg-gray-100
+
         // Default properties for shapes
         const shapeDefaults: Partial<AssetInstance> =
           type === "square" || type === "circle"
-            ? { width: 50, height: 50, backgroundColor: "#FFFFFF" }
+            ? { width: 50, height: 50, backgroundColor: defaultBackgroundColor }
             : type === "line"
-              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#000000", backgroundColor: "#FFFFFF" }
+              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#000000", backgroundColor: defaultBackgroundColor }
               : type === "double-line"
-                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#000000", lineGap: 8, lineColor: "#000000", backgroundColor: "#FFFFFF" }
+                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#000000", lineGap: 8, lineColor: "#000000", backgroundColor: defaultBackgroundColor }
                 : type === "drawn-line"
-                  ? { strokeWidth: 2, strokeColor: "#000000", backgroundColor: "#FFFFFF" }
+                  ? { strokeWidth: 2, strokeColor: "#000000", backgroundColor: defaultBackgroundColor }
                   : type === "wall-segments"
-                    ? { wallThickness: 1, wallGap: 8, lineColor: "#000000", backgroundColor: "#FFFFFF" }
+                    ? { wallThickness: 1, wallGap: 8, lineColor: "#000000", backgroundColor: defaultBackgroundColor }
                     : type === "text"
-                      ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: "#FFFFFF" }
-                      : { width: 24, height: 24, backgroundColor: "#FFFFFF" }; // Default for icons
+                      ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: defaultBackgroundColor }
+                      : { width: 24, height: 24, backgroundColor: defaultBackgroundColor }; // Default for icons
 
         set({
           assets: [
@@ -513,7 +515,7 @@ export const useSceneStore = create<SceneState>()(
             rotation: 0,
             width,
             height,
-            backgroundColor: '#FFFFFF',
+            backgroundColor: '#f3f4f6', // bg-gray-100
             fillColor: 'transparent',
             strokeColor: '#000000',
             strokeWidth: 2,
@@ -528,7 +530,7 @@ export const useSceneStore = create<SceneState>()(
             rotation: 0,
             width,
             height,
-            backgroundColor: '#FFFFFF',
+            backgroundColor: '#f3f4f6', // bg-gray-100
             fillColor: 'transparent',
             strokeColor: '#000000',
             strokeWidth: 2,
@@ -673,7 +675,7 @@ export const useSceneStore = create<SceneState>()(
           wallThickness: 1,
           wallGap: 8,
           lineColor: "#000000",
-          backgroundColor: "#FFFFFF"
+          backgroundColor: "#f3f4f6" // bg-gray-100
         };
 
         set((state) => ({
@@ -1317,7 +1319,7 @@ export const useSceneStore = create<SceneState>()(
               wallThickness: 1, // Default wall thickness of 1
               wallGap: 8,
               lineColor: "#000000",
-              backgroundColor: "#FFFFFF"
+              backgroundColor: "#f3f4f6" // bg-gray-100
             };
 
             set((state) => ({
@@ -1352,7 +1354,7 @@ export const useSceneStore = create<SceneState>()(
 
       pasteAsset: (offsetX = 10, offsetY = 10) => {
         const state = get();
-        if (!state.clipboard || !state.canvas) return;
+        if (!state.clipboard) return;
 
         // Get the next zIndex for the pasted asset
         const nextZIndex = state.assets.length > 0 
@@ -1897,7 +1899,7 @@ export const useSceneStore = create<SceneState>()(
             y: asset.y - groupCenterY,
           })),
           groupExpanded: false,
-          backgroundColor: '#FFFFFF',
+          backgroundColor: '#f3f4f6', // bg-gray-100
         };
 
         // Keep all assets and add group (don't remove individual assets)
