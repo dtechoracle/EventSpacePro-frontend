@@ -297,15 +297,15 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 whileHover={{ scale: 1.03 }}
-                className={`w-8 h-8 flex items-center justify-center rounded-md ${
+                className={`w-8 h-8 border-2 flex items-center justify-center rounded-md ${
                   (tool.options.some((opt) => opt.id === "draw-line") &&
                     isPenMode) ||
                   (tool.options.some((opt) => opt.id === "draw-wall") &&
                     (isWallMode || wallDrawingMode)) ||
                   (tool.options.some((opt) => opt.id === "rectangular-select") &&
                     activeTool === "rectangular-select")
-                    ? "bg-green-600 text-white"
-                    : "bg-[var(--accent)] text-white"
+                    ? "border-green-600 text-green-600"
+                    : "border-[var(--accent)] text-[var(--accent)]"
                 }`}
                 aria-expanded={openIndex === index}
                 aria-haspopup="menu"

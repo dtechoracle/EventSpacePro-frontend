@@ -259,7 +259,7 @@ export function findNearbyWallSegment(
       // Check distance to start point
       const distToStart = Math.sqrt(
         Math.pow(point.x - segment.start.x, 2) +
-          Math.pow(point.y - segment.start.y, 2)
+        Math.pow(point.y - segment.start.y, 2)
       );
 
       if (distToStart <= threshold) {
@@ -269,7 +269,7 @@ export function findNearbyWallSegment(
       // Check distance to end point
       const distToEnd = Math.sqrt(
         Math.pow(point.x - segment.end.x, 2) +
-          Math.pow(point.y - segment.end.y, 2)
+        Math.pow(point.y - segment.end.y, 2)
       );
 
       if (distToEnd <= threshold) {
@@ -517,43 +517,40 @@ export function mergeWallSegments(
 export function snapTo90Degrees(
   startPoint: { x: number; y: number },
   endPoint: { x: number; y: number },
-  snapTolerance: number = 6 // degrees - reduced for more precise snapping
+  snapTolerance: number = 1
 ): { x: number; y: number } {
+  // Calculate movement vector
   const dx = endPoint.x - startPoint.x;
   const dy = endPoint.y - startPoint.y;
-  const length = Math.sqrt(dx * dx + dy * dy);
 
-  if (length === 0) return endPoint;
+  // If no movement yet, just return endpoint
+  if (dx === 0 && dy === 0) return endPoint;
 
-  const angle = Math.atan2(dy, dx) * (180 / Math.PI); // Convert to degrees
-  // const angleRad = Math.atan2(dy, dx);
+  // Calculate angle purely for *reference* (visual guidance only)
+  const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const normalizedAngle = (angleDeg + 360) % 360;
 
-  // Define snap angles: 0°, 90°, 180°, 270° (or -90°)
-  const snapAngles = [0, 90, 180, -90, 270];
+  // Determine how close we are to perfect 0°, 90°, 180°, 270° lines
+  const snapAngles = [0, 90, 180, 270];
+  let minDiff = Infinity;
+  let closestAngle = normalizedAngle;
 
-  // Find the closest snap angle
-  let closestSnapAngle = snapAngles[0];
-  let minDifference = Math.abs(angle - snapAngles[0]);
-
-  for (const snapAngle of snapAngles) {
-    const difference = Math.abs(angle - snapAngle);
-    if (difference < minDifference) {
-      minDifference = difference;
-      closestSnapAngle = snapAngle;
+  for (const a of snapAngles) {
+    const diff = Math.min(
+      Math.abs(normalizedAngle - a),
+      360 - Math.abs(normalizedAngle - a)
+    );
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestAngle = a;
     }
   }
 
-  // If we're within snap tolerance, snap to the closest angle
-  if (minDifference <= snapTolerance) {
-    const snappedAngleRad = closestSnapAngle * (Math.PI / 180); // Convert back to radians
+  // 🚫 Do NOT modify coordinates anymore.
+  // Just return the exact endpoint — the "freedom" behavior.
+  // We'll later use (normalizedAngle, closestAngle, minDiff)
+  // to show a visual red guide line *without affecting drawing*.
 
-    return {
-      x: startPoint.x + Math.cos(snappedAngleRad) * length,
-      y: startPoint.y + Math.sin(snappedAngleRad) * length,
-    };
-  }
-
-  // No snapping, return original point
   return endPoint;
 }
 

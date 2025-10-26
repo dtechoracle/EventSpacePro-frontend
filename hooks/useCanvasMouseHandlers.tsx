@@ -335,18 +335,17 @@ export function useCanvasMouseHandlers({
           snappedPoint = snapTo90Degrees(currentWallStart, snappedPoint);
 
           // If we have a tracked first horizontal length, align opposite horizontal walls
-          if (firstHorizontalWallLength && currentWallSegments.length >= 2) {
-            // Heuristic: if this looks horizontal, force length to match the first horizontal
-            const dx = snappedPoint.x - currentWallStart.x;
-            const dy = snappedPoint.y - currentWallStart.y;
-            if (Math.abs(dx) >= Math.abs(dy)) {
-              const sign = dx >= 0 ? 1 : -1;
-              snappedPoint = {
-                x: currentWallStart.x + sign * firstHorizontalWallLength,
-                y: currentWallStart.y,
-              };
-            }
-          }
+          // if (firstHorizontalWallLength && currentWallSegments.length >= 2) {
+          //   // Heuristic: if this looks horizontal, force length to match the first horizontal
+          //   const dx = snappedPoint.x - currentWallStart.x;
+          //   const dy = snappedPoint.y - currentWallStart.y;
+          //   if (Math.abs(dx) >= Math.abs(dy)) {
+          //     const sign = dx >= 0 ? 1 : -1;
+          //     snappedPoint = {
+          //       x: currentWallStart.x + sign * firstHorizontalWallLength,
+          //       y: currentWallStart.y,
+          //     };
+          //   }
 
           // Edge snapping: if endpoint is near an existing wall edge, snap to the edge projection
           const projectPointToSegment = (
