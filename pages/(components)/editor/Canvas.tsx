@@ -77,11 +77,6 @@ export default function Canvas({
     (s) => s.isRectangularSelectionMode
   );
 
-  // Debug logging
-  console.log(
-    "Canvas - isRectangularSelectionMode:",
-    isRectangularSelectionMode
-  );
   const rectangularSelectionStart = useSceneStore(
     (s) => s.rectangularSelectionStart
   );
@@ -241,7 +236,6 @@ export default function Canvas({
             !wallDrawingMode &&
             !shapeMode
           ) {
-            console.log("Starting rectangular selection drag");
             const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
             startRectangularSelectionDrag(x, y);
             return;
@@ -256,12 +250,10 @@ export default function Canvas({
             setIsDrawing(true);
             setCurrentPath([{ x, y }]);
             setTempPath([{ x, y }]);
-            console.log("Started drawing at:", { x, y });
             return; // Prevent canvas movement when in pen mode
           } else if (wallDrawingMode) {
             // Check if the click target is the canvas itself (not a child element like sidebar buttons)
             if (e.target !== canvasRef.current) {
-              console.log("Click not on canvas element, ignoring wall drawing");
               return;
             }
 
@@ -308,10 +300,8 @@ export default function Canvas({
                 startPoint = closest;
               }
               startWallSegment(startPoint);
-              console.log("Started wall segment at:", startPoint);
             } else {
               // This will be handled by the mouse up event to commit the current segment
-              console.log("Continuing wall segment at:", { x, y });
             }
             return; // Prevent canvas movement when in wall mode
           } else if (shapeMode) {
@@ -411,27 +401,15 @@ export default function Canvas({
                 topPx={topPx}
                 mmToPx={mmToPx}
                 onAssetClick={(id) => selectAsset(id)}
-                onAssetDoubleClick={(id) =>
-                  console.log("Double click group:", id)
-                }
+                onAssetDoubleClick={(id) => {
+                  if (id) {
+                    const asset = assets.find((a: AssetInstance) => a.id === id);
+                    if (asset?.isGroup) {
+                      updateAsset(id, { groupExpanded: !asset.groupExpanded });
+                    }
+                  }
+                }}
                 onAssetMouseDown={assetHandlers.onAssetMouseDown}
-                onAssetMouseMove={(e, id) =>
-                  console.log("Mouse move group:", id)
-                }
-                onAssetMouseUp={(e, id) => console.log("Mouse up group:", id)}
-                onAssetMouseLeave={(e, id) =>
-                  console.log("Mouse leave group:", id)
-                }
-                onAssetMouseEnter={(e, id) =>
-                  console.log("Mouse enter group:", id)
-                }
-                onAssetMouseOver={(e, id) =>
-                  console.log("Mouse over group:", id)
-                }
-                onAssetMouseOut={(e, id) => console.log("Mouse out group:", id)}
-                onAssetContextMenu={(e, id) =>
-                  console.log("Context menu group:", id)
-                }
                 onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
                 onRotationHandleMouseDown={
                   assetHandlers.onRotationHandleMouseDown

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FaUserCircle, FaChevronDown, FaChevronRight } from "react-icons/fa";
 import { IoPlayOutline } from "react-icons/io5";
 import ShareModal from "./ShareModal";
@@ -42,6 +42,19 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const [showCanvas, setShowCanvas] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
   const [modelName, setModelName] = useState<string>("");
+
+  // Auto-populate wall thickness based on current wall type when a wall is selected
+  useEffect(() => {
+    if (selectedAsset && selectedAsset.type === "wall-segments") {
+      const currentWallThickness = useSceneStore.getState().getCurrentWallThickness();
+      // Only update if the asset doesn't already have a thickness set
+      if (!selectedAsset.wallThickness) {
+        updateAsset(selectedAsset.id, {
+          wallThickness: currentWallThickness,
+        });
+      }
+    }
+  }, [selectedAsset, updateAsset]);
   const [canvasName, setCanvasName] = useState<string>("");
 
   const roundForDisplay = (num: number) => Math.round(num * 100) / 100;
@@ -511,16 +524,19 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span>Wall Thickness</span>
                       <input
                         type="number"
-                        value={selectedAsset.wallThickness || 2}
-                        onChange={(e) =>
+                        value={selectedAsset.wallThickness || useSceneStore.getState().getCurrentWallThickness()}
+                        onChange={(e) => {
                           updateAsset(selectedAsset.id, {
                             wallThickness: Number(e.target.value),
-                          })
-                        }
+                          });
+                        }}
                         className="sidebar-input w-28 text-xs"
                         min={1}
                         max={20}
                       />
+                    </div>
+                    <div className="text-xs text-gray-500 ml-2">
+                      Current wall type: {useSceneStore.getState().getCurrentWallThickness()}px
                     </div>
                     <div className="flex justify-between items-center">
                       <span>Wall Gap</span>

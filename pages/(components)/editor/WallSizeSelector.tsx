@@ -18,17 +18,9 @@ export default function WallSizeSelector({ className = "" }: WallSizeSelectorPro
     wallDrawingMode
   } = useSceneStore();
 
-  // Fallback wall types if store doesn't have them
-  const defaultWallTypes = [
-    { id: 'thin', label: 'Thin (5mm)', thickness: 5 },
-    { id: 'standard', label: 'Standard (10mm)', thickness: 10 },
-    { id: 'thick', label: 'Thick (20mm)', thickness: 20 },
-    { id: 'extra-thick', label: 'Extra Thick (40mm)', thickness: 40 }
-  ];
-  
-  const wallTypes = availableWallTypes || defaultWallTypes;
-  const currentWallType = wallTypes.find(wt => wt.id === wallType);
-  const currentThickness = currentWallType?.thickness || 10;
+  // Use the store's wall types directly
+  const wallTypes = availableWallTypes;
+  const currentThickness = useSceneStore.getState().getCurrentWallThickness();
 
   const formatThickness = (thickness: number) => {
     if (thickness < 1) {
@@ -96,7 +88,7 @@ export default function WallSizeSelector({ className = "" }: WallSizeSelectorPro
                         <div 
                           className="w-4 h-1 bg-gray-400 rounded"
                           style={{ 
-                            width: `${Math.max(2, wallTypeOption.thickness * 0.1)}px`,
+                            width: `${Math.max(1, wallTypeOption.thickness)}px`,
                             backgroundColor: wallTypeOption.id === wallType ? '#3b82f6' : '#9ca3af'
                           }}
                         />

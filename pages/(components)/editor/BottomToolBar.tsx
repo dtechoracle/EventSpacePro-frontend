@@ -106,8 +106,6 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
 
   // Handle option clicks
   const handleWallTypeSelection = (wallType: string) => {
-    console.log("Selected wall type:", wallType);
-    
     // Map the new wall type IDs to the store's expected format
     let mappedWallType: 'thin' | 'standard' | 'thick' | 'extra-thick';
     
@@ -125,13 +123,11 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
         mappedWallType = 'thin';
         break;
       default:
-        mappedWallType = 'standard';
+        mappedWallType = 'thin';
     }
     
     setWallType(mappedWallType);
     setShowWallTypeSubmenu(false);
-    
-    console.log("Mapped to:", mappedWallType);
     
     // Set all states in the correct order to avoid conflicts
     setPenMode(false);
@@ -194,75 +190,56 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
 
       // Modify tools
       case "trim":
-        console.log("Trim tool activated");
         break;
       case "move":
-        console.log("Move tool activated");
         break;
       case "copy":
-        console.log("Copy tool activated");
         break;
       case "rotate":
-        console.log("Rotate tool activated");
         break;
       case "group":
-        console.log("Group objects");
         groupSelectedAssets();
         break;
       case "ungroup":
-        console.log("Ungroup objects");
         if (selectedAssetId && assets.find((a: AssetInstance) => a.id === selectedAssetId)?.isGroup) {
           ungroupAsset(selectedAssetId);
         }
         break;
       case "align":
-        console.log("Align objects");
         break;
       case "array":
-        console.log("Array objects");
         break;
 
       // Annotation tools
       case "label-arrow":
-        console.log("Label with arrow tool activated");
         break;
       case "dimensions":
-        console.log("Dimension tool activated");
         break;
       case "text-annotation":
-        console.log("Text annotation tool activated");
         break;
 
       // Snapping tools
       case "snap-toggle":
-        console.log("Toggle snapping mode");
         break;
       case "snap-endpoint":
-        console.log("Snap to endpoint");
         break;
       case "snap-midpoint":
-        console.log("Snap to midpoint");
         break;
       case "snap-center":
-        console.log("Snap to center");
         break;
       case "snap-intersection":
-        console.log("Snap to intersection");
         break;
       case "snap-perpendicular":
-        console.log("Snap to perpendicular");
         break;
       case "snap-grid":
-        console.log("Snap to grid");
         break;
 
       // Export
       case "export-project":
-        console.log("Exporting project...");
         break;
 
       default:
-        console.log("Clicked:", option.id);
+        break;
     }
     setOpenIndex(null);
   };
@@ -274,9 +251,6 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
       if (el && !el.contains(e.target as Node)) {
         setOpenIndex(null);
         setShowWallTypeSubmenu(false);
-        console.log("Submenu closed by outside click");
-      } else {
-        console.log("Click inside submenu, not closing");
       }
     }
     function handleKeyDown(e: KeyboardEvent) {
@@ -424,8 +398,8 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
               {/* Partitions */}
               <li className="px-2 py-1 text-xs font-medium text-gray-500 bg-gray-50">Partitions</li>
               {[
-                { id: 'partition-75', label: 'Partition Wall (75mm)', thickness: 75, visualThickness: 1, category: 'partition' },
-                { id: 'partition-100', label: 'Partition Wall (100mm)', thickness: 100, visualThickness: 2, category: 'partition' }
+                { id: 'partition-75', label: 'Partition Wall (75mm)', thickness: 1, visualThickness: 1, category: 'partition' },
+                { id: 'partition-100', label: 'Partition Wall (100mm)', thickness: 2, visualThickness: 2, category: 'partition' }
               ].map((wallType) => (
                 <li
                   key={wallType.id}
@@ -463,8 +437,8 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
               {/* Enclosure Walls */}
               <li className="px-2 py-1 text-xs font-medium text-gray-500 bg-gray-50 mt-2">Enclosure Walls</li>
               {[
-                { id: 'enclosure-150', label: 'Enclosure Wall (150mm)', thickness: 150, visualThickness: 5, category: 'enclosure' },
-                { id: 'enclosure-225', label: 'Enclosure Wall (225mm)', thickness: 225, visualThickness: 8, category: 'enclosure' }
+                { id: 'enclosure-150', label: 'Enclosure Wall (150mm)', thickness: 5, visualThickness: 5, category: 'enclosure' },
+                { id: 'enclosure-225', label: 'Enclosure Wall (225mm)', thickness: 8, visualThickness: 8, category: 'enclosure' }
               ].map((wallType) => (
                 <li
                   key={wallType.id}

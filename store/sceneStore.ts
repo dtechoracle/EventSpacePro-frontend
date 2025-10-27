@@ -236,6 +236,7 @@ type SceneState = {
   ungroupAsset: (groupId: string) => void;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const useSceneStore = create<SceneState>()(
   persist(
     (set, get) => ({
@@ -250,18 +251,14 @@ export const useSceneStore = create<SceneState>()(
       showDebugOutlines: false,
       gridSize: 10, // Default 10mm grid
       snapToGridEnabled: false,
-      
-      // Grid size options
-      availableGridSizes: [5, 10, 25, 50, 100], // 5mm, 10mm, 25mm, 50mm, 100mm
-      selectedGridSizeIndex: 1, // Default to 10mm (index 1)
-      
-      // Wall type and size options
-      wallType: 'standard',
+      availableGridSizes: [5, 10, 25, 50, 100],
+      selectedGridSizeIndex: 1,
+      wallType: 'thin',
       availableWallTypes: [
-        { id: 'thin', label: 'Partition (75mm)', thickness: 75 },
-        { id: 'standard', label: 'Partition (100mm)', thickness: 100 },
-        { id: 'thick', label: 'Enclosure Wall (150mm)', thickness: 150 },
-        { id: 'extra-thick', label: 'Enclosure Wall (225mm)', thickness: 225 }
+        { id: 'thin', label: 'Partition (75mm)', thickness: 1 },
+        { id: 'standard', label: 'Partition (100mm)', thickness: 2 },
+        { id: 'thick', label: 'Enclosure Wall (150mm)', thickness: 5 },
+        { id: 'extra-thick', label: 'Enclosure Wall (225mm)', thickness: 8 }
       ],
       shapeMode: null,
       shapeStart: null,
@@ -325,7 +322,7 @@ export const useSceneStore = create<SceneState>()(
                 : type === "drawn-line"
                   ? { strokeWidth: 2, strokeColor: "#000000", backgroundColor: defaultBackgroundColor }
                   : type === "wall-segments"
-                    ? { wallThickness: 1, wallGap: 8, lineColor: "#000000", backgroundColor: defaultBackgroundColor }
+                    ? { wallThickness: get().getCurrentWallThickness(), wallGap: 8, lineColor: "#000000", backgroundColor: defaultBackgroundColor }
                     : type === "text"
                       ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: defaultBackgroundColor }
                       : { width: 24, height: 24, backgroundColor: defaultBackgroundColor }; // Default for icons
@@ -549,11 +546,10 @@ export const useSceneStore = create<SceneState>()(
       getCurrentWallThickness: () => {
         const state = get();
         const wallType = state.availableWallTypes.find(wt => wt.id === state.wallType);
-        return wallType?.thickness || 10; // Default to 10mm if not found
+        return wallType?.thickness || 1; // Default to 1px if not found
       },
 
       setShapeMode: (mode) => set({ shapeMode: mode, shapeStart: null, shapeTempEnd: null }),
-      startShape: (start) => set({ shapeStart: start, shapeTempEnd: null }),
       updateShapeTempEnd: (end) => set({ shapeTempEnd: end }),
       finishShape: () => {
         const state = get();
@@ -737,6 +733,7 @@ export const useSceneStore = create<SceneState>()(
           lineColor: "#000000",
           backgroundColor: "#f3f4f6" // bg-gray-100
         };
+
 
         set((state) => ({
           assets: [...state.assets, wallAsset],
@@ -2011,7 +2008,7 @@ export const useSceneStore = create<SceneState>()(
         setTimeout(() => get().saveToHistory(), 0);
       },
     }),
-    { name: "scene-storage" }
+    { name: "scene-storage-v2" }
   )
 );
 

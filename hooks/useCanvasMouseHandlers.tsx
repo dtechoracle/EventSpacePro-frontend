@@ -229,7 +229,7 @@ export function useCanvasMouseHandlers({
         lastMousePos.current = { x, y };
         return;
       }
-
+      
       if (isRotatingAsset.current && selectedAssetId) {
         const asset = assets.find((a) => a.id === selectedAssetId);
         if (asset) {
@@ -237,17 +237,17 @@ export function useCanvasMouseHandlers({
             e.clientX,
             e.clientY
           );
-
+          
           // Calculate angle from asset center to mouse position
           const deltaX = mouseX - asset.x;
           const deltaY = mouseY - asset.y;
           const currentMouseAngle =
             Math.atan2(deltaY, deltaX) * (180 / Math.PI);
-
+          
           // Calculate rotation difference from initial angle
           const rotationDelta = currentMouseAngle - initialMouseAngle.current;
           const newRotation = initialRotation.current + rotationDelta;
-
+          
           updateAsset(selectedAssetId, { rotation: newRotation });
         }
         return;
@@ -264,24 +264,24 @@ export function useCanvasMouseHandlers({
             e.clientX,
             e.clientY
           );
-
+          
           // Use distance from asset center to mouse position for stable scaling
           const assetCenterX = asset.x;
           const assetCenterY = asset.y;
-
+          
           // Calculate current distance from asset center to mouse position
           const currentDistance = Math.sqrt(
             Math.pow(mouseX - assetCenterX, 2) +
               Math.pow(mouseY - assetCenterY, 2)
           );
-
+          
           // Calculate scale based on distance ratio
           const scaleRatio = currentDistance / initialDistance.current;
           const newScale = Math.max(
             0.1,
             Math.min(10, initialScale.current * scaleRatio)
           );
-
+          
           updateAsset(selectedAssetId, { scale: newScale });
         }
         return;
@@ -299,7 +299,7 @@ export function useCanvasMouseHandlers({
             e.clientY
           );
           const assetCenterY = asset.y;
-
+          
           // Calculate height adjustment based on mouse distance from center
           const heightDelta = Math.abs(mouseY - assetCenterY);
           const heightRatio = heightDelta / initialDistance.current;
@@ -307,12 +307,12 @@ export function useCanvasMouseHandlers({
             10,
             Math.min(500, initialHeight.current * heightRatio)
           );
-
+          
           updateAsset(selectedAssetId, { height: newHeight });
         }
         return;
       }
-
+      
       if (isDrawing && isPenMode) {
         const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
         currentDrawingPath.current = [...currentDrawingPath.current, { x, y }];
@@ -350,7 +350,7 @@ export function useCanvasMouseHandlers({
       // Handle wall drawing mode mouse movement
       if (wallDrawingMode && currentWallStart) {
         const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-
+        
         // Check if mouse is within canvas bounds
         if (
           canvas &&
@@ -492,7 +492,7 @@ export function useCanvasMouseHandlers({
         updateAsset(draggingAssetRef.current, { x: snapped.x, y: snapped.y });
         return;
       }
-
+      
       if (isMovingCanvas.current) {
         const dx = e.clientX - lastCanvasPointer.current.x;
         const dy = e.clientY - lastCanvasPointer.current.y;
@@ -523,27 +523,27 @@ export function useCanvasMouseHandlers({
         if (currentDrawingPath.current.length > 1) {
           // Straighten the path if it's close to a straight line
           const straightenedPath = straightenPath(currentDrawingPath.current);
-
+          
           // Calculate center point and dimensions of the straightened path
           const startPoint = straightenedPath[0];
           const endPoint = straightenedPath[straightenedPath.length - 1];
-
+          
           const centerX = (startPoint.x + endPoint.x) / 2;
           const centerY = (startPoint.y + endPoint.y) / 2;
-
+          
           // Calculate length for the line
           const length = Math.sqrt(
             Math.pow(endPoint.x - startPoint.x, 2) +
               Math.pow(endPoint.y - startPoint.y, 2)
           );
-
+          
           // Determine if the line is more horizontal or vertical
           const deltaX = Math.abs(endPoint.x - startPoint.x);
           const deltaY = Math.abs(endPoint.y - startPoint.y);
           const isHorizontal = deltaX > deltaY;
-
+          
           let newAsset: AssetInstance;
-
+          
           if (isWallMode) {
             // Create double line asset for wall mode
             const id = `double-line-${Date.now()}`;
@@ -565,13 +565,13 @@ export function useCanvasMouseHandlers({
           } else {
             // Create single line asset for pen mode (drawn-line type for path rendering)
             const id = `drawn-line-${Date.now()}`;
-
+            
             // Convert path coordinates to be relative to the center point
             const relativePath = straightenedPath.map((point) => ({
               x: point.x - centerX,
               y: point.y - centerY,
             }));
-
+            
             newAsset = {
               id,
               type: "drawn-line",
@@ -586,11 +586,11 @@ export function useCanvasMouseHandlers({
               zIndex: 0,
             };
           }
-
+          
           addAssetObject(newAsset);
           selectAsset(newAsset.id);
         }
-
+        
         // Reset drawing state
         setIsDrawing(false);
         currentDrawingPath.current = [];

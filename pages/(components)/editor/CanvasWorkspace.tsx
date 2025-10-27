@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import Canvas from "./Canvas";
-import { EventData, useSceneStore } from "@/store/sceneStore";
+import { EventData } from "@/store/sceneStore";
 
 // Type for API response that wraps EventData
 type EventDataResponse =
@@ -33,12 +33,6 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
 
   // detect spacebar pressed to pan
   const isSpaceDown = useRef(false);
-  
-  // Get wall drawing mode state for cursor styling
-  const wallDrawingMode = useSceneStore((s) => s.wallDrawingMode);
-  const isWallMode = useSceneStore((s) => s.isWallMode);
-  const isPenMode = useSceneStore((s) => s.isPenMode);
-  const isRectangularSelectionMode = useSceneStore((s) => s.isRectangularSelectionMode);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space") isSpaceDown.current = true;
@@ -70,8 +64,8 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
         }
       : {
           size: "layout",
-          width: 2000, // Default 2000mm width for plain layout
-          height: 2000, // Default 2000mm height for plain layout
+          width: 1000, // Default 2000mm width for plain layout
+          height: 1000, // Default 2000mm height for plain layout
         };
   }, [actualData]);
 
@@ -166,11 +160,7 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
   return (
     <div
       ref={containerRef}
-      className={`w-full h-full overflow-hidden bg-gray-100 ${
-        isPenMode || isWallMode || wallDrawingMode || isRectangularSelectionMode
-          ? "cursor-crosshair"
-          : ""
-      }`}
+      className='w-full h-full overflow-hidden bg-gray-100'
       onMouseDown={handlePointerDown}
       // style={{
       //   backgroundImage:
@@ -192,6 +182,8 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
             position: "absolute",
             left: canvasPos.x - canvasPxW / 2,
             top: canvasPos.y - canvasPxH / 2,
+            transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+            transformOrigin: "top left",
           }}
         >
           <Canvas

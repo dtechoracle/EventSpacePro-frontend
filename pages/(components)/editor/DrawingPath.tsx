@@ -1,8 +1,8 @@
 import React from 'react';
 import { AssetInstance, useSceneStore } from '@/store/sceneStore';
-import {
-  buildWallGeometry,
-  findNearbyWallSegment,
+import { 
+  buildWallGeometry, 
+  findNearbyWallSegment, 
   mergeWallSegments
 } from '@/lib/wallGeometry';
 
@@ -48,18 +48,6 @@ export default function DrawingPath({
   const shapeMode = useSceneStore((s) => s.shapeMode);
   const shapeStart = useSceneStore((s) => s.shapeStart);
   const shapeTempEnd = useSceneStore((s) => s.shapeTempEnd);
-  const wallType = useSceneStore((s) => s.wallType);
-  const availableWallTypes = useSceneStore((s) => s.availableWallTypes);
-  
-  // Fallback wall types if store doesn't have them
-  const defaultWallTypes = [
-    { id: 'thin', label: 'Thin (5mm)', thickness: 5 },
-    { id: 'standard', label: 'Standard (10mm)', thickness: 10 },
-    { id: 'thick', label: 'Thick (20mm)', thickness: 20 },
-    { id: 'extra-thick', label: 'Extra Thick (40mm)', thickness: 40 }
-  ];
-  
-  const wallTypes = availableWallTypes || defaultWallTypes;
 
   if (!isDrawing && !wallDrawingMode && !shapeMode && !isRectangularSelectionMode) return null;
 
@@ -72,17 +60,17 @@ export default function DrawingPath({
     >
       {/* === SHAPE DRAWING PREVIEW === */}
       {shapeMode && shapeStart && shapeTempEnd && (() => {
-        const x1 = shapeStart.x * mmToPx;
-        const y1 = shapeStart.y * mmToPx;
-        const x2 = shapeTempEnd.x * mmToPx;
-        const y2 = shapeTempEnd.y * mmToPx;
-        const left = Math.min(x1, x2);
-        const top = Math.min(y1, y2);
-        const w = Math.abs(x2 - x1);
-        const h = Math.abs(y2 - y1);
+          const x1 = shapeStart.x * mmToPx;
+          const y1 = shapeStart.y * mmToPx;
+          const x2 = shapeTempEnd.x * mmToPx;
+          const y2 = shapeTempEnd.y * mmToPx;
+          const left = Math.min(x1, x2);
+          const top = Math.min(y1, y2);
+          const w = Math.abs(x2 - x1);
+          const h = Math.abs(y2 - y1);
 
         if (shapeMode === 'rectangle')
-          return (
+            return (
             <rect
               x={left}
               y={top}
@@ -95,7 +83,7 @@ export default function DrawingPath({
             />
           );
         if (shapeMode === 'ellipse')
-          return (
+            return (
             <ellipse
               cx={left + w / 2}
               cy={top + h / 2}
@@ -108,7 +96,7 @@ export default function DrawingPath({
             />
           );
         if (shapeMode === 'line')
-          return (
+            return (
             <line
               x1={x1}
               y1={y1}
@@ -119,30 +107,30 @@ export default function DrawingPath({
               strokeDasharray="6,4"
             />
           );
-        return null;
+          return null;
       })()}
 
       {/* === PEN DRAWING === */}
       {isDrawing && tempPath.length > 0 && !wallDrawingMode && (
         tempPath.length === 1 ? (
-          <circle
-            cx={tempPath[0].x * mmToPx}
-            cy={tempPath[0].y * mmToPx}
-            r="2"
-            fill="#000000"
-          />
-        ) : (
-          <path
+            <circle
+              cx={tempPath[0].x * mmToPx}
+              cy={tempPath[0].y * mmToPx}
+              r="2"
+              fill="#000000"
+            />
+          ) : (
+            <path
             d={`M ${tempPath[0].x * mmToPx} ${tempPath[0].y * mmToPx} ${tempPath
               .slice(1)
               .map((p) => `L ${p.x * mmToPx} ${p.y * mmToPx}`)
               .join(' ')}`}
-            stroke="#000000"
-            strokeWidth="2"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+              stroke="#000000"
+              strokeWidth="2"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
         )
       )}
 
@@ -151,22 +139,21 @@ export default function DrawingPath({
         <>
           {/* Completed walls */}
           {currentWallSegments.length > 0 && (() => {
-            const currentWallType = wallTypes.find(wt => wt.id === wallType);
-            const wallThickness = currentWallType?.thickness || 10;
+            const wallThickness = 1;
             const wallGap = 8;
-
+            
             const segmentsInMM = currentWallSegments.map((segment) => ({
               start: { x: segment.start.x, y: segment.start.y },
               end: { x: segment.end.x, y: segment.end.y }
             }));
-
+            
             const wallAssets = assets.filter(
               (asset) => asset.wallSegments && asset.wallSegments.length > 0
             );
 
             let mergedSegments = segmentsInMM;
             let connectedAsset: AssetInstance | null = null;
-
+            
             if (segmentsInMM.length > 0) {
               const firstPoint = segmentsInMM[0].start;
               const lastPoint = segmentsInMM[segmentsInMM.length - 1].end;
@@ -199,12 +186,10 @@ export default function DrawingPath({
               />
             );
           })()}
-
+          
           {/* Current wall segment */}
           {currentWallStart && currentWallTempEnd && (() => {
             const wallGap = 8;
-            const currentWallType = wallTypes.find(wt => wt.id === wallType);
-            const wallThickness = currentWallType?.thickness || 10;
             const tempSegment = { start: currentWallStart, end: currentWallTempEnd };
             const geometry = buildWallGeometry([tempSegment], wallGap);
             if (!geometry.outerPoints.length) return null;
@@ -321,14 +306,14 @@ export default function DrawingPath({
                 .join(' ');
               return `${outer} ${inner} Z`;
             })();
-
+            
             return (
               <>
                 <path
                   d={fullPath}
                   fill="none"
                   stroke="#000"
-                  strokeWidth={Math.max(2, wallThickness * mmToPx * 0.1)}
+                  strokeWidth="2"
                   strokeDasharray="6,4"
                   opacity="0.8"
                 />
@@ -337,7 +322,7 @@ export default function DrawingPath({
               </>
             );
           })()}
-
+          
           {currentWallStart && (
             <circle
               cx={currentWallStart.x * mmToPx}
