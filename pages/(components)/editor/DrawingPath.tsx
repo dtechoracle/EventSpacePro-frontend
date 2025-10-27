@@ -48,6 +48,18 @@ export default function DrawingPath({
   const shapeMode = useSceneStore((s) => s.shapeMode);
   const shapeStart = useSceneStore((s) => s.shapeStart);
   const shapeTempEnd = useSceneStore((s) => s.shapeTempEnd);
+  const wallType = useSceneStore((s) => s.wallType);
+  const availableWallTypes = useSceneStore((s) => s.availableWallTypes);
+  
+  // Fallback wall types if store doesn't have them
+  const defaultWallTypes = [
+    { id: 'thin', label: 'Thin (5mm)', thickness: 5 },
+    { id: 'standard', label: 'Standard (10mm)', thickness: 10 },
+    { id: 'thick', label: 'Thick (20mm)', thickness: 20 },
+    { id: 'extra-thick', label: 'Extra Thick (40mm)', thickness: 40 }
+  ];
+  
+  const wallTypes = availableWallTypes || defaultWallTypes;
 
   if (!isDrawing && !wallDrawingMode && !shapeMode && !isRectangularSelectionMode) return null;
 
@@ -139,7 +151,8 @@ export default function DrawingPath({
         <>
           {/* Completed walls */}
           {currentWallSegments.length > 0 && (() => {
-            const wallThickness = 1;
+            const currentWallType = wallTypes.find(wt => wt.id === wallType);
+            const wallThickness = currentWallType?.thickness || 10;
             const wallGap = 8;
 
             const segmentsInMM = currentWallSegments.map((segment) => ({
@@ -190,6 +203,8 @@ export default function DrawingPath({
           {/* Current wall segment */}
           {currentWallStart && currentWallTempEnd && (() => {
             const wallGap = 8;
+            const currentWallType = wallTypes.find(wt => wt.id === wallType);
+            const wallThickness = currentWallType?.thickness || 10;
             const tempSegment = { start: currentWallStart, end: currentWallTempEnd };
             const geometry = buildWallGeometry([tempSegment], wallGap);
             if (!geometry.outerPoints.length) return null;
@@ -313,7 +328,7 @@ export default function DrawingPath({
                   d={fullPath}
                   fill="none"
                   stroke="#000"
-                  strokeWidth="2"
+                  strokeWidth={Math.max(2, wallThickness * mmToPx * 0.1)}
                   strokeDasharray="6,4"
                   opacity="0.8"
                 />

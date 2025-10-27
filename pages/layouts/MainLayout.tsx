@@ -18,7 +18,7 @@ const MainLayout: React.FC<LayoutProps> = ({ children }) => {
         <Sidebar />
 
         <main
-          className={`flex-1 overflow-auto pt-4 ${instrumentSans.className}`}
+          className={`flex-1 overflow-hidden pt-4 ${instrumentSans.className}`}
         >
           {children}
         <AiTrigger />

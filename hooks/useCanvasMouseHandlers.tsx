@@ -72,6 +72,8 @@ export function useCanvasMouseHandlers({
   const commitWallSegment = useSceneStore((s) => s.commitWallSegment);
   const finishWallDrawingAction = useSceneStore((s) => s.finishWallDrawing);
   const finishWallDraftAction = useSceneStore((s) => s.finishWallDraft);
+  const startWallDraft = useSceneStore((s) => s.startWallDraft);
+  const addWallDraftNode = useSceneStore((s) => s.addWallDraftNode);
   const shapeMode = useSceneStore((s) => s.shapeMode);
   const shapeStart = useSceneStore((s) => s.shapeStart);
   const shapeTempEnd = useSceneStore((s) => s.shapeTempEnd);
@@ -170,6 +172,33 @@ export function useCanvasMouseHandlers({
           lastMousePos.current = { x, y };
           return;
         }
+      }
+
+      // Handle wall drawing mode mouse down - use EXACT original approach
+      if (isWallMode) {
+        const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+        
+        // Check if mouse is within canvas bounds
+        if (
+          canvas &&
+          x >= 0 &&
+          y >= 0 &&
+          x <= canvas.width &&
+          y <= canvas.height
+        ) {
+          // Apply grid snapping if enabled
+          const snappedPoint = snapToGrid(x, y);
+          
+          // Use the EXACT original wall drawing approach that was working
+          if (!currentWallStart) {
+            // Start new wall drawing
+            startWallDraft(snappedPoint);
+          } else {
+            // Add point to current wall
+            addWallDraftNode(snappedPoint);
+          }
+        }
+        return;
       }
     };
 

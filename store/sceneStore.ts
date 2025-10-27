@@ -84,6 +84,18 @@ type SceneState = {
   showDebugOutlines?: boolean;
   gridSize: number; // Grid size in mm
   snapToGridEnabled: boolean; // Whether to snap to grid
+  
+  // Grid size options
+  availableGridSizes: number[]; // Available grid sizes in mm
+  selectedGridSizeIndex: number; // Index of currently selected grid size
+  
+  // Wall type and size options
+  wallType: 'thin' | 'standard' | 'thick' | 'extra-thick'; // Current wall type
+  availableWallTypes: Array<{
+    id: 'thin' | 'standard' | 'thick' | 'extra-thick';
+    label: string;
+    thickness: number; // Thickness in mm
+  }>;
   // Shape drawing
   shapeMode: 'rectangle' | 'ellipse' | 'line' | null;
   shapeStart: { x: number; y: number } | null;
@@ -152,6 +164,14 @@ type SceneState = {
   setGridSize: (size: number) => void;
   toggleSnapToGrid: () => void;
   snapToGrid: (x: number, y: number) => { x: number; y: number };
+  
+  // Grid size selection methods
+  setSelectedGridSizeIndex: (index: number) => void;
+  getCurrentGridSize: () => number;
+  
+  // Wall type selection methods - Updated
+  setWallType: (type: 'thin' | 'standard' | 'thick' | 'extra-thick') => void;
+  getCurrentWallThickness: () => number;
   setShapeMode: (mode: 'rectangle' | 'ellipse' | 'line' | null) => void;
   startShape: (start: { x: number; y: number }) => void;
   updateShapeTempEnd: (end: { x: number; y: number }) => void;
@@ -230,6 +250,19 @@ export const useSceneStore = create<SceneState>()(
       showDebugOutlines: false,
       gridSize: 10, // Default 10mm grid
       snapToGridEnabled: false,
+      
+      // Grid size options
+      availableGridSizes: [5, 10, 25, 50, 100], // 5mm, 10mm, 25mm, 50mm, 100mm
+      selectedGridSizeIndex: 1, // Default to 10mm (index 1)
+      
+      // Wall type and size options
+      wallType: 'standard',
+      availableWallTypes: [
+        { id: 'thin', label: 'Partition (75mm)', thickness: 75 },
+        { id: 'standard', label: 'Partition (100mm)', thickness: 100 },
+        { id: 'thick', label: 'Enclosure Wall (150mm)', thickness: 150 },
+        { id: 'extra-thick', label: 'Enclosure Wall (225mm)', thickness: 225 }
+      ],
       shapeMode: null,
       shapeStart: null,
       shapeTempEnd: null,
@@ -492,6 +525,33 @@ export const useSceneStore = create<SceneState>()(
         };
       },
 
+      // Grid size selection methods
+      setSelectedGridSizeIndex: (index: number) => {
+        const state = get();
+        if (index >= 0 && index < state.availableGridSizes.length) {
+          set({ 
+            selectedGridSizeIndex: index,
+            gridSize: state.availableGridSizes[index]
+          });
+        }
+      },
+
+      getCurrentGridSize: () => {
+        const state = get();
+        return state.availableGridSizes[state.selectedGridSizeIndex] || state.gridSize;
+      },
+
+      // Wall type selection methods
+      setWallType: (type: 'thin' | 'standard' | 'thick' | 'extra-thick') => {
+        set({ wallType: type });
+      },
+
+      getCurrentWallThickness: () => {
+        const state = get();
+        const wallType = state.availableWallTypes.find(wt => wt.id === state.wallType);
+        return wallType?.thickness || 10; // Default to 10mm if not found
+      },
+
       setShapeMode: (mode) => set({ shapeMode: mode, shapeStart: null, shapeTempEnd: null }),
       startShape: (start) => set({ shapeStart: start, shapeTempEnd: null }),
       updateShapeTempEnd: (end) => set({ shapeTempEnd: end }),
@@ -667,12 +727,12 @@ export const useSceneStore = create<SceneState>()(
           type: "wall-segments",
           x: cx,
           y: cy,
-          scale: 2,
+          scale: 1, // Keep scale at 1 for consistent rendering
           rotation: 0,
           zIndex: nextZIndex,
           wallNodes: nodes,
           wallEdges: edges,
-          wallThickness: 1,
+          wallThickness: get().getCurrentWallThickness(), // Use selected wall thickness
           wallGap: 8,
           lineColor: "#000000",
           backgroundColor: "#f3f4f6" // bg-gray-100
@@ -1310,13 +1370,13 @@ export const useSceneStore = create<SceneState>()(
               type: "wall-segments",
               x: centerX,
               y: centerY,
-              scale: 2, // Default scale of 2 for proper wall size
+              scale: 1, // Keep scale at 1 for consistent rendering
               rotation: 0,
               zIndex: nextZIndex,
               wallSegments: undefined,
               wallNodes: nodes,
               wallEdges: edges,
-              wallThickness: 1, // Default wall thickness of 1
+              wallThickness: get().getCurrentWallThickness(), // Use selected wall thickness
               wallGap: 8,
               lineColor: "#000000",
               backgroundColor: "#f3f4f6" // bg-gray-100

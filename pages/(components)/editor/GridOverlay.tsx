@@ -10,14 +10,9 @@ interface GridOverlayProps {
 
 export default function GridOverlay({ showGrid, canvasPxW, canvasPxH, mmToPx, gridSize }: GridOverlayProps) {
   if (!showGrid) return null;
-
-  // Debug logging
-  console.log('GridOverlay render:', { showGrid, canvasPxW, canvasPxH, mmToPx, gridSize });
-  console.log('Grid pattern size:', gridSize * mmToPx);
   
   // Ensure grid is visible - if pattern is too large, use a smaller size
   const patternSize = Math.min(gridSize * mmToPx, 100); // Max 100px pattern size
-  console.log('Adjusted pattern size:', patternSize);
 
   return (
     <svg

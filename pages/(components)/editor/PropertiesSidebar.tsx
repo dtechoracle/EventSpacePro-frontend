@@ -25,8 +25,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
   const showGrid = useSceneStore((s) => s.showGrid);
   const toggleGrid = useSceneStore((s) => s.toggleGrid);
-  const gridSize = useSceneStore((s) => s.gridSize);
-  const setGridSize = useSceneStore((s) => s.setGridSize);
+  const availableGridSizes = useSceneStore((s) => s.availableGridSizes);
+  const selectedGridSizeIndex = useSceneStore((s) => s.selectedGridSizeIndex);
+  const setSelectedGridSizeIndex = useSceneStore((s) => s.setSelectedGridSizeIndex);
   const snapToGridEnabled = useSceneStore((s) => s.snapToGridEnabled);
   const toggleSnapToGrid = useSceneStore((s) => s.toggleSnapToGrid);
   // const addAsset = useSceneStore((s) => s.addAsset);
@@ -162,15 +163,17 @@ export default function PropertiesSidebar(): React.JSX.Element {
               <div className="py-2">
                 <label className="block text-xs text-gray-600 mb-1">Grid Size</label>
                 <select 
-                  value={gridSize} 
-                  onChange={(e) => setGridSize(Number(e.target.value))}
+                  value={availableGridSizes?.[selectedGridSizeIndex] || 10} 
+                  onChange={(e) => {
+                    const selectedSize = Number(e.target.value);
+                    const index = availableGridSizes?.indexOf(selectedSize) || 1;
+                    setSelectedGridSizeIndex(index);
+                  }}
                   className="w-full text-xs border rounded px-2 py-1 bg-white"
                 >
-                  <option value={5}>5mm</option>
-                  <option value={10}>10mm</option>
-                  <option value={20}>20mm</option>
-                  <option value={50}>50mm</option>
-                  <option value={100}>100mm</option>
+                  {(availableGridSizes || [5, 10, 25, 50, 100]).map((size) => (
+                    <option key={size} value={size}>{size}mm</option>
+                  ))}
                 </select>
               </div>
             )}

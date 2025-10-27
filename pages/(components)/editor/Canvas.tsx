@@ -49,11 +49,9 @@ export default function Canvas({
   const markAsSaved = useSceneStore((s) => s.markAsSaved);
   const showGrid = useSceneStore((s) => s.showGrid);
   const gridSize = useSceneStore((s) => s.gridSize);
-
-  // Debug logging
-  console.log("Canvas grid state:", { showGrid, gridSize });
   const isPenMode = useSceneStore((s) => s.isPenMode);
   const isWallMode = useSceneStore((s) => s.isWallMode);
+  const wallType = useSceneStore((s) => s.wallType);
   const isDrawing = useSceneStore((s) => s.isDrawing);
   // const currentPath = useSceneStore((s) => s.currentPath);
   const tempPath = useSceneStore((s) => s.tempPath);
@@ -210,23 +208,25 @@ export default function Canvas({
   const rotateCCW = () => setRotation((r) => (r - 90 + 360) % 360);
 
   return (
-    <div
-      ref={canvasRef}
-      className={`relative ${canvas ? "bg-gray-100" : "bg-transparent"} ${
-        isPenMode ||
-        isWallMode ||
-        wallDrawingMode ||
-        shapeMode ||
-        isRectangularSelectionMode
-          ? "cursor-crosshair"
-          : ""
-      }`}
+    <div className="relative w-full h-full">
+      {/* Debug Panel */}
+      <div
+        ref={canvasRef}
+        className={`relative ${canvas ? "bg-gray-100" : "bg-transparent"} ${
+          isPenMode ||
+          isWallMode ||
+          wallDrawingMode ||
+          shapeMode ||
+          isRectangularSelectionMode
+            ? "cursor-crosshair"
+            : ""
+        }`}
       style={{
         width: canvasPxW,
         height: canvasPxH,
         transform: `rotate(${rotation}deg)`,
         transformOrigin: "center center",
-        cursor: isRectangularSelectionMode ? "crosshair" : undefined,
+        cursor: isRectangularSelectionMode ? "crosshair" : (isWallMode || wallDrawingMode) ? "crosshair" : undefined,
       }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
@@ -466,6 +466,7 @@ export default function Canvas({
             />
           );
         })}
+      </div>
     </div>
   );
 }

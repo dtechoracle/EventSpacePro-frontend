@@ -61,6 +61,8 @@ interface BarProps {
 export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
   const tools = useToolbarTools();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  const [showWallTypeSubmenu, setShowWallTypeSubmenu] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const {
     isPenMode,
@@ -77,7 +79,8 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     assets,
     groupSelectedAssets,
     ungroupAsset,
-  } = useSceneStore();
+    setWallType,
+  } = useSceneStore(); // Updated
 
   // Example states to toggle (keeping for future use)
   // const [isPreviewOn, setIsPreviewOn] = useState(false);
@@ -94,31 +97,61 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
 
   // Manual setRectangularSelectionMode function
   const setRectangularSelectionMode = (enabled: boolean) => {
-    console.log("Setting rectangular selection mode to:", enabled);
     useSceneStore.setState({
       isRectangularSelectionMode: enabled,
     });
-    console.log("Store state after setting:", useSceneStore.getState().isRectangularSelectionMode);
   };
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Handle option clicks
+  const handleWallTypeSelection = (wallType: string) => {
+    console.log("Selected wall type:", wallType);
+    
+    // Map the new wall type IDs to the store's expected format
+    let mappedWallType: 'thin' | 'standard' | 'thick' | 'extra-thick';
+    
+    switch (wallType) {
+      case 'enclosure-225':
+        mappedWallType = 'extra-thick';
+        break;
+      case 'enclosure-150':
+        mappedWallType = 'thick';
+        break;
+      case 'partition-100':
+        mappedWallType = 'standard';
+        break;
+      case 'partition-75':
+        mappedWallType = 'thin';
+        break;
+      default:
+        mappedWallType = 'standard';
+    }
+    
+    setWallType(mappedWallType);
+    setShowWallTypeSubmenu(false);
+    
+    console.log("Mapped to:", mappedWallType);
+    
+    // Set all states in the correct order to avoid conflicts
+    setPenMode(false);
+    setRectangularSelectionMode(false);
+    setActiveTool("draw-wall");
+    setWallDrawingMode(true);
+  };
+
   const handleOptionClick = (option: ToolOption) => {
     switch (option.id) {
       // Selection tools
       case "pointer-select":
-        console.log("Pointer selection mode activated");
         setRectangularSelectionMode(false);
         setActiveTool("pointer-select");
         break;
       case "rectangular-select":
-        console.log("Rectangular selection mode activated");
         // Clear any existing selections and enable rectangular selection mode
         clearSelection();
         setRectangularSelectionMode(true);
         setActiveTool("rectangular-select");
-        console.log("Rectangular selection mode set to true");
         break;
 
       // Assets
@@ -137,7 +170,6 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
         setShapeMode("line");
         break;
       case "polygon":
-        console.log("Polygon tool activated");
         break;
 
       // Drawing tools
@@ -146,19 +178,9 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
         if (isPenMode) setWallMode(false); // Turn off wall mode when turning off pen mode
         break;
       case "draw-wall":
-        if (wallDrawingMode) {
-          // If we're currently drawing walls, finish the wall
-          if (currentWallSegments.length > 0) {
-            finishWallDrawing();
-          } else {
-            cancelWallDrawing();
-          }
-        } else {
-          // Start wall drawing mode
-          setWallDrawingMode(true);
-          setPenMode(false); // Turn off pen mode when starting wall mode
-          setWallMode(false); // Turn off old wall mode
-        }
+        // Show wall type submenu (like before)
+        setShowWallTypeSubmenu(true);
+        setOpenIndex(null); // Close the main dropdown
         break;
       case "add-text":
         // Add text at center of canvas
@@ -251,10 +273,17 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
       const el = containerRef.current;
       if (el && !el.contains(e.target as Node)) {
         setOpenIndex(null);
+        setShowWallTypeSubmenu(false);
+        console.log("Submenu closed by outside click");
+      } else {
+        console.log("Click inside submenu, not closing");
       }
     }
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpenIndex(null);
+      if (e.key === "Escape") {
+        setOpenIndex(null);
+        setShowWallTypeSubmenu(false);
+      }
     }
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -265,9 +294,9 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
   }, []);
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] pointer-events-auto">
+    <div ref={containerRef} className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] pointer-events-auto">
       {/* Wall Drawing Status */}
-      {wallDrawingMode && (
+      {isWallMode && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -304,7 +333,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                     (isWallMode || wallDrawingMode)) ||
                   (tool.options.some((opt) => opt.id === "rectangular-select") &&
                     activeTool === "rectangular-select")
-                    ? "border-green-600 text-green-600"
+                    ? "border-blue-500 text-blue-500"
                     : "border-[var(--accent)] text-[var(--accent)]"
                 }`}
                 aria-expanded={openIndex === index}
@@ -341,17 +370,25 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                           (option.id === "draw-wall" &&
                             (isWallMode || wallDrawingMode)) ||
                           (option.id === "rectangular-select" && activeTool === "rectangular-select")
-                            ? "bg-green-100 text-green-800"
+                            ? "bg-blue-100 text-blue-800"
                             : ""
                         }`}
                         onClick={() => handleOptionClick(option)}
                       >
-                        <span>{option.label}</span>
+                        <div className="flex items-center gap-2">
+                          {option.icon && <span className="text-gray-600">{option.icon}</span>}
+                          <span>{option.label}</span>
+                          {option.id === "draw-wall" && (
+                            <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          )}
+                        </div>
                         {((option.id === "draw-line" && isPenMode) ||
                           (option.id === "draw-wall" &&
                             (isWallMode || wallDrawingMode)) ||
                           (option.id === "rectangular-select" && activeTool === "rectangular-select")) && (
-                              <div className="w-2 h-2 bg-green-600 rounded-full"></div>
+                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                             )}
                       </li>
                     ))}
@@ -367,6 +404,104 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
           </div>
         ))}
       </motion.div>
+
+      {/* Wall Type Submenu */}
+      <AnimatePresence>
+        {showWallTypeSubmenu && (
+          <motion.div
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.15 }}
+            className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-white rounded-md shadow-lg border p-1.5 w-56 z-[10000] pointer-events-auto"
+            onClick={(e) => {
+              // Don't stop propagation - let wall type clicks work
+            }}
+          >
+            <div className="text-xs font-medium text-gray-600 mb-2 px-2">Select Wall Type:</div>
+            
+            <ul className="space-y-0.5 text-xs text-gray-700">
+              {/* Partitions */}
+              <li className="px-2 py-1 text-xs font-medium text-gray-500 bg-gray-50">Partitions</li>
+              {[
+                { id: 'partition-75', label: 'Partition Wall (75mm)', thickness: 75, visualThickness: 1, category: 'partition' },
+                { id: 'partition-100', label: 'Partition Wall (100mm)', thickness: 100, visualThickness: 2, category: 'partition' }
+              ].map((wallType) => (
+                <li
+                  key={wallType.id}
+                  className="px-2 py-1.5 rounded hover:bg-gray-100 cursor-pointer flex items-center justify-between"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleWallTypeSelection(wallType.id as any);
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1 items-center">
+                      <div 
+                        className="bg-gray-400 rounded"
+                        style={{ 
+                          width: `${wallType.visualThickness}px`,
+                          height: '16px',
+                          backgroundColor: '#10b981'
+                        }}
+                      />
+                      <div 
+                        className="bg-gray-400 rounded"
+                        style={{ 
+                          width: `${wallType.visualThickness}px`,
+                          height: '16px',
+                          backgroundColor: '#10b981'
+                        }}
+                      />
+                    </div>
+                    <span>{wallType.label}</span>
+                  </div>
+                </li>
+              ))}
+              
+              {/* Enclosure Walls */}
+              <li className="px-2 py-1 text-xs font-medium text-gray-500 bg-gray-50 mt-2">Enclosure Walls</li>
+              {[
+                { id: 'enclosure-150', label: 'Enclosure Wall (150mm)', thickness: 150, visualThickness: 5, category: 'enclosure' },
+                { id: 'enclosure-225', label: 'Enclosure Wall (225mm)', thickness: 225, visualThickness: 8, category: 'enclosure' }
+              ].map((wallType) => (
+                <li
+                  key={wallType.id}
+                  className="px-2 py-1.5 rounded hover:bg-gray-100 cursor-pointer flex items-center justify-between"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleWallTypeSelection(wallType.id as any);
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1 items-center">
+                      <div 
+                        className="bg-gray-400 rounded"
+                        style={{ 
+                          width: `${wallType.visualThickness}px`,
+                          height: '16px',
+                          backgroundColor: '#3b82f6'
+                        }}
+                      />
+                      <div 
+                        className="bg-gray-400 rounded"
+                        style={{ 
+                          width: `${wallType.visualThickness}px`,
+                          height: '16px',
+                          backgroundColor: '#3b82f6'
+                        }}
+                      />
+                    </div>
+                    <span>{wallType.label}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import Canvas from "./Canvas";
-import { EventData } from "@/store/sceneStore";
+import { EventData, useSceneStore } from "@/store/sceneStore";
 
 // Type for API response that wraps EventData
 type EventDataResponse =
@@ -33,6 +33,12 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
 
   // detect spacebar pressed to pan
   const isSpaceDown = useRef(false);
+  
+  // Get wall drawing mode state for cursor styling
+  const wallDrawingMode = useSceneStore((s) => s.wallDrawingMode);
+  const isWallMode = useSceneStore((s) => s.isWallMode);
+  const isPenMode = useSceneStore((s) => s.isPenMode);
+  const isRectangularSelectionMode = useSceneStore((s) => s.isRectangularSelectionMode);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space") isSpaceDown.current = true;
@@ -160,7 +166,11 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
   return (
     <div
       ref={containerRef}
-      className='w-full h-full overflow-hidden bg-gray-100'
+      className={`w-full h-full overflow-hidden bg-gray-100 ${
+        isPenMode || isWallMode || wallDrawingMode || isRectangularSelectionMode
+          ? "cursor-crosshair"
+          : ""
+      }`}
       onMouseDown={handlePointerDown}
       // style={{
       //   backgroundImage:
