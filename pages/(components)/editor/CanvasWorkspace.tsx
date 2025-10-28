@@ -12,6 +12,7 @@ type EventDataResponse =
   | EventData;
 
 const MM_TO_PX = 2; // must match the constant used in Canvas for mm -> px
+const ZOOM_SENSITIVITY = 0.001;
 
 interface CanvasWorkspaceProps {
   eventData?: EventDataResponse | null;
@@ -24,6 +25,7 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
   const [zoom, setZoom] = useState(1); // current zoom (displayed)
   const targetZoom = useRef(1); // desired zoom (set by wheel)
   const [offset, setOffset] = useState({ x: 0, y: 0 }); // workspace pan (px)
+  const targetOffset = useRef({ x: 0, y: 0 }); // for smooth zoom animation
 
   const isPanning = useRef(false);
   const lastPanPos = useRef({ x: 0, y: 0 });
@@ -49,7 +51,6 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
   }, []);
 
   // Use event data directly instead of store
-  // The eventData has a 'data' wrapper based on the API response
   const actualData = useMemo(() => {
     if (!eventData) return null;
     return "data" in eventData ? eventData.data : eventData;
@@ -64,8 +65,8 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
         }
       : {
           size: "layout",
-          width: 1000, // Default 2000mm width for plain layout
-          height: 1000, // Default 2000mm height for plain layout
+          width: 1000,
+          height: 1000,
         };
   }, [actualData]);
 
@@ -87,10 +88,8 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
     });
 
     // Reset offset to zero (no initial pan)
-    setOffset({
-      x: 0,
-      y: 0,
-    });
+    setOffset({ x: 0, y: 0 });
+    targetOffset.current = { x: 0, y: 0 };
   }, [canvas, actualData]);
 
   // Smooth zoom animation using requestAnimationFrame
@@ -100,7 +99,14 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
       setZoom((z) => {
         const diff = targetZoom.current - z;
         if (Math.abs(diff) < 0.001) return targetZoom.current;
-        return z + diff * 0.2; // easing factor
+        return z + diff * 0.2;
+      });
+      setOffset((o) => {
+        const dx = targetOffset.current.x - o.x;
+        const dy = targetOffset.current.y - o.y;
+        if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1)
+          return targetOffset.current;
+        return { x: o.x + dx * 0.2, y: o.y + dy * 0.2 };
       });
       raf = requestAnimationFrame(tick);
     };
@@ -108,22 +114,40 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Wheel zoom handler (updates targetZoom and adjusts offset to keep canvas centered)
+  // ✅ Cursor-centered zoom (the point under the cursor remains fixed)
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
+    const clamp = (v: number) => Math.min(3, Math.max(0.2, v));
+
     const onWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        const delta = -e.deltaY * 0.001;
-        targetZoom.current = Math.min(
-          3,
-          Math.max(0.2, targetZoom.current + delta)
-        );
 
-        // Keep offset at zero to maintain canvas center during zoom
-        // The canvas positioning handles the centering
+        const rect = el.getBoundingClientRect();
+        const cursor = {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        };
+
+        // Step 1: Convert cursor to scene coordinates before zoom
+        const sceneX = (cursor.x - targetOffset.current.x) / targetZoom.current;
+        const sceneY = (cursor.y - targetOffset.current.y) / targetZoom.current;
+
+        // Step 2: Compute new zoom
+        const delta = -e.deltaY * ZOOM_SENSITIVITY;
+        const newZoom = clamp(targetZoom.current + delta);
+
+        // Step 3: Compute new offset so that scene point under cursor stays fixed
+        const newOffset = {
+          x: cursor.x - sceneX * newZoom,
+          y: cursor.y - sceneY * newZoom,
+        };
+
+        // Step 4: Apply targets (smoothly animated in RAF loop)
+        targetZoom.current = newZoom;
+        targetOffset.current = newOffset;
       }
     };
 
@@ -143,7 +167,11 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
         const dx = ev.clientX - lastPanPos.current.x;
         const dy = ev.clientY - lastPanPos.current.y;
         lastPanPos.current = { x: ev.clientX, y: ev.clientY };
-        setOffset((o) => ({ x: o.x + dx, y: o.y + dy }));
+        setOffset((o) => {
+          const newOffset = { x: o.x + dx, y: o.y + dy };
+          targetOffset.current = newOffset;
+          return newOffset;
+        });
       };
 
       const onDocUp = () => {
@@ -160,17 +188,12 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
   return (
     <div
       ref={containerRef}
-      className='w-full h-full overflow-hidden bg-gray-100'
+      className="w-full h-full overflow-hidden bg-gray-100"
       onMouseDown={handlePointerDown}
-      // style={{
-      //   backgroundImage:
-      //     "linear-gradient(to right, #e5e7eb 1px, transparent 1px), linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)",
-      //   backgroundSize: "20px 20px",
-      // }}
     >
       {/* Scene container */}
       <div
-        className='relative w-full h-full'
+        className="relative w-full h-full"
         style={{
           transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
           transformOrigin: "top left",
@@ -179,7 +202,7 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
         {/* Canvas (paper) */}
         <div
           style={{
-            position: "absolute",
+            position: "fixed",
             left: canvasPos.x - canvasPxW / 2,
             top: canvasPos.y - canvasPxH / 2,
           }}
@@ -197,3 +220,4 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
     </div>
   );
 }
+

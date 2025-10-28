@@ -1,8 +1,8 @@
 import React from 'react';
 import { AssetInstance, useSceneStore } from '@/store/sceneStore';
-import { 
-  buildWallGeometry, 
-  findNearbyWallSegment, 
+import {
+  buildWallGeometry,
+  findNearbyWallSegment,
   mergeWallSegments
 } from '@/lib/wallGeometry';
 
@@ -30,6 +30,21 @@ function normalizeAngle(a: number) {
   return angle;
 }
 
+/** Convert geometry (outerPoints + innerPoints) into a single SVG path string (mm coords -> px applied outside) */
+function geometryToPathD(geometry: { outerPoints: { x: number; y: number }[]; innerPoints: { x: number; y: number }[] }, mmToPx: number) {
+  if (!geometry || !geometry.outerPoints?.length) return '';
+  const outer = geometry.outerPoints
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x * mmToPx} ${p.y * mmToPx}`)
+    .join(' ');
+  // inner points should be appended in reverse to close correctly
+  const inner = (geometry.innerPoints || [])
+    .slice()
+    .reverse()
+    .map((p, i) => `L ${p.x * mmToPx} ${p.y * mmToPx}`)
+    .join(' ');
+  return `${outer} ${inner} Z`;
+}
+
 export default function DrawingPath({
   isDrawing,
   tempPath,
@@ -51,6 +66,78 @@ export default function DrawingPath({
 
   if (!isDrawing && !wallDrawingMode && !shapeMode && !isRectangularSelectionMode) return null;
 
+  /**
+   * Build a list of "wall geometries" (outer + inner) for:
+   *  - each asset that has wallSegments
+   *  - the completed currentWallSegments (joined/merged if necessary)
+   *  - the currently previewed temp segment (if present)
+   *
+   * We'll render these polygons into the mask (black = transparent area).
+   */
+  const wallGap = 8; // thickness gap used for geometry generation (mm)
+  const wallGeometries: Array<{ outerPoints: { x: number; y: number }[]; innerPoints: { x: number; y: number }[] }> = [];
+
+  // 1) asset walls (each asset may already contain full polygons or segments)
+  const wallAssets = assets.filter((asset) => asset.wallSegments && asset.wallSegments.length > 0);
+  for (const asset of wallAssets) {
+    try {
+      // assume asset.wallSegments is in the same segment format your buildWallGeometry expects
+      const geom = buildWallGeometry(asset.wallSegments, wallGap);
+      if (geom && geom.outerPoints?.length && geom.innerPoints?.length) {
+        wallGeometries.push(geom);
+      }
+    } catch (err) {
+      // swallow errors per-asset so mask generation does not break the UI
+      // console.warn('Failed building geometry for asset', err);
+    }
+  }
+
+  // 2) completed current wall segments (the in-progress multi-segment wall)
+  if (currentWallSegments && currentWallSegments.length > 0) {
+    const segmentsInMM = currentWallSegments.map((segment) => ({
+      start: { x: segment.start.x, y: segment.start.y },
+      end: { x: segment.end.x, y: segment.end.y }
+    }));
+
+    let mergedSegments = segmentsInMM;
+    let connectedAsset: AssetInstance | null = null;
+
+    if (segmentsInMM.length > 0) {
+      const firstPoint = segmentsInMM[0].start;
+      const lastPoint = segmentsInMM[segmentsInMM.length - 1].end;
+      const firstConnection = findNearbyWallSegment(firstPoint, wallAssets);
+      const lastConnection = findNearbyWallSegment(lastPoint, wallAssets);
+      if (firstConnection) connectedAsset = firstConnection.asset;
+      else if (lastConnection) connectedAsset = lastConnection.asset;
+      if (connectedAsset) mergedSegments = mergeWallSegments(segmentsInMM, connectedAsset);
+    }
+
+    try {
+      const geom = buildWallGeometry(mergedSegments, wallGap);
+      if (geom && geom.outerPoints?.length && geom.innerPoints?.length) {
+        wallGeometries.push(geom);
+      }
+    } catch (err) {
+      // console.warn('Failed building geometry for current wall segments', err);
+    }
+  }
+
+  // 3) current temp segment (the segment you're currently dragging / previewing)
+  if (currentWallStart && currentWallTempEnd) {
+    try {
+      const tempSegment = { start: currentWallStart, end: currentWallTempEnd };
+      const geom = buildWallGeometry([tempSegment], wallGap);
+      if (geom && geom.outerPoints?.length && geom.innerPoints?.length) {
+        wallGeometries.push(geom);
+      }
+    } catch (err) {
+      // console.warn('Failed building geometry for temp segment', err);
+    }
+  }
+
+  // convert all geometries to path d strings (so they can be rendered in mask and stroked)
+  const wallPathDs = wallGeometries.map((g) => geometryToPathD(g, mmToPx)).filter(Boolean);
+
   return (
     <svg
       className="absolute inset-0 pointer-events-none"
@@ -58,78 +145,76 @@ export default function DrawingPath({
       height={canvasPxH}
       style={{ zIndex: 5 }}
     >
-      {/* === SHAPE DRAWING PREVIEW === */}
-      {shapeMode && shapeStart && shapeTempEnd && (() => {
-          const x1 = shapeStart.x;
-          const y1 = shapeStart.y;
-          const x2 = shapeTempEnd.x;
-          const y2 = shapeTempEnd.y;
+      <defs>
+        {/* mask: white = visible, black = transparent (void) */}
+        <mask id="wallVoidMask">
+          <rect width="100%" height="100%" fill="white" />
+          {wallPathDs.map((d, i) => (
+            <path key={`mask-wall-${i}`} d={d} fill="black" stroke="none" />
+          ))}
+        </mask>
+      </defs>
+
+      {/* ===============================
+          Everything that should be hidden by walls goes inside this group
+          (the mask will remove any pixels that fall inside wall polygons)
+          =============================== */}
+      <g mask="url(#wallVoidMask)">
+        {/* === SHAPE DRAWING PREVIEW === */}
+        {shapeMode && shapeStart && shapeTempEnd && (() => {
+          const x1 = shapeStart.x * mmToPx;
+          const y1 = shapeStart.y * mmToPx;
+          const x2 = shapeTempEnd.x * mmToPx;
+          const y2 = shapeTempEnd.y * mmToPx;
           const left = Math.min(x1, x2);
           const top = Math.min(y1, y2);
           const w = Math.abs(x2 - x1);
           const h = Math.abs(y2 - y1);
 
-        if (shapeMode === 'rectangle')
+          if (shapeMode === 'rectangle')
             return (
-            <>
-            <rect
-              x={left * mmToPx}
-              y={top * mmToPx}
-              width={w * mmToPx}
-              height={h * mmToPx}
-              fill="none"
-              stroke="#111827"
-              strokeWidth={1.5}
-              strokeDasharray="6,4"
-            />
-            </>
-          );
-        if (shapeMode === 'ellipse')
+              <rect
+                x={left}
+                y={top}
+                width={w}
+                height={h}
+                fill="none"
+                stroke="#111827"
+                strokeWidth={1.5}
+                strokeDasharray="6,4"
+              />
+            );
+          if (shapeMode === 'ellipse')
             return (
-            <>
-            <ellipse
-              cx={(left + w / 2) * mmToPx}
-              cy={(top + h / 2) * mmToPx}
-              rx={(w / 2) * mmToPx}
-              ry={(h / 2) * mmToPx}
-              fill="none"
-              stroke="#111827"
-              strokeWidth={1.5}
-              strokeDasharray="6,4"
-            />
-            </>
-          );
-        if (shapeMode === 'line')
+              <ellipse
+                cx={left + w / 2}
+                cy={top + h / 2}
+                rx={w / 2}
+                ry={h / 2}
+                fill="none"
+                stroke="#111827"
+                strokeWidth={1.5}
+                strokeDasharray="6,4"
+              />
+            );
+          if (shapeMode === 'line')
             return (
-            <>
-            <line
-              x1={x1 * mmToPx}
-              y1={y1 * mmToPx}
-              x2={x2 * mmToPx}
-              y2={y2 * mmToPx}
-              stroke="#111827"
-              strokeWidth={2}
-              strokeDasharray="6,4"
-            />
-            {/* DEBUG: Visual size info */}
-            <text
-              x={(x1 + x2)/2 * mmToPx}
-              y={(y1 + y2)/2 * mmToPx - 10}
-              fill="#ff0000"
-              fontSize="12"
-              textAnchor="middle"
-              fontWeight="bold"
-            >
-              PREVIEW: {Math.sqrt(w*w + h*h).toFixed(1)}mm length
-            </text>
-            </>
-          );
+              <line
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke="#111827"
+                strokeWidth={2}
+                strokeDasharray="6,4"
+              />
+            );
           return null;
-      })()}
+        })()}
 
-      {/* === PEN DRAWING === */}
-      {isDrawing && tempPath.length > 0 && !wallDrawingMode && (
-        tempPath.length === 1 ? (
+        {/* === PEN DRAWING === */}
+        {isDrawing && tempPath.length > 0 && !wallDrawingMode && (
+          tempPath.length === 1 ? (
             <circle
               cx={tempPath[0].x * mmToPx}
               cy={tempPath[0].y * mmToPx}
@@ -138,89 +223,78 @@ export default function DrawingPath({
             />
           ) : (
             <path
-            d={`M ${tempPath[0].x * mmToPx} ${tempPath[0].y * mmToPx} ${tempPath
-              .slice(1)
-              .map((p) => `L ${p.x * mmToPx} ${p.y * mmToPx}`)
-              .join(' ')}`}
+              d={`M ${tempPath[0].x * mmToPx} ${tempPath[0].y * mmToPx} ${tempPath
+                .slice(1)
+                .map((p) => `L ${p.x * mmToPx} ${p.y * mmToPx}`)
+                .join(' ')}`}
               stroke="#000000"
               strokeWidth="2"
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-        )
-      )}
+          )
+        )}
 
-      {/* === WALL DRAWING MODE === */}
+        {/* === RECTANGULAR SELECTION (if any) === */}
+        {isRectangularSelectionMode && rectangularSelectionStart && rectangularSelectionEnd && (() => {
+          const x1 = rectangularSelectionStart.x * mmToPx;
+          const y1 = rectangularSelectionStart.y * mmToPx;
+          const x2 = rectangularSelectionEnd.x * mmToPx;
+          const y2 = rectangularSelectionEnd.y * mmToPx;
+          const left = Math.min(x1, x2);
+          const top = Math.min(y1, y2);
+          const w = Math.abs(x2 - x1);
+          const h = Math.abs(y2 - y1);
+          return (
+            <rect
+              x={left}
+              y={top}
+              width={w}
+              height={h}
+              fill="none"
+              stroke="#2563EB"
+              strokeWidth={1.5}
+              strokeDasharray="4,4"
+            />
+          );
+        })()}
+
+        {/* You can also render other scene layers here: assets, background grid, selection highlights, etc.
+            Because they are inside the mask group, anything inside wall polygons will be hidden (void).
+         */}
+      </g>
+
+      {/* ===============================
+          Wall outlines / edges (drawn on top so we still see wall edges)
+          These do NOT participate in the mask (so their strokes still show).
+          =============================== */}
+      {wallPathDs.map((d, i) => (
+        <path
+          key={`wall-outline-${i}`}
+          d={d}
+          fill="none"
+          stroke="#000000"
+          strokeWidth={2}
+          strokeLinejoin="round"
+        />
+      ))}
+
+      {/* === WALL DRAWING MODE (existing logic for current segment guides & preview) === */}
       {wallDrawingMode && (
         <>
-          {/* Completed walls */}
-          {currentWallSegments.length > 0 && (() => {
-            const wallThickness = useSceneStore.getState().getCurrentWallThickness();
-            const wallGap = 8;
-            
-            const segmentsInMM = currentWallSegments.map((segment) => ({
-              start: { x: segment.start.x, y: segment.start.y },
-              end: { x: segment.end.x, y: segment.end.y }
-            }));
-            
-            const wallAssets = assets.filter(
-              (asset) => asset.wallSegments && asset.wallSegments.length > 0
-            );
-
-            let mergedSegments = segmentsInMM;
-            let connectedAsset: AssetInstance | null = null;
-            
-            if (segmentsInMM.length > 0) {
-              const firstPoint = segmentsInMM[0].start;
-              const lastPoint = segmentsInMM[segmentsInMM.length - 1].end;
-              const firstConnection = findNearbyWallSegment(firstPoint, wallAssets);
-              const lastConnection = findNearbyWallSegment(lastPoint, wallAssets);
-              if (firstConnection) connectedAsset = firstConnection.asset;
-              else if (lastConnection) connectedAsset = lastConnection.asset;
-              if (connectedAsset) mergedSegments = mergeWallSegments(segmentsInMM, connectedAsset);
-            }
-
-            const geometry = buildWallGeometry(mergedSegments, wallGap);
-            if (!geometry.outerPoints.length || !geometry.innerPoints.length) return null;
-
-            const outerPath = geometry.outerPoints
-              .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x * mmToPx} ${p.y * mmToPx}`)
-              .join(' ');
-            const innerPath = geometry.innerPoints
-              .slice()
-              .reverse()
-              .map((p) => `L ${p.x * mmToPx} ${p.y * mmToPx}`)
-              .join(' ');
-
-            return (
-              <path
-                d={`${outerPath} ${innerPath} Z`}
-                fill="none"
-                stroke="#000000"
-                strokeWidth={wallThickness}
-                strokeLinejoin="round"
-              />
-            );
-          })()}
-          
-          {/* Current wall segment */}
+          {/* Current wall segment preview + guides */}
           {currentWallStart && currentWallTempEnd && (() => {
-            const wallGap = 8;
+            const wallGapLocal = 8;
             const tempSegment = { start: currentWallStart, end: currentWallTempEnd };
-            const geometry = buildWallGeometry([tempSegment], wallGap);
+            const geometry = buildWallGeometry([tempSegment], wallGapLocal);
             if (!geometry.outerPoints.length) return null;
 
             const startPx = { x: currentWallStart.x * mmToPx, y: currentWallStart.y * mmToPx };
             const endPx = { x: currentWallTempEnd.x * mmToPx, y: currentWallTempEnd.y * mmToPx };
-            
-            // DEBUG: Show wall preview info
+
             const dx = currentWallTempEnd.x - currentWallStart.x;
             const dy = currentWallTempEnd.y - currentWallStart.y;
-            const lengthMm = Math.sqrt(dx * dx + dy * dy);
-            const centerX = (currentWallStart.x + currentWallTempEnd.x) / 2;
-            const centerY = (currentWallStart.y + currentWallTempEnd.y) / 2;
-
             const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
             const TOL = 3;
 
@@ -328,47 +402,23 @@ export default function DrawingPath({
                 .join(' ');
               return `${outer} ${inner} Z`;
             })();
-            
-            // Get current wall thickness from the store
-            const currentWallThickness = useSceneStore.getState().getCurrentWallThickness();
-            
+
             return (
               <>
                 <path
                   d={fullPath}
                   fill="none"
                   stroke="#000"
-                  strokeWidth={currentWallThickness}
+                  strokeWidth="2"
                   strokeDasharray="6,4"
                   opacity="0.8"
                 />
-                {/* DEBUG: Wall preview info */}
-                <text
-                  x={centerX * mmToPx}
-                  y={centerY * mmToPx - 10}
-                  fill="#ff0000"
-                  fontSize="12"
-                  textAnchor="middle"
-                  fontWeight="bold"
-                >
-                  PREVIEW: {lengthMm.toFixed(1)}mm
-                </text>
-                <text
-                  x={centerX * mmToPx}
-                  y={centerY * mmToPx + 5}
-                  fill="#ff0000"
-                  fontSize="12"
-                  textAnchor="middle"
-                  fontWeight="bold"
-                >
-                  Center: {centerX.toFixed(1)}, {centerY.toFixed(1)}
-                </text>
                 {guideLines}
                 {guideTexts}
               </>
             );
           })()}
-          
+
           {currentWallStart && (
             <circle
               cx={currentWallStart.x * mmToPx}

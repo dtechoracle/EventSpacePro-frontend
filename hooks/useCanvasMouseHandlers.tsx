@@ -167,7 +167,6 @@ export function useCanvasMouseHandlers({
         });
 
         if (clickedAsset) {
-          console.log("Starting multi-asset drag for:", selectedAssetIds);
           isDraggingMultiple.current = true;
           lastMousePos.current = { x, y };
           return;
@@ -207,16 +206,8 @@ export function useCanvasMouseHandlers({
       lastMousePosition.current = { x: e.clientX, y: e.clientY };
       const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
 
-      console.log(
-        "Mouse move - isRectangularSelectionMode:",
-        isRectangularSelectionMode,
-        "rectangularSelectionStart:",
-        rectangularSelectionStart
-      );
-
       // Handle rectangular selection dragging
       if (isRectangularSelectionMode && rectangularSelectionStart) {
-        console.log("Mouse move - Updating rectangular selection drag:", x, y);
         updateRectangularSelectionDrag(x, y);
         return;
       }
