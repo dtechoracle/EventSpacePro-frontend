@@ -60,10 +60,10 @@ export default function DrawingPath({
     >
       {/* === SHAPE DRAWING PREVIEW === */}
       {shapeMode && shapeStart && shapeTempEnd && (() => {
-          const x1 = shapeStart.x * mmToPx;
-          const y1 = shapeStart.y * mmToPx;
-          const x2 = shapeTempEnd.x * mmToPx;
-          const y2 = shapeTempEnd.y * mmToPx;
+          const x1 = shapeStart.x;
+          const y1 = shapeStart.y;
+          const x2 = shapeTempEnd.x;
+          const y2 = shapeTempEnd.y;
           const left = Math.min(x1, x2);
           const top = Math.min(y1, y2);
           const w = Math.abs(x2 - x1);
@@ -71,41 +71,58 @@ export default function DrawingPath({
 
         if (shapeMode === 'rectangle')
             return (
+            <>
             <rect
-              x={left}
-              y={top}
-              width={w}
-              height={h}
+              x={left * mmToPx}
+              y={top * mmToPx}
+              width={w * mmToPx}
+              height={h * mmToPx}
               fill="none"
               stroke="#111827"
               strokeWidth={1.5}
               strokeDasharray="6,4"
             />
+            </>
           );
         if (shapeMode === 'ellipse')
             return (
+            <>
             <ellipse
-              cx={left + w / 2}
-              cy={top + h / 2}
-              rx={w / 2}
-              ry={h / 2}
+              cx={(left + w / 2) * mmToPx}
+              cy={(top + h / 2) * mmToPx}
+              rx={(w / 2) * mmToPx}
+              ry={(h / 2) * mmToPx}
               fill="none"
               stroke="#111827"
               strokeWidth={1.5}
               strokeDasharray="6,4"
             />
+            </>
           );
         if (shapeMode === 'line')
             return (
+            <>
             <line
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
+              x1={x1 * mmToPx}
+              y1={y1 * mmToPx}
+              x2={x2 * mmToPx}
+              y2={y2 * mmToPx}
               stroke="#111827"
               strokeWidth={2}
               strokeDasharray="6,4"
             />
+            {/* DEBUG: Visual size info */}
+            <text
+              x={(x1 + x2)/2 * mmToPx}
+              y={(y1 + y2)/2 * mmToPx - 10}
+              fill="#ff0000"
+              fontSize="12"
+              textAnchor="middle"
+              fontWeight="bold"
+            >
+              PREVIEW: {Math.sqrt(w*w + h*h).toFixed(1)}mm length
+            </text>
+            </>
           );
           return null;
       })()}
@@ -139,7 +156,7 @@ export default function DrawingPath({
         <>
           {/* Completed walls */}
           {currentWallSegments.length > 0 && (() => {
-            const wallThickness = 1;
+            const wallThickness = useSceneStore.getState().getCurrentWallThickness();
             const wallGap = 8;
             
             const segmentsInMM = currentWallSegments.map((segment) => ({
@@ -196,9 +213,14 @@ export default function DrawingPath({
 
             const startPx = { x: currentWallStart.x * mmToPx, y: currentWallStart.y * mmToPx };
             const endPx = { x: currentWallTempEnd.x * mmToPx, y: currentWallTempEnd.y * mmToPx };
-
+            
+            // DEBUG: Show wall preview info
             const dx = currentWallTempEnd.x - currentWallStart.x;
             const dy = currentWallTempEnd.y - currentWallStart.y;
+            const lengthMm = Math.sqrt(dx * dx + dy * dy);
+            const centerX = (currentWallStart.x + currentWallTempEnd.x) / 2;
+            const centerY = (currentWallStart.y + currentWallTempEnd.y) / 2;
+
             const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
             const TOL = 3;
 
@@ -307,16 +329,40 @@ export default function DrawingPath({
               return `${outer} ${inner} Z`;
             })();
             
+            // Get current wall thickness from the store
+            const currentWallThickness = useSceneStore.getState().getCurrentWallThickness();
+            
             return (
               <>
                 <path
                   d={fullPath}
                   fill="none"
                   stroke="#000"
-                  strokeWidth="2"
+                  strokeWidth={currentWallThickness}
                   strokeDasharray="6,4"
                   opacity="0.8"
                 />
+                {/* DEBUG: Wall preview info */}
+                <text
+                  x={centerX * mmToPx}
+                  y={centerY * mmToPx - 10}
+                  fill="#ff0000"
+                  fontSize="12"
+                  textAnchor="middle"
+                  fontWeight="bold"
+                >
+                  PREVIEW: {lengthMm.toFixed(1)}mm
+                </text>
+                <text
+                  x={centerX * mmToPx}
+                  y={centerY * mmToPx + 5}
+                  fill="#ff0000"
+                  fontSize="12"
+                  textAnchor="middle"
+                  fontWeight="bold"
+                >
+                  Center: {centerX.toFixed(1)}, {centerY.toFixed(1)}
+                </text>
                 {guideLines}
                 {guideTexts}
               </>

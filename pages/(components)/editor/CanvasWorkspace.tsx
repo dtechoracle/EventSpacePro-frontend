@@ -182,8 +182,6 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
             position: "absolute",
             left: canvasPos.x - canvasPxW / 2,
             top: canvasPos.y - canvasPxH / 2,
-            transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-            transformOrigin: "top left",
           }}
         >
           <Canvas

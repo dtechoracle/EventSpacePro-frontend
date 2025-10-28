@@ -43,6 +43,17 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const [showShareModal, setShowShareModal] = useState(false);
   const [modelName, setModelName] = useState<string>("");
 
+  // Chair placement state from store with fallback
+  const chairSettings = useSceneStore((s) => s.chairSettings) || { numChairs: 8, radius: 80 };
+  
+  // Direct function to update chair settings
+  const updateChairSettings = (settings: { numChairs: number; radius: number }) => {
+    const state = useSceneStore.getState();
+    if (state.setChairSettings) {
+      state.setChairSettings(settings);
+    }
+  };
+
   // Auto-populate wall thickness based on current wall type when a wall is selected
   useEffect(() => {
     if (selectedAsset && selectedAsset.type === "wall-segments") {
@@ -521,7 +532,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       />
                     </div>
                     <div className="flex justify-between items-center">
-                      <span>Wall Thickness</span>
+                      <span>Line</span>
                       <input
                         type="number"
                         value={selectedAsset.wallThickness || useSceneStore.getState().getCurrentWallThickness()}
@@ -539,7 +550,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       Current wall type: {useSceneStore.getState().getCurrentWallThickness()}px
                     </div>
                     <div className="flex justify-between items-center">
-                      <span>Wall Gap</span>
+                      <span>Wall Thickness</span>
                       <input
                         type="number"
                         value={selectedAsset.wallGap || 8}
@@ -663,6 +674,102 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       Send to Back
                     </button>
                   </div>
+
+                  {/* Chair Placement Controls for Tables */}
+                  {selectedAsset.type.includes('table') && (
+                    <div className="mb-4 p-3 bg-gray-100 border-t">
+                      <div className="text-xs font-semibold text-gray-700 mb-3">Chair Placement</div>
+                      
+                      {/* Number of Chairs */}
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs">Number of Chairs</span>
+                        <input
+                          type="number"
+                          value={chairSettings.numChairs}
+                          min={2}
+                          max={20}
+                          className="sidebar-input w-16 text-xs"
+                          onChange={(e) => {
+                            updateChairSettings({
+                              numChairs: Number(e.target.value),
+                              radius: chairSettings.radius
+                            });
+                          }}
+                        />
+                      </div>
+                      
+                      {/* Radius Around Table */}
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-xs">Radius (mm)</span>
+                        <input
+                          type="number"
+                          value={chairSettings.radius}
+                          min={40}
+                          max={200}
+                          className="sidebar-input w-16 text-xs"
+                          onChange={(e) => {
+                            updateChairSettings({
+                              numChairs: chairSettings.numChairs,
+                              radius: Number(e.target.value)
+                            });
+                          }}
+                        />
+                      </div>
+                      
+                      {/* Add Chairs Button */}
+                      <button
+                        className="w-full text-xs bg-blue-500 hover:bg-blue-600 text-white py-1.5 rounded shadow"
+                        onClick={() => {
+                          const state = useSceneStore.getState();
+                          const addAssetObject = state.addAssetObject;
+                          
+                          // Get table dimensions for chair sizing
+                          const tableWidth = (selectedAsset.width || 100) * selectedAsset.scale;
+                          const tableHeight = (selectedAsset.height || 100) * selectedAsset.scale;
+                          const chairSize = Math.min(tableWidth, tableHeight) * 0.3; // 30% of smaller table dimension
+                          
+                          // Use values from state with fallbacks
+                          const numChairs = chairSettings.numChairs;
+                          const radius = chairSettings.radius;
+                          
+                          // Calculate chair positions in a circle around the table
+                          const chairs = [];
+                          const angleStep = 360 / numChairs; // Degrees per chair
+                          
+                          for (let i = 0; i < numChairs; i++) {
+                            const angleDegrees = i * angleStep;
+                            const angleRadians = (angleDegrees * Math.PI) / 180;
+                            const x = selectedAsset.x + Math.cos(angleRadians) * radius;
+                            const y = selectedAsset.y + Math.sin(angleRadians) * radius;
+                            // Calculate rotation so chair faces the table center
+                            // Chair should point directly toward the table center (like spokes on a wheel)
+                            // Add 180 degrees to make chair point toward table center, then rotate 90 degrees left
+                            const chairRotation = (angleDegrees + 180 + 90) % 360;
+                            chairs.push({ x, y, rotation: chairRotation });
+                          }
+                          
+                          // Create chair assets with table-proportional sizing
+                          chairs.forEach((chairPos, index) => {
+                            const chairAsset = {
+                              id: `chair-${Date.now()}-${index}`,
+                              type: 'normal-chair',
+                              x: chairPos.x,
+                              y: chairPos.y,
+                              scale: 1,
+                              rotation: chairPos.rotation,
+                              zIndex: state.assets.length > 0 ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1 : 1,
+                              width: chairSize,
+                              height: chairSize,
+                              backgroundColor: '#f3f4f6'
+                            };
+                            addAssetObject(chairAsset);
+                          });
+                        }}
+                      >
+                        Add Chairs
+                      </button>
+                    </div>
+                  )}
 
                   {/* Remove Asset Button */}
                   <button

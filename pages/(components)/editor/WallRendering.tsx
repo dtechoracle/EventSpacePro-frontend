@@ -39,17 +39,82 @@ export default function WallRendering({
       }}
     >
       {(() => {
-        const boundingBox = calculateWallBoundingBox(asset);
-        const width = Math.max(boundingBox.width, 100); // Minimum 100mm
-        const height = Math.max(boundingBox.height, 100); // Minimum 100mm
+        // Use stored dimensions if available, otherwise calculate from geometry
+        let width, height;
+        if (asset.width && asset.height) {
+          // Use stored dimensions (same approach as shapes)
+          const mmToPx = 2.000021;
+          width = Math.max(asset.width * mmToPx, 40);
+          height = Math.max(asset.height * mmToPx, 40);
+        } else {
+          // Fallback to geometry calculation
+          const boundingBox = calculateWallBoundingBox(asset);
+          const mmToPx = 2.000021;
+          width = Math.max(boundingBox.width * mmToPx, 40);
+          height = Math.max(boundingBox.height * mmToPx, 40);
+        }
 
         return (
-          <svg
-            width={width}
-            height={height}
-            viewBox={`${-width / 2} ${-height / 2} ${width} ${height}`}
-            style={{ overflow: "visible" }}
-          >
+          <>
+            {/* DEBUG: Wall rendering info */}
+            {(asset as any).debugInfo && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "-30px",
+                  left: "0px",
+                  backgroundColor: "rgba(255, 0, 0, 0.8)",
+                  color: "white",
+                  padding: "2px 4px",
+                  borderRadius: "3px",
+                  fontSize: "10px",
+                  fontWeight: "bold",
+                  whiteSpace: "nowrap",
+                  zIndex: 1000,
+                  pointerEvents: "none",
+                }}
+              >
+                WALL DEBUG:
+                <br />
+                Nodes: {(asset as any).debugInfo.originalNodes?.length || 0}
+                <br />
+                Center: {(asset as any).debugInfo.center?.x?.toFixed(1) || 0}, {(asset as any).debugInfo.center?.y?.toFixed(1) || 0}
+                <br />
+                Stored: {(asset as any).debugInfo.storedDimensions?.width?.toFixed(1) || 'N/A'}×{(asset as any).debugInfo.storedDimensions?.height?.toFixed(1) || 'N/A'}mm
+                <br />
+                SVG: {width.toFixed(1)}×{height.toFixed(1)}px
+                <br />
+                Method: {asset.width && asset.height ? 'Stored' : 'Calculated'}
+                <br />
+                Segments: {asset.wallEdges?.length || 0}
+                <br />
+                Total Length: {(() => {
+                  if (asset.wallNodes && asset.wallEdges) {
+                    const segments = asset.wallEdges.map((edge) => {
+                      const a = asset.wallNodes![edge.a];
+                      const b = asset.wallNodes![edge.b];
+                      return {
+                        start: { x: a.x - asset.x, y: a.y - asset.y },
+                        end: { x: b.x - asset.x, y: b.y - asset.y },
+                      };
+                    });
+                    const lengths = segments.map(seg => {
+                      const dx = seg.end.x - seg.start.x;
+                      const dy = seg.end.y - seg.start.y;
+                      return Math.sqrt(dx * dx + dy * dy);
+                    });
+                    return lengths.reduce((sum, len) => sum + len, 0).toFixed(1) + 'mm';
+                  }
+                  return 'N/A';
+                })()}
+              </div>
+            )}
+            <svg
+              width={width}
+              height={height}
+              viewBox={`${-width / 2} ${-height / 2} ${width} ${height}`}
+              style={{ overflow: "visible" }}
+            >
             {/* Render legacy segments only when we DON'T have node-edge data */}
             {!asset.wallNodes &&
               asset.wallSegments &&
@@ -132,12 +197,28 @@ export default function WallRendering({
                     end: { x: b.x - asset.x, y: b.y - asset.y },
                   };
                 });
+                
+                // DEBUG: Calculate segment lengths for visual debugging
+                const segmentLengths = segments.map(seg => {
+                  const dx = seg.end.x - seg.start.x;
+                  const dy = seg.end.y - seg.start.y;
+                  return Math.sqrt(dx * dx + dy * dy);
+                });
+                const totalLength = segmentLengths.reduce((sum, len) => sum + len, 0);
                 const geometry = buildWallGeometry(segments, wallGap);
+                
+                // DEBUG: Show geometry points
+                const debugText = `Geometry: ${geometry.outerPoints.length} outer, ${geometry.innerPoints.length} inner points`;
+                
                 if (
                   geometry.outerPoints.length === 0 ||
                   geometry.innerPoints.length === 0
                 )
-                  return null;
+                  return (
+                    <text x="0" y="0" fill="red" fontSize="12">
+                      {debugText} - No geometry!
+                    </text>
+                  );
                 const outerPointsScaled = geometry.outerPoints.map((p) => ({
                   x: p.x * asset.scale,
                   y: p.y * asset.scale,
@@ -166,6 +247,7 @@ export default function WallRendering({
                 );
               })()}
           </svg>
+          </>
         );
       })()}
     </div>

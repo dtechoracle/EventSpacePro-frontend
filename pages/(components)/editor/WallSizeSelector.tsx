@@ -21,6 +21,9 @@ export default function WallSizeSelector({ className = "" }: WallSizeSelectorPro
   // Use the store's wall types directly
   const wallTypes = availableWallTypes;
   const currentThickness = useSceneStore.getState().getCurrentWallThickness();
+  
+  // Find the current wall type object
+  const currentWallType = wallTypes.find(wt => wt.id === wallType);
 
   const formatThickness = (thickness: number) => {
     if (thickness < 1) {

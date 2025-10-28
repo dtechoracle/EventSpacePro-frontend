@@ -262,7 +262,7 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
         </div>
 
         {showAssets && (
-          <div className="space-y-1 pt-2">
+          <div className="space-y-1 pt-2 max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
             {assets.length === 0 ? (
               <div className="text-xs text-gray-500 italic pl-2">
                 No assets added yet

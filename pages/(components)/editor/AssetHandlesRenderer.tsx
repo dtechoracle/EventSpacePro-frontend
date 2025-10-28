@@ -21,7 +21,50 @@ export default function AssetHandlesRenderer({
     return null;
   }
 
-  const handleSize = 12;
+  const handleSize = 14;
+  
+  // Professional handle styling
+  const cornerHandleStyle = {
+    position: "absolute" as const,
+    width: handleSize,
+    height: handleSize,
+    backgroundColor: "#3B82F6", // Professional blue
+    border: "2px solid #FFFFFF",
+    borderRadius: "3px",
+    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+    cursor: "pointer",
+    zIndex: 10,
+    transition: "all 0.2s ease",
+    transform: "translate(-50%, -50%)",
+  };
+
+  const rotationHandleStyle = {
+    position: "absolute" as const,
+    width: handleSize,
+    height: handleSize,
+    backgroundColor: "#10B981", // Professional green
+    border: "2px solid #FFFFFF",
+    borderRadius: "50%",
+    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
+    cursor: "grab",
+    zIndex: 10,
+    transform: "translate(-50%, -50%)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "all 0.2s ease",
+  };
+
+  const rotationLineStyle = {
+    position: "absolute" as const,
+    width: "2px",
+    height: "32px",
+    backgroundColor: "#6B7280", // Professional gray
+    transformOrigin: "bottom center",
+    transform: "translate(-50%, -50%)",
+    zIndex: 9,
+    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
+  };
   
   // Calculate handle positions directly in pixel coordinates relative to asset center
   const assetCenterPx = { x: leftPx, y: topPx };
@@ -57,117 +100,76 @@ export default function AssetHandlesRenderer({
         <div
           onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-left')}
           style={{
-            position: "absolute",
+            ...cornerHandleStyle,
             left: topLeftPx.x,
             top: topLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
             cursor: "nw-resize",
-            zIndex: 10,
           }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
+          className="hover:scale-110 hover:shadow-lg"
+          title="Resize"
         />
         <div
           onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-right')}
           style={{
-            position: "absolute",
+            ...cornerHandleStyle,
             left: topRightPx.x,
             top: topRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
             cursor: "ne-resize",
-            zIndex: 10,
           }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
+          className="hover:scale-110 hover:shadow-lg"
+          title="Resize"
         />
         <div
           onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-left')}
           style={{
-            position: "absolute",
+            ...cornerHandleStyle,
             left: bottomLeftPx.x,
             top: bottomLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
             cursor: "sw-resize",
-            zIndex: 10,
           }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
+          className="hover:scale-110 hover:shadow-lg"
+          title="Resize"
         />
         <div
           onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-right')}
           style={{
-            position: "absolute",
+            ...cornerHandleStyle,
             left: bottomRightPx.x,
             top: bottomRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
             cursor: "se-resize",
-            zIndex: 10,
           }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
+          className="hover:scale-110 hover:shadow-lg"
+          title="Resize"
         />
         
         {/* Rotation line and handle */}
         <div
           style={{
-            position: "absolute",
+            ...rotationLineStyle,
             left: assetCenterPx.x,
             top: assetCenterPx.y,
-            width: 2,
-            height: 30,
-            backgroundColor: "#000000",
-            transformOrigin: "bottom center",
-            transform: `translate(-50%, -50%)`,
-            zIndex: 9,
           }}
         />
         <div
           onMouseDown={(e) => onRotationHandleMouseDown(e, asset.id)}
           style={{
-            position: "absolute",
+            ...rotationHandleStyle,
             left: rotationHandlePx.x,
             top: rotationHandlePx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "50%",
-            cursor: "grab",
-            zIndex: 10,
-            transform: "translate(-50%, -50%)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
           }}
-          className="hover:bg-blue-600 transition-colors"
+          className="hover:scale-110 hover:shadow-lg"
           title="Rotate"
         >
-          {/* Rotation icon - curved arrow */}
+          {/* Professional rotation icon */}
           <svg
-            width="8"
-            height="8"
+            width="10"
+            height="10"
             viewBox="0 0 16 16"
             fill="white"
             style={{ pointerEvents: "none" }}
           >
-            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
-            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
+            <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+            <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
           </svg>
         </div>
       </>
@@ -208,9 +210,12 @@ export default function AssetHandlesRenderer({
             top: topLeftPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "nw-resize",
             zIndex: 10,
           }}
@@ -225,9 +230,12 @@ export default function AssetHandlesRenderer({
             top: topRightPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "ne-resize",
             zIndex: 10,
           }}
@@ -242,9 +250,12 @@ export default function AssetHandlesRenderer({
             top: bottomLeftPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "sw-resize",
             zIndex: 10,
           }}
@@ -259,9 +270,12 @@ export default function AssetHandlesRenderer({
             top: bottomRightPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "se-resize",
             zIndex: 10,
           }}
@@ -277,7 +291,7 @@ export default function AssetHandlesRenderer({
             top: assetCenterPx.y,
             width: 2,
             height: 30,
-            backgroundColor: "#000000",
+            backgroundColor: "#10B981",
             transformOrigin: "bottom center",
             transform: `translate(-50%, -50%)`,
             zIndex: 9,
@@ -291,9 +305,10 @@ export default function AssetHandlesRenderer({
             top: rotationHandlePx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
+            backgroundColor: "#10B981",
+            border: "2px solid #FFFFFF",
             borderRadius: "50%",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
             cursor: "grab",
             zIndex: 10,
             transform: "translate(-50%, -50%)",
@@ -358,9 +373,12 @@ export default function AssetHandlesRenderer({
             top: topLeftPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "nw-resize",
             zIndex: 10,
           }}
@@ -375,9 +393,12 @@ export default function AssetHandlesRenderer({
             top: topRightPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "ne-resize",
             zIndex: 10,
           }}
@@ -392,9 +413,12 @@ export default function AssetHandlesRenderer({
             top: bottomLeftPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "sw-resize",
             zIndex: 10,
           }}
@@ -409,9 +433,12 @@ export default function AssetHandlesRenderer({
             top: bottomRightPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "se-resize",
             zIndex: 10,
           }}
@@ -427,7 +454,7 @@ export default function AssetHandlesRenderer({
             top: assetCenterPx.y,
             width: 2,
             height: 30,
-            backgroundColor: "#000000",
+            backgroundColor: "#10B981",
             transformOrigin: "bottom center",
             transform: `translate(-50%, -50%)`,
             zIndex: 9,
@@ -441,9 +468,10 @@ export default function AssetHandlesRenderer({
             top: rotationHandlePx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
+            backgroundColor: "#10B981",
+            border: "2px solid #FFFFFF",
             borderRadius: "50%",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
             cursor: "grab",
             zIndex: 10,
             transform: "translate(-50%, -50%)",
@@ -504,9 +532,12 @@ export default function AssetHandlesRenderer({
             top: topLeftPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "nw-resize",
             zIndex: 10,
           }}
@@ -521,9 +552,12 @@ export default function AssetHandlesRenderer({
             top: topRightPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "ne-resize",
             zIndex: 10,
           }}
@@ -538,9 +572,12 @@ export default function AssetHandlesRenderer({
             top: bottomLeftPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "sw-resize",
             zIndex: 10,
           }}
@@ -555,9 +592,12 @@ export default function AssetHandlesRenderer({
             top: bottomRightPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "se-resize",
             zIndex: 10,
           }}
@@ -573,7 +613,7 @@ export default function AssetHandlesRenderer({
             top: assetCenterPx.y,
             width: 2,
             height: 30,
-            backgroundColor: "#000000",
+            backgroundColor: "#10B981",
             transformOrigin: "bottom center",
             transform: `translate(-50%, -50%)`,
             zIndex: 9,
@@ -587,9 +627,10 @@ export default function AssetHandlesRenderer({
             top: rotationHandlePx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
+            backgroundColor: "#10B981",
+            border: "2px solid #FFFFFF",
             borderRadius: "50%",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
             cursor: "grab",
             zIndex: 10,
             transform: "translate(-50%, -50%)",
@@ -615,10 +656,18 @@ export default function AssetHandlesRenderer({
       </>
     );
   } else if (asset.type === "wall-segments") {
-    // For wall segments, calculate actual bounding box from wall geometry
-    const boundingBox = calculateWallBoundingBox(asset);
-    const width = boundingBox.width * asset.scale;
-    const height = boundingBox.height * asset.scale;
+    // For wall segments, use stored dimensions if available, otherwise calculate from geometry
+    let width, height;
+    if (asset.width && asset.height) {
+      // Use stored dimensions (same approach as shapes)
+      width = asset.width * asset.scale;
+      height = asset.height * asset.scale;
+    } else {
+      // Fallback to geometry calculation
+      const boundingBox = calculateWallBoundingBox(asset);
+      width = boundingBox.width * asset.scale;
+      height = boundingBox.height * asset.scale;
+    }
     
     const topLeftPx = { 
       x: assetCenterPx.x - width / 2 - 6, 
@@ -652,9 +701,12 @@ export default function AssetHandlesRenderer({
             top: topLeftPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "nw-resize",
             zIndex: 10,
           }}
@@ -669,9 +721,12 @@ export default function AssetHandlesRenderer({
             top: topRightPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "ne-resize",
             zIndex: 10,
           }}
@@ -686,9 +741,12 @@ export default function AssetHandlesRenderer({
             top: bottomLeftPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "sw-resize",
             zIndex: 10,
           }}
@@ -703,9 +761,12 @@ export default function AssetHandlesRenderer({
             top: bottomRightPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "se-resize",
             zIndex: 10,
           }}
@@ -721,7 +782,7 @@ export default function AssetHandlesRenderer({
             top: assetCenterPx.y,
             width: 2,
             height: 30,
-            backgroundColor: "#000000",
+            backgroundColor: "#10B981",
             transformOrigin: "bottom center",
             transform: `translate(-50%, -50%)`,
             zIndex: 9,
@@ -735,9 +796,10 @@ export default function AssetHandlesRenderer({
             top: rotationHandlePx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
+            backgroundColor: "#10B981",
+            border: "2px solid #FFFFFF",
             borderRadius: "50%",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
             cursor: "grab",
             zIndex: 10,
             transform: "translate(-50%, -50%)",
@@ -801,9 +863,12 @@ export default function AssetHandlesRenderer({
             top: topLeftPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "nw-resize",
             zIndex: 10,
           }}
@@ -818,9 +883,12 @@ export default function AssetHandlesRenderer({
             top: topRightPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "ne-resize",
             zIndex: 10,
           }}
@@ -835,9 +903,12 @@ export default function AssetHandlesRenderer({
             top: bottomLeftPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "sw-resize",
             zIndex: 10,
           }}
@@ -852,9 +923,12 @@ export default function AssetHandlesRenderer({
             top: bottomRightPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "se-resize",
             zIndex: 10,
           }}
@@ -870,7 +944,7 @@ export default function AssetHandlesRenderer({
             top: assetCenterPx.y,
             width: 2,
             height: 30,
-            backgroundColor: "#000000",
+            backgroundColor: "#10B981",
             transformOrigin: "bottom center",
             transform: `translate(-50%, -50%)`,
             zIndex: 9,
@@ -884,9 +958,10 @@ export default function AssetHandlesRenderer({
             top: rotationHandlePx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
+            backgroundColor: "#10B981",
+            border: "2px solid #FFFFFF",
             borderRadius: "50%",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
             cursor: "grab",
             zIndex: 10,
             transform: "translate(-50%, -50%)",
@@ -948,9 +1023,12 @@ export default function AssetHandlesRenderer({
             top: topLeftPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "nw-resize",
             zIndex: 10,
           }}
@@ -965,9 +1043,12 @@ export default function AssetHandlesRenderer({
             top: topRightPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "ne-resize",
             zIndex: 10,
           }}
@@ -982,9 +1063,12 @@ export default function AssetHandlesRenderer({
             top: bottomLeftPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "sw-resize",
             zIndex: 10,
           }}
@@ -999,9 +1083,12 @@ export default function AssetHandlesRenderer({
             top: bottomRightPx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
-            borderRadius: "2px",
+            backgroundColor: "#3B82F6",
+            border: "2px solid #FFFFFF",
+            borderRadius: "3px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
+            transition: "all 0.2s ease",
+            transform: "translate(-50%, -50%)",
             cursor: "se-resize",
             zIndex: 10,
           }}
@@ -1017,7 +1104,7 @@ export default function AssetHandlesRenderer({
             top: assetCenterPx.y,
             width: 2,
             height: 30,
-            backgroundColor: "#000000",
+            backgroundColor: "#10B981",
             transformOrigin: "bottom center",
             transform: `translate(-50%, -50%)`,
             zIndex: 9,
@@ -1031,9 +1118,10 @@ export default function AssetHandlesRenderer({
             top: rotationHandlePx.y,
             width: handleSize,
             height: handleSize,
-            backgroundColor: "#000000",
-            border: "2px solid white",
+            backgroundColor: "#10B981",
+            border: "2px solid #FFFFFF",
             borderRadius: "50%",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
             cursor: "grab",
             zIndex: 10,
             transform: "translate(-50%, -50%)",

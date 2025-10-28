@@ -55,6 +55,9 @@ export default function AssetRenderer({
 
   // Handle square and circle assets
   if (asset.type === "square" || asset.type === "circle") {
+    const isCircle = asset.type === "circle";
+    const borderRadius = isCircle ? "50%" : "0%";
+    
     return (
       <div className="relative">
         {/* Background layer */}
@@ -67,7 +70,7 @@ export default function AssetRenderer({
               width: (asset.width ?? 50) * asset.scale,
               height: (asset.height ?? 50) * asset.scale,
               backgroundColor: asset.backgroundColor,
-              borderRadius: "0%",
+              borderRadius: borderRadius,
               transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
               zIndex: (asset.zIndex || 0) - 1,
             }}
@@ -87,7 +90,7 @@ export default function AssetRenderer({
             border: `${asset.strokeWidth ?? 2}px solid ${
               asset.strokeColor ?? "#000000"
             }`,
-            borderRadius: "0%",
+            borderRadius: borderRadius,
             transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
             cursor: "move",
             zIndex: asset.zIndex || 0,
@@ -95,6 +98,7 @@ export default function AssetRenderer({
             transition: isCopied ? "box-shadow 0.3s ease" : undefined,
           }}
         />
+
 
         {/* Multi-select indicator */}
         {isMultiSelected && !isSelected && (
@@ -106,7 +110,7 @@ export default function AssetRenderer({
               width: (asset.width ?? 50) * asset.scale,
               height: (asset.height ?? 50) * asset.scale,
               border: "2px dashed #3B82F6",
-              borderRadius: "0px",
+              borderRadius: borderRadius,
               transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
               pointerEvents: "none",
               zIndex: (asset.zIndex || 0) + 1,

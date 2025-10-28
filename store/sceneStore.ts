@@ -118,6 +118,12 @@ type SceneState = {
   // New draft state (nodes-only while drawing)
   wallDraftNodes?: { x: number; y: number }[];
 
+  // Chair placement settings
+  chairSettings: {
+    numChairs: number;
+    radius: number;
+  };
+
   // Copy/paste state
   clipboard: AssetInstance | null;
 
@@ -172,6 +178,8 @@ type SceneState = {
   // Wall type selection methods - Updated
   setWallType: (type: 'thin' | 'standard' | 'thick' | 'extra-thick') => void;
   getCurrentWallThickness: () => number;
+  setChairSettings: (settings: { numChairs: number; radius: number }) => void;
+  getChairSettings: () => { numChairs: number; radius: number };
   setShapeMode: (mode: 'rectangle' | 'ellipse' | 'line' | null) => void;
   startShape: (start: { x: number; y: number }) => void;
   updateShapeTempEnd: (end: { x: number; y: number }) => void;
@@ -212,6 +220,7 @@ type SceneState = {
   undo: () => void;
   redo: () => void;
   saveToHistory: () => void;
+  clearHistory: () => void;
 
   // Smart duplication methods
   smartDuplicate: (id: string) => void;
@@ -274,6 +283,10 @@ export const useSceneStore = create<SceneState>()(
       currentWallTempEnd: null,
       firstHorizontalWallLength: null,
       wallDraftNodes: [],
+      chairSettings: {
+        numChairs: 8,
+        radius: 80
+      },
       clipboard: null,
       history: [[]],
       historyIndex: 0,
@@ -549,7 +562,16 @@ export const useSceneStore = create<SceneState>()(
         return wallType?.thickness || 1; // Default to 1px if not found
       },
 
+      setChairSettings: (settings: { numChairs: number; radius: number }) => {
+        set({ chairSettings: settings });
+      },
+
+      getChairSettings: () => {
+        return get().chairSettings;
+      },
+
       setShapeMode: (mode) => set({ shapeMode: mode, shapeStart: null, shapeTempEnd: null }),
+      startShape: (start) => set({ shapeStart: start }),
       updateShapeTempEnd: (end) => set({ shapeTempEnd: end }),
       finishShape: () => {
         const state = get();
@@ -558,8 +580,16 @@ export const useSceneStore = create<SceneState>()(
         const end = state.shapeTempEnd;
         const centerX = (start.x + end.x) / 2;
         const centerY = (start.y + end.y) / 2;
-        const width = Math.max(1, Math.abs(end.x - start.x));
-        const height = Math.max(1, Math.abs(end.y - start.y));
+        const rawWidthMm = Math.abs(end.x - start.x);
+        const rawHeightMm = Math.abs(end.y - start.y);
+        
+        // Use the exact same calculation as the preview
+        // Preview: w = Math.abs(x2 - x1), then w * mmToPx
+        // Don't apply minimum constraints here - let the preview handle it
+        const actualMmToPx = 2.000021; // This matches the preview conversion factor
+        const width = rawWidthMm * actualMmToPx;
+        const height = rawHeightMm * actualMmToPx;
+        
         let newAsset: AssetInstance | null = null;
         if (state.shapeMode === 'rectangle') {
           newAsset = {
@@ -592,14 +622,18 @@ export const useSceneStore = create<SceneState>()(
             strokeWidth: 2,
           } as any;
         } else if (state.shapeMode === 'line') {
+          // Calculate line length and angle
+          const lineLength = Math.max(2, Math.sqrt(width * width + height * height)); // Minimum 2mm length
+          const angle = Math.atan2(end.y - start.y, end.x - start.x) * (180 / Math.PI);
+          
           newAsset = {
             id: `line-${Date.now()}`,
             type: 'line',
             x: centerX,
             y: centerY,
             scale: 1,
-            rotation: 0,
-            width,
+            rotation: angle,
+            width: lineLength,
             height: 2,
             strokeWidth: 2,
             strokeColor: '#000000',
@@ -710,10 +744,13 @@ export const useSceneStore = create<SceneState>()(
           nodes[nodes.length - 1] = { x: first.x, y: first.y };
         }
 
-        // Compute center
+        // Compute center and dimensions
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         nodes.forEach(n => { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); });
-        const cx = (minX + maxX) / 2; const cy = (minY + maxY) / 2;
+        const cx = (minX + maxX) / 2; 
+        const cy = (minY + maxY) / 2;
+        const wallWidth = maxX - minX;
+        const wallHeight = maxY - minY;
 
         // Get a low zIndex for wall assets to ensure they render behind other assets
         const nextZIndex = -100; // Walls should render behind other assets
@@ -726,12 +763,23 @@ export const useSceneStore = create<SceneState>()(
           scale: 1, // Keep scale at 1 for consistent rendering
           rotation: 0,
           zIndex: nextZIndex,
+          width: wallWidth, // Store actual wall dimensions
+          height: wallHeight, // Store actual wall dimensions
           wallNodes: nodes,
           wallEdges: edges,
           wallThickness: get().getCurrentWallThickness(), // Use selected wall thickness
           wallGap: 8,
           lineColor: "#000000",
           backgroundColor: "#f3f4f6" // bg-gray-100
+        };
+        
+        // Store debug info for wall debugging
+        (wallAsset as any).debugInfo = {
+          originalNodes: nodes,
+          center: { x: cx, y: cy },
+          boundingBox: { minX, minY, maxX, maxY },
+          storedDimensions: { width: wallWidth, height: wallHeight },
+          timestamp: Date.now()
         };
 
 
@@ -1438,16 +1486,43 @@ export const useSceneStore = create<SceneState>()(
 
       clearClipboard: () => set({ clipboard: null }),
 
-      // Undo/Redo methods
+      // Undo/Redo methods - Optimized for localStorage
       saveToHistory: () => {
-        const state = get();
-        const newHistory = state.history.slice(0, state.historyIndex + 1);
-        newHistory.push([...state.assets]);
-        
-        set({
-          history: newHistory,
-          historyIndex: newHistory.length - 1,
-        });
+        try {
+          const state = get();
+          
+          // Limit history size to prevent localStorage overflow
+          const MAX_HISTORY_SIZE = 20;
+          const newHistory = state.history.slice(0, state.historyIndex + 1);
+          
+          // Only save if assets have actually changed
+          const currentAssets = state.assets;
+          const lastAssets = newHistory[newHistory.length - 1];
+          
+          if (lastAssets && JSON.stringify(currentAssets) === JSON.stringify(lastAssets)) {
+            return; // No changes, don't save
+          }
+          
+          // Add current state
+          newHistory.push([...currentAssets]);
+          
+          // Trim history if it exceeds max size
+          if (newHistory.length > MAX_HISTORY_SIZE) {
+            newHistory.shift(); // Remove oldest entry
+          }
+          
+          set({
+            history: newHistory,
+            historyIndex: newHistory.length - 1,
+          });
+        } catch (error) {
+          console.warn('Failed to save to history, clearing history to free space:', error);
+          // Clear history if we can't save
+          set({
+            history: [],
+            historyIndex: -1,
+          });
+        }
       },
 
       undo: () => {
@@ -1472,6 +1547,14 @@ export const useSceneStore = create<SceneState>()(
             hasUnsavedChanges: true,
           });
         }
+      },
+
+      // Clear history to free up localStorage space
+      clearHistory: () => {
+        set({
+          history: [],
+          historyIndex: -1,
+        });
       },
 
       // Smart duplication methods
@@ -2008,7 +2091,31 @@ export const useSceneStore = create<SceneState>()(
         setTimeout(() => get().saveToHistory(), 0);
       },
     }),
-    { name: "scene-storage-v2" }
+    { 
+      name: "scene-storage-v2",
+      partialize: (state) => ({
+        // Only persist essential data, not the full history
+        canvas: state.canvas,
+        assets: state.assets,
+        selectedAssetId: state.selectedAssetId,
+        showGrid: state.showGrid,
+        gridSize: state.gridSize,
+        snapToGridEnabled: state.snapToGridEnabled,
+        wallType: state.wallType,
+        chairSettings: state.chairSettings,
+        // Don't persist history to prevent localStorage overflow
+        // history: state.history,
+        // historyIndex: state.historyIndex,
+      }),
+      // Add storage error handling
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          // Clear history on rehydration to prevent storage issues
+          state.history = [];
+          state.historyIndex = -1;
+        }
+      },
+    }
   )
 );
 

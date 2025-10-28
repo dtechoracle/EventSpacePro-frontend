@@ -702,7 +702,7 @@ export function calculateWallBoundingBox(asset: AssetInstance): { width: number;
     const maxY = Math.max(...allPoints.map(p => p.y));
 
     return {
-        width: Math.max(50, maxX - minX), // Minimum 50mm width
-        height: Math.max(50, maxY - minY) // Minimum 50mm height
+        width: maxX - minX, // Use actual calculated width
+        height: maxY - minY // Use actual calculated height
     };
 }

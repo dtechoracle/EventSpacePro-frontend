@@ -60,7 +60,9 @@ export default function Canvas({
   const currentWallStart = useSceneStore((s) => s.currentWallStart);
   const currentWallTempEnd = useSceneStore((s) => s.currentWallTempEnd);
   const selectedAssetId = useSceneStore((s) => s.selectedAssetId);
+  const chairSettings = useSceneStore((s) => s.chairSettings) || { numChairs: 8, radius: 80 };
   const selectAsset = useSceneStore((s) => s.selectAsset);
+  const updateAsset = useSceneStore((s) => s.updateAsset);
   const clearSelection = useSceneStore((s) => s.clearSelection);
   // const setPenMode = useSceneStore((s) => s.setPenMode);
   // const setWallMode = useSceneStore((s) => s.setWallMode);
@@ -68,6 +70,11 @@ export default function Canvas({
   const setCurrentPath = useSceneStore((s) => s.setCurrentPath);
   const setTempPath = useSceneStore((s) => s.setTempPath);
   const shapeMode = useSceneStore((s) => s.shapeMode);
+  const shapeStart = useSceneStore((s) => s.shapeStart);
+  const shapeTempEnd = useSceneStore((s) => s.shapeTempEnd);
+  const startShape = useSceneStore((s) => s.startShape);
+  const finishShape = useSceneStore((s) => s.finishShape);
+  const updateShapeTempEnd = useSceneStore((s) => s.updateShapeTempEnd);
   const startWallSegment = useSceneStore((s) => s.startWallSegment);
   const startRectangularSelection = useSceneStore(
     (s) => s.startRectangularSelection
@@ -221,10 +228,43 @@ export default function Canvas({
         height: canvasPxH,
         transform: `rotate(${rotation}deg)`,
         transformOrigin: "center center",
-        cursor: isRectangularSelectionMode ? "crosshair" : (isWallMode || wallDrawingMode) ? "crosshair" : undefined,
+        cursor: isRectangularSelectionMode ? "crosshair" : (isWallMode || wallDrawingMode || shapeMode) ? "crosshair" : undefined,
       }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
+      onMouseMove={(e) => {
+        if (isRectangularSelectionMode && rectangularSelectionStart) {
+          const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+          updateRectangularSelectionDrag(x, y);
+        }
+        // Update shape preview while drawing
+        if (shapeMode && shapeStart) {
+          const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+          let end = { x, y };
+          
+          // Apply Shift key constraint for perfect squares/circles
+          if (e.shiftKey && (shapeMode === "rectangle" || shapeMode === "ellipse")) {
+            const dx = x - shapeStart.x;
+            const dy = y - shapeStart.y;
+            const size = Math.max(Math.abs(dx), Math.abs(dy));
+            end = {
+              x: shapeStart.x + Math.sign(dx || 1) * size,
+              y: shapeStart.y + Math.sign(dy || 1) * size,
+            };
+          }
+          
+          updateShapeTempEnd(end);
+        }
+      }}
+      onMouseUp={(e) => {
+        if (isRectangularSelectionMode && rectangularSelectionStart) {
+          finishRectangularSelectionDrag();
+        }
+        // Finish shape drawing on mouse up
+        if (shapeMode && shapeStart) {
+          finishShape();
+        }
+      }}
       onMouseDown={(e) => {
         if (e.button !== 0) return;
         if (e.target === canvasRef.current) {
@@ -307,7 +347,7 @@ export default function Canvas({
           } else if (shapeMode) {
             e.stopPropagation();
             const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-            useSceneStore.getState().startShape({ x, y });
+            startShape({ x, y });
             return;
           } else {
             clearSelection();
@@ -376,6 +416,36 @@ export default function Canvas({
       {/* Selection Box */}
       <SelectionBox mmToPx={mmToPx} />
 
+      {/* Chair Radius Preview */}
+      {selectedAssetId && assets.find(a => a.id === selectedAssetId)?.type.includes('table') && (
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            left: `${assets.find(a => a.id === selectedAssetId)!.x * mmToPx}px`,
+            top: `${assets.find(a => a.id === selectedAssetId)!.y * mmToPx}px`,
+            transform: 'translate(-50%, -50%)',
+            width: `${chairSettings.radius * mmToPx * 2}px`,
+            height: `${chairSettings.radius * mmToPx * 2}px`,
+          }}
+        >
+          <div
+            className="absolute inset-0 rounded-full border-2 border-blue-400 border-dashed opacity-60"
+            style={{
+              width: '100%',
+              height: '100%',
+            }}
+          />
+          {/* Debug text showing current radius */}
+          <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 font-bold bg-white px-1 rounded">
+            {chairSettings.radius}mm radius
+          </div>
+          {/* Show chair count */}
+          <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 font-bold bg-white px-1 rounded">
+            {chairSettings.numChairs} chairs
+          </div>
+        </div>
+      )}
+
       {/* Render Assets - Sort by zIndex to ensure proper layering */}
       {assets
         .slice()
@@ -410,6 +480,13 @@ export default function Canvas({
                   }
                 }}
                 onAssetMouseDown={assetHandlers.onAssetMouseDown}
+                onAssetMouseMove={() => {}}
+                onAssetMouseUp={() => {}}
+                onAssetMouseLeave={() => {}}
+                onAssetMouseEnter={() => {}}
+                onAssetMouseOver={() => {}}
+                onAssetMouseOut={() => {}}
+                onAssetContextMenu={() => {}}
                 onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
                 onRotationHandleMouseDown={
                   assetHandlers.onRotationHandleMouseDown
@@ -445,6 +522,7 @@ export default function Canvas({
           );
         })}
       </div>
+      
     </div>
   );
 }
