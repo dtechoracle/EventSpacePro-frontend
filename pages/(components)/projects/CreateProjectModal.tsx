@@ -46,6 +46,8 @@ export default function CreateProjectModal({
     onSuccess: () => {
       // Invalidate and refetch projects list
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      localStorage.removeItem("scene-storage-v2")
+      localStorage.removeItem("scene-storage")
       toast.success("Project created successfully!");
       onClose();
     },

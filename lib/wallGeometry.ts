@@ -561,6 +561,110 @@ export function buildWallGeometryWithIntersections(
 
     return { outerPoints, innerPoints };
 }
+type Point = { x: number; y: number };
+
+type Segment = {
+  start: Point;
+  end: Point;
+};
+
+export function mergeAndTrimWalls(
+  newSegments: Segment[],
+  existingSegments: Segment[]
+): Segment[] {
+  const allSegments: Segment[] = [...existingSegments, ...newSegments];
+
+  // Utility: find intersection between two lines (if any)
+  function getIntersection(a: Segment, b: Segment): Point | null {
+    const { x: x1, y: y1 } = a.start;
+    const { x: x2, y: y2 } = a.end;
+    const { x: x3, y: y3 } = b.start;
+    const { x: x4, y: y4 } = b.end;
+
+    const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (denom === 0) return null; // parallel lines
+
+    const px =
+      ((x1 * y2 - y1 * x2) * (x3 - x4) -
+        (x1 - x2) * (x3 * y4 - y3 * x4)) /
+      denom;
+    const py =
+      ((x1 * y2 - y1 * x2) * (y3 - y4) -
+        (y1 - y2) * (x3 * y4 - y3 * x4)) /
+      denom;
+
+    // Check if the intersection point lies within both segments
+    if (
+      px >= Math.min(x1, x2) - 0.01 &&
+      px <= Math.max(x1, x2) + 0.01 &&
+      px >= Math.min(x3, x4) - 0.01 &&
+      px <= Math.max(x3, x4) + 0.01 &&
+      py >= Math.min(y1, y2) - 0.01 &&
+      py <= Math.max(y1, y2) + 0.01 &&
+      py >= Math.min(y3, y4) - 0.01 &&
+      py <= Math.max(y3, y4) + 0.01
+    ) {
+      return { x: px, y: py };
+    }
+
+    return null;
+  }
+
+  // Step 1: find all intersection points
+  const intersections: Record<string, Point> = {};
+  for (let i = 0; i < allSegments.length; i++) {
+    for (let j = i + 1; j < allSegments.length; j++) {
+      const point = getIntersection(allSegments[i], allSegments[j]);
+      if (point) {
+        const key = `${point.x.toFixed(2)}_${point.y.toFixed(2)}`;
+        intersections[key] = point;
+      }
+    }
+  }
+
+  // Step 2: trim segments at intersection points
+  const trimmed: Segment[] = [];
+  for (const seg of allSegments) {
+    const cuts = Object.values(intersections)
+      .filter(
+        (p) =>
+          p.x >= Math.min(seg.start.x, seg.end.x) &&
+          p.x <= Math.max(seg.start.x, seg.end.x) &&
+          p.y >= Math.min(seg.start.y, seg.end.y) &&
+          p.y <= Math.max(seg.start.y, seg.end.y)
+      )
+      .sort(
+        (a, b) =>
+          Math.hypot(a.x - seg.start.x, a.y - seg.start.y) -
+          Math.hypot(b.x - seg.start.x, b.y - seg.start.y)
+      );
+
+    if (cuts.length === 0) {
+      trimmed.push(seg);
+    } else {
+      const points = [seg.start, ...cuts, seg.end];
+      for (let i = 0; i < points.length - 1; i++) {
+        trimmed.push({ start: points[i], end: points[i + 1] });
+      }
+    }
+  }
+
+  // Step 3 (optional): remove duplicates or overlaps
+  const unique = trimmed.filter(
+    (s, i, arr) =>
+      i ===
+      arr.findIndex(
+        (t) =>
+          Math.abs(t.start.x - s.start.x) < 1 &&
+          Math.abs(t.start.y - s.start.y) < 1 &&
+          Math.abs(t.end.x - s.end.x) < 1 &&
+          Math.abs(t.end.y - s.end.y) < 1
+      )
+  );
+
+  return unique;
+}
+
 
 // Helper function to merge wall segments when they connect
 export function mergeWallSegments(
