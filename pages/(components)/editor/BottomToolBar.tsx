@@ -80,6 +80,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     groupSelectedAssets,
     ungroupAsset,
     setWallType,
+    setWallTool,
   } = useSceneStore(); // Updated
 
   // Example states to toggle (keeping for future use)
@@ -473,6 +474,21 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 </li>
               ))}
             </ul>
+            <div className="mt-2 pt-2 border-t border-gray-200">
+              <button
+                className="w-full px-2 py-1.5 rounded hover:bg-gray-100 text-gray-800 text-xs font-medium"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setWallTool('cross');
+                  setWallDrawingMode(true);
+                  setShowWallTypeSubmenu(false);
+                  setActiveTool('draw-wall');
+                }}
+              >
+                Draw Cross (click to place)
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

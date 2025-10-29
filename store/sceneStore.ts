@@ -91,6 +91,7 @@ type SceneState = {
   
   // Wall type and size options
   wallType: 'thin' | 'standard' | 'thick' | 'extra-thick'; // Current wall type
+  wallTool?: 'wall' | 'cross';
   availableWallTypes: Array<{
     id: 'thin' | 'standard' | 'thick' | 'extra-thick';
     label: string;
@@ -178,6 +179,7 @@ type SceneState = {
   
   // Wall type selection methods - Updated
   setWallType: (type: 'thin' | 'standard' | 'thick' | 'extra-thick') => void;
+  setWallTool: (tool: 'wall' | 'cross') => void;
   getCurrentWallThickness: () => number;
   setChairSettings: (settings: { numChairs: number; radius: number }) => void;
   getChairSettings: () => { numChairs: number; radius: number };
@@ -207,6 +209,10 @@ type SceneState = {
   commitWallSegment: () => void;
   finishWallDrawing: () => void;
   cancelWallDrawing: () => void;
+  createCrossAt: (center: { x: number; y: number }, armMm?: number) => void;
+  // Wall moving/snap methods
+  getWallSnapDelta: (assetId: string, proposedCenter: { x: number; y: number }) => { dx: number; dy: number };
+  finishWallMove: (assetId: string, finalCenter: { x: number; y: number }) => void;
   // New draft methods
   startWallDraft: (start: { x: number; y: number }) => void;
   addWallDraftNode: (pt: { x: number; y: number }) => void;
@@ -258,12 +264,13 @@ export const useSceneStore = create<SceneState>()(
       hasUnsavedChanges: false,
       hasHydrated: false,
       showGrid: false,
-      showDebugOutlines: false,
+      showDebugOutlines: true,
       gridSize: 10, // Default 10mm grid
       snapToGridEnabled: false,
       availableGridSizes: [5, 10, 25, 50, 100],
       selectedGridSizeIndex: 1,
       wallType: 'thin',
+      wallTool: 'wall',
       availableWallTypes: [
         { id: 'thin', label: 'Partition (75mm)', thickness: 1 },
         { id: 'standard', label: 'Partition (100mm)', thickness: 2 },
@@ -565,6 +572,8 @@ export const useSceneStore = create<SceneState>()(
         set({ wallType: type });
       },
 
+      setWallTool: (tool: 'wall' | 'cross') => set({ wallTool: tool }),
+
       getCurrentWallThickness: () => {
         const state = get();
         const wallType = state.availableWallTypes.find(wt => wt.id === state.wallType);
@@ -816,9 +825,28 @@ export const useSceneStore = create<SceneState>()(
       commitWallSegment: () => {
         const state = get();
         if (state.currentWallStart && state.currentWallTempEnd) {
+          // Snap end to nearest existing wall endpoint within tolerance to ensure clean T-junctions
+          const snapTol = 0.8; // mm
+          const snapToNearestEndpoint = (pt: {x:number;y:number}) => {
+            let best = pt;
+            let bestD = Infinity;
+            for (const a of state.assets) {
+              if (a.type !== 'wall-segments' || !a.wallSegments) continue;
+              for (const seg of a.wallSegments) {
+                const s = { x: seg.start.x + a.x, y: seg.start.y + a.y };
+                const e = { x: seg.end.x + a.x, y: seg.end.y + a.y };
+                const ds = Math.hypot(pt.x - s.x, pt.y - s.y);
+                if (ds < bestD) { bestD = ds; best = s; }
+                const de = Math.hypot(pt.x - e.x, pt.y - e.y);
+                if (de < bestD) { bestD = de; best = e; }
+              }
+            }
+            return bestD <= snapTol ? best : pt;
+          };
+          const snappedEnd = snapToNearestEndpoint(state.currentWallTempEnd);
           const newSegment = {
             start: state.currentWallStart,
-            end: state.currentWallTempEnd
+            end: snappedEnd
           };
           // Determine if this is the first horizontal segment to track length
           const dx = newSegment.end.x - newSegment.start.x;
@@ -828,7 +856,7 @@ export const useSceneStore = create<SceneState>()(
 
           set({
             currentWallSegments: [...state.currentWallSegments, newSegment],
-            currentWallStart: state.currentWallTempEnd, // Next segment starts where this one ends
+            currentWallStart: snappedEnd, // Next segment starts where this one ends (snapped)
             currentWallTempEnd: null,
             firstHorizontalWallLength: state.firstHorizontalWallLength ?? (isHorizontal ? length : null)
           });
@@ -1466,8 +1494,42 @@ export const useSceneStore = create<SceneState>()(
               return { x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y) };
             };
 
+            // Ensure all wall assets have node-edge representation
+            const toNodesEdges = (asset: AssetInstance): AssetInstance => {
+              if (asset.type !== 'wall-segments') return asset;
+              if (asset.wallNodes && asset.wallEdges) return asset;
+              if (!asset.wallSegments || asset.wallSegments.length === 0) return asset;
+              const nodes: { x: number; y: number }[] = [];
+              const edges: { a: number; b: number }[] = [];
+              const addNode = (pt: { x: number; y: number }) => {
+                const idx = nodes.findIndex(n => Math.hypot(n.x - pt.x, n.y - pt.y) <= 0.5);
+                if (idx >= 0) return idx;
+                nodes.push({ x: pt.x, y: pt.y });
+                return nodes.length - 1;
+              };
+              for (const s of asset.wallSegments) {
+                const a = { x: s.start.x + asset.x, y: s.start.y + asset.y };
+                const b = { x: s.end.x + asset.x, y: s.end.y + asset.y };
+                const ai = addNode(a);
+                const bi = addNode(b);
+                if (ai !== bi) edges.push({ a: ai, b: bi });
+              }
+              return { ...asset, wallNodes: nodes, wallEdges: edges, wallSegments: undefined } as AssetInstance;
+            };
+
+            const cleanupSmallEdges = (asset: AssetInstance, minLen = 0.8) => {
+              if (!asset.wallNodes || !asset.wallEdges) return asset;
+              const kept = asset.wallEdges.filter(e => {
+                const a = asset.wallNodes![e.a];
+                const b = asset.wallNodes![e.b];
+                return Math.hypot(a.x - b.x, a.y - b.y) >= minLen;
+              });
+              return { ...asset, wallEdges: kept } as AssetInstance;
+            };
+
             const addAndBlendWalls = (stateAssets: AssetInstance[]) => {
-              const result = [...stateAssets];
+              // Normalize all walls first
+              const result = stateAssets.map(a => toNodesEdges(a));
               // Insert new wall first
               result.push(wallAsset);
               const newIdx = result.length - 1;
@@ -1493,6 +1555,25 @@ export const useSceneStore = create<SceneState>()(
                   }
                 }
               }
+              // Merge coincident nodes across all walls (dedup within tolerance)
+              const mergeTol = 0.5;
+              for (let i = 0; i < result.length; i++) {
+                const a = result[i];
+                if (a.type !== 'wall-segments' || !a.wallNodes || !a.wallEdges) continue;
+                const nodes = [...a.wallNodes];
+                const mapIdx: number[] = nodes.map((_, idx) => idx);
+                for (let j = 0; j < nodes.length; j++) {
+                  for (let k = j + 1; k < nodes.length; k++) {
+                    if (Math.hypot(nodes[j].x - nodes[k].x, nodes[j].y - nodes[k].y) <= mergeTol) {
+                      mapIdx[k] = j;
+                    }
+                  }
+                }
+                const newEdges = a.wallEdges!.map(e => ({ a: mapIdx[e.a], b: mapIdx[e.b] })).filter(e => e.a !== e.b);
+                result[i] = { ...a, wallNodes: nodes, wallEdges: newEdges } as AssetInstance;
+              }
+              // Remove tiny caps created by splits so the pass-through looks smooth
+              for (let i = 0; i < result.length; i++) result[i] = cleanupSmallEdges(result[i]);
               return result;
             };
 
@@ -1516,6 +1597,177 @@ export const useSceneStore = create<SceneState>()(
         currentWallStart: null,
         currentWallTempEnd: null
       }),
+
+      // Create a cross wall asset centered at position
+      createCrossAt: (center, armMm = 160) => {
+        const state = get();
+        const thickness = state.getCurrentWallThickness();
+        const wallGap = 8;
+        const segments = [
+          { start: { x: -armMm, y: 0 }, end: { x: armMm, y: 0 } },
+          { start: { x: 0, y: -armMm }, end: { x: 0, y: armMm } },
+        ];
+        const asset: AssetInstance = {
+          id: `wall-cross-${Date.now()}`,
+          type: 'wall-segments',
+          x: center.x,
+          y: center.y,
+          scale: 1,
+          rotation: 0,
+          zIndex: -100,
+          wallSegments: segments,
+          wallGap,
+          wallThickness: thickness,
+          lineColor: '#000000',
+          backgroundColor: '#f3f4f6'
+        } as any;
+        set({
+          assets: [...state.assets, asset],
+          selectedAssetId: asset.id,
+          wallDrawingMode: false,
+          wallTool: 'wall',
+          hasUnsavedChanges: true,
+        });
+      },
+
+      // Compute snap delta for a wall being dragged to align with other walls
+      getWallSnapDelta: (assetId, proposedCenter) => {
+        const state = get();
+        const tol = 2.0; // mm
+        const asset = state.assets.find(a => a.id === assetId);
+        if (!asset || asset.type !== 'wall-segments' || !asset.wallNodes || !asset.wallEdges) return { dx: 0, dy: 0 };
+        const currentCenter = { x: asset.x, y: asset.y };
+        const delta = { dx: proposedCenter.x - currentCenter.x, dy: proposedCenter.y - currentCenter.y };
+
+        const movingNodes = asset.wallNodes.map(n => ({ x: n.x + delta.dx, y: n.y + delta.dy }));
+
+        const foreignEndpoints: { x: number; y: number }[] = [];
+        const foreignEdges: { a: { x: number; y: number }; b: { x: number; y: number } }[] = [];
+        for (const other of state.assets) {
+          if (other.id === assetId || other.type !== 'wall-segments' || !other.wallNodes || !other.wallEdges) continue;
+          for (const n of other.wallNodes) foreignEndpoints.push({ x: n.x, y: n.y });
+          for (const e of other.wallEdges) {
+            const a = other.wallNodes[e.a];
+            const b = other.wallNodes[e.b];
+            foreignEdges.push({ a, b });
+          }
+        }
+
+        const projectPointToSegment = (p: {x:number;y:number}, a: {x:number;y:number}, b: {x:number;y:number}) => {
+          const abx = b.x - a.x, aby = b.y - a.y;
+          const apx = p.x - a.x, apy = p.y - a.y;
+          const ab2 = abx*abx + aby*aby;
+          if (ab2 === 0) return null;
+          let t = (apx*abx + apy*aby) / ab2;
+          if (t <= 0 || t >= 1) return null;
+          return { x: a.x + t*abx, y: a.y + t*aby };
+        };
+
+        let best = { dx: 0, dy: 0 };
+        let bestD = tol + 1;
+        // Endpoint -> endpoint
+        for (const pn of movingNodes) {
+          for (const q of foreignEndpoints) {
+            const d = Math.hypot(q.x - pn.x, q.y - pn.y);
+            if (d < bestD && d <= tol) {
+              bestD = d; best = { dx: q.x - pn.x, dy: q.y - pn.y };
+            }
+          }
+        }
+        // Endpoint -> edge projection
+        for (const pn of movingNodes) {
+          for (const e of foreignEdges) {
+            const proj = projectPointToSegment(pn, e.a, e.b);
+            if (!proj) continue;
+            const d = Math.hypot(proj.x - pn.x, proj.y - pn.y);
+            if (d < bestD && d <= tol) {
+              bestD = d; best = { dx: proj.x - pn.x, dy: proj.y - pn.y };
+            }
+          }
+        }
+        return best;
+      },
+
+      // Apply final move and split/merge at intersections
+      finishWallMove: (assetId, finalCenter) => {
+        const state = get();
+        const idx = state.assets.findIndex(a => a.id === assetId);
+        if (idx < 0) return;
+        const a = state.assets[idx];
+        if (a.type !== 'wall-segments' || !a.wallNodes || !a.wallEdges) return;
+        const delta = { x: finalCenter.x - a.x, y: finalCenter.y - a.y };
+        const movedNodes = a.wallNodes.map(n => ({ x: n.x + delta.x, y: n.y + delta.y }));
+        const movedAsset: AssetInstance = { ...a, x: finalCenter.x, y: finalCenter.y, wallNodes: movedNodes } as AssetInstance;
+
+        // helpers
+        const splitEdgeAtPoint = (
+          asset: AssetInstance,
+          aIndex: number,
+          bIndex: number,
+          point: { x: number; y: number }
+        ) => {
+          if (!asset.wallNodes || !asset.wallEdges) return asset;
+          const nodes = [...asset.wallNodes];
+          const edges = [...asset.wallEdges];
+          const newNodeIndex = nodes.findIndex(n => Math.hypot(n.x - point.x, n.y - point.y) <= 0.5);
+          const idxN = newNodeIndex >= 0 ? newNodeIndex : (nodes.push({ x: point.x, y: point.y }), nodes.length - 1);
+          const filtered = edges.filter(e => !(e.a === aIndex && e.b === bIndex) && !(e.a === bIndex && e.b === aIndex));
+          filtered.push({ a: aIndex, b: idxN });
+          filtered.push({ a: idxN, b: bIndex });
+          return { ...asset, wallNodes: nodes, wallEdges: filtered } as AssetInstance;
+        };
+        const lineIntersection = (
+          p1: {x:number;y:number}, p2: {x:number;y:number},
+          p3: {x:number;y:number}, p4: {x:number;y:number}
+        ): {x:number;y:number} | null => {
+          const denom = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
+          if (Math.abs(denom) < 1e-9) return null;
+          const t = ((p1.x - p3.x) * (p3.y - p4.y) - (p1.y - p3.y) * (p3.x - p4.x)) / denom;
+          const u = ((p1.x - p3.x) * (p1.y - p2.y) - (p1.y - p3.y) * (p1.x - p2.x)) / denom;
+          if (t <= 0 || t >= 1 || u <= 0 || u >= 1) return null;
+          return { x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y) };
+        };
+
+        // Start from current assets with moved asset injected
+        const result = [...state.assets];
+        result[idx] = movedAsset;
+        // Split intersections between movedAsset and all other walls
+        const moved = result[idx];
+        if (moved.wallNodes && moved.wallEdges) {
+          for (let i = 0; i < result.length; i++) {
+            if (i === idx) continue;
+            const other = result[i];
+            if (other.type !== 'wall-segments' || !other.wallNodes || !other.wallEdges) continue;
+            for (const e1 of moved.wallEdges) {
+              const a1n = moved.wallNodes[e1.a];
+              const b1n = moved.wallNodes[e1.b];
+              for (const e2 of other.wallEdges) {
+                const a2n = other.wallNodes[e2.a];
+                const b2n = other.wallNodes[e2.b];
+                const p = lineIntersection(a1n, b1n, a2n, b2n);
+                if (p) {
+                  result[idx] = splitEdgeAtPoint(result[idx], e1.a, e1.b, p);
+                  result[i] = splitEdgeAtPoint(result[i], e2.a, e2.b, p);
+                }
+              }
+            }
+          }
+        }
+
+        // Cleanup tiny edges after splits
+        const cleanupSmallEdges = (asset: AssetInstance, minLen = 0.8) => {
+          if (!asset.wallNodes || !asset.wallEdges) return asset;
+          const kept = asset.wallEdges.filter(e => {
+            const a = asset.wallNodes![e.a];
+            const b = asset.wallNodes![e.b];
+            return Math.hypot(a.x - b.x, a.y - b.y) >= minLen;
+          });
+          return { ...asset, wallEdges: kept } as AssetInstance;
+        };
+        for (let i=0;i<result.length;i++) result[i] = cleanupSmallEdges(result[i]);
+
+        set({ assets: result, hasUnsavedChanges: true, selectedAssetId: assetId });
+      },
 
       // Copy/paste methods
       copyAsset: (id) => {

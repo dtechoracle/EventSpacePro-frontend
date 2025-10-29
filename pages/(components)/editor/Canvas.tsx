@@ -64,6 +64,7 @@ export default function Canvas({
   const isPenMode = useSceneStore((s) => s.isPenMode);
   const isWallMode = useSceneStore((s) => s.isWallMode);
   const wallType = useSceneStore((s) => s.wallType);
+  const wallTool = useSceneStore((s) => s.wallTool);
   const isDrawing = useSceneStore((s) => s.isDrawing);
   // const currentPath = useSceneStore((s) => s.currentPath);
   const tempPath = useSceneStore((s) => s.tempPath);
@@ -88,6 +89,7 @@ export default function Canvas({
   const finishShape = useSceneStore((s) => s.finishShape);
   const updateShapeTempEnd = useSceneStore((s) => s.updateShapeTempEnd);
   const startWallSegment = useSceneStore((s) => s.startWallSegment);
+  const createCrossAt = useSceneStore((s) => s.createCrossAt);
   const startRectangularSelection = useSceneStore(
     (s) => s.startRectangularSelection
   );
@@ -502,11 +504,16 @@ export default function Canvas({
             const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
 
             // Start drawing
-            currentDrawingPath.current = [{ x, y }];
-            setIsDrawing(true);
-            setCurrentPath([{ x, y }]);
-            setTempPath([{ x, y }]);
-            return; // Prevent canvas movement when in pen mode
+            if (isWallMode && wallTool === 'cross') {
+              createCrossAt({ x, y });
+              return;
+            } else {
+              currentDrawingPath.current = [{ x, y }];
+              setIsDrawing(true);
+              setCurrentPath([{ x, y }]);
+              setTempPath([{ x, y }]);
+              return; // Prevent canvas movement when in pen mode
+            }
           } else if (wallDrawingMode) {
             // Check if the click target is the canvas itself (not a child element like sidebar buttons)
             if (e.target !== canvasRef.current) {
