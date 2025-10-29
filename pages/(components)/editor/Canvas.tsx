@@ -5,6 +5,7 @@ import { useSceneStore, AssetInstance } from "@/store/sceneStore";
 import { PaperSize } from "@/lib/paperSizes";
 import { PAPER_SIZES } from "@/lib/paperSizes";
 import GridOverlay from "./GridOverlay";
+import UnifiedWallRendering from "./UnifiedWallRendering";
 import DrawingPath from "./DrawingPath";
 import AssetRenderer from "./AssetRenderer";
 import GroupRenderer from "./GroupRenderer";
@@ -23,22 +24,33 @@ import { motion } from "framer-motion";
 // } | EventData;
 
 type CanvasProps = {
-  workspaceZoom: number;
-  mmToPx: number;
-  canvasPos: { x: number; y: number };
-  setCanvasPos: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
   canvas?: { size: string; width: number; height: number } | null;
   assets?: AssetInstance[];
 };
 
 export default function Canvas({
-  workspaceZoom,
-  mmToPx,
-  canvasPos,
-  setCanvasPos,
   canvas: propCanvas,
   assets: propAssets,
 }: CanvasProps) {
+  // Workspace (viewport) transform
+  const MM_TO_PX = 2; // keep consistent with other components
+  const ZOOM_SENSITIVITY = 0.001;
+  const MIN_ZOOM_BASE = 0.3;
+  const MIN_ZOOM_PADDING = 1.12;
+  const EDGE_PADDING_MM = 10;
+
+  // Large virtual scene so the user can pan/scroll comfortably
+  const SCENE_W_MM = 20000; // 20 meters
+  const SCENE_H_MM = 20000; // 20 meters
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const targetZoom = useRef(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const targetOffset = useRef({ x: 0, y: 0 });
+  const isPanning = useRef(false);
+  const lastPanPos = useRef({ x: 0, y: 0 });
+  const [canvasPos, setCanvasPos] = useState<{ x: number; y: number }>({ x: 200, y: 150 });
   // Use store data for rendering (synced from props)
   const canvas = useSceneStore((s) => s.canvas);
   const assets = useSceneStore((s) => s.assets);
@@ -145,11 +157,15 @@ export default function Canvas({
 
   const [rotation, setRotation] = useState<number>(0);
 
-  // Use store canvas when known; otherwise fall back to provided dimensions so we can still render an empty layout without paper
-  const effectiveWidthMm = canvas?.width ?? propCanvas?.width ?? 0;
-  const effectiveHeightMm = canvas?.height ?? propCanvas?.height ?? 0;
-  const canvasPxW = effectiveWidthMm * mmToPx;
-  const canvasPxH = effectiveHeightMm * mmToPx;
+  // Single-canvas mode: use the large scene as the canvas
+  const effectiveWidthMm = SCENE_W_MM;
+  const effectiveHeightMm = SCENE_H_MM;
+  const mmToPx = MM_TO_PX;
+  const workspaceZoom = zoom;
+  const canvasPxW = effectiveWidthMm * mmToPx; // paper size in px
+  const canvasPxH = effectiveHeightMm * mmToPx; // paper size in px
+  const scenePxWNoZoom = SCENE_W_MM * mmToPx; // virtual scene size (no zoom)
+  const scenePxHNoZoom = SCENE_H_MM * mmToPx;
 
   // Create coordinate transformation function
   const clientToCanvasMM = useCallback(
@@ -181,6 +197,187 @@ export default function Canvas({
     ]
   );
 
+  // Smooth zoom/offset animation loop
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      setZoom((z) => {
+        const dz = targetZoom.current - z;
+        if (Math.abs(dz) < 0.001) return targetZoom.current;
+        return z + dz * 0.2;
+      });
+      setOffset((o) => {
+        const dx = targetOffset.current.x - o.x;
+        const dy = targetOffset.current.y - o.y;
+        if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) {
+          return clampOffset(targetOffset.current, targetZoom.current, false);
+        }
+        const candidate = { x: o.x + dx * 0.2, y: o.y + dy * 0.2 };
+        return clampOffset(candidate, targetZoom.current, false);
+      });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  // Cursor-centered zoom with dynamic min zoom
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const computeMinZoom = (): number => {
+      const rect = el.getBoundingClientRect();
+      // ensure the entire viewport is always covered by the SCENE, not just the paper
+      if (!scenePxWNoZoom || !scenePxHNoZoom) return MIN_ZOOM_BASE;
+      const minW = rect.width / scenePxWNoZoom;
+      const minH = rect.height / scenePxHNoZoom;
+      const min = Math.min(minW, minH);
+      const padded = min * MIN_ZOOM_PADDING;
+      return Math.min(3, Math.max(MIN_ZOOM_BASE, padded));
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const rect = el.getBoundingClientRect();
+        const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        const sceneX = (cursor.x - targetOffset.current.x) / targetZoom.current;
+        const sceneY = (cursor.y - targetOffset.current.y) / targetZoom.current;
+        const delta = -e.deltaY * ZOOM_SENSITIVITY;
+        const desired = targetZoom.current + delta;
+        const minZoom = computeMinZoom();
+        const newZoom = Math.min(3, Math.max(minZoom, desired));
+        const newOffset = {
+          x: cursor.x - sceneX * newZoom,
+          y: cursor.y - sceneY * newZoom,
+        };
+        targetZoom.current = newZoom;
+        targetOffset.current = clampOffset(newOffset, newZoom, false);
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [effectiveWidthMm, effectiveHeightMm, mmToPx]);
+
+  // Wheel-to-pan when not zooming (prevent page scroll)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheelPan = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) return; // zoom handler handles this
+      e.preventDefault();
+      const dx = e.deltaX;
+      const dy = e.deltaY;
+      const candidate = { x: targetOffset.current.x - dx, y: targetOffset.current.y - dy };
+      targetOffset.current = clampOffset(candidate, targetZoom.current, false);
+    };
+    el.addEventListener("wheel", onWheelPan, { passive: false });
+    return () => el.removeEventListener("wheel", onWheelPan);
+  }, []);
+
+  // Enforce minimum zoom on mount/resize and center scene
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const enforceMin = () => {
+      const rect = el.getBoundingClientRect();
+      if (!scenePxWNoZoom || !scenePxHNoZoom) return;
+      const minW = rect.width / scenePxWNoZoom;
+      const minH = rect.height / scenePxHNoZoom;
+      const minZoom = Math.min(minW, minH) * MIN_ZOOM_PADDING;
+      const clampedMin = Math.min(3, Math.max(MIN_ZOOM_BASE, minZoom));
+      if (targetZoom.current < clampedMin) {
+        targetZoom.current = clampedMin;
+        const centeredOffset = {
+          x: rect.width / 2 - (scenePxWNoZoom * clampedMin) / 2,
+          y: rect.height / 2 - (scenePxHNoZoom * clampedMin) / 2,
+        };
+        targetOffset.current = clampOffset(centeredOffset, clampedMin, false);
+      } else {
+        // Ensure current offset is within strict bounds at current zoom
+        targetOffset.current = clampOffset(targetOffset.current, targetZoom.current, false);
+      }
+    };
+    enforceMin();
+    window.addEventListener("resize", enforceMin);
+    return () => window.removeEventListener("resize", enforceMin);
+  }, [scenePxWNoZoom, scenePxHNoZoom, mmToPx]);
+
+  // Strictly snap targetOffset to bounds when dependencies change
+  useEffect(() => {
+    targetOffset.current = clampOffset(targetOffset.current, targetZoom.current, false);
+  }, [scenePxWNoZoom, scenePxHNoZoom, canvasPos.x, canvasPos.y, mmToPx]);
+
+  // Middle-mouse/spacebar drag panning
+  const isSpaceDown = useRef(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => { if (e.code === "Space") isSpaceDown.current = true; };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.code === "Space") isSpaceDown.current = false; };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); };
+  }, []);
+
+  const clampOffset = (
+    offsetCandidate: { x: number; y: number },
+    zoomVal: number,
+    allowOverscroll = false
+  ) => {
+    const el = containerRef.current;
+    if (!el) return offsetCandidate;
+    const rect = el.getBoundingClientRect();
+    const vw = rect.width;
+    const vh = rect.height;
+    // Use the large SCENE as bounds
+    const sceneW = SCENE_W_MM * mmToPx; // scene px (no zoom)
+    const sceneH = SCENE_H_MM * mmToPx;
+    const leftScene = 0; // scene starts at 0,0
+    const topScene = 0;
+    const padPx = EDGE_PADDING_MM * mmToPx * zoomVal;
+    const minOffsetX = vw - padPx - (leftScene + sceneW) * zoomVal;
+    const maxOffsetX = padPx - leftScene * zoomVal;
+    let x = offsetCandidate.x;
+    if (minOffsetX > maxOffsetX) {
+      x = vw / 2 - (leftScene + sceneW / 2) * zoomVal;
+    } else if (!allowOverscroll) {
+      x = Math.min(maxOffsetX, Math.max(minOffsetX, x));
+    }
+    const minOffsetY = vh - padPx - (topScene + sceneH) * zoomVal;
+    const maxOffsetY = padPx - topScene * zoomVal;
+    let y = offsetCandidate.y;
+    if (minOffsetY > maxOffsetY) {
+      y = vh / 2 - (topScene + sceneH / 2) * zoomVal;
+    } else if (!allowOverscroll) {
+      y = Math.min(maxOffsetY, Math.max(minOffsetY, y));
+    }
+    return { x, y };
+  };
+
+  const handlePointerDown = (e: React.MouseEvent) => {
+    if (e.button === 1 || isSpaceDown.current) {
+      e.preventDefault();
+      isPanning.current = true;
+      lastPanPos.current = { x: e.clientX, y: e.clientY };
+      const onDocMove = (ev: MouseEvent) => {
+        if (!isPanning.current) return;
+        const dx = ev.clientX - lastPanPos.current.x;
+        const dy = ev.clientY - lastPanPos.current.y;
+        lastPanPos.current = { x: ev.clientX, y: ev.clientY };
+        const candidate = { x: targetOffset.current.x + dx, y: targetOffset.current.y + dy };
+        const clamped = clampOffset(candidate, targetZoom.current, false);
+        setOffset(clamped);
+        targetOffset.current = clamped;
+      };
+      const onDocUp = () => {
+        isPanning.current = false;
+        targetOffset.current = clampOffset(targetOffset.current, targetZoom.current, false);
+        document.removeEventListener("mousemove", onDocMove);
+        document.removeEventListener("mouseup", onDocUp);
+      };
+      document.addEventListener("mousemove", onDocMove);
+      document.addEventListener("mouseup", onDocUp);
+    }
+  };
+
   // Use custom hooks
   const { straightenPath } = useDrawingLogic();
   const mouseRefs = useCanvasMouseHandlers({
@@ -210,11 +407,32 @@ export default function Canvas({
   const rotateCCW = () => setRotation((r) => (r - 90 + 360) % 360);
 
   return (
-    <div className="relative w-full h-full">
-      {/* Debug Panel */}
+    <div ref={containerRef} className="w-full h-full overflow-hidden bg-gray-50" onMouseDown={handlePointerDown}>
+      <div
+        className="relative w-full h-full"
+        style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`, transformOrigin: "top left" }}
+      >
+        {/* Virtual Scene */}
+        <div
+          className="relative"
+          style={{ width: scenePxWNoZoom, height: scenePxHNoZoom }}
+        >
+        {/* Grid Overlay covering the entire scene so no whitespace shows */}
+        <div style={{ pointerEvents: 'none' }}>
+        <GridOverlay
+          showGrid={showGrid}
+          canvasPxW={scenePxWNoZoom}
+          canvasPxH={scenePxHNoZoom}
+          mmToPx={mmToPx}
+          gridSize={gridSize}
+        />
+        </div>
+        {/* Unified wall rendering (boolean union of all wall polygons incl. preview) */}
+        <UnifiedWallRendering mmToPx={mmToPx} />
+      {/* Single Canvas (the scene itself) */}
       <div
         ref={canvasRef}
-        className={`relative ${canvas ? "bg-gray-100" : "bg-transparent"} ${
+        className={`relative ${
           isPenMode ||
           isWallMode ||
           wallDrawingMode ||
@@ -224,10 +442,8 @@ export default function Canvas({
             : ""
         }`}
       style={{
-        width: canvasPxW,
-        height: canvasPxH,
-        transform: `rotate(${rotation}deg)`,
-        transformOrigin: "center center",
+        width: scenePxWNoZoom,
+        height: scenePxHNoZoom,
         cursor: isRectangularSelectionMode ? "crosshair" : (isWallMode || wallDrawingMode || shapeMode) ? "crosshair" : undefined,
       }}
       onDragOver={(e) => e.preventDefault()}
@@ -361,14 +577,7 @@ export default function Canvas({
         }
       }}
     >
-      {/* Grid Overlay */}
-      <GridOverlay
-        showGrid={showGrid}
-        canvasPxW={canvasPxW}
-        canvasPxH={canvasPxH}
-        mmToPx={mmToPx}
-        gridSize={gridSize}
-      />
+      {/* Grid Overlay moved to scene-level */}
 
       {/* Drawing Path */}
       <DrawingPath
@@ -414,7 +623,9 @@ export default function Canvas({
       )}
 
       {/* Selection Box */}
-      <SelectionBox mmToPx={mmToPx} />
+      <div style={{ pointerEvents: 'none' }}>
+        <SelectionBox mmToPx={mmToPx} />
+      </div>
 
       {/* Chair Radius Preview */}
       {selectedAssetId && assets.find(a => a.id === selectedAssetId)?.type.includes('table') && (
@@ -522,7 +733,8 @@ export default function Canvas({
           );
         })}
       </div>
-      
+        </div>
+      </div>
     </div>
   );
 }

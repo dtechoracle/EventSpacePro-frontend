@@ -158,24 +158,17 @@ export default function WallRendering({
                 // Render two independent closed strokes (no fill) to avoid any bridging line
                 // Blend the first/last corner by stroking a compound path
                 const compound = `${outerPath} ${innerPath}`;
+                // Draw as a filled ring (no stroke) so intersections can be masked/outlined globally
                 return (
                   <>
                     <path
                       d={compound}
-                      fill='none'
-                      stroke={asset.lineColor ?? "#000000"}
-                      strokeWidth={wallThickness}
-                      strokeLinejoin='round'
-                      strokeLinecap='square'
+                      fill='#f3f4f6'
+                      stroke='none'
+                      fillRule='evenodd'
                     />
                     {showDebugOutlines && (
-                      <path
-                        d={compound}
-                        fill='none'
-                        stroke='#FF00FF'
-                        strokeWidth={1}
-                        strokeDasharray='4,4'
-                      />
+                      <path d={compound} fill='none' stroke='#FF00FF' strokeWidth={1} strokeDasharray='4,4' />
                     )}
                   </>
                 );

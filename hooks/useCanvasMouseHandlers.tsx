@@ -26,6 +26,9 @@ export function useCanvasMouseHandlers({
   clientToCanvasMM,
   straightenPath,
 }: UseCanvasMouseHandlersProps) {
+  // Keep in sync with Canvas scene dimensions
+  const SCENE_W_MM = 20000;
+  const SCENE_H_MM = 20000;
   // Store selectors
   const assets = useSceneStore((s) => s.assets);
   const selectedAssetId = useSceneStore((s) => s.selectedAssetId);
@@ -469,10 +472,26 @@ export function useCanvasMouseHandlers({
       if (isMovingCanvas.current) {
         const dx = e.clientX - lastCanvasPointer.current.x;
         const dy = e.clientY - lastCanvasPointer.current.y;
-        setCanvasPos((p) => ({
-          x: p.x + dx / workspaceZoom,
-          y: p.y + dy / workspaceZoom,
-        }));
+        const scenePxW = SCENE_W_MM * mmToPx;
+        const scenePxH = SCENE_H_MM * mmToPx;
+        const paperPxW = (canvas?.width || 0) * mmToPx;
+        const paperPxH = (canvas?.height || 0) * mmToPx;
+        const halfPaperW = paperPxW / 2;
+        const halfPaperH = paperPxH / 2;
+        setCanvasPos((p) => {
+          const nextX = p.x + dx / workspaceZoom;
+          const nextY = p.y + dy / workspaceZoom;
+          // Guarantee paper inside big scene: clamp center so you never see outside
+          const margin = 0; // set to 0, no bouncing before limit
+          const minX = halfPaperW + margin;
+          const maxX = scenePxW - halfPaperW - margin;
+          const minY = halfPaperH + margin;
+          const maxY = scenePxH - halfPaperH - margin;
+          // Optionally for soft edge, use 19900 instead of 20000
+          const clampX = Math.max(minX, Math.min(maxX, nextX));
+          const clampY = Math.max(minY, Math.min(maxY, nextY));
+          return { x: clampX, y: clampY };
+        });
         lastCanvasPointer.current = { x: e.clientX, y: e.clientY };
       }
     };

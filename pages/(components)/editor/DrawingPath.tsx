@@ -403,13 +403,15 @@ export default function DrawingPath({
               return `${outer} ${inner} Z`;
             })();
 
+            const wallThickness = useSceneStore.getState().getCurrentWallThickness();
+
             return (
               <>
                 <path
                   d={fullPath}
                   fill="none"
                   stroke="#000"
-                  strokeWidth="2"
+                  strokeWidth={wallThickness}
                   strokeDasharray="6,4"
                   opacity="0.8"
                 />

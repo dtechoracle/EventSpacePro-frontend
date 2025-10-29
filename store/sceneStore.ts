@@ -71,7 +71,7 @@ export type EventData = {
 
 type SceneState = {
   canvas: {
-    size: PaperSize;
+    size: PaperSize; // for custom layouts we set a string casted to PaperSize
     width: number;
     height: number;
   } | null;
@@ -159,6 +159,7 @@ type SceneState = {
 
   // Methods
   setCanvas: (size: PaperSize) => void;
+  setCanvasDimensions: (width: number, height: number) => void; // allow arbitrary canvas when not a known PaperSize
   addAsset: (type: string, x: number, y: number) => void;
   addAssetObject: (assetObj: AssetInstance) => void;
   updateAsset: (id: string, updates: Partial<AssetInstance>) => void;
@@ -308,6 +309,14 @@ export const useSceneStore = create<SceneState>()(
           selectedAssetId: null,
           hasUnsavedChanges: true
         });
+      },
+
+      // Directly set canvas dimensions (supports custom/layout canvas not in PAPER_SIZES)
+      setCanvasDimensions: (width: number, height: number) => {
+        set({
+          canvas: { size: "layout" as PaperSize, width, height },
+          hasUnsavedChanges: true,
+        } as any);
       },
 
       addAsset: (type, x, y) => {
@@ -1426,9 +1435,69 @@ export const useSceneStore = create<SceneState>()(
               lineColor: "#000000",
               backgroundColor: "#f3f4f6" // bg-gray-100
             };
+            // Post-process: split existing walls and the new wall at intersections for seamless joints
+            const splitEdgeAtPoint = (
+              asset: AssetInstance,
+              aIndex: number,
+              bIndex: number,
+              point: { x: number; y: number }
+            ) => {
+              if (!asset.wallNodes || !asset.wallEdges) return asset;
+              const nodes = [...asset.wallNodes];
+              const edges = [...asset.wallEdges];
+              const newNodeIndex = nodes.findIndex(n => Math.hypot(n.x - point.x, n.y - point.y) <= 0.5);
+              const idx = newNodeIndex >= 0 ? newNodeIndex : (nodes.push({ x: point.x, y: point.y }), nodes.length - 1);
+              // remove original edge a-b once, add a-idx and idx-b
+              const filtered = edges.filter(e => !(e.a === aIndex && e.b === bIndex) && !(e.a === bIndex && e.b === aIndex));
+              filtered.push({ a: aIndex, b: idx });
+              filtered.push({ a: idx, b: bIndex });
+              return { ...asset, wallNodes: nodes, wallEdges: filtered } as AssetInstance;
+            };
+
+            const lineIntersection = (
+              p1: {x:number;y:number}, p2: {x:number;y:number},
+              p3: {x:number;y:number}, p4: {x:number;y:number}
+            ): {x:number;y:number} | null => {
+              const denom = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
+              if (Math.abs(denom) < 1e-9) return null;
+              const t = ((p1.x - p3.x) * (p3.y - p4.y) - (p1.y - p3.y) * (p3.x - p4.x)) / denom;
+              const u = ((p1.x - p3.x) * (p1.y - p2.y) - (p1.y - p3.y) * (p1.x - p2.x)) / denom;
+              if (t <= 0 || t >= 1 || u <= 0 || u >= 1) return null;
+              return { x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y) };
+            };
+
+            const addAndBlendWalls = (stateAssets: AssetInstance[]) => {
+              const result = [...stateAssets];
+              // Insert new wall first
+              result.push(wallAsset);
+              const newIdx = result.length - 1;
+              const newWall = result[newIdx];
+              if (!newWall.wallNodes || !newWall.wallEdges) return result;
+              // Compare against all existing walls
+              for (let i = 0; i < result.length - 1; i++) {
+                const other = result[i];
+                if (other.type !== 'wall-segments' || !other.wallNodes || !other.wallEdges) continue;
+                // Iterate edges
+                for (const e1 of newWall.wallEdges) {
+                  const a1 = newWall.wallNodes[e1.a];
+                  const b1 = newWall.wallNodes[e1.b];
+                  for (const e2 of other.wallEdges) {
+                    const a2 = other.wallNodes[e2.a];
+                    const b2 = other.wallNodes[e2.b];
+                    const p = lineIntersection(a1, b1, a2, b2);
+                    if (p) {
+                      // Split both edges at intersection point
+                      result[newIdx] = splitEdgeAtPoint(result[newIdx], e1.a, e1.b, p);
+                      result[i] = splitEdgeAtPoint(result[i], e2.a, e2.b, p);
+                    }
+                  }
+                }
+              }
+              return result;
+            };
 
             set((state) => ({
-              assets: [...state.assets, wallAsset],
+              assets: addAndBlendWalls(state.assets),
               selectedAssetId: wallAsset.id,
               hasUnsavedChanges: true,
               wallDrawingMode: false,

@@ -425,27 +425,10 @@ export default function AssetRenderer({
     );
   }
 
-  // Handle wall-segments assets
+  // Handle wall-segments assets (stroke-only; overlay handles blending/dots)
   if (asset.type === "wall-segments") {
     return (
       <div className="relative">
-        {/* Background layer */}
-        {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
-          <div
-            style={{
-              position: "absolute",
-              left: leftPx,
-              top: topPx,
-              width: 200,
-              height: 200,
-              backgroundColor: asset.backgroundColor,
-              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
-              zIndex: (asset.zIndex || 0) - 1,
-            }}
-          />
-        )}
-
-        {/* Main wall segments */}
         <div
           onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
           style={{
@@ -455,32 +438,11 @@ export default function AssetRenderer({
             transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
             cursor: "move",
             zIndex: asset.zIndex || 0,
-            boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
-            transition: isCopied ? "box-shadow 0.3s ease" : undefined,
           }}
         >
           <WallRendering asset={asset} leftPx={0} topPx={0} totalRotation={0} />
         </div>
 
-        {/* Multi-select indicator */}
-        {isMultiSelected && !isSelected && (
-          <div
-            style={{
-              position: "absolute",
-              left: leftPx,
-              top: topPx,
-              width: (asset.width ?? 50) * asset.scale,
-              height: (asset.height ?? 50) * asset.scale,
-              border: "2px dashed #3B82F6",
-              borderRadius: "0px",
-              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
-              pointerEvents: "none",
-              zIndex: (asset.zIndex || 0) + 1,
-            }}
-          />
-        )}
-
-        {/* Handles */}
         {(isSelected || isMultiSelected) && (
           <AssetHandlesRenderer
             asset={asset}

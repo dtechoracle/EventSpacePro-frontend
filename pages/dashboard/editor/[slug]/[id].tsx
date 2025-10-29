@@ -6,7 +6,7 @@ import PropertiesSidebar from "@/pages/(components)/editor/PropertiesSidebar";
 import Toolbar from "@/pages/(components)/editor/ToolBar";
 import MainLayout from "@/pages/layouts/MainLayout";
 import { useState, useEffect, useCallback } from "react";
-import CanvasWorkspace from "@/pages/(components)/editor/CanvasWorkspace";
+import Canvas from "@/pages/(components)/editor/Canvas";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
@@ -177,7 +177,14 @@ export default function Editor() {
 
         {/* Main Content Area */}
         <div className="flex-1 overflow-hidden bg-gray-50">
-          <CanvasWorkspace eventData={eventData} />
+          <Canvas
+            canvas={eventData?.canvases?.[0] ? {
+              size: eventData.canvases[0].size,
+              width: eventData.canvases[0].width,
+              height: eventData.canvases[0].height,
+            } : undefined}
+            assets={eventData?.canvasAssets || []}
+          />
         </div>
 
         <div className="flex-shrink-0 w-64 bg-white">

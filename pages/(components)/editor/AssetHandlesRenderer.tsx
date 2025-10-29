@@ -283,18 +283,19 @@ export default function AssetHandlesRenderer({
           title="Scale"
         />
         
-        {/* Rotation line and handle */}
+W        {/* Rotation line hidden for walls to avoid center box artifact */}
         <div
           style={{
             position: "absolute",
             left: assetCenterPx.x,
             top: assetCenterPx.y,
-            width: 2,
-            height: 30,
-            backgroundColor: "#10B981",
+            width: 0,
+            height: 0,
+            backgroundColor: "transparent",
             transformOrigin: "bottom center",
             transform: `translate(-50%, -50%)`,
             zIndex: 9,
+            pointerEvents: "none",
           }}
         />
         <div
