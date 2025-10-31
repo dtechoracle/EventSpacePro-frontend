@@ -46,21 +46,17 @@ export interface Tool {
 
 export function useToolbarTools(): Tool[] {
   return [
+    // 1) Drawing
     {
-      icon: <FaMousePointer size={18} />,
-      label: "Selection",
+      icon: <FaPenNib size={18} />,
+      label: "Drawing",
       options: [
-        { id: "pointer-select", label: "Pointer", icon: <FaMousePointer size={14} /> },
-        { id: "rectangular-select", label: "Rectangular Selector", icon: <FaExpand size={14} /> },
+        { id: "draw-line", label: "Draw Line", icon: <FaPenNib size={14} /> },
+        { id: "draw-wall", label: "Draw Wall ►", icon: <FaDrawPolygon size={14} /> },
+        { id: "add-text", label: "Add Text", icon: <FaComment size={14} /> },
       ],
     },
-    {
-      icon: <FaBox size={18} />,
-      label: "Assetsssssss",
-      options: [
-        { id: "open-assets", label: "Assets", icon: <FaBox size={14} /> },
-      ],
-    },
+    // 2) Shapes
     {
       icon: <FaShapes size={18} />,
       label: "Shapes",
@@ -71,15 +67,24 @@ export function useToolbarTools(): Tool[] {
         { id: "polygon", label: "Polygon", icon: <FaDrawPolygon size={14} /> },
       ],
     },
+    // 3) Assets
     {
-      icon: <FaPenNib size={18} />,
-      label: "Drawing",
+      icon: <FaBox size={18} />,
+      label: "Assets",
       options: [
-        { id: "draw-line", label: "Draw Line", icon: <FaPenNib size={14} /> }, 
-        { id: "draw-wall", label: "Draw Wall ►", icon: <FaDrawPolygon size={14} /> }, 
-        { id: "add-text", label: "Add Text", icon: <FaComment size={14} /> }
+        { id: "open-assets", label: "Assets", icon: <FaBox size={14} /> },
       ],
     },
+    // 4) Selection
+    {
+      icon: <FaMousePointer size={18} />,
+      label: "Selection",
+      options: [
+        { id: "pointer-select", label: "Pointer", icon: <FaMousePointer size={14} /> },
+        { id: "rectangular-select", label: "Rectangular Selector", icon: <FaExpand size={14} /> },
+      ],
+    },
+    // 5) Modify
     {
       icon: <FaEdit size={18} />,
       label: "Modify",
@@ -94,6 +99,7 @@ export function useToolbarTools(): Tool[] {
         { id: "array", label: "Array", icon: <FaTh size={14} /> },
       ],
     },
+    // 6) Annotations (unchanged)
     {
       icon: <FaComment size={18} />,
       label: "Annotations",
@@ -103,6 +109,7 @@ export function useToolbarTools(): Tool[] {
         { id: "text-annotation", label: "Text", icon: <FaFont size={14} /> },
       ],
     },
+    // 7) Snapping (unchanged)
     {
       icon: <FaMagnet size={18} />,
       label: "Snapping",
@@ -116,6 +123,7 @@ export function useToolbarTools(): Tool[] {
         { id: "snap-grid", label: "Snap to Grid", icon: <FaTimes size={14} /> },
       ],
     },
+    // 8) Export (unchanged)
     {
       icon: <FaDownload size={18} />,
       label: "Export",

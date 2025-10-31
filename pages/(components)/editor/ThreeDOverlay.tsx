@@ -5,9 +5,7 @@ import dynamic from "next/dynamic";
 import { useSceneStore } from "@/store/sceneStore";
 
 // Dynamically import Scene3D to avoid SSR issues
-const Scene3D = dynamic(() => import("@/components/Scene3D"), { ssr: false, loading: () => (
-  <div className="w-full h-full flex items-center justify-center text-gray-600 text-sm">Loading 3D…</div>
-) });
+const Scene3D = dynamic(() => import("@/components/Scene3D"), { ssr: false });
 
 export default function ThreeDOverlay() {
   const assets = useSceneStore((s) => s.assets);

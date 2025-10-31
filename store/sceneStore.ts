@@ -836,8 +836,8 @@ export const useSceneStore = create<SceneState>()(
       commitWallSegment: () => {
         const state = get();
         if (state.currentWallStart && state.currentWallTempEnd) {
-          // Snap end to nearest existing wall endpoint within tolerance to ensure clean T-junctions
-          const snapTol = 0.8; // mm
+          // Do not snap endpoints to preserve exact drawn length
+          const snapTol = 0; // mm (no snapping)
           const snapToNearestEndpoint = (pt: {x:number;y:number}) => {
             let best = pt;
             let bestD = Infinity;
@@ -1567,7 +1567,7 @@ export const useSceneStore = create<SceneState>()(
                 }
               }
               // Merge coincident nodes across all walls (dedup within tolerance)
-              const mergeTol = 0.5;
+              const mergeTol = 0;
               for (let i = 0; i < result.length; i++) {
                 const a = result[i];
                 if (a.type !== 'wall-segments' || !a.wallNodes || !a.wallEdges) continue;
@@ -1766,7 +1766,7 @@ export const useSceneStore = create<SceneState>()(
         }
 
         // Cleanup tiny edges after splits
-        const cleanupSmallEdges = (asset: AssetInstance, minLen = 0.8) => {
+            const cleanupSmallEdges = (asset: AssetInstance, minLen = 0) => {
           if (!asset.wallNodes || !asset.wallEdges) return asset;
           const kept = asset.wallEdges.filter(e => {
             const a = asset.wallNodes![e.a];

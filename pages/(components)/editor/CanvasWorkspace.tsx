@@ -363,10 +363,6 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
           }}
         >
           <Canvas
-            workspaceZoom={zoom}
-            mmToPx={MM_TO_PX}
-            canvasPos={canvasPos}
-            setCanvasPos={setCanvasPos}
             canvas={canvas}
             assets={actualData?.canvasAssets || []}
           />

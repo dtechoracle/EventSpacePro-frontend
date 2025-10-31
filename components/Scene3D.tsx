@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useRef, useMemo, useLayoutEffect, useEffect, useState } from 'react';
+import React, { useRef, useMemo, useLayoutEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import { AssetInstance } from '@/store/sceneStore';
 import * as THREE from 'three';
-// We will load SVGLoader dynamically inside the SVG component to avoid blocking dynamic import
+// import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader'; // Removed because can't resolve module
 import { ASSET_LIBRARY } from '@/lib/assets';
 
 interface Scene3DProps {
@@ -17,7 +17,7 @@ interface Scene3DProps {
 // 3D Wall Component (one box per wall edge, positioned and rotated)
 function Wall3D({ asset }: { asset: AssetInstance }) {
   const scale = 0.01; // mm -> meters
-  const wallHeight = 3; // meters
+  const wallHeight = 0.6; // meters - reduced for low miniature view
   const wallThickness = ((asset.wallGap ?? 8)) * scale; // use visual gap as physical thickness
 
   // Support both node-edge and plain segments
@@ -161,7 +161,8 @@ function AssetsGroup3D({ assets }: { assets: AssetInstance[] }) {
         // Custom SVGs: extrude to thin 3D meshes
         const def = ASSET_LIBRARY.find(d => d.id === asset.type);
         if (def && def.isCustom && def.path) {
-          return <SvgAsset3D key={asset.id} asset={asset} path={def.path} />;
+          // Fallback to simple shape proxy for custom SVGs (viewer-only) to avoid loader issues
+          return <Shape3D key={asset.id} asset={asset} />;
         }
         return null;
       })}
@@ -170,111 +171,7 @@ function AssetsGroup3D({ assets }: { assets: AssetInstance[] }) {
 }
 
 // Extrude custom SVG into a thin 3D mesh and scale to asset width/height
-function SvgAsset3D({ asset, path }: { asset: AssetInstance; path: string }) {
-  const scaleUnit = 0.01; // mm -> m
-  const groupRef = useRef<THREE.Group>(null);
-  const [built, setBuilt] = useState<React.ReactNode[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const mod = await import('three/examples/jsm/loaders/SVGLoader.js');
-        const Loader = (mod as any).SVGLoader;
-        const loader = new Loader();
-        const data = await loader.loadAsync(path);
-        const items: React.ReactNode[] = [];
-        const depth = 0.05;
-        if (data && data.paths) {
-          data.paths.forEach((p: any, i: number) => {
-            const style = (p.userData && p.userData.style) || {};
-            const hasFill = style.fill && style.fill !== 'none';
-            const hasStroke = style.stroke && style.stroke !== 'none' && (style.strokeWidth || 0) > 0;
-            if (hasFill) {
-              const shapes = Loader.createShapes(p);
-              shapes.forEach((shape: THREE.Shape, j: number) => {
-                const geom = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
-                geom.rotateX(-Math.PI / 2);
-                items.push(
-                  <mesh key={`f-${i}-${j}`} geometry={geom} castShadow receiveShadow>
-                    <meshStandardMaterial color={(style.fill && style.fill !== 'none') ? style.fill : '#d1d5db'} />
-                  </mesh>
-                );
-              });
-            }
-            if (hasStroke && p.subPaths && p.subPaths.length) {
-              p.subPaths.forEach((sp: any, k: number) => {
-                try {
-                  const pts = sp.getPoints();
-                  const strokeGeom: THREE.BufferGeometry = (Loader as any).pointsToStroke(pts, {
-                    strokeWidth: style.strokeWidth || 1,
-                    strokeLineJoin: style.strokeLinejoin || 'miter',
-                    strokeLineCap: style.strokeLinecap || 'butt',
-                    strokeMiterLimit: style.strokeMiterLimit || 4,
-                  });
-                  if (strokeGeom) {
-                    const top = strokeGeom.clone(); top.rotateX(-Math.PI / 2); top.translate(0, depth / 2, 0);
-                    items.push(
-                      <mesh key={`s-top-${i}-${k}`} geometry={top} castShadow receiveShadow>
-                        <meshStandardMaterial color={style.stroke || '#c7cdd4'} />
-                      </mesh>
-                    );
-                    const bot = strokeGeom.clone(); bot.rotateX(-Math.PI / 2); bot.translate(0, -depth / 2, 0);
-                    items.push(
-                      <mesh key={`s-bot-${i}-${k}`} geometry={bot} receiveShadow>
-                        <meshStandardMaterial color={style.stroke || '#c7cdd4'} />
-                      </mesh>
-                    );
-                  }
-                } catch {}
-              });
-            }
-          });
-        }
-        if (!cancelled) setBuilt(items);
-      } catch {
-        if (!cancelled) setBuilt([]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [path]);
-
-  useLayoutEffect(() => {
-    const g = groupRef.current;
-    if (!g || !built || built.length === 0) return;
-    const box = new THREE.Box3().setFromObject(g);
-    const size = new THREE.Vector3();
-    const center = new THREE.Vector3();
-    box.getSize(size); box.getCenter(center);
-    g.position.x -= center.x; g.position.y -= center.y; g.position.z -= center.z;
-    const targetW = Math.max(0.1, (asset.width || 1000) * scaleUnit);
-    const targetH = Math.max(0.1, (asset.height || 1000) * scaleUnit);
-    const s = Math.min(targetW / (size.x || 1), targetH / (size.z || 1));
-    g.scale.setScalar(s);
-  }, [asset.width, asset.height, built]);
-
-  const pos: [number, number, number] = [ (asset.x || 0) * scaleUnit, 0.03, (asset.y || 0) * scaleUnit ];
-  const rot: [number, number, number] = [0, (asset.rotation || 0) * Math.PI / 180, 0];
-
-  if (!built) {
-    const w = Math.max(0.2, (asset.width || 800) * scaleUnit);
-    const h = Math.max(0.2, (asset.height || 800) * scaleUnit);
-    return (
-      <mesh position={pos} rotation={rot} castShadow>
-        <boxGeometry args={[w, 0.05, h]} />
-        <meshStandardMaterial color="#d1d5db" />
-      </mesh>
-    );
-  }
-
-  return (
-    <group position={pos} rotation={rot}>
-      <group ref={groupRef}>
-        {built}
-      </group>
-    </group>
-  );
-}
+// Note: SVG-to-3D extrusion is temporarily disabled due to loader build issues.
 
 // Main 3D Scene Component
 export default function Scene3D({ assets, width, height }: Scene3DProps) {

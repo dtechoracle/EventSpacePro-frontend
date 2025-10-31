@@ -27,11 +27,6 @@ import { motion } from "framer-motion";
 type CanvasProps = {
   canvas?: { size: string; width: number; height: number } | null;
   assets?: AssetInstance[];
-  // Optional pass-throughs from CanvasWorkspace (not required when used standalone)
-  workspaceZoom?: number;
-  mmToPx?: number;
-  canvasPos?: { x: number; y: number };
-  setCanvasPos?: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
 };
 
 export default function Canvas({
@@ -46,8 +41,8 @@ export default function Canvas({
   const EDGE_PADDING_MM = 10;
 
   // Large virtual scene so the user can pan/scroll comfortably
-  const SCENE_W_MM = 20000; // 20 meters
-  const SCENE_H_MM = 20000; // 20 meters
+  const SCENE_W_MM = 100000; // 100 meters
+  const SCENE_H_MM = 100000; // 100 meters
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -95,6 +90,9 @@ export default function Canvas({
   const finishShape = useSceneStore((s) => s.finishShape);
   const updateShapeTempEnd = useSceneStore((s) => s.updateShapeTempEnd);
   const startWallSegment = useSceneStore((s) => s.startWallSegment);
+  const updateWallTempEnd = useSceneStore((s) => s.updateWallTempEnd);
+  const commitWallSegment = useSceneStore((s) => s.commitWallSegment);
+  const finishWallDrawing = useSceneStore((s) => s.finishWallDrawing);
   const createCrossAt = useSceneStore((s) => s.createCrossAt);
   const startRectangularSelection = useSceneStore(
     (s) => s.startRectangularSelection
@@ -123,17 +121,17 @@ export default function Canvas({
   // Sync props data to store when props change (only once per data change)
   const hasSyncedRef = useRef(false);
   const lastDataRef = useRef<string>("");
-
+  
   useEffect(() => {
     if (propCanvas && propAssets && propAssets.length > 0) {
       // Create a unique identifier for this data set
       const dataId = JSON.stringify({ canvas: propCanvas, assets: propAssets });
-
+      
       // Only sync if the data has actually changed and we haven't synced this data yet
       if (dataId !== lastDataRef.current) {
         // Reset store and populate with current props data
         reset();
-
+        
         // Set canvas only if size is a known PaperSize (A1–A5)
         const isKnownSize = !!(
           propCanvas.size &&
@@ -143,15 +141,15 @@ export default function Canvas({
           const setCanvas = useSceneStore.getState().setCanvas;
           setCanvas(propCanvas.size as PaperSize);
         }
-
+        
         // Add assets
         propAssets.forEach((asset) => {
           addAssetObject(asset);
         });
-
+        
         // Mark as saved since this is from the backend
         markAsSaved();
-
+        
         // Update the refs
         lastDataRef.current = dataId;
         hasSyncedRef.current = true;
@@ -180,19 +178,19 @@ export default function Canvas({
     (clientX: number, clientY: number) => {
       if (!canvasRef.current || !effectiveWidthMm || !effectiveHeightMm)
         return { x: 0, y: 0 };
-      const rect = canvasRef.current.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const dx = clientX - cx;
-      const dy = clientY - cy;
-      const theta = (-rotation * Math.PI) / 180;
-      const ux = dx * Math.cos(theta) - dy * Math.sin(theta);
-      const uy = dx * Math.sin(theta) + dy * Math.cos(theta);
-      const halfWscreen = (canvasPxW * workspaceZoom) / 2;
-      const halfHscreen = (canvasPxH * workspaceZoom) / 2;
-      const xMm = (ux + halfWscreen) / (mmToPx * workspaceZoom);
-      const yMm = (uy + halfHscreen) / (mmToPx * workspaceZoom);
-      return { x: xMm, y: yMm };
+    const rect = canvasRef.current.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = clientX - cx;
+    const dy = clientY - cy;
+    const theta = (-rotation * Math.PI) / 180;
+    const ux = dx * Math.cos(theta) - dy * Math.sin(theta);
+    const uy = dx * Math.sin(theta) + dy * Math.cos(theta);
+    const halfWscreen = (canvasPxW * workspaceZoom) / 2;
+    const halfHscreen = (canvasPxH * workspaceZoom) / 2;
+    const xMm = (ux + halfWscreen) / (mmToPx * workspaceZoom);
+    const yMm = (uy + halfHscreen) / (mmToPx * workspaceZoom);
+    return { x: xMm, y: yMm };
     },
     [
       effectiveWidthMm,
@@ -438,8 +436,8 @@ export default function Canvas({
         {/* Unified wall rendering (boolean union of all wall polygons incl. preview) */}
         <UnifiedWallRendering mmToPx={mmToPx} />
       {/* Single Canvas (the scene itself) */}
-      <div
-        ref={canvasRef}
+    <div
+      ref={canvasRef}
         className={`relative ${
           isPenMode ||
           isWallMode ||
@@ -460,6 +458,19 @@ export default function Canvas({
         if (isRectangularSelectionMode && rectangularSelectionStart) {
           const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
           updateRectangularSelectionDrag(x, y);
+        }
+        // Update wall preview while drawing
+        if (wallDrawingMode && currentWallStart) {
+          let { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+          // Snap preview to the very first start point to allow clean closure
+          if (currentWallSegments && currentWallSegments.length > 0) {
+            const first = currentWallSegments[0].start;
+            const closeTol = 6; // mm
+            if (Math.hypot(x - first.x, y - first.y) <= closeTol) {
+              x = first.x; y = first.y;
+            }
+          }
+          updateWallTempEnd({ x, y });
         }
         // Update shape preview while drawing
         if (shapeMode && shapeStart) {
@@ -483,6 +494,22 @@ export default function Canvas({
       onMouseUp={(e) => {
         if (isRectangularSelectionMode && rectangularSelectionStart) {
           finishRectangularSelectionDrag();
+        }
+        // Commit wall segment on click release in wall mode
+        if (wallDrawingMode && currentWallStart) {
+          // Auto-close if we're near the first point
+          const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+          if (currentWallSegments && currentWallSegments.length > 0) {
+            const first = currentWallSegments[0].start;
+            const closeTol = 6; // mm
+            if (Math.hypot(x - first.x, y - first.y) <= closeTol) {
+              updateWallTempEnd({ x: first.x, y: first.y });
+              commitWallSegment();
+              finishWallDrawing();
+              return;
+            }
+          }
+          commitWallSegment();
         }
         // Finish shape drawing on mouse up
         if (shapeMode && shapeStart) {
@@ -508,30 +535,25 @@ export default function Canvas({
           if (isPenMode || isWallMode) {
             e.stopPropagation();
             const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-
-            // Start drawing
-            if (isWallMode && wallTool === 'cross') {
-              createCrossAt({ x, y });
-              return;
-            } else {
-              currentDrawingPath.current = [{ x, y }];
-              setIsDrawing(true);
-              setCurrentPath([{ x, y }]);
-              setTempPath([{ x, y }]);
-              return; // Prevent canvas movement when in pen mode
-            }
+            
+            // Always start wall/pen path; remove cross placement in wall mode
+            currentDrawingPath.current = [{ x, y }];
+            setIsDrawing(true);
+            setCurrentPath([{ x, y }]);
+            setTempPath([{ x, y }]);
+            return; // Prevent canvas movement when in drawing modes
           } else if (wallDrawingMode) {
             // Check if the click target is the canvas itself (not a child element like sidebar buttons)
             if (e.target !== canvasRef.current) {
               return;
             }
-
+            
             e.stopPropagation();
             const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-
+            
             // For very large canvas, allow wall creation anywhere
             // No bounds checking needed for large canvas
-
+            
             if (!currentWallStart) {
               // Start new wall segment, snapping to nearest existing wall endpoint if close
               let startPoint = { x, y };
@@ -689,12 +711,12 @@ export default function Canvas({
         .filter((asset) => asset != null) // Filter out null/undefined assets
         .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
         .map((asset) => {
-          const isSelected = asset.id === selectedAssetId;
+        const isSelected = asset.id === selectedAssetId;
           const isMultiSelected = selectedAssetIds.includes(asset.id);
-          const isCopied = asset.id === copiedAssetId;
-          const leftPx = asset.x * mmToPx;
-          const topPx = asset.y * mmToPx;
-          const totalRotation = asset.rotation;
+        const isCopied = asset.id === copiedAssetId;
+        const leftPx = asset.x * mmToPx;
+        const topPx = asset.y * mmToPx;
+        const totalRotation = asset.rotation;
 
           // Use GroupRenderer for group assets, AssetRenderer for regular assets
           if (asset.isGroup) {
@@ -734,30 +756,30 @@ export default function Canvas({
             );
           }
 
-          return (
-            <AssetRenderer
-              key={asset.id}
-              asset={asset}
-              isSelected={isSelected}
+        return (
+          <AssetRenderer
+            key={asset.id}
+            asset={asset}
+            isSelected={isSelected}
               isMultiSelected={isMultiSelected}
-              isCopied={isCopied}
-              leftPx={leftPx}
-              topPx={topPx}
-              totalRotation={totalRotation}
-              editingTextId={assetHandlers.editingTextId}
-              editingText={assetHandlers.editingText}
-              onAssetMouseDown={assetHandlers.onAssetMouseDown}
-              onTextDoubleClick={assetHandlers.onTextDoubleClick}
-              onTextEditKeyDown={assetHandlers.onTextEditKeyDown}
-              onTextEditBlur={assetHandlers.onTextEditBlur}
-              onTextEditChange={assetHandlers.setEditingText}
-              onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
+            isCopied={isCopied}
+            leftPx={leftPx}
+            topPx={topPx}
+            totalRotation={totalRotation}
+            editingTextId={assetHandlers.editingTextId}
+            editingText={assetHandlers.editingText}
+            onAssetMouseDown={assetHandlers.onAssetMouseDown}
+            onTextDoubleClick={assetHandlers.onTextDoubleClick}
+            onTextEditKeyDown={assetHandlers.onTextEditKeyDown}
+            onTextEditBlur={assetHandlers.onTextEditBlur}
+            onTextEditChange={assetHandlers.setEditingText}
+            onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
               onRotationHandleMouseDown={
                 assetHandlers.onRotationHandleMouseDown
               }
-            />
-          );
-        })}
+          />
+        );
+      })}
       </div>
         </div>
       </div>

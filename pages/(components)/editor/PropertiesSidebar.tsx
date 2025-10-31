@@ -72,7 +72,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const roundForDisplay = (num: number) => Math.round(num * 100) / 100;
 
   return (
-    <aside className="h-screen flex flex-col p-3 overflow-y-auto text-sm">
+    <aside className="h-screen flex flex-col p-3 pb-24 overflow-y-auto text-sm">
       {showShareModal && (
         <ShareModal onClose={() => setShowShareModal(false)} />
       )}

@@ -80,7 +80,6 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     groupSelectedAssets,
     ungroupAsset,
     setWallType,
-    setWallTool,
   } = useSceneStore(); // Updated
 
   // Example states to toggle (keeping for future use)
@@ -104,6 +103,16 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
   };
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Ensure only one tool is active at a time
+  const deactivateAllTools = () => {
+    setPenMode(false);
+    setWallMode(false);
+    setWallDrawingMode(false);
+    setRectangularSelectionMode(false);
+    setShapeMode(null);
+    setActiveTool(null);
+  };
 
   // Handle option clicks
   const handleWallTypeSelection = (wallType: string) => {
@@ -129,10 +138,9 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     
     setWallType(mappedWallType);
     setShowWallTypeSubmenu(false);
-    
-    // Set all states in the correct order to avoid conflicts
-    setPenMode(false);
-    setRectangularSelectionMode(false);
+
+    // Activate wall drawing exclusively
+    deactivateAllTools();
     setActiveTool("draw-wall");
     setWallDrawingMode(true);
   };
@@ -141,11 +149,11 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     switch (option.id) {
       // Selection tools
       case "pointer-select":
-        setRectangularSelectionMode(false);
+        deactivateAllTools();
         setActiveTool("pointer-select");
         break;
       case "rectangular-select":
-        // Clear any existing selections and enable rectangular selection mode
+        deactivateAllTools();
         clearSelection();
         setRectangularSelectionMode(true);
         setActiveTool("rectangular-select");
@@ -158,12 +166,15 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
 
       // Shape tools
       case "rectangle":
+        deactivateAllTools();
         setShapeMode("rectangle");
         break;
       case "circle":
+        deactivateAllTools();
         setShapeMode("ellipse");
         break;
       case "arrow":
+        deactivateAllTools();
         setShapeMode("line");
         break;
       case "polygon":
@@ -171,11 +182,19 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
 
       // Drawing tools
       case "draw-line":
-        setPenMode(!isPenMode);
-        if (isPenMode) setWallMode(false); // Turn off wall mode when turning off pen mode
+        if (isPenMode) {
+          // toggle off if already active
+          setPenMode(false);
+          setActiveTool(null);
+        } else {
+          deactivateAllTools();
+          setPenMode(true);
+          setActiveTool("draw-line");
+        }
         break;
       case "draw-wall":
-        // Show wall type submenu (like before)
+        // Prepare wall as exclusive; submenu will finalize activation
+        deactivateAllTools();
         setShowWallTypeSubmenu(true);
         setOpenIndex(null); // Close the main dropdown
         break;
@@ -474,7 +493,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 </li>
               ))}
             </ul>
-            {/* Removed cross placement option */}
+            {/* Cross tool removed */}
           </motion.div>
         )}
       </AnimatePresence>

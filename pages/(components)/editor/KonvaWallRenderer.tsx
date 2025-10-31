@@ -1,17 +1,17 @@
 "use client";
 
 import React from "react";
-// This renderer depended on react-konva which isn't installed.
-// It's currently unused; return null to avoid build errors until enabled intentionally.
+import { AssetInstance } from "@/store/sceneStore";
 
 type KonvaWallRendererProps = {
-  asset: any;
+  asset: AssetInstance;
   width: number;
   height: number;
-  scalePx: number;
+  scalePx: number; // mm to px
 };
 
-export default function KonvaWallRenderer(_props: KonvaWallRendererProps) {
+export default function KonvaWallRenderer({ asset, width, height, scalePx }: KonvaWallRendererProps) {
+  // react-konva not bundled; renderer disabled.
   return null;
 }
 

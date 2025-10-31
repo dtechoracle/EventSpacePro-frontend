@@ -119,8 +119,12 @@ export function commitWallSegment(newSeg: Segment) {
       start: sg.start,
       end: sg.end,
     })),
+    wallGap: 8,
+    wallThickness: useSceneStore.getState().getCurrentWallThickness?.() || 2,
+    lineColor: "#000000",
     zIndex: 0,
-  };
+    backgroundColor: "#f3f4f6",
+  } as any;
 
   s.addAssetObject(newWallAsset);
 
