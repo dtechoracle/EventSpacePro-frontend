@@ -34,8 +34,8 @@ export default function WallRendering({
         top: topPx,
         transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
         cursor: "move",
-        zIndex: asset.zIndex || -100, // Ensure walls render behind other assets
-        isolation: "isolate", // Create a new stacking context to prevent rendering issues
+        zIndex: asset.zIndex || 0,
+        isolation: "isolate",
       }}
     >
       {(() => {

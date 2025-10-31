@@ -12,6 +12,7 @@ import GroupRenderer from "./GroupRenderer";
 import CanvasControls from "./CanvasControls";
 import PatternIndicator from "./PatternIndicator";
 import SelectionBox from "./SelectionBox";
+import ThreeDOverlay from "./ThreeDOverlay";
 import { useCanvasMouseHandlers } from "@/hooks/useCanvasMouseHandlers";
 import { useCanvasKeyboardHandlers } from "@/hooks/useCanvasKeyboardHandlers";
 import { useAssetHandlers } from "@/hooks/useAssetHandlers";
@@ -26,6 +27,11 @@ import { motion } from "framer-motion";
 type CanvasProps = {
   canvas?: { size: string; width: number; height: number } | null;
   assets?: AssetInstance[];
+  // Optional pass-throughs from CanvasWorkspace (not required when used standalone)
+  workspaceZoom?: number;
+  mmToPx?: number;
+  canvasPos?: { x: number; y: number };
+  setCanvasPos?: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
 };
 
 export default function Canvas({
@@ -616,6 +622,19 @@ export default function Canvas({
       {/* Pattern Indicator */}
       <PatternIndicator />
 
+      {/* Live wall measurement (meters) */}
+      {wallDrawingMode && currentWallStart && currentWallTempEnd && (
+        <div className='absolute top-4 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-3 py-1 rounded text-xs shadow z-50'>
+          {(() => {
+            const dx = currentWallTempEnd.x - currentWallStart.x;
+            const dy = currentWallTempEnd.y - currentWallStart.y;
+            const lengthMm = Math.sqrt(dx*dx + dy*dy);
+            const lengthM = lengthMm / 1000;
+            return `${lengthM.toFixed(2)} m`;
+          })()}
+        </div>
+      )}
+
       {/* Rectangular Selection Status */}
       {isRectangularSelectionMode && (
         <motion.div
@@ -742,6 +761,8 @@ export default function Canvas({
       </div>
         </div>
       </div>
+      {/* 3D Overlay */}
+      <ThreeDOverlay />
     </div>
   );
 }

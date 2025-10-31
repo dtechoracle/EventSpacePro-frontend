@@ -110,9 +110,11 @@ export function commitWallSegment(newSeg: Segment) {
   // === 4. Create the new wall asset ===
   const newWallAsset = {
     id: `wall_${Date.now()}`,
-    type: "wall",
+    type: "wall-segments",
     x: 0,
     y: 0,
+    scale: 1,
+    rotation: 0,
     wallSegments: newSubSegments.map((sg) => ({
       start: sg.start,
       end: sg.end,

@@ -42,6 +42,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const [showCanvas, setShowCanvas] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
   const [modelName, setModelName] = useState<string>("");
+  const open3D = useSceneStore((s) => s.open3DOverlay);
 
   // Chair placement state from store with fallback
   const chairSettings = useSceneStore((s) => s.chairSettings) || { numChairs: 8, radius: 80 };
@@ -83,7 +84,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
           size={28}
         />
         <div className="flex items-center gap-1">
-          <button className="p-1 rounded hover:bg-gray-100">
+          <button className="p-1 rounded hover:bg-gray-100" onClick={() => open3D && open3D()}>
             <IoPlayOutline size={14} />
           </button>
           <button
@@ -185,7 +186,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
             {/* Grid Size */}
             {showGrid && (
               <div className="py-2">
-                <label className="block text-xs text-gray-600 mb-1">Grid Size</label>
+                <label className="block text-xs text-gray-600 mb-1">Grid Size (meters)</label>
                 <select 
                   value={availableGridSizes?.[selectedGridSizeIndex] || 10} 
                   onChange={(e) => {
@@ -196,7 +197,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   className="w-full text-xs border rounded px-2 py-1 bg-white"
                 >
                   {(availableGridSizes || [5, 10, 25, 50, 100]).map((size) => (
-                    <option key={size} value={size}>{size}mm</option>
+                    <option key={size} value={size}>{(size/1000).toFixed(3)} m</option>
                   ))}
                 </select>
               </div>

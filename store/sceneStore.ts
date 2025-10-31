@@ -142,6 +142,11 @@ type SceneState = {
     direction?: { x: number; y: number };
   } | null;
 
+  // 3D overlay state
+  is3DOverlayOpen?: boolean;
+  open3DOverlay?: () => void;
+  close3DOverlay?: () => void;
+
   // Multi-select state
   selectedAssetIds: string[];
   isRectangularSelecting: boolean;
@@ -300,6 +305,8 @@ export const useSceneStore = create<SceneState>()(
       historyIndex: 0,
       lastDuplicatedAsset: null,
       duplicationPattern: null,
+      // 3D overlay default state
+      is3DOverlayOpen: false,
       selectedAssetIds: [],
       isRectangularSelecting: false,
       isRectangularSelectionMode: false,
@@ -536,6 +543,10 @@ export const useSceneStore = create<SceneState>()(
       toggleDebugOutlines: () => set((state) => ({ showDebugOutlines: !state.showDebugOutlines })),
 
       setGridSize: (size: number) => set({ gridSize: size }),
+
+      // 3D overlay controls
+      open3DOverlay: () => set({ is3DOverlayOpen: true }),
+      close3DOverlay: () => set({ is3DOverlayOpen: false }),
 
       toggleSnapToGrid: () => set((state) => ({ snapToGridEnabled: !state.snapToGridEnabled })),
 

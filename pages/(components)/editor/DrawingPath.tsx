@@ -82,7 +82,7 @@ export default function DrawingPath({
   for (const asset of wallAssets) {
     try {
       // assume asset.wallSegments is in the same segment format your buildWallGeometry expects
-      const geom = buildWallGeometry(asset.wallSegments, wallGap);
+      const geom = buildWallGeometry(asset.wallSegments!, wallGap);
       if (geom && geom.outerPoints?.length && geom.innerPoints?.length) {
         wallGeometries.push(geom);
       }
