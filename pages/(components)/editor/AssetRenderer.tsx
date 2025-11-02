@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import Image from "next/image";
 import { AssetInstance } from "@/store/sceneStore";
 import { ASSET_LIBRARY } from "@/lib/assets";
@@ -47,17 +47,43 @@ export default function AssetRenderer({
   onRotationHandleMouseDown,
 }: AssetRendererProps) {
   // Early return if asset is undefined (prevents SSR errors)
+  const drawn = useMemo(() => {
+    if (asset.type !== "drawn-line" || !asset.path || asset.path.length < 2) {
+      return null;
+    }
+
+    const xs = asset.path.map((p) => p.x);
+    const ys = asset.path.map((p) => p.y);
+
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    const width = (maxX - minX) * asset.scale;
+    const height = (maxY - minY) * asset.scale;
+
+    // Translate points so the shape starts at (0,0)
+    const localPath = asset.path.map((p) => ({
+      x: (p.x - minX) * asset.scale,
+      y: (p.y - minY) * asset.scale,
+    }));
+
+    return { width, height, localPath };
+  }, [asset]);
+
   if (!asset) {
     return null;
   }
 
   const def = ASSET_LIBRARY.find((a) => a.id === asset.type);
 
+
   // Handle square and circle assets
   if (asset.type === "square" || asset.type === "circle") {
     const isCircle = asset.type === "circle";
     const borderRadius = isCircle ? "50%" : "0%";
-    
+
     return (
       <div className="relative">
         {/* Background layer */}
@@ -87,9 +113,8 @@ export default function AssetRenderer({
             width: (asset.width ?? 50) * asset.scale,
             height: (asset.height ?? 50) * asset.scale,
             backgroundColor: asset.fillColor ?? "transparent",
-            border: `${asset.strokeWidth ?? 2}px solid ${
-              asset.strokeColor ?? "#000000"
-            }`,
+            border: `${asset.strokeWidth ?? 2}px solid ${asset.strokeColor ?? "#000000"
+              }`,
             borderRadius: borderRadius,
             transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
             cursor: "move",
@@ -338,94 +363,48 @@ export default function AssetRenderer({
   }
 
   // Handle drawn-line assets
-  if (asset.type === "drawn-line") {
-    return (
-      <div className="relative">
-        {/* Background layer */}
-        {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
-          <div
-            style={{
-              position: "absolute",
-              left: leftPx,
-              top: topPx,
-              width: 100,
-              height: 100,
-              backgroundColor: asset.backgroundColor,
-              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
-              zIndex: (asset.zIndex || 0) - 1,
-            }}
-          />
-        )}
+  if (asset.type === "drawn-line" && drawn) {
+    const { width, height, localPath } = drawn;
 
-        {/* Main drawn line */}
+    return (
+      <>
         <div
-          onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
           style={{
             position: "absolute",
             left: leftPx,
             top: topPx,
+            width,
+            height,
             transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
             cursor: "move",
             zIndex: asset.zIndex || 0,
-            boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
-            transition: isCopied ? "box-shadow 0.3s ease" : undefined,
           }}
+          onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
         >
-          <svg
-            width="200"
-            height="200"
-            viewBox="-100 -100 200 200"
-            style={{ overflow: "visible" }}
-          >
-            {asset.path && asset.path.length > 1 && (
-              <path
-                d={`M ${asset.path[0].x} ${asset.path[0].y} ${asset.path
-                  .slice(1)
-                  .map((point) => `L ${point.x} ${point.y}`)
-                  .join(" ")}`}
-                stroke={asset.strokeColor ?? "#000000"}
-                strokeWidth={(asset.strokeWidth ?? 2) * asset.scale}
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )}
+          <svg width={width} height={height}>
+            <path
+              d={`M ${localPath.map((p) => `${p.x} ${p.y}`).join(" L ")}`}
+              stroke={asset.strokeColor ?? "#000"}
+              strokeWidth={(asset.strokeWidth ?? 2)}
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         </div>
 
-        {/* Multi-select indicator */}
-        {isMultiSelected && !isSelected && (
-          <div
-            style={{
-              position: "absolute",
-              left: leftPx,
-              top: topPx,
-              width: (asset.width ?? 50) * asset.scale,
-              height: (asset.height ?? 50) * asset.scale,
-              border: "2px dashed #3B82F6",
-              borderRadius: "0px",
-              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
-              pointerEvents: "none",
-              zIndex: (asset.zIndex || 0) + 1,
-            }}
-          />
-        )}
-
-        {/* Handles */}
         {(isSelected || isMultiSelected) && (
           <AssetHandlesRenderer
-            asset={asset}
+            asset={{ ...asset, width: width / asset.scale, height: height / asset.scale }}
             leftPx={leftPx}
             topPx={topPx}
             onScaleHandleMouseDown={onScaleHandleMouseDown}
             onRotationHandleMouseDown={onRotationHandleMouseDown}
           />
         )}
-      </div>
+      </>
     );
-  }
-
-  // Handle wall-segments assets (stroke-only; overlay handles blending/dots)
+  }  // Handle wall-segments assets (stroke-only; overlay handles blending/dots)
   if (asset.type === "wall-segments") {
     return (
       <div className="relative">

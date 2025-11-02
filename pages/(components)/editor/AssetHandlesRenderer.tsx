@@ -1,3 +1,4 @@
+import React from "react";
 import { AssetInstance } from "@/store/sceneStore";
 import { calculateWallBoundingBox } from "@/lib/wallGeometry";
 
@@ -5,1147 +6,199 @@ interface AssetHandlesRendererProps {
   asset: AssetInstance;
   leftPx: number;
   topPx: number;
-  onScaleHandleMouseDown: (e: React.MouseEvent, assetId: string, handleType: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') => void;
+  onScaleHandleMouseDown: (
+    e: React.MouseEvent,
+    assetId: string,
+    handleType: "top-left" | "top-right" | "bottom-left" | "bottom-right"
+  ) => void;
   onRotationHandleMouseDown: (e: React.MouseEvent, assetId: string) => void;
 }
+
+const HANDLE_TYPES = ["top-left", "top-right", "bottom-left", "bottom-right"] as const;
+type HandleType = (typeof HANDLE_TYPES)[number];
 
 export default function AssetHandlesRenderer({
   asset,
   leftPx,
   topPx,
   onScaleHandleMouseDown,
-  onRotationHandleMouseDown,
+  onRotationHandleMouseDown
 }: AssetHandlesRendererProps) {
-  // Early return if asset is undefined (prevents SSR errors)
-  if (!asset) {
-    return null;
-  }
+  if (!asset) return null;
 
   const handleSize = 14;
-  
-  // Professional handle styling
-  const cornerHandleStyle = {
-    position: "absolute" as const,
-    width: handleSize,
-    height: handleSize,
-    backgroundColor: "#3B82F6", // Professional blue
-    border: "2px solid #FFFFFF",
-    borderRadius: "3px",
-    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-    cursor: "pointer",
-    zIndex: 10,
-    transition: "all 0.2s ease",
-    transform: "translate(-50%, -50%)",
+  const padding = 6;
+  const rotationHandleDistance = 30;
+  const rotationDeg = asset.rotation ?? 0;
+  const scale = asset.scale ?? 1;
+
+  let w = (asset.width ?? 50) * scale;
+  let h = (asset.height ?? 50) * scale;
+
+  // Default: handles centered on the provided asset center
+  let offsetCenterPx = { x: 0, y: 0 };
+
+  // ---- SPECIAL CASE: DRAWN FREE LINE / PATH ---- //
+  if (asset.type === "drawn-line") {
+    const path = asset.path ?? [];
+
+    if (path.length > 0) {
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+
+      for (const p of path) {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x);
+        maxY = Math.max(maxY, p.y);
+      }
+
+      // actual width/height of drawn region
+      w = (maxX - minX) * scale;
+      h = (maxY - minY) * scale;
+
+      // ✅ local center of drawing
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+
+      // ✅ offset container relative to asset center like other asset types
+      offsetCenterPx = {
+        x: (cx - asset.x) * scale,
+        y: (cy - asset.y) * scale
+      };
+    }
+  }
+
+  // ---- OTHER ASSET TYPES ---- //
+
+  if (asset.type === "line") {
+    w = (asset.width ?? 100) * scale;
+    h = Math.max((asset.strokeWidth ?? 2) * scale, 6);
+  }
+
+  if (asset.type === "double-line") {
+    const gap = (asset.lineGap ?? 8) * scale;
+    const isHorizontal = asset.isHorizontal ?? true;
+    const thickness = 2;
+
+    w = isHorizontal ? (asset.width ?? 100) * scale : thickness + gap;
+    h = isHorizontal ? thickness + gap : (asset.height ?? 100) * scale;
+  }
+
+  if (asset.type === "text") {
+    const font = (asset.fontSize ?? 16) * scale;
+    const len = (asset.text ?? "").length;
+    w = Math.max(len * font * 0.6, 50);
+    h = font * 1.2;
+  }
+
+  if (asset.type === "wall-segments") {
+    const bb = calculateWallBoundingBox(asset);
+    w = bb.width * scale;
+    h = bb.height * scale;
+  }
+
+  // Half size for corner handles
+  const halfW = w / 2;
+  const halfH = h / 2;
+
+  const corners: Record<HandleType, { x: number; y: number; cursor: string }> = {
+    "top-left": { x: -halfW - padding, y: -halfH - padding, cursor: "nw-resize" },
+    "top-right": { x: halfW + padding, y: -halfH - padding, cursor: "ne-resize" },
+    "bottom-left": { x: -halfW - padding, y: halfH + padding, cursor: "sw-resize" },
+    "bottom-right": { x: halfW + padding, y: halfH + padding, cursor: "se-resize" }
   };
 
-  const rotationHandleStyle = {
-    position: "absolute" as const,
+  const rotationHandle = { x: 0, y: -halfH - rotationHandleDistance };
+
+  const containerStyle: React.CSSProperties = {
+    position: "absolute",
+    left: leftPx + offsetCenterPx.x,
+    top: topPx + offsetCenterPx.y,
+    transform: `translate(-50%, -50%) rotate(${rotationDeg}deg)`,
+    pointerEvents: "none",
+    zIndex: 9999
+  };
+
+  const cornerBaseStyle: React.CSSProperties = {
+    position: "absolute",
     width: handleSize,
     height: handleSize,
-    backgroundColor: "#10B981", // Professional green
+    backgroundColor: "#3B82F6",
+    border: "2px solid #FFFFFF",
+    borderRadius: 3,
+    transform: "translate(-50%, -50%)",
+    zIndex: 10000
+  };
+
+  const rotationBaseStyle: React.CSSProperties = {
+    position: "absolute",
+    width: handleSize,
+    height: handleSize,
+    backgroundColor: "#10B981",
     border: "2px solid #FFFFFF",
     borderRadius: "50%",
-    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
-    cursor: "grab",
-    zIndex: 10,
-    transform: "translate(-50%, -50%)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    transition: "all 0.2s ease",
-  };
-
-  const rotationLineStyle = {
-    position: "absolute" as const,
-    width: "2px",
-    height: "32px",
-    backgroundColor: "#6B7280", // Professional gray
-    transformOrigin: "bottom center",
     transform: "translate(-50%, -50%)",
-    zIndex: 9,
-    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
+    cursor: "grab",
+    zIndex: 10000
   };
-  
-  // Calculate handle positions directly in pixel coordinates relative to asset center
-  const assetCenterPx = { x: leftPx, y: topPx };
-  
-  if (asset.type === "square" || asset.type === "circle") {
-    const width = (asset.width ?? 50) * asset.scale;
-    const height = (asset.height ?? 50) * asset.scale;
-    
-    const topLeftPx = { 
-      x: assetCenterPx.x - width / 2 - 6, 
-      y: assetCenterPx.y - height / 2 - 6 
-    };
-    const topRightPx = { 
-      x: assetCenterPx.x + width / 2 + 6, 
-      y: assetCenterPx.y - height / 2 - 6 
-    };
-    const bottomLeftPx = { 
-      x: assetCenterPx.x - width / 2 - 6, 
-      y: assetCenterPx.y + height / 2 + 6 
-    };
-    const bottomRightPx = { 
-      x: assetCenterPx.x + width / 2 + 6, 
-      y: assetCenterPx.y + height / 2 + 6 
-    };
-    const rotationHandlePx = { 
-      x: assetCenterPx.x, 
-      y: assetCenterPx.y - height / 2 - 30 
-    };
 
-    return (
-      <>
-        {/* Corner scaling handles */}
+  return (
+    <div style={containerStyle}>
+      {Object.entries(corners).map(([id, pos]) => (
         <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-left')}
-          style={{
-            ...cornerHandleStyle,
-            left: topLeftPx.x,
-            top: topLeftPx.y,
-            cursor: "nw-resize",
+          key={id}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            onScaleHandleMouseDown(e, asset.id, id as HandleType);
           }}
-          className="hover:scale-110 hover:shadow-lg"
-          title="Resize"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-right')}
           style={{
-            ...cornerHandleStyle,
-            left: topRightPx.x,
-            top: topRightPx.y,
-            cursor: "ne-resize",
-          }}
-          className="hover:scale-110 hover:shadow-lg"
-          title="Resize"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-left')}
-          style={{
-            ...cornerHandleStyle,
-            left: bottomLeftPx.x,
-            top: bottomLeftPx.y,
-            cursor: "sw-resize",
-          }}
-          className="hover:scale-110 hover:shadow-lg"
-          title="Resize"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-right')}
-          style={{
-            ...cornerHandleStyle,
-            left: bottomRightPx.x,
-            top: bottomRightPx.y,
-            cursor: "se-resize",
-          }}
-          className="hover:scale-110 hover:shadow-lg"
-          title="Resize"
-        />
-        
-        {/* Rotation line and handle */}
-        <div
-          style={{
-            ...rotationLineStyle,
-            left: assetCenterPx.x,
-            top: assetCenterPx.y,
+            ...cornerBaseStyle,
+            left: pos.x,
+            top: pos.y,
+            cursor: pos.cursor,
+            pointerEvents: "auto"
           }}
         />
-        <div
-          onMouseDown={(e) => onRotationHandleMouseDown(e, asset.id)}
-          style={{
-            ...rotationHandleStyle,
-            left: rotationHandlePx.x,
-            top: rotationHandlePx.y,
-          }}
-          className="hover:scale-110 hover:shadow-lg"
-          title="Rotate"
-        >
-          {/* Professional rotation icon */}
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 16 16"
-            fill="white"
-            style={{ pointerEvents: "none" }}
-          >
-            <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
-            <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
-          </svg>
-        </div>
-      </>
-    );
-  } else if (asset.type === "line") {
-    const width = (asset.width ?? 100) * asset.scale;
-    const height = (asset.strokeWidth ?? 2) * asset.scale;
-    
-    const topLeftPx = { 
-      x: assetCenterPx.x - width / 2 - 6, 
-      y: assetCenterPx.y - height / 2 - 6 
-    };
-    const topRightPx = { 
-      x: assetCenterPx.x + width / 2 + 6, 
-      y: assetCenterPx.y - height / 2 - 6 
-    };
-    const bottomLeftPx = { 
-      x: assetCenterPx.x - width / 2 - 6, 
-      y: assetCenterPx.y + height / 2 + 6 
-    };
-    const bottomRightPx = { 
-      x: assetCenterPx.x + width / 2 + 6, 
-      y: assetCenterPx.y + height / 2 + 6 
-    };
-    const rotationHandlePx = { 
-      x: assetCenterPx.x, 
-      y: assetCenterPx.y - height / 2 - 30 
-    };
+      ))}
 
-    return (
-      <>
-        {/* Corner scaling handles for line */}
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-left')}
-          style={{
-            position: "absolute",
-            left: topLeftPx.x,
-            top: topLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "nw-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-right')}
-          style={{
-            position: "absolute",
-            left: topRightPx.x,
-            top: topRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "ne-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-left')}
-          style={{
-            position: "absolute",
-            left: bottomLeftPx.x,
-            top: bottomLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "sw-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-right')}
-          style={{
-            position: "absolute",
-            left: bottomRightPx.x,
-            top: bottomRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "se-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        
-W        {/* Rotation line hidden for walls to avoid center box artifact */}
-        <div
-          style={{
-            position: "absolute",
-            left: assetCenterPx.x,
-            top: assetCenterPx.y,
-            width: 0,
-            height: 0,
-            backgroundColor: "transparent",
-            transformOrigin: "bottom center",
-            transform: `translate(-50%, -50%)`,
-            zIndex: 9,
-            pointerEvents: "none",
-          }}
-        />
-        <div
-          onMouseDown={(e) => onRotationHandleMouseDown(e, asset.id)}
-          style={{
-            position: "absolute",
-            left: rotationHandlePx.x,
-            top: rotationHandlePx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#10B981",
-            border: "2px solid #FFFFFF",
-            borderRadius: "50%",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
-            cursor: "grab",
-            zIndex: 10,
-            transform: "translate(-50%, -50%)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Rotate"
-        >
-          {/* Rotation icon - curved arrow */}
-          <svg
-            width="8"
-            height="8"
-            viewBox="0 0 16 16"
-            fill="white"
-            style={{ pointerEvents: "none" }}
-          >
-            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
-            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
-          </svg>
-        </div>
-      </>
-    );
-  } else if (asset.type === "double-line") {
-    const lineGap = (asset.lineGap ?? 8) * asset.scale;
-    const isHorizontal = asset.isHorizontal ?? true;
-    const lineThickness = 2;
-    
-    const totalWidth = isHorizontal ? (asset.width ?? 100) * asset.scale : (lineThickness + lineGap);
-    const totalHeight = isHorizontal ? (lineThickness + lineGap) : (asset.height ?? 100) * asset.scale;
-    
-    const topLeftPx = { 
-      x: assetCenterPx.x - totalWidth / 2 - 6, 
-      y: assetCenterPx.y - totalHeight / 2 - 6 
-    };
-    const topRightPx = { 
-      x: assetCenterPx.x + totalWidth / 2 + 6, 
-      y: assetCenterPx.y - totalHeight / 2 - 6 
-    };
-    const bottomLeftPx = { 
-      x: assetCenterPx.x - totalWidth / 2 - 6, 
-      y: assetCenterPx.y + totalHeight / 2 + 6 
-    };
-    const bottomRightPx = { 
-      x: assetCenterPx.x + totalWidth / 2 + 6, 
-      y: assetCenterPx.y + totalHeight / 2 + 6 
-    };
-    const rotationHandlePx = { 
-      x: assetCenterPx.x, 
-      y: assetCenterPx.y - totalHeight / 2 - 30 
-    };
+      <div
+        style={{
+          position: "absolute",
+          left: rotationHandle.x,
+          top: rotationHandle.y + handleSize / 2,
+          width: 2,
+          height: rotationHandleDistance + handleSize / 2,
+          transform: "translate(-50%, -100%)",
+          backgroundColor: "#10B981",
+          pointerEvents: "none",
+          zIndex: 9998
+        }}
+      />
 
-    return (
-      <>
-        {/* Corner scaling handles for double-line */}
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-left')}
-          style={{
-            position: "absolute",
-            left: topLeftPx.x,
-            top: topLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "nw-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-right')}
-          style={{
-            position: "absolute",
-            left: topRightPx.x,
-            top: topRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "ne-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-left')}
-          style={{
-            position: "absolute",
-            left: bottomLeftPx.x,
-            top: bottomLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "sw-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-right')}
-          style={{
-            position: "absolute",
-            left: bottomRightPx.x,
-            top: bottomRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "se-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        
-        {/* Rotation line and handle */}
-        <div
-          style={{
-            position: "absolute",
-            left: assetCenterPx.x,
-            top: assetCenterPx.y,
-            width: 2,
-            height: 30,
-            backgroundColor: "#10B981",
-            transformOrigin: "bottom center",
-            transform: `translate(-50%, -50%)`,
-            zIndex: 9,
-          }}
-        />
-        <div
-          onMouseDown={(e) => onRotationHandleMouseDown(e, asset.id)}
-          style={{
-            position: "absolute",
-            left: rotationHandlePx.x,
-            top: rotationHandlePx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#10B981",
-            border: "2px solid #FFFFFF",
-            borderRadius: "50%",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
-            cursor: "grab",
-            zIndex: 10,
-            transform: "translate(-50%, -50%)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Rotate"
-        >
-          {/* Rotation icon - curved arrow */}
-          <svg
-            width="8"
-            height="8"
-            viewBox="0 0 16 16"
-            fill="white"
-            style={{ pointerEvents: "none" }}
-          >
-            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
-            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
-          </svg>
-        </div>
-      </>
-    );
-  } else if (asset.type === "drawn-line") {
-    // For drawn lines, use a fixed bounding box since the path can be any shape
-    const boundingSize = 100 * asset.scale;
-    
-    const topLeftPx = { 
-      x: assetCenterPx.x - boundingSize / 2 - 6, 
-      y: assetCenterPx.y - boundingSize / 2 - 6 
-    };
-    const topRightPx = { 
-      x: assetCenterPx.x + boundingSize / 2 + 6, 
-      y: assetCenterPx.y - boundingSize / 2 - 6 
-    };
-    const bottomLeftPx = { 
-      x: assetCenterPx.x - boundingSize / 2 - 6, 
-      y: assetCenterPx.y + boundingSize / 2 + 6 
-    };
-    const bottomRightPx = { 
-      x: assetCenterPx.x + boundingSize / 2 + 6, 
-      y: assetCenterPx.y + boundingSize / 2 + 6 
-    };
-    const rotationHandlePx = { 
-      x: assetCenterPx.x, 
-      y: assetCenterPx.y - boundingSize / 2 - 30 
-    };
-
-    return (
-      <>
-        {/* Corner scaling handles for drawn-line */}
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-left')}
-          style={{
-            position: "absolute",
-            left: topLeftPx.x,
-            top: topLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "nw-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-right')}
-          style={{
-            position: "absolute",
-            left: topRightPx.x,
-            top: topRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "ne-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-left')}
-          style={{
-            position: "absolute",
-            left: bottomLeftPx.x,
-            top: bottomLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "sw-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-right')}
-          style={{
-            position: "absolute",
-            left: bottomRightPx.x,
-            top: bottomRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "se-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        
-        {/* Rotation line and handle */}
-        <div
-          style={{
-            position: "absolute",
-            left: assetCenterPx.x,
-            top: assetCenterPx.y,
-            width: 2,
-            height: 30,
-            backgroundColor: "#10B981",
-            transformOrigin: "bottom center",
-            transform: `translate(-50%, -50%)`,
-            zIndex: 9,
-          }}
-        />
-        <div
-          onMouseDown={(e) => onRotationHandleMouseDown(e, asset.id)}
-          style={{
-            position: "absolute",
-            left: rotationHandlePx.x,
-            top: rotationHandlePx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#10B981",
-            border: "2px solid #FFFFFF",
-            borderRadius: "50%",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
-            cursor: "grab",
-            zIndex: 10,
-            transform: "translate(-50%, -50%)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Rotate"
-        >
-          {/* Rotation icon - curved arrow */}
-          <svg
-            width="8"
-            height="8"
-            viewBox="0 0 16 16"
-            fill="white"
-            style={{ pointerEvents: "none" }}
-          >
-            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
-            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
-          </svg>
-        </div>
-      </>
-    );
-  } else if (asset.type === "wall-segments") {
-    // For wall segments, use stored dimensions if available, otherwise calculate from geometry
-    let width, height;
-    if (asset.width && asset.height) {
-      // Use stored dimensions (same approach as shapes)
-      width = asset.width * asset.scale;
-      height = asset.height * asset.scale;
-    } else {
-      // Fallback to geometry calculation
-      const boundingBox = calculateWallBoundingBox(asset);
-      width = boundingBox.width * asset.scale;
-      height = boundingBox.height * asset.scale;
-    }
-    
-    const topLeftPx = { 
-      x: assetCenterPx.x - width / 2 - 6, 
-      y: assetCenterPx.y - height / 2 - 6 
-    };
-    const topRightPx = { 
-      x: assetCenterPx.x + width / 2 + 6, 
-      y: assetCenterPx.y - height / 2 - 6 
-    };
-    const bottomLeftPx = { 
-      x: assetCenterPx.x - width / 2 - 6, 
-      y: assetCenterPx.y + height / 2 + 6 
-    };
-    const bottomRightPx = { 
-      x: assetCenterPx.x + width / 2 + 6, 
-      y: assetCenterPx.y + height / 2 + 6 
-    };
-    const rotationHandlePx = { 
-      x: assetCenterPx.x, 
-      y: assetCenterPx.y - height / 2 - 30 
-    };
-
-    return (
-      <>
-        {/* Corner scaling handles for wall-segments */}
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-left')}
-          style={{
-            position: "absolute",
-            left: topLeftPx.x,
-            top: topLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "nw-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-right')}
-          style={{
-            position: "absolute",
-            left: topRightPx.x,
-            top: topRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "ne-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-left')}
-          style={{
-            position: "absolute",
-            left: bottomLeftPx.x,
-            top: bottomLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "sw-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-right')}
-          style={{
-            position: "absolute",
-            left: bottomRightPx.x,
-            top: bottomRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "se-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        
-        {/* Rotation line and handle */}
-        <div
-          style={{
-            position: "absolute",
-            left: assetCenterPx.x,
-            top: assetCenterPx.y,
-            width: 2,
-            height: 30,
-            backgroundColor: "#10B981",
-            transformOrigin: "bottom center",
-            transform: `translate(-50%, -50%)`,
-            zIndex: 9,
-          }}
-        />
-        <div
-          onMouseDown={(e) => onRotationHandleMouseDown(e, asset.id)}
-          style={{
-            position: "absolute",
-            left: rotationHandlePx.x,
-            top: rotationHandlePx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#10B981",
-            border: "2px solid #FFFFFF",
-            borderRadius: "50%",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
-            cursor: "grab",
-            zIndex: 10,
-            transform: "translate(-50%, -50%)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Rotate"
-        >
-          {/* Rotation icon - curved arrow */}
-          <svg
-            width="8"
-            height="8"
-            viewBox="0 0 16 16"
-            fill="white"
-            style={{ pointerEvents: "none" }}
-          >
-            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
-            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
-          </svg>
-        </div>
-      </>
-    );
-  } else if (asset.type === "text") {
-    // For text, estimate size based on text content and font size
-    const fontSize = (asset.fontSize ?? 16) * asset.scale;
-    const textLength = (asset.text ?? "Enter text").length;
-    const estimatedWidth = Math.max(textLength * fontSize * 0.6, 50); // Rough estimation
-    const estimatedHeight = fontSize * 1.2;
-    
-    const topLeftPx = { 
-      x: assetCenterPx.x - estimatedWidth / 2 - handleSize / 2, 
-      y: assetCenterPx.y - estimatedHeight / 2 - handleSize / 2 
-    };
-    const topRightPx = { 
-      x: assetCenterPx.x + estimatedWidth / 2 + handleSize / 2, 
-      y: assetCenterPx.y - estimatedHeight / 2 - handleSize / 2 
-    };
-    const bottomLeftPx = { 
-      x: assetCenterPx.x - estimatedWidth / 2 - handleSize / 2, 
-      y: assetCenterPx.y + estimatedHeight / 2 + handleSize / 2 
-    };
-    const bottomRightPx = { 
-      x: assetCenterPx.x + estimatedWidth / 2 + handleSize / 2, 
-      y: assetCenterPx.y + estimatedHeight / 2 + handleSize / 2 
-    };
-    const rotationHandlePx = { 
-      x: assetCenterPx.x, 
-      y: assetCenterPx.y - estimatedHeight / 2 - 30 
-    };
-
-    return (
-      <>
-        {/* Corner scaling handles for text */}
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-left')}
-          style={{
-            position: "absolute",
-            left: topLeftPx.x,
-            top: topLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "nw-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-right')}
-          style={{
-            position: "absolute",
-            left: topRightPx.x,
-            top: topRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "ne-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-left')}
-          style={{
-            position: "absolute",
-            left: bottomLeftPx.x,
-            top: bottomLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "sw-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-right')}
-          style={{
-            position: "absolute",
-            left: bottomRightPx.x,
-            top: bottomRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "se-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        
-        {/* Rotation line and handle */}
-        <div
-          style={{
-            position: "absolute",
-            left: assetCenterPx.x,
-            top: assetCenterPx.y,
-            width: 2,
-            height: 30,
-            backgroundColor: "#10B981",
-            transformOrigin: "bottom center",
-            transform: `translate(-50%, -50%)`,
-            zIndex: 9,
-          }}
-        />
-        <div
-          onMouseDown={(e) => onRotationHandleMouseDown(e, asset.id)}
-          style={{
-            position: "absolute",
-            left: rotationHandlePx.x,
-            top: rotationHandlePx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#10B981",
-            border: "2px solid #FFFFFF",
-            borderRadius: "50%",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
-            cursor: "grab",
-            zIndex: 10,
-            transform: "translate(-50%, -50%)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Rotate"
-        >
-          {/* Rotation icon - curved arrow */}
-          <svg
-            width="8"
-            height="8"
-            viewBox="0 0 16 16"
-            fill="white"
-            style={{ pointerEvents: "none" }}
-          >
-            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
-            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
-          </svg>
-        </div>
-      </>
-    );
-  } else {
-    // For icons and other assets
-    const width = (asset.width ?? 24) * asset.scale;
-    const height = (asset.height ?? 24) * asset.scale;
-    
-    const topLeftPx = { 
-      x: assetCenterPx.x - width / 2 - 6, 
-      y: assetCenterPx.y - height / 2 - 6 
-    };
-    const topRightPx = { 
-      x: assetCenterPx.x + width / 2 + 6, 
-      y: assetCenterPx.y - height / 2 - 6 
-    };
-    const bottomLeftPx = { 
-      x: assetCenterPx.x - width / 2 - 6, 
-      y: assetCenterPx.y + height / 2 + 6 
-    };
-    const bottomRightPx = { 
-      x: assetCenterPx.x + width / 2 + 6, 
-      y: assetCenterPx.y + height / 2 + 6 
-    };
-    const rotationHandlePx = { 
-      x: assetCenterPx.x, 
-      y: assetCenterPx.y - height / 2 - 30 
-    };
-
-    return (
-      <>
-        {/* Corner scaling handles for icons */}
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-left')}
-          style={{
-            position: "absolute",
-            left: topLeftPx.x,
-            top: topLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "nw-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'top-right')}
-          style={{
-            position: "absolute",
-            left: topRightPx.x,
-            top: topRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "ne-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-left')}
-          style={{
-            position: "absolute",
-            left: bottomLeftPx.x,
-            top: bottomLeftPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "sw-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        <div
-          onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, 'bottom-right')}
-          style={{
-            position: "absolute",
-            left: bottomRightPx.x,
-            top: bottomRightPx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#3B82F6",
-            border: "2px solid #FFFFFF",
-            borderRadius: "3px",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2)",
-            transition: "all 0.2s ease",
-            transform: "translate(-50%, -50%)",
-            cursor: "se-resize",
-            zIndex: 10,
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Scale"
-        />
-        
-        {/* Rotation line and handle */}
-        <div
-          style={{
-            position: "absolute",
-            left: assetCenterPx.x,
-            top: assetCenterPx.y,
-            width: 2,
-            height: 30,
-            backgroundColor: "#10B981",
-            transformOrigin: "bottom center",
-            transform: `translate(-50%, -50%)`,
-            zIndex: 9,
-          }}
-        />
-        <div
-          onMouseDown={(e) => onRotationHandleMouseDown(e, asset.id)}
-          style={{
-            position: "absolute",
-            left: rotationHandlePx.x,
-            top: rotationHandlePx.y,
-            width: handleSize,
-            height: handleSize,
-            backgroundColor: "#10B981",
-            border: "2px solid #FFFFFF",
-            borderRadius: "50%",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2)",
-            cursor: "grab",
-            zIndex: 10,
-            transform: "translate(-50%, -50%)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          className="hover:bg-blue-600 transition-colors"
-          title="Rotate"
-        >
-          {/* Rotation icon - curved arrow */}
-          <svg
-            width="8"
-            height="8"
-            viewBox="0 0 16 16"
-            fill="white"
-            style={{ pointerEvents: "none" }}
-          >
-            <path d="M8 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 1a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
-            <path d="M6 4l2-2 2 2" stroke="white" strokeWidth="1" fill="none" />
-          </svg>
-        </div>
-      </>
-    );
-  }
+      <div
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          onRotationHandleMouseDown(e, asset.id);
+        }}
+        style={{
+          ...rotationBaseStyle,
+          left: rotationHandle.x,
+          top: rotationHandle.y,
+          pointerEvents: "auto"
+        }}
+      >
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="white">
+          <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
+          <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
+        </svg>
+      </div>
+    </div>
+  );
 }
+
