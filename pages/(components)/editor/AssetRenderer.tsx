@@ -48,6 +48,7 @@ export default function AssetRenderer({
 }: AssetRendererProps) {
   // Early return if asset is undefined (prevents SSR errors)
   const drawn = useMemo(() => {
+    if (!asset) return null
     if (asset.type !== "drawn-line" || !asset.path || asset.path.length < 2) {
       return null;
     }

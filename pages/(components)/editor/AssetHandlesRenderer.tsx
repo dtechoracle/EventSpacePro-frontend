@@ -1,9 +1,10 @@
+"use client";
 import React from "react";
 import { AssetInstance } from "@/store/sceneStore";
 import { calculateWallBoundingBox } from "@/lib/wallGeometry";
 
 interface AssetHandlesRendererProps {
-  asset: AssetInstance;
+  asset?: AssetInstance | null;
   leftPx: number;
   topPx: number;
   onScaleHandleMouseDown: (
