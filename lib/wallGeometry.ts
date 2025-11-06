@@ -767,8 +767,7 @@ export function snapTo90Degrees(
     return endPoint;
 }
 
-// Helper function to calculate bounding box from wall segments
-export function calculateWallBoundingBox(asset: AssetInstance): { width: number; height: number } {
+export function calculateWallBoundingBox(asset: AssetInstance): { minX: number; minY: number; maxX: number; maxY: number } {
     // Prefer node-edge data if present; otherwise fall back to legacy segments
     const wallGap = asset.wallGap ?? 8;
 
@@ -789,14 +788,14 @@ export function calculateWallBoundingBox(asset: AssetInstance): { width: number;
         const relativeSegments = asset.wallSegments;
         geometry = buildWallGeometry(relativeSegments, wallGap);
     } else {
-        return { width: 200, height: 200 };
+        return { minX: -100, minY: -100, maxX: 100, maxY: 100 }; // Default fallback
     }
 
     // Combine all points from both outer and inner geometry
     const allPoints = [...geometry.outerPoints, ...geometry.innerPoints];
 
     if (allPoints.length === 0) {
-        return { width: 200, height: 200 }; // Default fallback
+        return { minX: -100, minY: -100, maxX: 100, maxY: 100 }; // Default fallback
     }
 
     // Find min/max coordinates
@@ -805,8 +804,11 @@ export function calculateWallBoundingBox(asset: AssetInstance): { width: number;
     const minY = Math.min(...allPoints.map(p => p.y));
     const maxY = Math.max(...allPoints.map(p => p.y));
 
+    // Return the actual bounding box coordinates, not just dimensions
     return {
-        width: maxX - minX, // Use actual calculated width
-        height: maxY - minY // Use actual calculated height
+        minX,
+        minY,
+        maxX,
+        maxY
     };
 }

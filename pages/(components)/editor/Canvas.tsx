@@ -687,21 +687,21 @@ export default function Canvas({
             height: `${chairSettings.radius * mmToPx * 2}px`,
           }}
         >
-          <div
-            className="absolute inset-0 rounded-full border-2 border-blue-400 border-dashed opacity-60"
-            style={{
-              width: '100%',
-              height: '100%',
-            }}
-          />
-          {/* Debug text showing current radius */}
-          <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 font-bold bg-white px-1 rounded">
-            {chairSettings.radius}mm radius
-          </div>
-          {/* Show chair count */}
-          <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 font-bold bg-white px-1 rounded">
-            {chairSettings.numChairs} chairs
-          </div>
+          {/* <div */}
+          {/*   className="absolute inset-0 rounded-full border-2 border-blue-400 border-dashed opacity-60" */}
+          {/*   style={{ */}
+          {/*     width: '100%', */}
+          {/*     height: '100%', */}
+          {/*   }} */}
+          {/* /> */}
+          {/* {/* Debug text showing current radius */} 
+          {/* <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 font-bold bg-white px-1 rounded"> */}
+          {/*   {chairSettings.radius}mm radius */}
+          {/* </div> */}
+          {/* {/* Show chair count */} 
+          {/* <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 font-bold bg-white px-1 rounded"> */}
+          {/*   {chairSettings.numChairs} chairs */}
+          {/* </div> */}
         </div>
       )}
 
@@ -717,6 +717,8 @@ export default function Canvas({
         const leftPx = asset.x * mmToPx;
         const topPx = asset.y * mmToPx;
         const totalRotation = asset.rotation;
+
+                console.log("assets", assets)
 
           // Use GroupRenderer for group assets, AssetRenderer for regular assets
           if (asset.isGroup) {
