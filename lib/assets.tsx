@@ -1,16 +1,16 @@
-import {
-  FaChair,
-  FaUtensils,
-  FaMusic,
-  FaBeer,
-  FaBirthdayCake,
-  FaMicrophone,
-  FaTable,
-  FaWineGlassAlt,
-  FaUsers,
-  FaCamera,
-  FaFont,
-} from "react-icons/fa";
+// import {
+//   FaChair,
+//   FaUtensils,
+//   FaMusic,
+//   FaBeer,
+//   FaBirthdayCake,
+//   FaMicrophone,
+//   FaTable,
+//   FaWineGlassAlt,
+//   FaUsers,
+//   FaCamera,
+//   FaFont,
+// } from "react-icons/fa";
 import { IconType } from "react-icons";
 
 // 🔹 This type supports both React icons and custom SVG paths
@@ -483,16 +483,6 @@ const CUSTOM_SVG_ASSETS: AssetDef[] = [
 ];
 
 export const ASSET_LIBRARY: AssetDef[] = [
-  { id: "chair", label: "Chair", icon: FaChair },
-  { id: "table", label: "Table", icon: FaTable },
-  { id: "guests", label: "Guests", icon: FaUsers },
-  { id: "food", label: "Food", icon: FaUtensils },
-  { id: "drinks", label: "Drinks", icon: FaBeer },
-  { id: "music", label: "Music", icon: FaMusic },
-  { id: "mic", label: "Mic", icon: FaMicrophone },
-  { id: "cake", label: "Cake", icon: FaBirthdayCake },
-  { id: "wine", label: "Wine", icon: FaWineGlassAlt },
-  { id: "camera", label: "Camera", icon: FaCamera },
   {
     id: "square",
     label: "Square",
@@ -503,22 +493,22 @@ export const ASSET_LIBRARY: AssetDef[] = [
     label: "Circle",
     icon: () => <div className='w-full h-full rounded-full bg-gray-300' />,
   },
-  {
-    id: "line",
-    label: "Line",
-    icon: () => <div className='w-full h-1 bg-gray-300' />,
-  },
-  {
-    id: "double-line",
-    label: "Double Line",
-    icon: () => (
-      <div className='w-2 h-full flex flex-row justify-center space-x-1'>
-        <div className='w-0.5 h-full bg-gray-300' />
-        <div className='w-0.5 h-full bg-gray-300' />
-      </div>
-    ),
-  },
-  { id: "text", label: "Text", icon: FaFont },
+  // {
+  //   id: "line",
+  //   label: "Line",
+  //   icon: () => <div className='w-full h-1 bg-gray-300' />,
+  // },
+  // {
+  //   id: "double-line",
+  //   label: "Double Line",
+  //   icon: () => (
+  //     <div className='w-2 h-full flex flex-row justify-center space-x-1'>
+  //       <div className='w-0.5 h-full bg-gray-300' />
+  //       <div className='w-0.5 h-full bg-gray-300' />
+  //     </div>
+  //   ),
+  // },
+  // { id: "text", label: "Text", icon: FaFont },
   // Add custom SVG assets
   ...CUSTOM_SVG_ASSETS,
 ];

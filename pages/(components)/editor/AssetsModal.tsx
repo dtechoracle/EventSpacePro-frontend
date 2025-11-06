@@ -13,17 +13,17 @@ type AssetsModalProps = {
 
 // Define asset categories for the full library tabs
 const ASSET_CATEGORIES = {
-  architectural: ASSET_LIBRARY.filter(
-    (a) =>
-      (a.id.includes("wall") && !a.id.includes("window")) ||
-      (a.id.includes("door") &&
-        !a.id.includes("swing-door") &&
-        !a.id.includes("double-swing-door")) ||
-      a.id.includes("stairs") ||
-      a.id.includes("bathtub") ||
-      a.id.includes("shower") ||
-      a.id.includes("wc")
-  ),
+  // architectural: ASSET_LIBRARY.filter(
+  //   (a) =>
+  //     (a.id.includes("wall") && !a.id.includes("window")) ||
+  //     (a.id.includes("door") &&
+  //       !a.id.includes("swing-door") &&
+  //       !a.id.includes("double-swing-door")) ||
+  //     a.id.includes("stairs") ||
+  //     a.id.includes("bathtub") ||
+  //     a.id.includes("shower") ||
+  //     a.id.includes("wc")
+  // ),
   event: ASSET_LIBRARY.filter(
     (a) =>
       !a.id.includes("wall") &&
@@ -85,12 +85,14 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
   const [hydrated, setHydrated] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const modalRef = useRef<HTMLDivElement | null>(null);
+  const tabsRef = useRef<HTMLDivElement | null>(null);
+
   const isDragging = useRef(false);
   const offset = useRef({ x: 0, y: 0 });
 
   const [showAll, setShowAll] = useState(false);
   const [activeTab, setActiveTab] =
-    useState<keyof typeof ASSET_CATEGORIES>("architectural");
+    useState<keyof typeof ASSET_CATEGORIES>("event");
   const [searchTerm, setSearchTerm] = useState("");
 
   // Hydration + initial modal position
@@ -162,8 +164,8 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
   // Filter assets based on search term
   const filteredAssets = searchTerm
     ? ASSET_LIBRARY.filter((a) =>
-        a.label.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+      a.label.toLowerCase().includes(searchTerm.toLowerCase())
+    )
     : [];
 
   return (
@@ -245,26 +247,26 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
           >
             {/* Tabs */}
             <div className='flex gap-2 mb-2 overflow-x-auto scrollbar-hide'>
+
               {Object.keys(ASSET_CATEGORIES).map((cat) => {
                 const tabLabels: Record<keyof typeof ASSET_CATEGORIES, string> =
-                  {
-                    architectural: "Architectural",
-                    event: "Event Assets",
-                    shapes: "Shapes",
-                    sittingStyles: "Sitting Styles",
-                    spaceElements: "Space Elements",
-                  };
+                {
+                  // architectural: "Architectural",
+                  event: "Event Assets",
+                  shapes: "Shapes",
+                  sittingStyles: "Sitting Styles",
+                  spaceElements: "Space Elements",
+                };
                 return (
                   <button
                     key={cat}
                     onClick={() =>
                       setActiveTab(cat as keyof typeof ASSET_CATEGORIES)
                     }
-                    className={`px-3 py-1 rounded text-sm whitespace-nowrap min-w-fit flex-shrink-0 ${
-                      activeTab === cat
-                        ? "bg-[var(--accent)] text-white"
-                        : "bg-gray-200 text-gray-700"
-                    }`}
+                    className={`px-3 py-1 rounded text-xs whitespace-nowrap min-w-fit flex-shrink-0 ${activeTab === cat
+                      ? "bg-[var(--accent)] text-white"
+                      : "bg-gray-200 text-gray-700"
+                      }`}
                   >
                     {tabLabels[cat as keyof typeof ASSET_CATEGORIES]}
                   </button>
