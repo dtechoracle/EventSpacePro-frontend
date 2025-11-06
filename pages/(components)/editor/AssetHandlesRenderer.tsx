@@ -1,6 +1,5 @@
 import { AssetInstance } from "@/store/sceneStore";
-import React, { useMemo } from "react";
-import { calculateWallBoundingBox } from "@/lib/wallGeometry"; // should return BoundingBox-like object
+import React from "react";
 
 interface AssetHandlesRendererProps {
   asset: AssetInstance;
@@ -9,20 +8,10 @@ interface AssetHandlesRendererProps {
   onScaleHandleMouseDown: (
     e: React.MouseEvent,
     assetId: string,
-    handleType: "top-left" | "top-right" | "bottom-left" | "bottom-right",
+    handleType: "top-left" | "top-right" | "bottom-left" | "bottom-right"
   ) => void;
   onRotationHandleMouseDown: (e: React.MouseEvent, assetId: string) => void;
 }
-
-/** Ensure this matches whatever calculateWallBoundingBox returns */
-type BoundingBox = {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-};
-
-type CornerKey = "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
 
 export default function AssetHandlesRenderer({
   asset,
@@ -31,9 +20,12 @@ export default function AssetHandlesRenderer({
   onScaleHandleMouseDown,
   onRotationHandleMouseDown,
 }: AssetHandlesRendererProps) {
+  if (!asset) return null;
+
   const handleSize = 14;
   const halfHandle = handleSize / 2;
 
+  // Shared handle base style
   const baseHandleStyle: React.CSSProperties = {
     position: "absolute",
     width: handleSize,
@@ -56,51 +48,17 @@ export default function AssetHandlesRenderer({
     cursor: "crosshair",
   };
 
-  const boundingBox: BoundingBox = useMemo(() => {
-    if (asset.type === "wall" || asset.type === "line") {
-      // No longer need the type assertion
-      return calculateWallBoundingBox(asset);
-    }
+  // Compute scaled dimensions
+  const w = (asset.width ?? 100) * asset.scale;
+  const h = (asset.height ?? 100) * asset.scale;
 
-    // fallback for images or simple assets (centered on 0,0)
-    const w = (asset.width ?? 100) * (asset.scale ?? 1);
-    const h = (asset.height ?? 100) * (asset.scale ?? 1);
-
-    return {
-      minX: -w / 2,
-      minY: -h / 2,
-      maxX: w / 2,
-      maxY: h / 2,
-    };
-  }, [asset]);
-
-  if (!asset) return null;
-
-  const w = boundingBox.maxX - boundingBox.minX;
-  const h = boundingBox.maxY - boundingBox.minY;
-  const centerX = (boundingBox.maxX + boundingBox.minX) / 2;
-  const centerY = (boundingBox.maxY + boundingBox.minY) / 2;
-
-  // typed box object
-  const box: Record<CornerKey, { x: number; y: number }> & {
-    rot: { x: number; y: number };
-  } = {
-    topLeft: { x: boundingBox.minX, y: boundingBox.minY },
-    topRight: { x: boundingBox.maxX, y: boundingBox.minY },
-    bottomLeft: { x: boundingBox.minX, y: boundingBox.maxY },
-    bottomRight: { x: boundingBox.maxX, y: boundingBox.maxY },
-    rot: { x: centerX, y: boundingBox.minY - 30 },
-  };
-
-  // map keys to the dashed handle types your handler expects
-  const handleKeyToHandleType: Record<
-    CornerKey,
-    "top-left" | "top-right" | "bottom-left" | "bottom-right"
-  > = {
-    topLeft: "top-left",
-    topRight: "top-right",
-    bottomLeft: "bottom-left",
-    bottomRight: "bottom-right",
+  // Compute handle positions relative to asset center
+  const box = {
+    topLeft: { x: -w / 2, y: -h / 2 },
+    topRight: { x: w / 2, y: -h / 2 },
+    bottomLeft: { x: -w / 2, y: h / 2 },
+    bottomRight: { x: w / 2, y: h / 2 },
+    rot: { x: 0, y: -h / 2 - 30 },
   };
 
   return (
@@ -110,62 +68,48 @@ export default function AssetHandlesRenderer({
         top: 0,
         left: 0,
         pointerEvents: "none",
-        transform: `translate3d(${leftPx}px, ${topPx}px, 0) rotate(${asset.rotation ?? 0}rad)`,
-        transformOrigin: "center center",
+        transform: `translate3d(${leftPx}px, ${topPx}px, 0)`,
       }}
     >
-      {/* selection rectangle using the true bounding box */}
+      {/* Resize Handles */}
       <div
+        onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, "top-left")}
         style={{
-          position: "absolute",
-          left: boundingBox.minX,
-          top: boundingBox.minY,
-          width: w,
-          height: h,
-          border: "1.5px solid #3B82F6",
-          borderRadius: "4px",
-          boxSizing: "border-box",
+          ...baseHandleStyle,
+          transform: `translate(${box.topLeft.x}px, ${box.topLeft.y}px)`,
+        }}
+      />
+      <div
+        onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, "top-right")}
+        style={{
+          ...baseHandleStyle,
+          transform: `translate(${box.topRight.x}px, ${box.topRight.y}px)`,
+        }}
+      />
+      <div
+        onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, "bottom-left")}
+        style={{
+          ...baseHandleStyle,
+          transform: `translate(${box.bottomLeft.x}px, ${box.bottomLeft.y}px)`,
+        }}
+      />
+      <div
+        onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, "bottom-right")}
+        style={{
+          ...baseHandleStyle,
+          transform: `translate(${box.bottomRight.x}px, ${box.bottomRight.y}px)`,
         }}
       />
 
-      {/* resize handles */}
-      {(
-        ["topLeft", "topRight", "bottomLeft", "bottomRight"] as CornerKey[]
-      ).map((key) => (
-        <div
-          key={key}
-          onMouseDown={(e) => {
-            // re-enable pointer events only for the mousedown target
-            e.stopPropagation();
-            onScaleHandleMouseDown(e, asset.id, handleKeyToHandleType[key]);
-          }}
-          style={{
-            ...baseHandleStyle,
-            // use left/top instead of transform translate to avoid stacking transform orders
-            left: box[key].x,
-            top: box[key].y,
-            position: "absolute",
-            pointerEvents: "auto", // allow interaction on the handles
-            transform: "translate(-50%, -50%)",
-          }}
-        />
-      ))}
-
-      {/* rotation handle */}
+      {/* Rotation Handle */}
       <div
-        onMouseDown={(e) => {
-          e.stopPropagation();
-          onRotationHandleMouseDown(e, asset.id);
-        }}
+        onMouseDown={(e) => onRotationHandleMouseDown(e, asset.id)}
         style={{
           ...rotationStyle,
-          left: box.rot.x,
-          top: box.rot.y,
-          position: "absolute",
-          pointerEvents: "auto",
-          transform: "translate(-50%, -50%)",
+          transform: `translate(${box.rot.x}px, ${box.rot.y}px)`,
         }}
       />
     </div>
   );
 }
+
