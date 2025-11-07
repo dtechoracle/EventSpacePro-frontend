@@ -696,25 +696,29 @@ export default function AssetRenderer({
         />
       )}
 
-      <div
-        onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
-        style={{
-          position: "absolute",
-          left: leftPx,
-          top: topPx,
-          width: (asset.width ?? 24) * asset.scale,
-          height: (asset.height ?? 24) * asset.scale,
-          transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "move",
-          zIndex: asset.zIndex,
-          boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
-          transition: isCopied ? "box-shadow 0.3s ease" : undefined,
-        }}
-        className="text-[var(--accent)]"
-      >
+      {/* Main shape */}
+<div
+  onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
+  style={{
+    position: "absolute",
+    left: leftPx,
+    top: topPx,
+    width: (asset.width ?? 50) * asset.scale,
+    height: (asset.height ?? 50) * asset.scale,
+    backgroundColor:
+      asset.backgroundColor && asset.backgroundColor !== "transparent"
+        ? asset.backgroundColor
+        : asset.fillColor ?? "transparent",
+    border: `${asset.strokeWidth ?? 2}px solid ${asset.strokeColor ?? "#000000"}`,
+    borderRadius: asset.type === "circle" ? "50%" : "0%",
+    transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+    cursor: "move",
+    zIndex: asset.zIndex || 0,
+    boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
+    transition: isCopied ? "box-shadow 0.3s ease" : undefined,
+  }}
+>
+
         <Icon
           size={Math.min(
             (asset.width ?? 24) * asset.scale,

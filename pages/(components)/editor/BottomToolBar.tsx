@@ -111,6 +111,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     setWallDrawingMode(false);
     setRectangularSelectionMode(false);
     setShapeMode(null);
+    useSceneStore.getState().setExportSelectionMode(false);
     setActiveTool(null);
   };
 
@@ -254,8 +255,10 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
       case "snap-grid":
         break;
 
-      // Export
+      // Export - removed drag selection, now handled by ExportPanel in sidebar
       case "export-project":
+        // Export is now handled automatically when assets are selected
+        // via the ExportPanel in the PropertiesSidebar
         break;
 
       default:
@@ -318,6 +321,15 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
             {/* Main Button with Tooltip */}
             <Tooltip content={tool.label} position="top">
               <motion.button
+                onClick={() => {
+                  // Activate the group's primary option and ensure exclusivity
+                  const primary = tool.options[0];
+                  if (primary) {
+                    handleOptionClick(primary);
+                  }
+                  // Close any open dropdown when directly activating
+                  setOpenIndex(null);
+                }}
                 whileTap={{ scale: 0.95 }}
                 whileHover={{ scale: 1.03 }}
                 className={`w-8 h-8 border-2 flex items-center justify-center rounded-md ${

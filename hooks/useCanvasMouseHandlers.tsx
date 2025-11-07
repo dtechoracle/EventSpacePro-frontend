@@ -59,6 +59,11 @@ export function useCanvasMouseHandlers({
   const finishRectangularSelectionDrag = useSceneStore(
     (s) => s.finishRectangularSelectionDrag
   );
+  // Export selection
+  const isExportSelectionMode = useSceneStore((s) => s.isExportSelectionMode);
+  const startExportSelection = useSceneStore((s) => s.startExportSelection);
+  const updateExportSelection = useSceneStore((s) => s.updateExportSelection);
+  const finishExportSelection = useSceneStore((s) => s.finishExportSelection);
 
   // Store actions
   const updateAsset = useSceneStore((s) => s.updateAsset);
@@ -96,6 +101,7 @@ export function useCanvasMouseHandlers({
   );
   const moveSelectedAssets = useSceneStore((s) => s.moveSelectedAssets);
   const clearSelection = useSceneStore((s) => s.clearSelection);
+  const setDraggingAsset = useSceneStore((s) => (s as any).setDraggingAsset);
 
   // Refs for tracking state
   const draggingAssetRef = useRef<string | null>(null);
@@ -172,8 +178,16 @@ export function useCanvasMouseHandlers({
         if (clickedAsset) {
           isDraggingMultiple.current = true;
           lastMousePos.current = { x, y };
+          if (setDraggingAsset) setDraggingAsset(true);
           return;
         }
+      }
+
+      // Handle export selection mode
+      if (isExportSelectionMode) {
+        const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+        startExportSelection(x, y);
+        return;
       }
 
       // Handle wall drawing mode mouse down - use EXACT original approach
@@ -208,6 +222,12 @@ export function useCanvasMouseHandlers({
       // Store mouse position for use in mouse up handler
       lastMousePosition.current = { x: e.clientX, y: e.clientY };
       const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+
+      // Handle export selection dragging
+      if (isExportSelectionMode) {
+        updateExportSelection(x, y);
+        return;
+      }
 
       // Handle rectangular selection dragging
       if (isRectangularSelectionMode && rectangularSelectionStart) {
@@ -259,24 +279,31 @@ export function useCanvasMouseHandlers({
             e.clientY
           );
 
-          // Use distance from asset center to mouse position for stable scaling
           const assetCenterX = asset.x;
           const assetCenterY = asset.y;
 
-          // Calculate current distance from asset center to mouse position
-          const currentDistance = Math.sqrt(
-            Math.pow(mouseX - assetCenterX, 2) +
-              Math.pow(mouseY - assetCenterY, 2)
-          );
-
-          // Calculate scale based on distance ratio
-          const scaleRatio = currentDistance / initialDistance.current;
-          const newScale = Math.max(
-            0.1,
-            Math.min(10, initialScale.current * scaleRatio)
-          );
-
-          updateAsset(selectedAssetId, { scale: newScale });
+          if (asset.type === 'line') {
+            // Adjust line length (width) based on mouse projection along line axis
+            const angleRad = (asset.rotation || 0) * Math.PI / 180;
+            const dx = mouseX - assetCenterX;
+            const dy = mouseY - assetCenterY;
+            // Project (dx,dy) onto the line's local X axis
+            const localX = dx * Math.cos(angleRad) + dy * Math.sin(angleRad);
+            const newWidth = Math.max(2, Math.abs(localX) * 2);
+            updateAsset(selectedAssetId, { width: newWidth });
+          } else {
+            // Generic uniform scale for other assets
+            const currentDistance = Math.sqrt(
+              Math.pow(mouseX - assetCenterX, 2) +
+                Math.pow(mouseY - assetCenterY, 2)
+            );
+            const scaleRatio = currentDistance / initialDistance.current;
+            const newScale = Math.max(
+              0.1,
+              Math.min(10, initialScale.current * scaleRatio)
+            );
+            updateAsset(selectedAssetId, { scale: newScale });
+          }
         }
         return;
       }
@@ -465,7 +492,15 @@ export function useCanvasMouseHandlers({
         const newX = x + draggingOffset.current.x;
         const newY = y + draggingOffset.current.y;
         const snapped = snapToGrid(newX, newY);
-        updateAsset(draggingAssetRef.current, { x: snapped.x, y: snapped.y });
+        const asset = assets.find(a => a.id === draggingAssetRef.current);
+        if (asset && asset.type === 'wall-segments' && asset.wallNodes && asset.wallNodes.length) {
+          const dx = snapped.x - asset.x;
+          const dy = snapped.y - asset.y;
+          const movedNodes = asset.wallNodes.map(n => ({ x: n.x + dx, y: n.y + dy }));
+          updateAsset(draggingAssetRef.current, { x: snapped.x, y: snapped.y, wallNodes: movedNodes } as any);
+        } else {
+          updateAsset(draggingAssetRef.current, { x: snapped.x, y: snapped.y });
+        }
         return;
       }
 
@@ -497,6 +532,12 @@ export function useCanvasMouseHandlers({
     };
 
     const onUp = () => {
+      // Handle export selection finish
+      if (isExportSelectionMode) {
+        finishExportSelection();
+        return;
+      }
+
       // Handle rectangular selection finish
       if (isRectangularSelectionMode && rectangularSelectionStart) {
         console.log("Finishing rectangular selection drag");
@@ -555,26 +596,24 @@ export function useCanvasMouseHandlers({
               zIndex: 0,
             };
           } else {
-            // Create single line asset for pen mode (drawn-line type for path rendering)
-            const id = `drawn-line-${Date.now()}`;
-
-            // Convert path coordinates to be relative to the center point
-            const relativePath = straightenedPath.map((point) => ({
-              x: point.x - centerX,
-              y: point.y - centerY,
-            }));
+            // Create single line asset for pen mode (line type with LineHandlesRenderer)
+            const id = `line-${Date.now()}`;
+            
+            // Calculate rotation angle from start to end
+            const angle = Math.atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x) * (180 / Math.PI);
 
             newAsset = {
               id,
-              type: "drawn-line",
+              type: "line",
               x: centerX,
               y: centerY,
               scale: 1,
-              rotation: 0, // Start with 0 rotation - user can rotate manually if needed
+              rotation: angle,
+              width: length,
+              height: 2,
               strokeWidth: 2,
               strokeColor: "#000000",
               backgroundColor: "transparent",
-              path: relativePath, // Store the relative path for rendering
               zIndex: 0,
             };
           }
@@ -636,6 +675,7 @@ export function useCanvasMouseHandlers({
       isScalingAsset.current = false;
       isAdjustingHeight.current = false;
       isRotatingAsset.current = false;
+      if (setDraggingAsset) setDraggingAsset(false);
       initialScale.current = 1;
       initialHeight.current = 1;
       initialDistance.current = 0;

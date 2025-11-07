@@ -4,8 +4,10 @@ import React, { useState, useEffect } from "react";
 import { FaUserCircle, FaChevronDown, FaChevronRight } from "react-icons/fa";
 import { IoPlayOutline } from "react-icons/io5";
 import ShareModal from "./ShareModal";
+import ExportPanel from "./ExportPanel";
 import { useAssetProperties } from "@/hooks/useAssetProperties";
 import { useSceneStore } from "@/store/sceneStore";
+import { useUserStore } from "@/store/userStore";
 
 export default function PropertiesSidebar(): React.JSX.Element {
   const {
@@ -43,6 +45,26 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const [showShareModal, setShowShareModal] = useState(false);
   const [modelName, setModelName] = useState<string>("");
   const open3D = useSceneStore((s) => s.open3DOverlay);
+  
+  // Get logged in user
+  const user = useUserStore((s) => s.user);
+  
+  // Get user's full name
+  const getUserName = () => {
+    if (!user) return "";
+    const firstName = user.firstName || "";
+    const lastName = user.lastName || "";
+    return `${firstName} ${lastName}`.trim() || user.email || "";
+  };
+  
+  const userName = getUserName();
+  
+  // Set model name to user's name when user is loaded
+  useEffect(() => {
+    if (userName && !modelName) {
+      setModelName(userName);
+    }
+  }, [userName, modelName]);
 
   // Chair placement state from store with fallback
   const chairSettings = useSceneStore((s) => s.chairSettings) || { numChairs: 8, radius: 80 };
@@ -123,7 +145,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
             </div>
             <div className="flex justify-between items-center">
               <span className="w-full">Owner</span>
-              <span className="font-medium w-full">John Doe</span>
+              <span className="font-medium w-full">{userName || "Not logged in"}</span>
             </div>
           </div>
         )}
@@ -787,6 +809,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
           </div>
         )}
       </div>
+      {/* Export Panel - shows when assets are selected */}
+      <ExportPanel />
     </aside>
   );
 }

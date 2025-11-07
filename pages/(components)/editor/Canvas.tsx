@@ -12,12 +12,16 @@ import GroupRenderer from "./GroupRenderer";
 import CanvasControls from "./CanvasControls";
 import PatternIndicator from "./PatternIndicator";
 import SelectionBox from "./SelectionBox";
+import ExportSelectionBox from "./ExportSelectionBox";
+import ExportModal from "./ExportModal";
 import ThreeDOverlay from "./ThreeDOverlay";
 import { useCanvasMouseHandlers } from "@/hooks/useCanvasMouseHandlers";
 import { useCanvasKeyboardHandlers } from "@/hooks/useCanvasKeyboardHandlers";
 import { useAssetHandlers } from "@/hooks/useAssetHandlers";
 import { useDrawingLogic } from "@/hooks/useDrawingLogic";
 import { motion } from "framer-motion";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 
 // Type for API response that wraps EventData
 // type EventDataResponse = {
@@ -117,6 +121,11 @@ export default function Canvas({
   const finishRectangularSelectionDrag = useSceneStore(
     (s) => s.finishRectangularSelectionDrag
   );
+  // Export selection
+  const isExportSelectionMode = useSceneStore((s) => s.isExportSelectionMode);
+  const exportSelectionStart = useSceneStore((s) => s.exportSelectionStart);
+  const exportSelectionEnd = useSceneStore((s) => s.exportSelectionEnd);
+  const setExportSelectionMode = useSceneStore((s) => s.setExportSelectionMode);
 
   // Sync props data to store when props change (only once per data change)
   const hasSyncedRef = useRef(false);
@@ -412,6 +421,84 @@ export default function Canvas({
   const rotateCW = () => setRotation((r) => (r + 90) % 360);
   const rotateCCW = () => setRotation((r) => (r - 90 + 360) % 360);
 
+  // Export modal state
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportArea, setExportArea] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
+
+  // Show export modal when selection is complete
+  useEffect(() => {
+    // Check if we have a valid selection that was just completed
+    if (exportSelectionStart && exportSelectionEnd && !isExportSelectionMode) {
+      const width = Math.abs(exportSelectionEnd.x - exportSelectionStart.x);
+      const height = Math.abs(exportSelectionEnd.y - exportSelectionStart.y);
+      
+      // Show modal if selection has meaningful size (reduced threshold for better UX)
+      if (width > 5 && height > 5 && !showExportModal) {
+        // Small delay to ensure state is updated
+        setTimeout(() => {
+          setExportArea({
+            startX: exportSelectionStart.x,
+            startY: exportSelectionStart.y,
+            endX: exportSelectionEnd.x,
+            endY: exportSelectionEnd.y,
+          });
+          setShowExportModal(true);
+        }, 50);
+      }
+    }
+  }, [isExportSelectionMode, exportSelectionStart, exportSelectionEnd, showExportModal]);
+
+  // Auto-center on newly selected asset (useful when selecting from asset tab)
+  // Only trigger on selection change, not on asset updates during dragging/resizing
+  const prevSelectedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !selectedAssetId) {
+      prevSelectedIdRef.current = selectedAssetId;
+      return;
+    }
+    
+    // Don't auto-center if we're currently scaling/resizing or dragging
+    if (mouseRefs.isScalingAsset.current || mouseRefs.isRotatingAsset.current || 
+        mouseRefs.draggingAssetRef.current || mouseRefs.isAdjustingHeight.current) {
+      return;
+    }
+    
+    // Only center if the selection actually changed to a different asset
+    if (prevSelectedIdRef.current === selectedAssetId) return;
+    prevSelectedIdRef.current = selectedAssetId;
+    
+    const asset = assets.find((a) => a.id === selectedAssetId);
+    if (!asset) return;
+    
+    // Calculate actual center position - for walls, use bounding box center from wallNodes
+    let centerX = asset.x;
+    let centerY = asset.y;
+    
+    if (asset.type === 'wall-segments' && asset.wallNodes && asset.wallNodes.length > 0) {
+      // Calculate bounding box from wallNodes (absolute coordinates)
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      asset.wallNodes.forEach(node => {
+        minX = Math.min(minX, node.x);
+        minY = Math.min(minY, node.y);
+        maxX = Math.max(maxX, node.x);
+        maxY = Math.max(maxY, node.y);
+      });
+      if (isFinite(minX)) {
+        centerX = (minX + maxX) / 2;
+        centerY = (minY + maxY) / 2;
+      }
+    }
+    
+    const rect = el.getBoundingClientRect();
+    const desired = {
+      x: rect.width / 2 - centerX * targetZoom.current,
+      y: rect.height / 2 - centerY * targetZoom.current,
+    };
+    targetOffset.current = clampOffset(desired, targetZoom.current, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAssetId]); // Only trigger on selection change, not on asset updates
+
   return (
     <div ref={containerRef} className="w-full h-full overflow-hidden bg-gray-50" onMouseDown={handlePointerDown}>
       <div
@@ -438,19 +525,21 @@ export default function Canvas({
       {/* Single Canvas (the scene itself) */}
     <div
       ref={canvasRef}
+      data-canvas-container
         className={`relative ${
           isPenMode ||
           isWallMode ||
           wallDrawingMode ||
           shapeMode ||
-          isRectangularSelectionMode
+          isRectangularSelectionMode ||
+          isExportSelectionMode
             ? "cursor-crosshair"
             : ""
         }`}
       style={{
         width: scenePxWNoZoom,
         height: scenePxHNoZoom,
-        cursor: isRectangularSelectionMode ? "crosshair" : (isWallMode || wallDrawingMode || shapeMode) ? "crosshair" : undefined,
+        cursor: (isRectangularSelectionMode || isExportSelectionMode) ? "crosshair" : (isWallMode || wallDrawingMode || shapeMode || isPenMode) ? "crosshair" : undefined,
       }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
@@ -783,10 +872,217 @@ export default function Canvas({
         );
       })}
       </div>
+        {/* Export Selection Box - inside canvas for proper positioning */}
+        <ExportSelectionBox mmToPx={mmToPx} />
+        {/* Selection Box */}
+        <SelectionBox mmToPx={mmToPx} />
         </div>
       </div>
       {/* 3D Overlay */}
       <ThreeDOverlay />
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => {
+          setShowExportModal(false);
+          setExportArea(null);
+          setExportSelectionMode(false);
+          useSceneStore.getState().setExportSelectionMode(false);
+        }}
+        exportArea={exportArea}
+        onExport={async (paperSize, format) => {
+          if (!exportArea || !canvasRef.current) return;
+          
+          // Calculate the export area in pixels
+          const minX = Math.min(exportArea.startX, exportArea.endX);
+          const minY = Math.min(exportArea.startY, exportArea.endY);
+          const maxX = Math.max(exportArea.startX, exportArea.endX);
+          const maxY = Math.max(exportArea.startY, exportArea.endY);
+          const widthMm = maxX - minX;
+          const heightMm = maxY - minY;
+          
+          // Get paper size dimensions
+          const PAPER_SIZES: Record<string, { width: number; height: number }> = {
+            A1: { width: 594, height: 841 },
+            A2: { width: 420, height: 594 },
+            A3: { width: 297, height: 420 },
+            A4: { width: 210, height: 297 },
+            A5: { width: 148, height: 210 },
+          };
+          
+          const paperSizeInfo = PAPER_SIZES[paperSize];
+          if (!paperSizeInfo) return;
+          
+          // Get the canvas container element
+          const containerEl = containerRef.current;
+          if (!containerEl) return;
+          
+          // Set canvas size based on paper size (convert mm to pixels at 96 DPI)
+          const dpi = 96;
+          const mmToInch = 0.0393701;
+          const pixelsPerMm = (dpi * mmToInch);
+          
+          try {
+            // Capture the canvas area using html2canvas
+            const canvasElement = canvasRef.current;
+            if (!canvasElement) {
+              alert('Canvas element not found');
+              return;
+            }
+
+            // Calculate the export area in pixels relative to the canvas element
+            // The canvas element is at scenePxWNoZoom x scenePxHNoZoom
+            // Export coordinates are in mm, need to convert to pixels
+            const exportX = minX * mmToPx;
+            const exportY = minY * mmToPx;
+            const exportWidth = widthMm * mmToPx;
+            const exportHeight = heightMm * mmToPx;
+
+            // Capture the entire canvas first
+            // Use try-catch to handle any CSS parsing errors (like lab() color function)
+            let capturedCanvas: HTMLCanvasElement;
+            try {
+              capturedCanvas = await html2canvas(canvasElement, {
+                scale: 2, // Higher quality
+                useCORS: true,
+                backgroundColor: '#ffffff',
+                width: scenePxWNoZoom,
+                height: scenePxHNoZoom,
+                onclone: (clonedDoc) => {
+                  // Fix CSS color issues by removing problematic styles
+                  try {
+                    const styleSheets = Array.from(clonedDoc.styleSheets);
+                    styleSheets.forEach((sheet) => {
+                      try {
+                        const rules = Array.from(sheet.cssRules || []);
+                        rules.forEach((rule) => {
+                          if (rule instanceof CSSStyleRule) {
+                            // Replace lab() colors with rgb equivalents
+                            if (rule.style.color && rule.style.color.includes('lab')) {
+                              rule.style.color = 'rgb(0, 0, 0)';
+                            }
+                            if (rule.style.backgroundColor && rule.style.backgroundColor.includes('lab')) {
+                              rule.style.backgroundColor = 'transparent';
+                            }
+                          }
+                        });
+                      } catch (e) {
+                        // Ignore cross-origin or other CSS errors
+                      }
+                    });
+                  } catch (e) {
+                    // Ignore errors
+                  }
+                },
+                logging: false,
+                allowTaint: false,
+              });
+            } catch (error: any) {
+              console.error('html2canvas error:', error);
+              // If error is about lab() color, try with a workaround
+              if (error?.message?.includes('lab') || error?.message?.includes('color')) {
+                // Fallback: use simpler options and ignore CSS parsing errors
+                try {
+                  capturedCanvas = await html2canvas(canvasElement, {
+                    scale: 1,
+                    useCORS: false,
+                    backgroundColor: '#ffffff',
+                    logging: false,
+                    allowTaint: true,
+                    ignoreElements: () => false,
+                  });
+                } catch (fallbackError) {
+                  alert('Export failed due to CSS compatibility issues. Please try again or contact support.');
+                  return;
+                }
+              } else {
+                alert('Export failed. Please try again.');
+                return;
+              }
+            }
+
+            // Create a new canvas for the cropped area
+            const croppedCanvas = document.createElement('canvas');
+            const croppedCtx = croppedCanvas.getContext('2d');
+            if (!croppedCtx) return;
+
+            // Set size to the export area (scaled for quality)
+            croppedCanvas.width = exportWidth * 2;
+            croppedCanvas.height = exportHeight * 2;
+
+            // Draw the cropped area from the captured canvas
+            // The captured canvas is at 2x scale, so multiply coordinates by 2
+            croppedCtx.drawImage(
+              capturedCanvas,
+              exportX * 2, exportY * 2, exportWidth * 2, exportHeight * 2,
+              0, 0, exportWidth * 2, exportHeight * 2
+            );
+
+            // Now scale to fit paper size
+            const finalCanvas = document.createElement('canvas');
+            const finalCtx = finalCanvas.getContext('2d');
+            if (!finalCtx) return;
+
+            // Calculate scale to fit paper size
+            const paperScaleX = (paperSizeInfo.width * pixelsPerMm) / (exportWidth * 2);
+            const paperScaleY = (paperSizeInfo.height * pixelsPerMm) / (exportHeight * 2);
+            const finalScale = Math.min(paperScaleX, paperScaleY);
+
+            finalCanvas.width = paperSizeInfo.width * pixelsPerMm;
+            finalCanvas.height = paperSizeInfo.height * pixelsPerMm;
+
+            // Fill white background
+            finalCtx.fillStyle = '#ffffff';
+            finalCtx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+
+            // Center and scale the cropped image
+            const scaledWidth = exportWidth * 2 * finalScale;
+            const scaledHeight = exportHeight * 2 * finalScale;
+            const centerX = (finalCanvas.width - scaledWidth) / 2;
+            const centerY = (finalCanvas.height - scaledHeight) / 2;
+
+            finalCtx.drawImage(
+              croppedCanvas,
+              centerX, centerY, scaledWidth, scaledHeight
+            );
+
+            // Export based on format
+            const fileName = `export-${Date.now()}.${format}`;
+
+            if (format === 'pdf') {
+              const pdf = new jsPDF({
+                orientation: paperSizeInfo.width > paperSizeInfo.height ? 'landscape' : 'portrait',
+                unit: 'mm',
+                format: paperSize.toLowerCase(),
+              });
+              const imgData = finalCanvas.toDataURL('image/png', 1.0);
+              pdf.addImage(imgData, 'PNG', 0, 0, paperSizeInfo.width, paperSizeInfo.height);
+              pdf.save(fileName);
+            } else {
+              // PNG or JPEG
+              const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+              finalCanvas.toBlob((blob) => {
+                if (blob) {
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = fileName;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }
+              }, mimeType, format === 'jpeg' ? 0.95 : 1.0);
+            }
+
+            setShowExportModal(false);
+            setExportArea(null);
+            setExportSelectionMode(false);
+            useSceneStore.getState().setExportSelectionMode(false);
+          } catch (error) {
+            console.error('Export error:', error);
+            alert('Export failed. Please try again.');
+          }
+        }}
+      />
     </div>
   );
 }

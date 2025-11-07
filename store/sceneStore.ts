@@ -80,6 +80,8 @@ type SceneState = {
   eventData: EventData | null;
   isInitialized: boolean;
   hasUnsavedChanges: boolean;
+  // Runtime interaction flags
+  isDraggingAsset: boolean;
   showGrid: boolean;
   showDebugOutlines?: boolean;
   gridSize: number; // Grid size in mm
@@ -163,6 +165,11 @@ type SceneState = {
   // Group management state
   createGroupFromSelection: boolean;
 
+  // Export selection state
+  isExportSelectionMode: boolean;
+  exportSelectionStart: { x: number; y: number } | null;
+  exportSelectionEnd: { x: number; y: number } | null;
+
   // Methods
   setCanvas: (size: PaperSize) => void;
   setCanvasDimensions: (width: number, height: number) => void; // allow arbitrary canvas when not a known PaperSize
@@ -197,6 +204,9 @@ type SceneState = {
   syncToEventData: () => AssetInstance[];
   markAsSaved: () => void;
   hasHydrated: boolean;
+
+  // Dragging flag setter
+  setDraggingAsset: (dragging: boolean) => void;
 
   // Pen tool methods
   setPenMode: (enabled: boolean) => void;
@@ -255,6 +265,11 @@ type SceneState = {
   createGroupFromSelectedAssets: () => void;
   groupSelectedAssets: () => void;
   ungroupAsset: (groupId: string) => void;
+  // Export selection methods
+  setExportSelectionMode: (enabled: boolean) => void;
+  startExportSelection: (startX: number, startY: number) => void;
+  updateExportSelection: (endX: number, endY: number) => void;
+  finishExportSelection: () => void;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -268,6 +283,7 @@ export const useSceneStore = create<SceneState>()(
       isInitialized: false,
       hasUnsavedChanges: false,
       hasHydrated: false,
+      isDraggingAsset: false,
       showGrid: false,
       showDebugOutlines: true,
       gridSize: 10, // Default 10mm grid
@@ -314,6 +330,10 @@ export const useSceneStore = create<SceneState>()(
       rectangularSelectionEnd: null,
       selectionBox: null,
       createGroupFromSelection: false,
+      // Export selection
+      isExportSelectionMode: false,
+      exportSelectionStart: null,
+      exportSelectionEnd: null,
 
       setCanvas: (size) => {
         const { width, height } = PAPER_SIZES[size];
@@ -686,6 +706,7 @@ export const useSceneStore = create<SceneState>()(
         eventData: null,
         isInitialized: false,
         hasUnsavedChanges: false,
+        isDraggingAsset: false,
         isPenMode: false,
         isWallMode: false,
         isDrawing: false,
@@ -698,6 +719,9 @@ export const useSceneStore = create<SceneState>()(
       }),
 
       markAsSaved: () => set({ hasUnsavedChanges: false }),
+
+      // Dragging state for performance-sensitive rendering
+      setDraggingAsset: (dragging: boolean) => set({ isDraggingAsset: dragging }),
 
       syncToEventData: () => {
         const state = get();
@@ -781,8 +805,8 @@ export const useSceneStore = create<SceneState>()(
         const wallWidth = maxX - minX;
         const wallHeight = maxY - minY;
 
-        // Get a low zIndex for wall assets to ensure they render behind other assets
-        const nextZIndex = -100; // Walls should render behind other assets
+        // Use a neutral zIndex so walls can receive pointer events and be selectable
+        const nextZIndex = 0;
 
         const wallAsset: AssetInstance = {
           id: `wall-segments-${Date.now()}`,
@@ -2122,18 +2146,17 @@ export const useSceneStore = create<SceneState>()(
       moveSelectedAssets: (deltaX, deltaY) => {
         const state = get();
         const updatedAssets = state.assets.map(asset => {
-          if (state.selectedAssetIds.includes(asset.id)) {
-            return { ...asset, x: asset.x + deltaX, y: asset.y + deltaY };
+          if (!state.selectedAssetIds.includes(asset.id)) return asset;
+          // Move base center
+          const moved: any = { ...asset, x: asset.x + deltaX, y: asset.y + deltaY };
+          // If this is a wall with node/edge data, shift nodes too so geometry stays locked
+          if (asset.type === 'wall-segments' && asset.wallNodes && asset.wallNodes.length) {
+            moved.wallNodes = asset.wallNodes.map(n => ({ x: n.x + deltaX, y: n.y + deltaY }));
           }
-          return asset;
+          return moved;
         });
 
-        set({
-          assets: updatedAssets,
-          hasUnsavedChanges: true,
-        });
-
-        // Save to history
+        set({ assets: updatedAssets, hasUnsavedChanges: true });
         setTimeout(() => get().saveToHistory(), 0);
       },
 
@@ -2421,6 +2444,45 @@ export const useSceneStore = create<SceneState>()(
 
         // Save to history
         setTimeout(() => get().saveToHistory(), 0);
+      },
+
+      // Export selection methods
+      setExportSelectionMode: (enabled) => {
+        set({ isExportSelectionMode: enabled });
+        if (!enabled) {
+          set({ exportSelectionStart: null, exportSelectionEnd: null });
+        }
+      },
+
+      startExportSelection: (startX, startY) => {
+        set({
+          exportSelectionStart: { x: startX, y: startY },
+          exportSelectionEnd: { x: startX, y: startY },
+        });
+      },
+
+      updateExportSelection: (endX, endY) => {
+        set({
+          exportSelectionEnd: { x: endX, y: endY },
+        });
+      },
+
+      finishExportSelection: () => {
+        const state = get();
+        if (state.exportSelectionStart && state.exportSelectionEnd) {
+          // Selection is complete, modal will be shown by Canvas component
+          // Keep the selection points so the modal can read them
+          set({ isExportSelectionMode: false });
+          // Clear selection after modal has had time to read it (1 second to be safe)
+          setTimeout(() => {
+            const currentState = get();
+            if (!currentState.isExportSelectionMode) {
+              set({ exportSelectionStart: null, exportSelectionEnd: null });
+            }
+          }, 1000);
+        } else {
+          set({ isExportSelectionMode: false, exportSelectionStart: null, exportSelectionEnd: null });
+        }
       },
     }),
     { 

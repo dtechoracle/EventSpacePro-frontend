@@ -34,6 +34,7 @@ export function useAssetHandlers({
   const addAssetObject = useSceneStore((s) => s.addAssetObject);
   const selectAsset = useSceneStore((s) => s.selectAsset);
   const updateAsset = useSceneStore((s) => s.updateAsset);
+  const setDraggingAsset = useSceneStore((s) => (s as any).setDraggingAsset);
 
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>("");
@@ -60,6 +61,7 @@ export function useAssetHandlers({
 
       selectAsset(draggingId);
       mouseRefs.draggingAssetRef.current = draggingId;
+      if (setDraggingAsset) setDraggingAsset(true);
       // Record offset as asset - mouse; during drag, newPos = mouse + offset
       const { x: mouseX, y: mouseY } = clientToCanvasMM(
         (e as any).clientX,

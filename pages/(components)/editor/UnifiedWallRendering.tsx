@@ -85,6 +85,7 @@ export default function UnifiedWallRendering({ mmToPx }: UnifiedWallRenderingPro
   const currentWallSegments = useSceneStore((s) => s.currentWallSegments);
   const currentWallStart = useSceneStore((s) => s.currentWallStart);
   const currentWallTempEnd = useSceneStore((s) => s.currentWallTempEnd);
+  const isDraggingAsset = useSceneStore((s) => (s as any).isDraggingAsset);
 
   // Compute centerline segments for existing walls and the live preview
   const centerlineSegments = useMemo(() => {
@@ -148,6 +149,11 @@ export default function UnifiedWallRendering({ mmToPx }: UnifiedWallRenderingPro
   // Estimate a stroke/patch size from current wall thickness selection
   const visualThicknessPx = useSceneStore.getState().getCurrentWallThickness() || 2;
 
+
+  if (isDraggingAsset) {
+    // Skip heavy overlay work while dragging to keep walls responsive
+    return null;
+  }
 
   return (
     <svg className="absolute inset-0 pointer-events-none" style={{ zIndex: 5, overflow: "visible" }}>

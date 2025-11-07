@@ -1,10 +1,13 @@
 import { AssetInstance } from "@/store/sceneStore";
 import React from "react";
+import { calculateWallBoundingBox } from "@/lib/wallGeometry";
 
 interface AssetHandlesRendererProps {
   asset: AssetInstance;
   leftPx: number;
   topPx: number;
+  rotationDeg?: number;
+  centered?: boolean;
   onScaleHandleMouseDown: (
     e: React.MouseEvent,
     assetId: string,
@@ -17,10 +20,14 @@ export default function AssetHandlesRenderer({
   asset,
   leftPx,
   topPx,
+  rotationDeg = 0,
+  centered = false,
   onScaleHandleMouseDown,
   onRotationHandleMouseDown,
 }: AssetHandlesRendererProps) {
   if (!asset) return null;
+  // Lines use LineHandlesRenderer instead
+  if (asset.type === "line") return null;
 
   const handleSize = 14;
   const halfHandle = handleSize / 2;
@@ -38,7 +45,6 @@ export default function AssetHandlesRenderer({
     zIndex: 10,
     userSelect: "none",
     pointerEvents: "auto",
-    transform: "translate(-50%, -50%)",
   };
 
   const rotationStyle: React.CSSProperties = {
@@ -48,9 +54,14 @@ export default function AssetHandlesRenderer({
     cursor: "crosshair",
   };
 
-  // Compute scaled dimensions
-  const w = (asset.width ?? 100) * asset.scale;
-  const h = (asset.height ?? 100) * asset.scale;
+  // Compute dimensions from geometry for walls; fallback to width/height otherwise
+  let w = (asset.width ?? 100) * asset.scale;
+  let h = (asset.height ?? 100) * asset.scale;
+  if (asset.type === "wall-segments") {
+    const box = calculateWallBoundingBox(asset);
+    w = Math.max(box.width, 2) * (asset.scale || 1);
+    h = Math.max(box.height, 2) * (asset.scale || 1);
+  }
 
   // Compute handle positions relative to asset center
   const box = {
@@ -65,10 +76,14 @@ export default function AssetHandlesRenderer({
     <div
       style={{
         position: "absolute",
-        top: 0,
-        left: 0,
+        top: centered ? "50%" : 0,
+        left: centered ? "50%" : 0,
         pointerEvents: "none",
-        transform: `translate3d(${leftPx}px, ${topPx}px, 0)`,
+        transform: centered
+          ? `translate(-50%, -50%) rotate(${rotationDeg}deg)`
+          : `translate3d(${leftPx}px, ${topPx}px, 0) rotate(${rotationDeg}deg)`,
+        transformOrigin: "center center",
+        willChange: "transform",
       }}
     >
       {/* Resize Handles */}
@@ -76,28 +91,28 @@ export default function AssetHandlesRenderer({
         onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, "top-left")}
         style={{
           ...baseHandleStyle,
-          transform: `translate(${box.topLeft.x}px, ${box.topLeft.y}px)`,
+          transform: `translate(${box.topLeft.x}px, ${box.topLeft.y}px) translate(-50%, -50%)`,
         }}
       />
       <div
         onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, "top-right")}
         style={{
           ...baseHandleStyle,
-          transform: `translate(${box.topRight.x}px, ${box.topRight.y}px)`,
+          transform: `translate(${box.topRight.x}px, ${box.topRight.y}px) translate(-50%, -50%)`,
         }}
       />
       <div
         onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, "bottom-left")}
         style={{
           ...baseHandleStyle,
-          transform: `translate(${box.bottomLeft.x}px, ${box.bottomLeft.y}px)`,
+          transform: `translate(${box.bottomLeft.x}px, ${box.bottomLeft.y}px) translate(-50%, -50%)`,
         }}
       />
       <div
         onMouseDown={(e) => onScaleHandleMouseDown(e, asset.id, "bottom-right")}
         style={{
           ...baseHandleStyle,
-          transform: `translate(${box.bottomRight.x}px, ${box.bottomRight.y}px)`,
+          transform: `translate(${box.bottomRight.x}px, ${box.bottomRight.y}px) translate(-50%, -50%)`,
         }}
       />
 
@@ -106,7 +121,7 @@ export default function AssetHandlesRenderer({
         onMouseDown={(e) => onRotationHandleMouseDown(e, asset.id)}
         style={{
           ...rotationStyle,
-          transform: `translate(${box.rot.x}px, ${box.rot.y}px)`,
+          transform: `translate(${box.rot.x}px, ${box.rot.y}px) translate(-50%, -50%)`,
         }}
       />
     </div>
