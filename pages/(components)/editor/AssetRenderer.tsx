@@ -61,23 +61,43 @@ export default function AssetRenderer({
     return (
       <div className="relative">
         {/* Background layer */}
-        {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
-          <div
-            style={{
-              position: "absolute",
-              left: leftPx,
-              top: topPx,
-              width: (asset.width ?? 50) * asset.scale,
-              height: (asset.height ?? 50) * asset.scale,
-              backgroundColor: asset.backgroundColor,
-              borderRadius: borderRadius,
-              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
-              zIndex: (asset.zIndex || 0) - 1,
-            }}
-          />
-        )}
+        {/* {asset.backgroundColor && asset.backgroundColor !== "transparent" && ( */}
+        {/*   <div */}
+        {/*     style={{ */}
+        {/*       position: "absolute", */}
+        {/*       left: leftPx, */}
+        {/*       top: topPx, */}
+        {/*       width: (asset.width ?? 50) * asset.scale, */}
+        {/*       height: (asset.height ?? 50) * asset.scale, */}
+        {/*       backgroundColor: asset.backgroundColor, */}
+        {/*       borderRadius: borderRadius, */}
+        {/*       transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`, */}
+        {/*       zIndex: (asset.zIndex || 0) - 1, */}
+        {/*     }} */}
+        {/*   /> */}
+        {/* )} */}
 
         {/* Main shape */}
+        {/* <div */}
+        {/*   onMouseDown={(e) => onAssetMouseDown(e, asset.id)} */}
+        {/*   style={{ */}
+        {/*     position: "absolute", */}
+        {/*     left: leftPx, */}
+        {/*     top: topPx, */}
+        {/*     width: (asset.width ?? 50) * asset.scale, */}
+        {/*     height: (asset.height ?? 50) * asset.scale, */}
+        {/*     backgroundColor: asset.fillColor ?? "transparent", */}
+        {/*     border: `${asset.strokeWidth ?? 2}px solid ${asset.strokeColor ?? "#000000" */}
+        {/*       }`, */}
+        {/*     borderRadius: borderRadius, */}
+        {/*     transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`, */}
+        {/*     cursor: "move", */}
+        {/*     zIndex: asset.zIndex || 0, */}
+        {/*     boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined, */}
+        {/*     transition: isCopied ? "box-shadow 0.3s ease" : undefined, */}
+        {/*   }} */}
+        {/* /> */}
+
         <div
           onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
           style={{
@@ -86,7 +106,10 @@ export default function AssetRenderer({
             top: topPx,
             width: (asset.width ?? 50) * asset.scale,
             height: (asset.height ?? 50) * asset.scale,
-            backgroundColor: asset.fillColor ?? "transparent",
+            backgroundColor:
+              asset.backgroundColor && asset.backgroundColor !== "transparent"
+                ? asset.backgroundColor
+                : asset.fillColor ?? "transparent",
             border: `${asset.strokeWidth ?? 2}px solid ${asset.strokeColor ?? "#000000"
               }`,
             borderRadius: borderRadius,
@@ -97,6 +120,7 @@ export default function AssetRenderer({
             transition: isCopied ? "box-shadow 0.3s ease" : undefined,
           }}
         />
+
 
 
         {/* Multi-select indicator */}
@@ -697,27 +721,27 @@ export default function AssetRenderer({
       )}
 
       {/* Main shape */}
-<div
-  onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
-  style={{
-    position: "absolute",
-    left: leftPx,
-    top: topPx,
-    width: (asset.width ?? 50) * asset.scale,
-    height: (asset.height ?? 50) * asset.scale,
-    backgroundColor:
-      asset.backgroundColor && asset.backgroundColor !== "transparent"
-        ? asset.backgroundColor
-        : asset.fillColor ?? "transparent",
-    border: `${asset.strokeWidth ?? 2}px solid ${asset.strokeColor ?? "#000000"}`,
-    borderRadius: asset.type === "circle" ? "50%" : "0%",
-    transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
-    cursor: "move",
-    zIndex: asset.zIndex || 0,
-    boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
-    transition: isCopied ? "box-shadow 0.3s ease" : undefined,
-  }}
->
+      <div
+        onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
+        style={{
+          position: "absolute",
+          left: leftPx,
+          top: topPx,
+          width: (asset.width ?? 50) * asset.scale,
+          height: (asset.height ?? 50) * asset.scale,
+          backgroundColor:
+            asset.backgroundColor && asset.backgroundColor !== "transparent"
+              ? asset.backgroundColor
+              : asset.fillColor ?? "transparent",
+          border: `${asset.strokeWidth ?? 2}px solid ${asset.strokeColor ?? "#000000"}`,
+          borderRadius: asset.type === "circle" ? "50%" : "0%",
+          transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+          cursor: "move",
+          zIndex: asset.zIndex || 0,
+          boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
+          transition: isCopied ? "box-shadow 0.3s ease" : undefined,
+        }}
+      >
 
         <Icon
           size={Math.min(
