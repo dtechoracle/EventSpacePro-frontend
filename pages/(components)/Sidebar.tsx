@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { useUserStore } from "@/store/userStore";
+import { FiLogOut } from "react-icons/fi";
 
 const Sidebar = () => {
   const router = useRouter();
@@ -18,6 +19,11 @@ const Sidebar = () => {
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
+
+  const logout = () => {
+    localStorage.clear()
+    router.push("/auth/login")
+  }
 
   // Load persisted state from localStorage on component mount
   useEffect(() => {
@@ -110,9 +116,8 @@ const Sidebar = () => {
             {links.map((item, index) => (
               <div
                 key={index}
-                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${
-                  item.route === pathname ? "bg-black/5" : ""
-                }`}
+                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${item.route === pathname ? "bg-black/5" : ""
+                  }`}
                 onClick={() => router.push(item.route)}
               >
                 <Image src={item.icon} alt={item.text} width={20} height={20} />
@@ -136,9 +141,8 @@ const Sidebar = () => {
 
         <div className="w-full gap-2">
           <div
-            className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${
-              pathname === "dashboard/settings" ? "bg-black/5" : ""
-            }`}
+            className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${pathname === "dashboard/settings" ? "bg-black/5" : ""
+              }`}
           >
             <Image
               src={"/assets/sidebar/Gear.svg"}
@@ -183,38 +187,62 @@ const Sidebar = () => {
             </AnimatePresence>
           </div>
 
-          <div className="bg-white rounded-full flex justify-between items-center p-2">
-            <div className="flex gap-2 items-center">
-              <Image
-                src={"/assets/sidebar/sample-profile.svg"}
-                alt="Profile"
-                width={40}
-                height={40}
-              />
+          <div>
+            {/* Profile Section */}
+            <div className="bg-white rounded-full flex justify-between items-center p-2">
+              <div className="flex gap-2 items-center">
+                <Image
+                  src={"/assets/sidebar/sample-profile.svg"}
+                  alt="Profile"
+                  width={40}
+                  height={40}
+                />
+                <AnimatePresence>
+                  {!isCollapsed && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <h1 className="font-semibold text-sm">
+                        {user?.firstName} {user?.lastName}
+                      </h1>
+                      <p className="text-xs">Basic plan</p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+              {!isCollapsed && (
+                <Image
+                  src={"/assets/sidebar/chevron-down.svg"}
+                  alt="Dropdown"
+                  width={20}
+                  height={20}
+                />
+              )}
+            </div>
+
+            {/* Logout Button */}
+            <button
+              onClick={logout}
+              className="mt-3 flex items-center gap-2 text-red-600 hover:bg-red-50 transition-colors w-full p-2 rounded-lg"
+            >
+              <FiLogOut size={20} />
               <AnimatePresence>
                 {!isCollapsed && (
-                  <motion.div
+                  <motion.span
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -10 }}
                     transition={{ duration: 0.2 }}
+                    className="text-sm font-medium"
                   >
-                    <h1 className="font-semibold text-sm">
-                      {user?.firstName} {user?.lastName}
-                    </h1>
-                    <p className="text-xs">Basic plan</p>
-                  </motion.div>
+                    Logout
+                  </motion.span>
                 )}
               </AnimatePresence>
-            </div>
-            {!isCollapsed && (
-              <Image
-                src={"/assets/sidebar/chevron-down.svg"}
-                alt="Dropdown"
-                width={20}
-                height={20}
-              />
-            )}
+            </button>
           </div>
         </div>
 
@@ -230,9 +258,8 @@ const Sidebar = () => {
       {/* Mobile Sidebar (unchanged) */}
       <button
         onClick={() => setOpen(!open)}
-        className={`fixed top-1 left-1 z-50 p-3 rounded-lg shadow-lg bg-[var(--accent)] text-white lg:hidden transition-transform ${
-          open ? "translate-x-52" : "translate-x-0"
-        }`}
+        className={`fixed top-1 left-1 z-50 p-3 rounded-lg shadow-lg bg-[var(--accent)] text-white lg:hidden transition-transform ${open ? "translate-x-52" : "translate-x-0"
+          }`}
       >
         {open ? <X size={24} /> : <Menu size={24} />}
       </button>
@@ -259,9 +286,8 @@ const Sidebar = () => {
                 {links.map((item, index) => (
                   <div
                     key={index}
-                    className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${
-                      item.route === pathname ? "bg-black/5" : ""
-                    }`}
+                    className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${item.route === pathname ? "bg-black/5" : ""
+                      }`}
                     onClick={() => {
                       router.push(item.route);
                       setOpen(false);
@@ -283,9 +309,8 @@ const Sidebar = () => {
 
             <div className="w-full gap-2">
               <div
-                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${
-                  pathname === "dashboard/settings" ? "bg-black/5" : ""
-                }`}
+                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${pathname === "dashboard/settings" ? "bg-black/5" : ""
+                  }`}
               >
                 <Image
                   src={"/assets/sidebar/Gear.svg"}
