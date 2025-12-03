@@ -21,12 +21,12 @@ interface ApiResponse {
 
 // Shimmer loading component
 const EventCardShimmer = () => (
-  <div className="relative w-full h-60 rounded-3xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200">
+  <div className="relative w-full h-60 p-12 rounded-3xl overflow-hidden bg-gradient-to-br from-[#E0EAFF] via-[#C7D2FE] to-[#A5B4FC]">
     {/* Background shimmer - matching the actual card's gradient */}
-    <div className="absolute inset-0 bg-gradient-to-br from-cyan-100/30 to-yellow-100/30">
-      <div className="absolute -top-10 -left-10 w-40 h-40 bg-cyan-200/40 rounded-full blur-3xl opacity-70" />
-      <div className="absolute top-10 right-10 w-32 h-32 bg-yellow-200/40 rounded-full blur-3xl opacity-70" />
-      <div className="absolute bottom-10 left-1/3 w-32 h-32 bg-blue-200/40 rounded-full blur-3xl opacity-70" />
+    <div className="absolute inset-0 bg-gradient-to-br from-blue-100/40 via-indigo-100/40 to-slate-100/50">
+      <div className="absolute -top-10 -left-10 w-40 h-40 bg-blue-300/60 rounded-full blur-3xl opacity-80" />
+      <div className="absolute top-10 right-10 w-32 h-32 bg-sky-300/60 rounded-full blur-3xl opacity-70" />
+      <div className="absolute bottom-10 left-1/3 w-32 h-32 bg-indigo-300/60 rounded-full blur-3xl opacity-70" />
     </div>
 
     {/* Shimmer animation overlay */}
@@ -64,38 +64,40 @@ const Events = () => {
 
   return (
     <MainLayout>
-      <div className="w-full min-h-screen">
-        <TopBar mainText={`Project ${slug}`} subText="Events" type="event" />
+      <div className="w-full min-h-screen bg-gray-50/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+          <TopBar mainText={`Project ${slug}`} subText="Events" type="event" />
 
-        {isLoading && (
-          <div className="grid grid-cols-4 gap-3 pl-6">
-            {Array.from({ length: 8 }).map((_, index) => (
-              <EventCardShimmer key={index} />
-            ))}
-          </div>
-        )}
+          {isLoading && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <EventCardShimmer key={index} />
+              ))}
+            </div>
+          )}
 
-        {error && (
-          <div className="flex justify-center items-center h-64">
-            <p className="text-red-500">Error loading events</p>
-          </div>
-        )}
+          {error && (
+            <div className="flex h-64 items-center justify-center rounded-2xl bg-white shadow">
+              <p className="text-red-500">Error loading events</p>
+            </div>
+          )}
 
-        {data && data.data && (
-          <div className="grid grid-cols-4 gap-3 pl-6">
-            {data.data.map((event) => (
-              <EventCard key={event?._id || Math.random()} event={event} />
-            ))}
-          </div>
-        )}
+          {data && data.data && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {data.data.map((event) => (
+                <EventCard key={event?._id || Math.random()} event={event} />
+              ))}
+            </div>
+          )}
 
-        {data && data.data && data.data.length === 0 && (
-          <div className="flex justify-center items-center h-64">
-            <p className="text-gray-500">
-              No events found. Create your first event!
-            </p>
-          </div>
-        )}
+          {data && data.data && data.data.length === 0 && (
+            <div className="flex h-64 items-center justify-center rounded-2xl bg-white shadow">
+              <p className="text-gray-500">
+                No events found. Create your first event!
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </MainLayout>
   );

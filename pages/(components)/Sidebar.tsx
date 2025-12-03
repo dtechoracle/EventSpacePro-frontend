@@ -227,15 +227,23 @@ const Sidebar = () => {
         </button>
       </motion.aside>
 
-      {/* Mobile Sidebar (unchanged) */}
-      <button
-        onClick={() => setOpen(!open)}
-        className={`fixed top-1 left-1 z-50 p-3 rounded-lg shadow-lg bg-[var(--accent)] text-white lg:hidden transition-transform ${
-          open ? "translate-x-52" : "translate-x-0"
-        }`}
-      >
-        {open ? <X size={24} /> : <Menu size={24} />}
-      </button>
+      {/* Mobile top bar + toggle */}
+      <header className="fixed inset-x-0 top-0 z-40 flex items-center justify-between bg-white/90 px-4 py-3 shadow-sm backdrop-blur lg:hidden">
+        <div className="flex items-center gap-2">
+          <Image
+            alt="EventSpacePro"
+            src={"/assets/mainLogo.svg"}
+            width={120}
+            height={32}
+          />
+        </div>
+        <button
+          onClick={() => setOpen(!open)}
+          className="inline-flex items-center justify-center rounded-md bg-[var(--accent)] p-2 text-white shadow"
+        >
+          {open ? <X size={22} /> : <Menu size={22} />}
+        </button>
+      </header>
 
       <AnimatePresence>
         {open && (
@@ -244,7 +252,7 @@ const Sidebar = () => {
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="fixed top-0 left-0 h-full w-64 bg-[#F6F4FA] px-3 py-8 flex flex-col justify-between z-40 lg:hidden"
+            className="fixed top-0 left-0 z-40 flex h-full w-64 flex-col justify-between bg-[#F6F4FA] px-3 py-8 pt-16 lg:hidden"
           >
             <div>
               <div className="w-full flex">

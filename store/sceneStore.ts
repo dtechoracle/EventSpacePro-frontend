@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { PAPER_SIZES, PaperSize } from "@/lib/paperSizes";
+import { calculateShapeAnchors, calculateAssetAnchors, AnchorType } from "@/utils/snapAnchors";
 
 export type AssetInstance = {
   id: string;
@@ -80,22 +81,20 @@ type SceneState = {
   eventData: EventData | null;
   isInitialized: boolean;
   hasUnsavedChanges: boolean;
-  // Runtime interaction flags
-  isDraggingAsset: boolean;
   showGrid: boolean;
   showDebugOutlines?: boolean;
   gridSize: number; // Grid size in mm
   snapToGridEnabled: boolean; // Whether to snap to grid
-  
+
   // Grid size options
   availableGridSizes: number[]; // Available grid sizes in mm
   selectedGridSizeIndex: number; // Index of currently selected grid size
-  
+
   // Wall type and size options
-  wallType: 'thin' | 'standard' | 'thick' | 'extra-thick'; // Current wall type
+      wallType: 'partition-75' | 'partition-100' | 'enclosure-150' | 'enclosure-225' | 'thin' | 'standard' | 'thick' | 'extra-thick'; // Current wall type
   wallTool?: 'wall' | 'cross';
   availableWallTypes: Array<{
-    id: 'thin' | 'standard' | 'thick' | 'extra-thick';
+    id: 'partition-75' | 'partition-100' | 'enclosure-150' | 'enclosure-225' | 'thin' | 'standard' | 'thick' | 'extra-thick';
     label: string;
     thickness: number; // Thickness in mm
   }>;
@@ -149,6 +148,13 @@ type SceneState = {
   open3DOverlay?: () => void;
   close3DOverlay?: () => void;
 
+  // Snap to anchor state
+  snapToAnchorMode: boolean;
+  snapTargetAssetId: string | null;
+  snapTargetAnchor: string | null;
+  snapSourceAssetId: string | null;
+  snapSourceAnchor: string | null;
+
   // Multi-select state
   selectedAssetIds: string[];
   isRectangularSelecting: boolean;
@@ -162,13 +168,17 @@ type SceneState = {
     endY: number;
   } | null;
 
-  // Group management state
-  createGroupFromSelection: boolean;
-
   // Export selection state
   isExportSelectionMode: boolean;
-  exportSelectionStart: { x: number; y: number } | null;
-  exportSelectionEnd: { x: number; y: number } | null;
+  exportSelectionBox: {
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+  } | null;
+
+  // Group management state
+  createGroupFromSelection: boolean;
 
   // Methods
   setCanvas: (size: PaperSize) => void;
@@ -184,13 +194,13 @@ type SceneState = {
   setGridSize: (size: number) => void;
   toggleSnapToGrid: () => void;
   snapToGrid: (x: number, y: number) => { x: number; y: number };
-  
+
   // Grid size selection methods
   setSelectedGridSizeIndex: (index: number) => void;
   getCurrentGridSize: () => number;
-  
+
   // Wall type selection methods - Updated
-  setWallType: (type: 'thin' | 'standard' | 'thick' | 'extra-thick') => void;
+  setWallType: (type: 'partition-75' | 'partition-100' | 'enclosure-150' | 'enclosure-225' | 'thin' | 'standard' | 'thick' | 'extra-thick') => void;
   setWallTool: (tool: 'wall' | 'cross') => void;
   getCurrentWallThickness: () => number;
   setChairSettings: (settings: { numChairs: number; radius: number }) => void;
@@ -204,9 +214,6 @@ type SceneState = {
   syncToEventData: () => AssetInstance[];
   markAsSaved: () => void;
   hasHydrated: boolean;
-
-  // Dragging flag setter
-  setDraggingAsset: (dragging: boolean) => void;
 
   // Pen tool methods
   setPenMode: (enabled: boolean) => void;
@@ -228,6 +235,12 @@ type SceneState = {
   // Wall moving/snap methods
   getWallSnapDelta: (assetId: string, proposedCenter: { x: number; y: number }) => { dx: number; dy: number };
   finishWallMove: (assetId: string, finalCenter: { x: number; y: number }) => void;
+  // Snap to anchor methods
+  setSnapToAnchorMode: (enabled: boolean) => void;
+  setSnapTarget: (assetId: string | null, anchor: string | null) => void;
+  setSnapSource: (assetId: string | null, anchor: string | null) => void;
+  performSnapToAnchor: () => void;
+  clearSnapToAnchor: () => void;
   // New draft methods
   startWallDraft: (start: { x: number; y: number }) => void;
   addWallDraftNode: (pt: { x: number; y: number }) => void;
@@ -261,15 +274,18 @@ type SceneState = {
   startRectangularSelectionDrag: (startX: number, startY: number) => void;
   updateRectangularSelectionDrag: (endX: number, endY: number) => void;
   finishRectangularSelectionDrag: () => void;
+  
+  // Export selection methods
+  startExportSelection: (x: number, y: number) => void;
+  updateExportSelection: (x: number, y: number) => void;
+  finishExportSelection: () => void;
+  exportSelectionStart: { x: number; y: number } | null;
+  exportSelectionEnd: { x: number; y: number } | null;
+  
   setCreateGroupFromSelection: (enabled: boolean) => void;
   createGroupFromSelectedAssets: () => void;
   groupSelectedAssets: () => void;
   ungroupAsset: (groupId: string) => void;
-  // Export selection methods
-  setExportSelectionMode: (enabled: boolean) => void;
-  startExportSelection: (startX: number, startY: number) => void;
-  updateExportSelection: (endX: number, endY: number) => void;
-  finishExportSelection: () => void;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -283,20 +299,26 @@ export const useSceneStore = create<SceneState>()(
       isInitialized: false,
       hasUnsavedChanges: false,
       hasHydrated: false,
-      isDraggingAsset: false,
       showGrid: false,
-      showDebugOutlines: true,
-      gridSize: 10, // Default 10mm grid
+      showDebugOutlines: false,
+      // Grid in millimetres (mm). We treat 1000mm = 1m.
+      // Available sizes in meters: 0.1m, 0.5m, 1m, 2m, 5m
+      gridSize: 1000, // Default 1m grid
       snapToGridEnabled: false,
-      availableGridSizes: [5, 10, 25, 50, 100],
-      selectedGridSizeIndex: 1,
-      wallType: 'thin',
+      availableGridSizes: [100, 500, 1000, 2000, 5000],
+      selectedGridSizeIndex: 2, // index of 1000mm (1m)
+      wallType: 'partition-75',
       wallTool: 'wall',
       availableWallTypes: [
-        { id: 'thin', label: 'Partition (75mm)', thickness: 1 },
-        { id: 'standard', label: 'Partition (100mm)', thickness: 2 },
-        { id: 'thick', label: 'Enclosure Wall (150mm)', thickness: 5 },
-        { id: 'extra-thick', label: 'Enclosure Wall (225mm)', thickness: 8 }
+        { id: 'partition-75', label: 'Partition (75mm)', thickness: 75 },
+        { id: 'partition-100', label: 'Partition (100mm)', thickness: 100 },
+        { id: 'enclosure-150', label: 'Enclosure Wall (150mm)', thickness: 150 },
+        { id: 'enclosure-225', label: 'Enclosure Wall (225mm)', thickness: 225 },
+        // Legacy support for old type names
+        { id: 'thin', label: 'Partition (75mm)', thickness: 75 },
+        { id: 'standard', label: 'Partition (100mm)', thickness: 100 },
+        { id: 'thick', label: 'Enclosure Wall (150mm)', thickness: 150 },
+        { id: 'extra-thick', label: 'Enclosure Wall (225mm)', thickness: 225 }
       ],
       shapeMode: null,
       shapeStart: null,
@@ -323,6 +345,11 @@ export const useSceneStore = create<SceneState>()(
       duplicationPattern: null,
       // 3D overlay default state
       is3DOverlayOpen: false,
+      snapToAnchorMode: false,
+      snapTargetAssetId: null,
+      snapTargetAnchor: null,
+      snapSourceAssetId: null,
+      snapSourceAnchor: null,
       selectedAssetIds: [],
       isRectangularSelecting: false,
       isRectangularSelectionMode: false,
@@ -330,8 +357,10 @@ export const useSceneStore = create<SceneState>()(
       rectangularSelectionEnd: null,
       selectionBox: null,
       createGroupFromSelection: false,
-      // Export selection
+      
+      // Export selection state
       isExportSelectionMode: false,
+      exportSelectionBox: null,
       exportSelectionStart: null,
       exportSelectionEnd: null,
 
@@ -360,8 +389,8 @@ export const useSceneStore = create<SceneState>()(
         const id = `${type}-${Date.now()}`;
 
         // Get the next zIndex (highest existing zIndex + 1, or 1 if no assets exist)
-        const nextZIndex = state.assets.length > 0 
-          ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1 
+        const nextZIndex = state.assets.length > 0
+          ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1
           : 1;
 
         // Use universal bg-gray-100 background for all assets
@@ -391,7 +420,7 @@ export const useSceneStore = create<SceneState>()(
           selectedAssetId: id,
           hasUnsavedChanges: true,
         });
-        
+
         // Save to history after adding asset
         setTimeout(() => get().saveToHistory(), 0);
       },
@@ -402,22 +431,22 @@ export const useSceneStore = create<SceneState>()(
           if (state.wallDrawingMode && assetObj.type !== "wall-segments") {
             return { hasUnsavedChanges: state.hasUnsavedChanges } as any;
           }
-          
+
           // Ensure the asset has a zIndex (use existing or assign next available)
           const assetWithZIndex = {
             ...assetObj,
-            zIndex: assetObj.zIndex ?? (state.assets.length > 0 
-              ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1 
+            zIndex: assetObj.zIndex ?? (state.assets.length > 0
+              ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1
               : 1)
           };
-          
+
           return {
             assets: [...state.assets, assetWithZIndex],
             selectedAssetId: assetObj.id,
             hasUnsavedChanges: true,
           };
         });
-        
+
         // Save to history after adding asset object
         setTimeout(() => get().saveToHistory(), 0);
       },
@@ -427,11 +456,11 @@ export const useSceneStore = create<SceneState>()(
         const updatedAssets = state.assets.map((a) => {
           if (a.id === id) {
             const updatedAsset = { ...a, ...updates };
-            
+
             // If this is a group and we're updating scale/width/height/rotation, update all child assets
             if (a.isGroup && a.groupAssets && (updates.scale !== undefined || updates.width !== undefined || updates.height !== undefined || updates.rotation !== undefined)) {
               let scaleRatio = 1;
-              
+
               if (updates.scale !== undefined) {
                 scaleRatio = updates.scale / a.scale;
               } else if (updates.width !== undefined) {
@@ -439,10 +468,10 @@ export const useSceneStore = create<SceneState>()(
               } else if (updates.height !== undefined) {
                 scaleRatio = a.height ? updates.height / a.height : 1;
               }
-              
+
               const updatedGroupAssets = a.groupAssets.map(childAsset => {
                 let updatedChild = { ...childAsset };
-                
+
                 // Apply scaling if needed
                 if (scaleRatio !== 1) {
                   updatedChild = {
@@ -452,25 +481,25 @@ export const useSceneStore = create<SceneState>()(
                     y: childAsset.y * scaleRatio,
                   };
                 }
-                
+
                 // Don't apply rotation to child assets - they should rotate as a group
                 // The group rotation will be applied during rendering
-                
+
                 return updatedChild;
               });
-              
+
               return {
                 ...updatedAsset,
                 groupAssets: updatedGroupAssets,
               };
             }
-            
+
             return updatedAsset;
           }
           return a;
         });
         set({ assets: updatedAssets, hasUnsavedChanges: true });
-        
+
         // Save to history after updating asset
         setTimeout(() => get().saveToHistory(), 0);
 
@@ -479,7 +508,7 @@ export const useSceneStore = create<SceneState>()(
         const moved = updates.x !== undefined || updates.y !== undefined || updates.rotation !== undefined || updates.width !== undefined || updates.scale !== undefined;
         const door = updatedAssets.find(a => a.id === id);
         if (!door || door.type !== 'double-door' || !moved) return;
-        
+
         // Skip wall opening during active dragging to prevent visual artifacts
         // This will be handled by a separate method when dragging completes
         return;
@@ -491,7 +520,7 @@ export const useSceneStore = create<SceneState>()(
           selectedAssetId: state.selectedAssetId === id ? null : state.selectedAssetId,
           hasUnsavedChanges: true,
         }));
-        
+
         // Save to history after removing asset
         setTimeout(() => get().saveToHistory(), 0);
       },
@@ -568,13 +597,133 @@ export const useSceneStore = create<SceneState>()(
       open3DOverlay: () => set({ is3DOverlayOpen: true }),
       close3DOverlay: () => set({ is3DOverlayOpen: false }),
 
+      // Snap to anchor methods
+      setSnapToAnchorMode: (enabled) => set({
+        snapToAnchorMode: enabled,
+        snapTargetAssetId: enabled ? null : null,
+        snapTargetAnchor: enabled ? null : null,
+        snapSourceAssetId: enabled ? null : null,
+        snapSourceAnchor: enabled ? null : null,
+      }),
+      setSnapTarget: (assetId, anchor) => set({
+        snapTargetAssetId: assetId,
+        snapTargetAnchor: anchor
+      }),
+      setSnapSource: (assetId, anchor) => set({
+        snapSourceAssetId: assetId,
+        snapSourceAnchor: anchor
+      }),
+      clearSnapToAnchor: () => set({
+        snapTargetAssetId: null,
+        snapTargetAnchor: null,
+        snapSourceAssetId: null,
+        snapSourceAnchor: null,
+      }),
+      performSnapToAnchor: () => {
+        const state = get();
+        if (!state.snapTargetAssetId || !state.snapTargetAnchor ||
+          !state.snapSourceAssetId || !state.snapSourceAnchor) {
+          return;
+        }
+
+        const targetAsset = state.assets.find(a => a.id === state.snapTargetAssetId);
+        const sourceAsset = state.assets.find(a => a.id === state.snapSourceAssetId);
+
+        if (!targetAsset || !sourceAsset) return;
+
+        // Calculate target anchor position
+        const isTargetShape = targetAsset.type === 'square' || targetAsset.type === 'circle';
+        const targetAnchors = isTargetShape
+          ? calculateShapeAnchors({
+            x: targetAsset.x,
+            y: targetAsset.y,
+            width: targetAsset.width || 0,
+            height: targetAsset.height || 0
+          } as any)
+          : calculateAssetAnchors({
+            x: targetAsset.x,
+            y: targetAsset.y,
+            width: targetAsset.width || 0,
+            height: targetAsset.height || 0,
+            scale: targetAsset.scale || 1
+          } as any);
+
+        const targetAnchor = targetAnchors.find(a => a.id === (state.snapTargetAnchor as AnchorType));
+        if (!targetAnchor) return;
+
+        // Calculate source anchor position (current)
+        const isSourceShape = sourceAsset.type === 'square' || sourceAsset.type === 'circle';
+        const sourceAnchors = isSourceShape
+          ? calculateShapeAnchors({
+            x: sourceAsset.x,
+            y: sourceAsset.y,
+            width: sourceAsset.width || 0,
+            height: sourceAsset.height || 0
+          } as any)
+          : calculateAssetAnchors({
+            x: sourceAsset.x,
+            y: sourceAsset.y,
+            width: sourceAsset.width || 0,
+            height: sourceAsset.height || 0,
+            scale: sourceAsset.scale || 1
+          } as any);
+
+        const sourceAnchor = sourceAnchors.find(a => a.id === (state.snapSourceAnchor as AnchorType));
+        if (!sourceAnchor) return;
+
+        // Calculate offset to move source anchor to target anchor
+        // The offset is the difference between where we want the source anchor to be (targetAnchor)
+        // and where it currently is (sourceAnchor)
+        const dx = targetAnchor.x - sourceAnchor.x;
+        const dy = targetAnchor.y - sourceAnchor.y;
+
+        // Calculate new position for source asset
+        const newX = sourceAsset.x + dx;
+        const newY = sourceAsset.y + dy;
+
+        // Update source asset position
+        state.updateAsset(state.snapSourceAssetId, {
+          x: newX,
+          y: newY
+        });
+
+        // Verify the snap worked by recalculating
+        // (This is just for debugging - in production we trust the calculation)
+        const verifyAnchors = isSourceShape
+          ? calculateShapeAnchors({
+            x: newX,
+            y: newY,
+            width: sourceAsset.width || 0,
+            height: sourceAsset.height || 0
+          } as any)
+          : calculateAssetAnchors({
+            x: newX,
+            y: newY,
+            width: sourceAsset.width || 0,
+            height: sourceAsset.height || 0,
+            scale: sourceAsset.scale || 1
+          } as any);
+
+        const verifyAnchor = verifyAnchors.find(a => a.id === (state.snapSourceAnchor as AnchorType));
+        if (verifyAnchor) {
+          const finalDist = Math.hypot(verifyAnchor.x - targetAnchor.x, verifyAnchor.y - targetAnchor.y);
+          // If distance is more than 1mm, log a warning (but still complete the snap)
+          if (finalDist > 1) {
+            console.warn(`Snap accuracy: ${finalDist.toFixed(2)}mm off target`);
+          }
+        }
+
+        // Clear snap state
+        state.clearSnapToAnchor();
+      },
+
       toggleSnapToGrid: () => set((state) => ({ snapToGridEnabled: !state.snapToGridEnabled })),
 
       // Grid snapping utility
       snapToGrid: (x: number, y: number) => {
         const state = get();
         if (!state.snapToGridEnabled) return { x, y };
-        
+
         const gridSize = state.gridSize;
         return {
           x: Math.round(x / gridSize) * gridSize,
@@ -586,7 +735,7 @@ export const useSceneStore = create<SceneState>()(
       setSelectedGridSizeIndex: (index: number) => {
         const state = get();
         if (index >= 0 && index < state.availableGridSizes.length) {
-          set({ 
+          set({
             selectedGridSizeIndex: index,
             gridSize: state.availableGridSizes[index]
           });
@@ -599,7 +748,7 @@ export const useSceneStore = create<SceneState>()(
       },
 
       // Wall type selection methods
-      setWallType: (type: 'thin' | 'standard' | 'thick' | 'extra-thick') => {
+      setWallType: (type: 'partition-75' | 'partition-100' | 'enclosure-150' | 'enclosure-225' | 'thin' | 'standard' | 'thick' | 'extra-thick') => {
         set({ wallType: type });
       },
 
@@ -607,8 +756,12 @@ export const useSceneStore = create<SceneState>()(
 
       getCurrentWallThickness: () => {
         const state = get();
-        const wallType = state.availableWallTypes.find(wt => wt.id === state.wallType);
-        return wallType?.thickness || 1; // Default to 1px if not found
+        const wallTypeConfig = state.availableWallTypes.find(wt => wt.id === state.wallType);
+        if (!wallTypeConfig) {
+          console.warn('Wall type not found:', state.wallType, 'Available types:', state.availableWallTypes.map(wt => wt.id));
+          return 75; // Default to 75mm if not found
+        }
+        return wallTypeConfig.thickness;
       },
 
       setChairSettings: (settings: { numChairs: number; radius: number }) => {
@@ -631,14 +784,14 @@ export const useSceneStore = create<SceneState>()(
         const centerY = (start.y + end.y) / 2;
         const rawWidthMm = Math.abs(end.x - start.x);
         const rawHeightMm = Math.abs(end.y - start.y);
-        
+
         // Use the exact same calculation as the preview
         // Preview: w = Math.abs(x2 - x1), then w * mmToPx
         // Don't apply minimum constraints here - let the preview handle it
         const actualMmToPx = 2.000021; // This matches the preview conversion factor
         const width = rawWidthMm * actualMmToPx;
         const height = rawHeightMm * actualMmToPx;
-        
+
         let newAsset: AssetInstance | null = null;
         if (state.shapeMode === 'rectangle') {
           newAsset = {
@@ -674,7 +827,7 @@ export const useSceneStore = create<SceneState>()(
           // Calculate line length and angle
           const lineLength = Math.max(2, Math.sqrt(width * width + height * height)); // Minimum 2mm length
           const angle = Math.atan2(end.y - start.y, end.x - start.x) * (180 / Math.PI);
-          
+
           newAsset = {
             id: `line-${Date.now()}`,
             type: 'line',
@@ -706,7 +859,6 @@ export const useSceneStore = create<SceneState>()(
         eventData: null,
         isInitialized: false,
         hasUnsavedChanges: false,
-        isDraggingAsset: false,
         isPenMode: false,
         isWallMode: false,
         isDrawing: false,
@@ -719,9 +871,6 @@ export const useSceneStore = create<SceneState>()(
       }),
 
       markAsSaved: () => set({ hasUnsavedChanges: false }),
-
-      // Dragging state for performance-sensitive rendering
-      setDraggingAsset: (dragging: boolean) => set({ isDraggingAsset: dragging }),
 
       syncToEventData: () => {
         const state = get();
@@ -800,13 +949,13 @@ export const useSceneStore = create<SceneState>()(
         // Compute center and dimensions
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         nodes.forEach(n => { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); });
-        const cx = (minX + maxX) / 2; 
+        const cx = (minX + maxX) / 2;
         const cy = (minY + maxY) / 2;
         const wallWidth = maxX - minX;
         const wallHeight = maxY - minY;
 
-        // Use a neutral zIndex so walls can receive pointer events and be selectable
-        const nextZIndex = 0;
+        // Get a low zIndex for wall assets to ensure they render behind other assets
+        const nextZIndex = -100; // Walls should render behind other assets
 
         const wallAsset: AssetInstance = {
           id: `wall-segments-${Date.now()}`,
@@ -825,7 +974,7 @@ export const useSceneStore = create<SceneState>()(
           lineColor: "#000000",
           backgroundColor: "#f3f4f6" // bg-gray-100
         };
-        
+
         // Store debug info for wall debugging
         (wallAsset as any).debugInfo = {
           originalNodes: nodes,
@@ -862,7 +1011,7 @@ export const useSceneStore = create<SceneState>()(
         if (state.currentWallStart && state.currentWallTempEnd) {
           // Do not snap endpoints to preserve exact drawn length
           const snapTol = 0; // mm (no snapping)
-          const snapToNearestEndpoint = (pt: {x:number;y:number}) => {
+          const snapToNearestEndpoint = (pt: { x: number; y: number }) => {
             let best = pt;
             let bestD = Infinity;
             for (const a of state.assets) {
@@ -1482,6 +1631,8 @@ export const useSceneStore = create<SceneState>()(
             // Get a low zIndex for wall assets to ensure they render behind other assets
             const nextZIndex = -100; // Walls should render behind other assets
 
+            const currentThickness = get().getCurrentWallThickness();
+            
             const wallAsset: AssetInstance = {
               id: `wall-segments-${Date.now()}`,
               type: "wall-segments",
@@ -1493,7 +1644,7 @@ export const useSceneStore = create<SceneState>()(
               wallSegments: undefined,
               wallNodes: nodes,
               wallEdges: edges,
-              wallThickness: get().getCurrentWallThickness(), // Use selected wall thickness
+              wallThickness: currentThickness, // Use selected wall thickness in mm
               wallGap: 8,
               lineColor: "#000000",
               backgroundColor: "#f3f4f6" // bg-gray-100
@@ -1518,9 +1669,9 @@ export const useSceneStore = create<SceneState>()(
             };
 
             const lineIntersection = (
-              p1: {x:number;y:number}, p2: {x:number;y:number},
-              p3: {x:number;y:number}, p4: {x:number;y:number}
-            ): {x:number;y:number} | null => {
+              p1: { x: number; y: number }, p2: { x: number; y: number },
+              p3: { x: number; y: number }, p4: { x: number; y: number }
+            ): { x: number; y: number } | null => {
               const denom = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
               if (Math.abs(denom) < 1e-9) return null;
               const t = ((p1.x - p3.x) * (p3.y - p4.y) - (p1.y - p3.y) * (p3.x - p4.x)) / denom;
@@ -1688,14 +1839,14 @@ export const useSceneStore = create<SceneState>()(
           }
         }
 
-        const projectPointToSegment = (p: {x:number;y:number}, a: {x:number;y:number}, b: {x:number;y:number}) => {
+        const projectPointToSegment = (p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => {
           const abx = b.x - a.x, aby = b.y - a.y;
           const apx = p.x - a.x, apy = p.y - a.y;
-          const ab2 = abx*abx + aby*aby;
+          const ab2 = abx * abx + aby * aby;
           if (ab2 === 0) return null;
-          let t = (apx*abx + apy*aby) / ab2;
+          let t = (apx * abx + apy * aby) / ab2;
           if (t <= 0 || t >= 1) return null;
-          return { x: a.x + t*abx, y: a.y + t*aby };
+          return { x: a.x + t * abx, y: a.y + t * aby };
         };
 
         let best = { dx: 0, dy: 0 };
@@ -1752,9 +1903,9 @@ export const useSceneStore = create<SceneState>()(
           return { ...asset, wallNodes: nodes, wallEdges: filtered } as AssetInstance;
         };
         const lineIntersection = (
-          p1: {x:number;y:number}, p2: {x:number;y:number},
-          p3: {x:number;y:number}, p4: {x:number;y:number}
-        ): {x:number;y:number} | null => {
+          p1: { x: number; y: number }, p2: { x: number; y: number },
+          p3: { x: number; y: number }, p4: { x: number; y: number }
+        ): { x: number; y: number } | null => {
           const denom = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
           if (Math.abs(denom) < 1e-9) return null;
           const t = ((p1.x - p3.x) * (p3.y - p4.y) - (p1.y - p3.y) * (p3.x - p4.x)) / denom;
@@ -1790,7 +1941,7 @@ export const useSceneStore = create<SceneState>()(
         }
 
         // Cleanup tiny edges after splits
-            const cleanupSmallEdges = (asset: AssetInstance, minLen = 0) => {
+        const cleanupSmallEdges = (asset: AssetInstance, minLen = 0) => {
           if (!asset.wallNodes || !asset.wallEdges) return asset;
           const kept = asset.wallEdges.filter(e => {
             const a = asset.wallNodes![e.a];
@@ -1799,7 +1950,7 @@ export const useSceneStore = create<SceneState>()(
           });
           return { ...asset, wallEdges: kept } as AssetInstance;
         };
-        for (let i=0;i<result.length;i++) result[i] = cleanupSmallEdges(result[i]);
+        for (let i = 0; i < result.length; i++) result[i] = cleanupSmallEdges(result[i]);
 
         set({ assets: result, hasUnsavedChanges: true, selectedAssetId: assetId });
       },
@@ -1818,8 +1969,8 @@ export const useSceneStore = create<SceneState>()(
         if (!state.clipboard) return;
 
         // Get the next zIndex for the pasted asset
-        const nextZIndex = state.assets.length > 0 
-          ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1 
+        const nextZIndex = state.assets.length > 0
+          ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1
           : 1;
 
         const newAsset: AssetInstance = {
@@ -1835,7 +1986,7 @@ export const useSceneStore = create<SceneState>()(
           selectedAssetId: newAsset.id,
           hasUnsavedChanges: true,
         });
-        
+
         // Save to history after pasting asset
         setTimeout(() => get().saveToHistory(), 0);
       },
@@ -1846,27 +1997,27 @@ export const useSceneStore = create<SceneState>()(
       saveToHistory: () => {
         try {
           const state = get();
-          
+
           // Limit history size to prevent localStorage overflow
           const MAX_HISTORY_SIZE = 20;
           const newHistory = state.history.slice(0, state.historyIndex + 1);
-          
+
           // Only save if assets have actually changed
           const currentAssets = state.assets;
           const lastAssets = newHistory[newHistory.length - 1];
-          
+
           if (lastAssets && JSON.stringify(currentAssets) === JSON.stringify(lastAssets)) {
             return; // No changes, don't save
           }
-          
+
           // Add current state
           newHistory.push([...currentAssets]);
-          
+
           // Trim history if it exceeds max size
           if (newHistory.length > MAX_HISTORY_SIZE) {
             newHistory.shift(); // Remove oldest entry
           }
-          
+
           set({
             history: newHistory,
             historyIndex: newHistory.length - 1,
@@ -1920,12 +2071,12 @@ export const useSceneStore = create<SceneState>()(
         if (!originalAsset) return;
 
         // If we have a pattern and this is the same type of asset, continue the pattern
-        if (state.duplicationPattern && state.lastDuplicatedAsset && 
-            originalAsset.type === state.lastDuplicatedAsset.type) {
-          
+        if (state.duplicationPattern && state.lastDuplicatedAsset &&
+          originalAsset.type === state.lastDuplicatedAsset.type) {
+
           let newX = originalAsset.x;
           let newY = originalAsset.y;
-          
+
           switch (state.duplicationPattern.type) {
             case 'linear':
               if (state.duplicationPattern.direction) {
@@ -1933,7 +2084,7 @@ export const useSceneStore = create<SceneState>()(
                 newY += state.duplicationPattern.direction.y;
               }
               break;
-              
+
             case 'circular':
               if (state.duplicationPattern.center && state.duplicationPattern.angle !== undefined) {
                 const angle = state.duplicationPattern.angle;
@@ -1949,13 +2100,13 @@ export const useSceneStore = create<SceneState>()(
                 });
               }
               break;
-              
+
             case 'grid':
               // Simple grid pattern - could be enhanced
               newX += 50;
               break;
           }
-          
+
           // Create the duplicated asset
           const newAsset: AssetInstance = {
             ...originalAsset,
@@ -1964,19 +2115,19 @@ export const useSceneStore = create<SceneState>()(
             y: newY,
             zIndex: Math.max(...state.assets.map(a => a.zIndex || 0)) + 1,
           };
-          
+
           set({
             assets: [...state.assets, newAsset],
             selectedAssetId: newAsset.id,
             lastDuplicatedAsset: newAsset,
             hasUnsavedChanges: true,
           });
-          
+
           // Save to history
           setTimeout(() => get().saveToHistory(), 0);
           return;
         }
-        
+
         // Fallback to regular duplication
         const newAsset: AssetInstance = {
           ...originalAsset,
@@ -1985,14 +2136,14 @@ export const useSceneStore = create<SceneState>()(
           y: originalAsset.y + 20,
           zIndex: Math.max(...state.assets.map(a => a.zIndex || 0)) + 1,
         };
-        
+
         set({
           assets: [...state.assets, newAsset],
           selectedAssetId: newAsset.id,
           lastDuplicatedAsset: newAsset,
           hasUnsavedChanges: true,
         });
-        
+
         // Save to history
         setTimeout(() => get().saveToHistory(), 0);
       },
@@ -2002,14 +2153,14 @@ export const useSceneStore = create<SceneState>()(
         const dx = duplicatedAsset.x - originalAsset.x;
         const dy = duplicatedAsset.y - originalAsset.y;
         const distance = Math.hypot(dx, dy);
-        
+
         // Detect circular pattern around a center point
-        const nearbyAssets = state.assets.filter(asset => 
-          asset.id !== originalAsset.id && 
+        const nearbyAssets = state.assets.filter(asset =>
+          asset.id !== originalAsset.id &&
           asset.id !== duplicatedAsset.id &&
           Math.hypot(asset.x - originalAsset.x, asset.y - originalAsset.y) < 300
         );
-        
+
         if (nearbyAssets.length > 0) {
           // Try to find a center point that makes sense
           const potentialCenters = nearbyAssets.map(asset => ({
@@ -2017,27 +2168,27 @@ export const useSceneStore = create<SceneState>()(
             y: asset.y,
             distance: Math.hypot(asset.x - originalAsset.x, asset.y - originalAsset.y)
           }));
-          
+
           // Find the center that's most equidistant from both assets
           let bestCenter = null;
           let bestScore = Infinity;
-          
+
           for (const center of potentialCenters) {
             const dist1 = Math.hypot(originalAsset.x - center.x, originalAsset.y - center.y);
             const dist2 = Math.hypot(duplicatedAsset.x - center.x, duplicatedAsset.y - center.y);
             const score = Math.abs(dist1 - dist2);
-            
+
             if (score < bestScore && score < 30) {
               bestScore = score;
               bestCenter = center;
             }
           }
-          
+
           if (bestCenter) {
             // Circular pattern detected
             const angle = Math.atan2(duplicatedAsset.y - bestCenter.y, duplicatedAsset.x - bestCenter.x);
             const distance = Math.hypot(originalAsset.x - bestCenter.x, originalAsset.y - bestCenter.y);
-            
+
             set({
               duplicationPattern: {
                 type: 'circular',
@@ -2049,7 +2200,7 @@ export const useSceneStore = create<SceneState>()(
             return;
           }
         }
-        
+
         // Detect linear pattern
         if (Math.abs(dx) > Math.abs(dy)) {
           // Horizontal line
@@ -2146,17 +2297,18 @@ export const useSceneStore = create<SceneState>()(
       moveSelectedAssets: (deltaX, deltaY) => {
         const state = get();
         const updatedAssets = state.assets.map(asset => {
-          if (!state.selectedAssetIds.includes(asset.id)) return asset;
-          // Move base center
-          const moved: any = { ...asset, x: asset.x + deltaX, y: asset.y + deltaY };
-          // If this is a wall with node/edge data, shift nodes too so geometry stays locked
-          if (asset.type === 'wall-segments' && asset.wallNodes && asset.wallNodes.length) {
-            moved.wallNodes = asset.wallNodes.map(n => ({ x: n.x + deltaX, y: n.y + deltaY }));
+          if (state.selectedAssetIds.includes(asset.id)) {
+            return { ...asset, x: asset.x + deltaX, y: asset.y + deltaY };
           }
-          return moved;
+          return asset;
         });
 
-        set({ assets: updatedAssets, hasUnsavedChanges: true });
+        set({
+          assets: updatedAssets,
+          hasUnsavedChanges: true,
+        });
+
+        // Save to history
         setTimeout(() => get().saveToHistory(), 0);
       },
 
@@ -2197,7 +2349,7 @@ export const useSceneStore = create<SceneState>()(
         const state = get();
         if (state.selectedAssetIds.length === 0) return;
 
-        const remainingAssets = state.assets.filter(asset => 
+        const remainingAssets = state.assets.filter(asset =>
           !state.selectedAssetIds.includes(asset.id)
         );
 
@@ -2214,9 +2366,13 @@ export const useSceneStore = create<SceneState>()(
 
       setRectangularSelectionMode: (enabled) => {
         console.log("Store: setRectangularSelectionMode called with enabled:", enabled);
-        set({ 
+        set({
           isRectangularSelectionMode: enabled,
           createGroupFromSelection: enabled, // Enable group creation when using rectangular selection
+          // Clear rectangular selection state when disabling
+          rectangularSelectionStart: enabled ? get().rectangularSelectionStart : null,
+          rectangularSelectionEnd: enabled ? get().rectangularSelectionEnd : null,
+          isRectangularSelecting: enabled ? get().isRectangularSelecting : false,
         });
         console.log("Store: After setting, createGroupFromSelection:", get().createGroupFromSelection);
       },
@@ -2254,13 +2410,13 @@ export const useSceneStore = create<SceneState>()(
         // Find assets that intersect with the selection box
         console.log("Store: Selection box bounds:", { minX, maxX, minY, maxY });
         console.log("Store: Available assets:", state.assets.length);
-        
+
         const selectedIds = state.assets
           .filter(asset => {
             // Get asset dimensions based on type
             let assetWidth = asset.width || 24;
             let assetHeight = asset.height || 24;
-            
+
             // Handle special cases for different asset types
             if (asset.type === 'square' || asset.type === 'circle') {
               assetWidth = asset.width || 50;
@@ -2275,11 +2431,11 @@ export const useSceneStore = create<SceneState>()(
               assetWidth = asset.width || 100;
               assetHeight = asset.height || 20;
             }
-            
+
             // Apply scale
             const scaledWidth = assetWidth * (asset.scale || 1);
             const scaledHeight = assetHeight * (asset.scale || 1);
-            
+
             // Calculate bounds
             const assetLeft = asset.x - scaledWidth / 2;
             const assetRight = asset.x + scaledWidth / 2;
@@ -2287,7 +2443,7 @@ export const useSceneStore = create<SceneState>()(
             const assetBottom = asset.y + scaledHeight / 2;
 
             const intersects = !(assetRight < minX || assetLeft > maxX || assetBottom < minY || assetTop > maxY);
-            
+
             console.log(`Store: Asset ${asset.id} (${asset.type}):`, {
               position: { x: asset.x, y: asset.y },
               originalSize: { width: assetWidth, height: assetHeight },
@@ -2303,7 +2459,7 @@ export const useSceneStore = create<SceneState>()(
 
         console.log("Store: Selected assets:", selectedIds.length, selectedIds);
         console.log("Store: createGroupFromSelection:", state.createGroupFromSelection);
-        
+
         // If we have multiple assets selected, automatically create a group
         if (selectedIds.length >= 2) {
           console.log("Store: Auto-creating group from rectangular selection");
@@ -2314,7 +2470,7 @@ export const useSceneStore = create<SceneState>()(
             selectedAssetIds: selectedIds,
             selectedAssetId: null,
           });
-          
+
           // Create group from selected assets
           setTimeout(() => {
             console.log("Store: About to create group, selectedAssetIds:", get().selectedAssetIds);
@@ -2332,6 +2488,46 @@ export const useSceneStore = create<SceneState>()(
         }
       },
 
+      startExportSelection: (x, y) => {
+        set({
+          exportSelectionStart: { x, y },
+          exportSelectionEnd: { x, y },
+          isExportSelectionMode: true,
+        });
+      },
+
+      updateExportSelection: (x, y) => {
+        set({
+          exportSelectionEnd: { x, y },
+        });
+      },
+
+      finishExportSelection: () => {
+        const state = get();
+        if (state.exportSelectionStart && state.exportSelectionEnd) {
+          const minX = Math.min(state.exportSelectionStart.x, state.exportSelectionEnd.x);
+          const maxX = Math.max(state.exportSelectionStart.x, state.exportSelectionEnd.x);
+          const minY = Math.min(state.exportSelectionStart.y, state.exportSelectionEnd.y);
+          const maxY = Math.max(state.exportSelectionStart.y, state.exportSelectionEnd.y);
+          
+          set({
+            exportSelectionBox: {
+              startX: minX,
+              startY: minY,
+              endX: maxX,
+              endY: maxY,
+            },
+            isExportSelectionMode: false,
+          });
+        } else {
+          set({
+            isExportSelectionMode: false,
+            exportSelectionStart: null,
+            exportSelectionEnd: null,
+          });
+        }
+      },
+
       setCreateGroupFromSelection: (enabled) => {
         set({ createGroupFromSelection: enabled });
       },
@@ -2343,9 +2539,9 @@ export const useSceneStore = create<SceneState>()(
           console.log("Store: Not enough assets to create group (need at least 2)");
           return; // Need at least 2 assets to create a group
         }
-        
+
         // Get the selected assets
-        const selectedAssets = state.assets.filter(asset => 
+        const selectedAssets = state.assets.filter(asset =>
           state.selectedAssetIds.includes(asset.id)
         );
 
@@ -2421,7 +2617,7 @@ export const useSceneStore = create<SceneState>()(
       ungroupAsset: (groupId) => {
         const state = get();
         const groupAsset = state.assets.find(asset => asset.id === groupId);
-        
+
         if (!groupAsset || !groupAsset.isGroup || !groupAsset.groupAssets) return;
 
         // Convert group assets back to absolute positions
@@ -2434,7 +2630,7 @@ export const useSceneStore = create<SceneState>()(
 
         // Remove group and add ungrouped assets
         const remainingAssets = state.assets.filter(asset => asset.id !== groupId);
-        
+
         set({
           assets: [...remainingAssets, ...ungroupedAssets],
           selectedAssetIds: ungroupedAssets.map(a => a.id),
@@ -2445,47 +2641,8 @@ export const useSceneStore = create<SceneState>()(
         // Save to history
         setTimeout(() => get().saveToHistory(), 0);
       },
-
-      // Export selection methods
-      setExportSelectionMode: (enabled) => {
-        set({ isExportSelectionMode: enabled });
-        if (!enabled) {
-          set({ exportSelectionStart: null, exportSelectionEnd: null });
-        }
-      },
-
-      startExportSelection: (startX, startY) => {
-        set({
-          exportSelectionStart: { x: startX, y: startY },
-          exportSelectionEnd: { x: startX, y: startY },
-        });
-      },
-
-      updateExportSelection: (endX, endY) => {
-        set({
-          exportSelectionEnd: { x: endX, y: endY },
-        });
-      },
-
-      finishExportSelection: () => {
-        const state = get();
-        if (state.exportSelectionStart && state.exportSelectionEnd) {
-          // Selection is complete, modal will be shown by Canvas component
-          // Keep the selection points so the modal can read them
-          set({ isExportSelectionMode: false });
-          // Clear selection after modal has had time to read it (1 second to be safe)
-          setTimeout(() => {
-            const currentState = get();
-            if (!currentState.isExportSelectionMode) {
-              set({ exportSelectionStart: null, exportSelectionEnd: null });
-            }
-          }, 1000);
-        } else {
-          set({ isExportSelectionMode: false, exportSelectionStart: null, exportSelectionEnd: null });
-        }
-      },
     }),
-    { 
+    {
       name: "scene-storage-v2",
       partialize: (state) => ({
         // Only persist essential data, not the full history

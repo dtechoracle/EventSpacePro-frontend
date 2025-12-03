@@ -1,0 +1,9 @@
+﻿components/renderers/ShapeRenderer.tsx(13,80): error TS2339: Property 'strokeColor' does not exist on type 'Shape'.
+components/renderers/ShapeRenderer.tsx(14,29): error TS2339: Property 'fillColor' does not exist on type 'Shape'.
+components/tools/ShapeTool.tsx(85,13): error TS2353: Object literal may only specify known properties, and 'fillColor' does not exist in type 'Shape'.
+components/Workspace2D.tsx(381,71): error TS2322: Type '{ key: string; asset: AssetInstance; mmToPx: number; }' is not assignable to type 'IntrinsicAttributes & AssetRendererProps'.
+  Property 'mmToPx' does not exist on type 'IntrinsicAttributes & AssetRendererProps'.
+components/Workspace2D.tsx(405,22): error TS2739: Type '{ key: string; wall: Wall; }' is missing the following properties from type 'WallRendererProps': isSelected, isHovered
+components/Workspace2D.tsx(411,33): error TS2739: Type '{ key: string; shape: Shape; }' is missing the following properties from type 'FreehandRendererProps': isSelected, isHovered
+components/Workspace2D.tsx(413,29): error TS2739: Type '{ key: string; shape: Shape; }' is missing the following properties from type 'ShapeRendererProps': isSelected, isHovered
+components/Workspace2D.tsx(418,22): error TS2739: Type '{ key: string; asset: Asset; }' is missing the following properties from type 'AssetRendererProps': isSelected, isHovered

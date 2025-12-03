@@ -41,6 +41,15 @@ export function useAssetHandlers({
 
   const onAssetMouseDown = useCallback(
     (e: React.MouseEvent, assetId: string) => {
+      // If in snap-to-anchor mode, don't handle the click here - let the canvas handler deal with it
+      const snapToAnchorMode = useSceneStore.getState().snapToAnchorMode;
+      if (snapToAnchorMode) {
+        // Don't stop propagation or prevent default - let the canvas handler process the click
+        // The canvas handler will use clientToCanvasMM to get the position
+        console.log('Asset click in snap mode - letting canvas handle it. Asset:', assetId);
+        return;
+      }
+      
       e.stopPropagation();
       const asset = assets.find((a) => a.id === assetId);
       if (!asset) return;
@@ -73,7 +82,7 @@ export function useAssetHandlers({
       };
       mouseRefs.draggingAssetStart.current = { x: asset.x, y: asset.y };
     },
-    [assets, addAssetObject, selectAsset, mouseRefs]
+    [assets, addAssetObject, selectAsset, mouseRefs, clientToCanvasMM]
   );
 
   const onTextDoubleClick = useCallback(

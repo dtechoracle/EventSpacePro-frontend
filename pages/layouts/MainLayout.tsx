@@ -1,3 +1,5 @@
+"use client";
+
 import Head from "next/head";
 import Sidebar from "../(components)/Sidebar";
 import { instrumentSans } from "@/helpers/fonts";
@@ -18,7 +20,7 @@ const MainLayout: React.FC<LayoutProps> = ({ children }) => {
         <Sidebar />
 
         <main
-          className={`flex-1 overflow-hidden pt-4 ${instrumentSans.className}`}
+          className={`flex-1 overflow-y-auto pt-4 ${instrumentSans.className}`}
         >
           {children}
         <AiTrigger />

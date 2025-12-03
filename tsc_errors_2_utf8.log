@@ -1,0 +1,5 @@
+﻿components/Workspace2D.tsx(403,22): error TS1005: '...' expected.
+components/Workspace2D.tsx(404,22): error TS1005: '...' expected.
+components/Workspace2D.tsx(405,22): error TS1005: '...' expected.
+components/Workspace2D.tsx(406,22): error TS1005: '...' expected.
+components/Workspace2D.tsx(407,13): error TS1003: Identifier expected.

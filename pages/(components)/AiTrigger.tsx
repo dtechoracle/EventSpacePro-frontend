@@ -7,6 +7,9 @@ import { GoPaperclip } from "react-icons/go";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUserStore } from "@/store/userStore";
 import { useSceneStore, AssetInstance } from "@/store/sceneStore";
+import { useProjectStore, Asset as ProjectAsset, Shape, Wall } from "@/store/projectStore";
+import { useEditorStore } from "@/store/editorStore";
+import PlanPreview from "./dashboard/PlanPreview";
 
 export default function AiTrigger() {
   const [isOpen, setIsOpen] = useState(false);
@@ -19,24 +22,199 @@ export default function AiTrigger() {
 
   // Scene actions for applying AI plans
   const addAssetObject = useSceneStore((s) => s.addAssetObject);
+  const updateAsset = useSceneStore((s) => s.updateAsset);
   const canvas = useSceneStore((s) => s.canvas);
   const existingAssets = useSceneStore((s) => s.assets);
+  const selectedAssetId = useSceneStore((s) => s.selectedAssetId);
+  const selectedAssetIds = useSceneStore((s) => s.selectedAssetIds);
 
-  // Handle keyboard shortcut (Ctrl + K)
+  // Workspace (Workspace2D) state
+  const workspaceAssets = useProjectStore((s) => s.assets);
+  const workspaceShapes = useProjectStore((s) => s.shapes);
+  const workspaceWalls = useProjectStore((s) => s.walls);
+  const updateWorkspaceAsset = useProjectStore((s) => s.updateAsset);
+  const updateWorkspaceShape = useProjectStore((s) => s.updateShape);
+  const editorSelectedIds = useEditorStore((s) => s.selectedIds);
+
+  type ResolvedSelection = {
+    asset: AssetInstance;
+    source: "scene" | "project-asset" | "project-shape" | "project-wall";
+  };
+
+  // Resolve current selected assets (from either new editor or Workspace2D),
+  // optionally using IDs pushed from "Add to AI chat"
+  const getResolvedSelection = (): ResolvedSelection[] => {
+    let idsFromContext: string[] | undefined;
+    try {
+      idsFromContext = (window as any).__ESP_AI_SELECTED_IDS__ as string[] | undefined;
+    } catch {
+      idsFromContext = undefined;
+    }
+
+    // Priority: explicit AI context IDs -> editor selection (Workspace2D) -> scene selection
+    const sceneSelectionIds =
+      selectedAssetId || (selectedAssetIds && selectedAssetIds.length)
+        ? [
+            ...(selectedAssetId ? [selectedAssetId] : []),
+            ...(selectedAssetIds || []),
+          ]
+        : [];
+
+    const baseIds =
+      Array.isArray(idsFromContext) && idsFromContext.length > 0
+        ? idsFromContext
+        : editorSelectedIds && editorSelectedIds.length > 0
+        ? editorSelectedIds
+        : sceneSelectionIds;
+
+    if (!baseIds || baseIds.length === 0) return [];
+
+    const results: ResolvedSelection[] = [];
+
+    baseIds.forEach((id) => {
+      // 1) New editor assets in sceneStore
+      const sceneAsset = existingAssets.find((a) => a.id === id);
+      if (sceneAsset) {
+        results.push({ asset: sceneAsset, source: "scene" });
+        return;
+      }
+
+      // 2) Workspace2D assets
+      const projAsset = workspaceAssets.find((a: ProjectAsset) => a.id === id);
+      if (projAsset) {
+        const aiAsset: AssetInstance = {
+          id: projAsset.id,
+          type: projAsset.type,
+          x: projAsset.x,
+          y: projAsset.y,
+          width: projAsset.width,
+          height: projAsset.height,
+          rotation: projAsset.rotation,
+          scale: projAsset.scale,
+          zIndex: projAsset.zIndex,
+        };
+        results.push({ asset: aiAsset, source: "project-asset" });
+        return;
+      }
+
+      // 3) Workspace2D shapes
+      const shape = workspaceShapes.find((s: Shape) => s.id === id);
+      if (shape) {
+        const aiAsset: AssetInstance = {
+          id: shape.id,
+          type: shape.type,
+          x: shape.x,
+          y: shape.y,
+          width: shape.width,
+          height: shape.height,
+          rotation: shape.rotation,
+          scale: 1,
+          zIndex: shape.zIndex,
+        };
+        results.push({ asset: aiAsset, source: "project-shape" });
+        return;
+      }
+
+      // 4) Workspace2D walls (convert to wall-segments AssetInstance for preview)
+      const wall = workspaceWalls.find((w: Wall) => w.id === id);
+      if (wall) {
+        const nodes = wall.nodes.map((n) => ({ x: n.x, y: n.y }));
+        const edges = wall.edges
+          .map((e) => {
+            const aIdx = wall.nodes.findIndex((n) => n.id === e.nodeA);
+            const bIdx = wall.nodes.findIndex((n) => n.id === e.nodeB);
+            if (aIdx === -1 || bIdx === -1) return null;
+            return { a: aIdx, b: bIdx };
+          })
+          .filter((e): e is { a: number; b: number } => !!e);
+        const thickness = wall.edges[0]?.thickness ?? 150;
+
+        const aiAsset: AssetInstance = {
+          id: wall.id,
+          type: "wall-segments",
+          x: 0,
+          y: 0,
+          scale: 1,
+          rotation: 0,
+          zIndex: wall.zIndex,
+          wallNodes: nodes,
+          wallEdges: edges,
+          wallThickness: thickness,
+        } as any;
+        results.push({ asset: aiAsset, source: "project-wall" });
+      }
+    });
+
+    return results;
+  };
+
+  const getCurrentSelectedAssets = () => getResolvedSelection().map((r) => r.asset);
+
+  // Handle keyboard shortcut (Ctrl + K) and external "open AI" events / helpers
   useEffect(() => {
+    const openFromExternal = () => {
+      setIsOpen(true);
+      // Slight delay so modal mounts before focusing
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setIsOpen(true);
-        inputRef.current?.focus();
+        openFromExternal();
       }
     };
 
+    const handleAddToChat = (e: Event) => {
+      const custom = e as CustomEvent<{ selectedIds?: string[] }>;
+      if (custom.detail && Array.isArray(custom.detail.selectedIds)) {
+        try {
+          (window as any).__ESP_AI_SELECTED_IDS__ = custom.detail.selectedIds;
+          const scene = useSceneStore.getState();
+          scene.selectMultipleAssets(custom.detail.selectedIds);
+        } catch {
+          // ignore selection errors
+        }
+      }
+      openFromExternal();
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("esp-open-ai-chat", openFromExternal as any);
+    window.addEventListener("esp-add-to-ai-chat", handleAddToChat as any);
+    try {
+      // Expose an explicit helper so the editor can open the AI modal directly
+      (window as any).__ESP_OPEN_AI_CHAT__ = openFromExternal;
+    } catch {
+      // ignore if window is not available
+    }
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("esp-open-ai-chat", openFromExternal as any);
+      window.removeEventListener("esp-add-to-ai-chat", handleAddToChat as any);
+      try {
+        if ((window as any).__ESP_OPEN_AI_CHAT__ === openFromExternal) {
+          (window as any).__ESP_OPEN_AI_CHAT__ = undefined;
+        }
+      } catch {
+        // ignore cleanup errors
+      }
+    };
   }, []);
 
   const handleAIClick = () => {
+    try {
+      const globalSelected = (window as any).__ESP_AI_SELECTED_IDS__ as string[] | undefined;
+      if (Array.isArray(globalSelected) && globalSelected.length > 0) {
+        const scene = useSceneStore.getState();
+        scene.selectMultipleAssets(globalSelected);
+      }
+    } catch (e) {
+      console.warn("Failed to sync selection from AI context", e);
+    }
     setIsOpen(true);
   };
 
@@ -470,31 +648,265 @@ export default function AiTrigger() {
     }
   };
 
+  // Handle interactive commands (resize, move, etc.)
+  const handleInteractiveCommand = async (prompt: string) => {
+    const resolved = getResolvedSelection();
+    const selectedAssets = resolved.map((r) => r.asset);
+    
+    if (selectedAssets.length === 0) {
+      setMessages((m) => [...m, { 
+        role: 'assistant', 
+        content: 'Please select an asset first. Click on a shape, table, or other item to select it.' 
+      }]);
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/ai/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          prompt,
+          selectedAssets: selectedAssets.map(a => ({
+            id: a.id,
+            type: a.type,
+            x: a.x,
+            y: a.y,
+            width: a.width,
+            height: a.height,
+            scale: a.scale,
+            rotation: a.rotation
+          })),
+          canvas 
+        }),
+      });
+      const data = await res.json();
+      
+      if (data?.action) {
+        // Apply the action to selected assets (both new editor + Workspace2D)
+        resolved.forEach(({ asset, source }) => {
+          const applyToScene = () => {
+            if (data.action.type === 'resize') {
+              const scaleFactor = data.action.scaleFactor ?? 1;
+              const nextWidth =
+                data.action.width ??
+                (data.action.scaleFactor != null && asset.width != null
+                  ? asset.width * scaleFactor
+                  : asset.width);
+              const nextHeight =
+                data.action.height ??
+                (data.action.scaleFactor != null && asset.height != null
+                  ? asset.height * scaleFactor
+                  : asset.height);
+              const nextScale =
+                data.action.scale ??
+                (data.action.scaleFactor != null && asset.scale != null
+                  ? asset.scale * scaleFactor
+                  : asset.scale);
+              updateAsset(asset.id, {
+                width: nextWidth,
+                height: nextHeight,
+                scale: nextScale,
+              });
+            } else if (data.action.type === 'move') {
+              const dx = data.action.dx ?? 0;
+              const dy = data.action.dy ?? 0;
+              updateAsset(asset.id, {
+                x:
+                  data.action.x !== undefined
+                    ? data.action.x
+                    : asset.x + dx,
+                y:
+                  data.action.y !== undefined
+                    ? data.action.y
+                    : asset.y + dy,
+              });
+            } else if (data.action.type === 'rotate') {
+              const delta = data.action.deltaRotation ?? 0;
+              updateAsset(asset.id, {
+                rotation:
+                  data.action.rotation !== undefined
+                    ? data.action.rotation
+                    : (asset.rotation || 0) + delta,
+              });
+            } else if (data.action.type === 'update') {
+              updateAsset(asset.id, data.action.updates || {});
+            }
+          };
+
+          const applyToWorkspace = () => {
+            if (source === "project-asset") {
+              if (data.action.type === 'resize') {
+                const scaleFactor = data.action.scaleFactor ?? 1;
+                const nextWidth =
+                  data.action.width ??
+                  (data.action.scaleFactor != null && asset.width != null
+                    ? asset.width * scaleFactor
+                    : asset.width);
+                const nextHeight =
+                  data.action.height ??
+                  (data.action.scaleFactor != null && asset.height != null
+                    ? asset.height * scaleFactor
+                    : asset.height);
+                const nextScale =
+                  data.action.scale ??
+                  (data.action.scaleFactor != null && asset.scale != null
+                    ? asset.scale * scaleFactor
+                    : asset.scale);
+                updateWorkspaceAsset(asset.id, {
+                  width: nextWidth as number | undefined,
+                  height: nextHeight as number | undefined,
+                  scale: nextScale as number | undefined,
+                });
+              } else if (data.action.type === 'move') {
+                const dx = data.action.dx ?? 0;
+                const dy = data.action.dy ?? 0;
+                updateWorkspaceAsset(asset.id, {
+                  x:
+                    data.action.x !== undefined
+                      ? data.action.x
+                      : asset.x + dx,
+                  y:
+                    data.action.y !== undefined
+                      ? data.action.y
+                      : asset.y + dy,
+                });
+              } else if (data.action.type === 'rotate') {
+                const delta = data.action.deltaRotation ?? 0;
+                updateWorkspaceAsset(asset.id, {
+                  rotation:
+                    data.action.rotation !== undefined
+                      ? data.action.rotation
+                      : (asset.rotation || 0) + delta,
+                });
+              } else if (data.action.type === 'update') {
+                updateWorkspaceAsset(asset.id, data.action.updates || {});
+              }
+            } else if (source === "project-shape") {
+              if (data.action.type === 'resize') {
+                const scaleFactor = data.action.scaleFactor ?? 1;
+                const nextWidth =
+                  data.action.width ??
+                  (data.action.scaleFactor != null && asset.width != null
+                    ? asset.width * scaleFactor
+                    : asset.width);
+                const nextHeight =
+                  data.action.height ??
+                  (data.action.scaleFactor != null && asset.height != null
+                    ? asset.height * scaleFactor
+                    : asset.height);
+                updateWorkspaceShape(asset.id, {
+                  width: nextWidth as number | undefined,
+                  height: nextHeight as number | undefined,
+                });
+              } else if (data.action.type === 'move') {
+                const dx = data.action.dx ?? 0;
+                const dy = data.action.dy ?? 0;
+                updateWorkspaceShape(asset.id, {
+                  x:
+                    data.action.x !== undefined
+                      ? data.action.x
+                      : asset.x + dx,
+                  y:
+                    data.action.y !== undefined
+                      ? data.action.y
+                      : asset.y + dy,
+                });
+              } else if (data.action.type === 'rotate') {
+                const delta = data.action.deltaRotation ?? 0;
+                updateWorkspaceShape(asset.id, {
+                  rotation:
+                    data.action.rotation !== undefined
+                      ? data.action.rotation
+                      : (asset.rotation || 0) + delta,
+                });
+              } else if (data.action.type === 'update') {
+                updateWorkspaceShape(asset.id, data.action.updates || {});
+              }
+            }
+          };
+
+          if (source === "scene") {
+            applyToScene();
+          } else {
+            applyToWorkspace();
+          }
+        });
+        
+        setMessages((m) => [...m, { 
+          role: 'assistant', 
+          content: data.message || 'Action completed successfully.' 
+        }]);
+      } else if (data?.message) {
+        setMessages((m) => [...m, { role: 'assistant', content: data.message }]);
+      } else {
+        setMessages((m) => [...m, { 
+          role: 'assistant', 
+          content: 'I couldn\'t understand that command. Try: "resize to 500mm", "make it smaller", "move to center", etc.' 
+        }]);
+      }
+    } catch (e) {
+      console.error(e);
+      setMessages((m) => [...m, { role: 'assistant', content: 'Sorry, I could not process that command.' }]);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!inputValue.trim()) return;
     const prompt = inputValue.trim();
     setMessages((m) => [...m, { role: 'user', content: prompt }]);
     setIsLoading(true);
+    
+    // Check if this is an interactive command (has selected assets and command-like prompt)
+    const selectedAssets = getCurrentSelectedAssets();
+    
+    const isInteractiveCommand = selectedAssets.length > 0 && (
+      prompt.toLowerCase().includes('resize') ||
+      prompt.toLowerCase().includes('size') ||
+      prompt.toLowerCase().includes('make it') ||
+      prompt.toLowerCase().includes('move') ||
+      prompt.toLowerCase().includes('rotate') ||
+      prompt.toLowerCase().includes('change') ||
+      prompt.toLowerCase().includes('set') ||
+      prompt.toLowerCase().includes('update')
+    );
+
     try {
-      const res = await fetch("/api/ai/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [...messages, { role: 'user', content: prompt }], canvas }),
-      });
-      const data = await res.json();
-      if (data?.followUp) {
-        setMessages((m) => [...m, { role: 'assistant', content: data.followUp }]);
-      } else if (data?.plan) {
-        applyPlan(data.plan);
-        setMessages((m) => [...m, { role: 'assistant', content: 'Plan generated and applied to canvas.' }]);
+      if (isInteractiveCommand) {
+        await handleInteractiveCommand(prompt);
       } else {
-        setMessages((m) => [...m, { role: 'assistant', content: 'I need more details. What are the wall dimensions?' }]);
+        // Original plan generation flow
+        const res = await fetch("/api/ai/plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            messages: [...messages, { role: 'user', content: prompt }], 
+            canvas,
+            selectedAssets: selectedAssets.length > 0 ? selectedAssets.map(a => ({
+              id: a.id,
+              type: a.type,
+              x: a.x,
+              y: a.y,
+              width: a.width,
+              height: a.height
+            })) : undefined
+          }),
+        });
+        const data = await res.json();
+        if (data?.followUp) {
+          setMessages((m) => [...m, { role: 'assistant', content: data.followUp }]);
+        } else if (data?.plan) {
+          applyPlan(data.plan);
+          setMessages((m) => [...m, { role: 'assistant', content: 'Plan generated and applied to canvas.' }]);
+        } else {
+          setMessages((m) => [...m, { role: 'assistant', content: 'I need more details. What are the wall dimensions?' }]);
+        }
       }
     } catch (e) {
       console.error(e);
-      setMessages((m) => [...m, { role: 'assistant', content: 'Sorry, I could not generate a plan.' }]);
+      setMessages((m) => [...m, { role: 'assistant', content: 'Sorry, I could not process that request.' }]);
     } finally {
-    setInputValue("");
+      setInputValue("");
       setIsLoading(false);
     }
   };
@@ -542,12 +954,67 @@ export default function AiTrigger() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex-1 flex flex-col items-stretch justify-start w-full max-w-3xl min-h-0 overflow-hidden">
-                <div className="flex items-center justify-center mb-4 flex-shrink-0">
-                  <h2 className="text-2xl font-bold">Hello, {user?.firstName || user?.email || "there"}.</h2>
+                <div className="flex flex-col gap-3 mb-4 flex-shrink-0 items-stretch">
+                  <h2 className="text-2xl font-bold">
+                    Hello, {user?.firstName || user?.email || "there"}.
+                  </h2>
+                  {/* Selected assets preview for AI context */}
+                  {(() => {
+                    const selectedAssets = getCurrentSelectedAssets();
+                    if (!selectedAssets.length) return null;
+                    const primary = selectedAssets[0];
+                    const w = Math.round((primary.width || 0) * (primary.scale || 1));
+                    const h = Math.round((primary.height || 0) * (primary.scale || 1));
+                    return (
+                      <div className="flex flex-col md:flex-row gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left">
+                        <div className="flex-1 flex flex-col justify-center">
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                            Working on
+                          </span>
+                          <span className="text-sm text-gray-800">
+                            {selectedAssets.length === 1
+                              ? `${primary.type} — ${w || "?"}mm × ${h || "?"}mm`
+                              : `${selectedAssets.length} items selected`}
+                          </span>
+                          <span className="mt-1 text-xs text-gray-500">
+                            Ask: “Resize to 500mm × 800mm”, “Move 1000mm right”, or “Center this item”.
+                          </span>
+                          <button
+                            type="button"
+                            className="mt-1 self-start text-xs text-[var(--accent)] hover:underline"
+                            onClick={() => {
+                              try {
+                                (window as any).__ESP_AI_SELECTED_IDS__ = undefined;
+                              } catch {
+                                // ignore
+                              }
+                            }}
+                          >
+                            Clear AI selection
+                          </button>
+                        </div>
+                        <div className="w-full md:w-48 h-24 rounded-md overflow-hidden bg-white border border-gray-200 flex-shrink-0">
+                          <PlanPreview
+                            assets={selectedAssets as AssetInstance[]}
+                            width={192}
+                            height={96}
+                            className="w-full h-full"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain rounded-lg p-4 space-y-3 min-h-0">
                   {messages.length === 0 ? (
-                    <p className="text-gray-500 text-sm">Try: “Draw a 10000mm by 6000mm rectangular wall and add 6 round tables with 6 chairs each.”</p>
+                    <div className="space-y-2">
+                      <p className="text-gray-500 text-sm font-semibold mb-3">Try these commands:</p>
+                      <div className="space-y-1 text-sm text-gray-600">
+                        <p>• "Draw a 10000mm by 6000mm rectangular wall and add 6 round tables"</p>
+                        <p>• Select a shape, then: "Resize to 500mm" or "Make it smaller"</p>
+                        <p>• Select an item, then: "Move to center" or "Rotate 45 degrees"</p>
+                      </div>
+                    </div>
                   ) : (
                     messages.map((m, i) => (
                       <div key={i} className={`${m.role === 'user' ? 'text-right' : 'text-left'}`}>

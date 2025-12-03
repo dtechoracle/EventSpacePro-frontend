@@ -12,16 +12,14 @@ import GroupRenderer from "./GroupRenderer";
 import CanvasControls from "./CanvasControls";
 import PatternIndicator from "./PatternIndicator";
 import SelectionBox from "./SelectionBox";
-import ExportSelectionBox from "./ExportSelectionBox";
-import ExportModal from "./ExportModal";
 import ThreeDOverlay from "./ThreeDOverlay";
+import AnchorHighlights from "./AnchorHighlights";
 import { useCanvasMouseHandlers } from "@/hooks/useCanvasMouseHandlers";
 import { useCanvasKeyboardHandlers } from "@/hooks/useCanvasKeyboardHandlers";
 import { useAssetHandlers } from "@/hooks/useAssetHandlers";
 import { useDrawingLogic } from "@/hooks/useDrawingLogic";
 import { motion } from "framer-motion";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
+import { calculateShapeAnchors, calculateAssetAnchors, findContainingObjects, AnchorType } from "@/utils/snapAnchors";
 
 // Type for API response that wraps EventData
 // type EventDataResponse = {
@@ -97,7 +95,18 @@ export default function Canvas({
   const updateWallTempEnd = useSceneStore((s) => s.updateWallTempEnd);
   const commitWallSegment = useSceneStore((s) => s.commitWallSegment);
   const finishWallDrawing = useSceneStore((s) => s.finishWallDrawing);
+  const setWallDrawingMode = useSceneStore((s) => s.setWallDrawingMode);
   const createCrossAt = useSceneStore((s) => s.createCrossAt);
+  const snapToAnchorMode = useSceneStore((s) => s.snapToAnchorMode);
+  const snapTargetAssetId = useSceneStore((s) => s.snapTargetAssetId);
+  const snapTargetAnchor = useSceneStore((s) => s.snapTargetAnchor);
+  const snapSourceAssetId = useSceneStore((s) => s.snapSourceAssetId);
+  const snapSourceAnchor = useSceneStore((s) => s.snapSourceAnchor);
+  const setSnapTarget = useSceneStore((s) => s.setSnapTarget);
+  const setSnapSource = useSceneStore((s) => s.setSnapSource);
+  const performSnapToAnchor = useSceneStore((s) => s.performSnapToAnchor);
+  const clearSnapToAnchor = useSceneStore((s) => s.clearSnapToAnchor);
+  const setSnapToAnchorMode = useSceneStore((s) => s.setSnapToAnchorMode);
   const startRectangularSelection = useSceneStore(
     (s) => s.startRectangularSelection
   );
@@ -121,11 +130,8 @@ export default function Canvas({
   const finishRectangularSelectionDrag = useSceneStore(
     (s) => s.finishRectangularSelectionDrag
   );
-  // Export selection
-  const isExportSelectionMode = useSceneStore((s) => s.isExportSelectionMode);
-  const exportSelectionStart = useSceneStore((s) => s.exportSelectionStart);
-  const exportSelectionEnd = useSceneStore((s) => s.exportSelectionEnd);
-  const setExportSelectionMode = useSceneStore((s) => s.setExportSelectionMode);
+
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; assetId: string } | null>(null);
 
   // Sync props data to store when props change (only once per data change)
   const hasSyncedRef = useRef(false);
@@ -368,6 +374,9 @@ export default function Canvas({
   };
 
   const handlePointerDown = (e: React.MouseEvent) => {
+    if (contextMenu) {
+      closeContextMenu();
+    }
     if (e.button === 1 || isSpaceDown.current) {
       e.preventDefault();
       isPanning.current = true;
@@ -410,6 +419,99 @@ export default function Canvas({
     mouseRefs,
   });
 
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  const handleAssetContextMenu = useCallback((e: React.MouseEvent, assetId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, assetId });
+  }, []);
+
+  const anchorMenuOptions: { id: AnchorType; label: string }[] = [
+    { id: "top-left", label: "↖ Top-Left" },
+    { id: "top-center", label: "↑ Top-Center" },
+    { id: "top-right", label: "↗ Top-Right" },
+    { id: "left-center", label: "← Left-Center" },
+    { id: "center", label: "⊙ Center" },
+    { id: "right-center", label: "→ Right-Center" },
+    { id: "bottom-left", label: "↙ Bottom-Left" },
+    { id: "bottom-center", label: "↓ Bottom-Center" },
+    { id: "bottom-right", label: "↘ Bottom-Right" },
+  ];
+
+  const handleSnapMenuSelect = useCallback(
+    (anchorId: AnchorType) => {
+      if (!contextMenu) return;
+
+      const hasSourceAndAnchor =
+        !!snapSourceAssetId && !!snapSourceAnchor;
+
+      // Phase 1: choose SOURCE + its anchor
+      if (!hasSourceAndAnchor || contextMenu.assetId === snapSourceAssetId) {
+        // Treat this asset as the source and store its anchor
+        setSnapSource(contextMenu.assetId, anchorId);
+        // Clear any previous target
+        setSnapTarget(null, null);
+        setSnapToAnchorMode(true);
+        console.log(
+          "Snap source set via context menu:",
+          contextMenu.assetId,
+          "anchor:",
+          anchorId
+        );
+      } else {
+        // Phase 2: choose TARGET + its anchor, then snap immediately
+        if (contextMenu.assetId === snapSourceAssetId) {
+          console.warn(
+            "Cannot use the same asset as both source and target for snap"
+          );
+          closeContextMenu();
+          return;
+        }
+
+        setSnapTarget(contextMenu.assetId, anchorId);
+        console.log(
+          "Snap target set via context menu:",
+          contextMenu.assetId,
+          "anchor:",
+          anchorId,
+          "source:",
+          snapSourceAssetId,
+          "sourceAnchor:",
+          snapSourceAnchor
+        );
+
+        // Perform the snap and clear mode/state
+        performSnapToAnchor();
+        clearSnapToAnchor();
+        setSnapToAnchorMode(false);
+      }
+
+      closeContextMenu();
+    },
+    [
+      contextMenu,
+      snapSourceAssetId,
+      snapSourceAnchor,
+      setSnapSource,
+      setSnapTarget,
+      setSnapToAnchorMode,
+      performSnapToAnchor,
+      clearSnapToAnchor,
+      closeContextMenu,
+    ]
+  );
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        closeContextMenu();
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [closeContextMenu]);
+
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const type = e.dataTransfer.getData("assetType");
@@ -421,86 +523,28 @@ export default function Canvas({
   const rotateCW = () => setRotation((r) => (r + 90) % 360);
   const rotateCCW = () => setRotation((r) => (r - 90 + 360) % 360);
 
-  // Export modal state
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [exportArea, setExportArea] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
-
-  // Show export modal when selection is complete
-  useEffect(() => {
-    // Check if we have a valid selection that was just completed
-    if (exportSelectionStart && exportSelectionEnd && !isExportSelectionMode) {
-      const width = Math.abs(exportSelectionEnd.x - exportSelectionStart.x);
-      const height = Math.abs(exportSelectionEnd.y - exportSelectionStart.y);
-      
-      // Show modal if selection has meaningful size (reduced threshold for better UX)
-      if (width > 5 && height > 5 && !showExportModal) {
-        // Small delay to ensure state is updated
-        setTimeout(() => {
-          setExportArea({
-            startX: exportSelectionStart.x,
-            startY: exportSelectionStart.y,
-            endX: exportSelectionEnd.x,
-            endY: exportSelectionEnd.y,
-          });
-          setShowExportModal(true);
-        }, 50);
-      }
+  // Handle clicks in snap mode at the container level to catch all clicks
+  const handleContainerMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    
+    // In snap mode, handle all clicks here
+    if (snapToAnchorMode) {
+      // Let the canvas handler process it
+      handlePointerDown(e);
     }
-  }, [isExportSelectionMode, exportSelectionStart, exportSelectionEnd, showExportModal]);
-
-  // Auto-center on newly selected asset (useful when selecting from asset tab)
-  // Only trigger on selection change, not on asset updates during dragging/resizing
-  const prevSelectedIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || !selectedAssetId) {
-      prevSelectedIdRef.current = selectedAssetId;
-      return;
-    }
-    
-    // Don't auto-center if we're currently scaling/resizing or dragging
-    if (mouseRefs.isScalingAsset.current || mouseRefs.isRotatingAsset.current || 
-        mouseRefs.draggingAssetRef.current || mouseRefs.isAdjustingHeight.current) {
-      return;
-    }
-    
-    // Only center if the selection actually changed to a different asset
-    if (prevSelectedIdRef.current === selectedAssetId) return;
-    prevSelectedIdRef.current = selectedAssetId;
-    
-    const asset = assets.find((a) => a.id === selectedAssetId);
-    if (!asset) return;
-    
-    // Calculate actual center position - for walls, use bounding box center from wallNodes
-    let centerX = asset.x;
-    let centerY = asset.y;
-    
-    if (asset.type === 'wall-segments' && asset.wallNodes && asset.wallNodes.length > 0) {
-      // Calculate bounding box from wallNodes (absolute coordinates)
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      asset.wallNodes.forEach(node => {
-        minX = Math.min(minX, node.x);
-        minY = Math.min(minY, node.y);
-        maxX = Math.max(maxX, node.x);
-        maxY = Math.max(maxY, node.y);
-      });
-      if (isFinite(minX)) {
-        centerX = (minX + maxX) / 2;
-        centerY = (minY + maxY) / 2;
-      }
-    }
-    
-    const rect = el.getBoundingClientRect();
-    const desired = {
-      x: rect.width / 2 - centerX * targetZoom.current,
-      y: rect.height / 2 - centerY * targetZoom.current,
-    };
-    targetOffset.current = clampOffset(desired, targetZoom.current, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAssetId]); // Only trigger on selection change, not on asset updates
+  }, [snapToAnchorMode, handlePointerDown]);
 
   return (
-    <div ref={containerRef} className="w-full h-full overflow-hidden bg-gray-50" onMouseDown={handlePointerDown}>
+    <div 
+      ref={containerRef} 
+      className="w-full h-full overflow-hidden bg-gray-50" 
+      onMouseDown={snapToAnchorMode ? handleContainerMouseDown : handlePointerDown}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        closeContextMenu();
+      }}
+      data-export-id="canvas-container"
+    >
       <div
         className="relative w-full h-full"
         style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`, transformOrigin: "top left" }}
@@ -525,31 +569,40 @@ export default function Canvas({
       {/* Single Canvas (the scene itself) */}
     <div
       ref={canvasRef}
-      data-canvas-container
+      data-canvas-container="true"
         className={`relative ${
           isPenMode ||
           isWallMode ||
           wallDrawingMode ||
           shapeMode ||
-          isRectangularSelectionMode ||
-          isExportSelectionMode
+          isRectangularSelectionMode
             ? "cursor-crosshair"
             : ""
         }`}
       style={{
         width: scenePxWNoZoom,
         height: scenePxHNoZoom,
-        cursor: (isRectangularSelectionMode || isExportSelectionMode) ? "crosshair" : (isWallMode || wallDrawingMode || shapeMode || isPenMode) ? "crosshair" : undefined,
+        cursor: isRectangularSelectionMode ? "crosshair" : (isWallMode || wallDrawingMode || shapeMode) ? "crosshair" : undefined,
       }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
       onMouseMove={(e) => {
-        if (isRectangularSelectionMode && rectangularSelectionStart) {
+        // Only process rectangular selection if not in drawing modes
+        // Drawing modes take absolute priority - rectangular selection should never activate during drawing
+        if (
+          isRectangularSelectionMode &&
+          rectangularSelectionStart &&
+          !isPenMode &&
+          !isWallMode &&
+          !wallDrawingMode &&
+          !shapeMode &&
+          !snapToAnchorMode
+        ) {
           const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
           updateRectangularSelectionDrag(x, y);
         }
         // Update wall preview while drawing
-        if (wallDrawingMode && currentWallStart) {
+        if ((wallDrawingMode || isWallMode) && currentWallStart) {
           let { x, y } = clientToCanvasMM(e.clientX, e.clientY);
           // Snap preview to the very first start point to allow clean closure
           if (currentWallSegments && currentWallSegments.length > 0) {
@@ -560,6 +613,10 @@ export default function Canvas({
             }
           }
           updateWallTempEnd({ x, y });
+        } else if ((wallDrawingMode || isWallMode) && !currentWallStart) {
+          // If wall mode is active but no segment started yet, update temp end on first point
+          const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+          // This ensures preview shows even before first click
         }
         // Update shape preview while drawing
         if (shapeMode && shapeStart) {
@@ -581,11 +638,20 @@ export default function Canvas({
         }
       }}
       onMouseUp={(e) => {
-        if (isRectangularSelectionMode && rectangularSelectionStart) {
+        // Only finish rectangular selection if not in drawing modes
+        if (
+          isRectangularSelectionMode &&
+          rectangularSelectionStart &&
+          !isPenMode &&
+          !isWallMode &&
+          !wallDrawingMode &&
+          !shapeMode
+        ) {
           finishRectangularSelectionDrag();
+          return;
         }
         // Commit wall segment on click release in wall mode
-        if (wallDrawingMode && currentWallStart) {
+        if ((wallDrawingMode || isWallMode) && currentWallStart) {
           // Auto-close if we're near the first point
           const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
           if (currentWallSegments && currentWallSegments.length > 0) {
@@ -607,34 +673,45 @@ export default function Canvas({
       }}
       onMouseDown={(e) => {
         if (e.button !== 0) return;
-        if (e.target === canvasRef.current) {
-          // Handle rectangular selection (when in rectangular selection mode and not in drawing modes)
-          if (
-            isRectangularSelectionMode &&
-            !isPenMode &&
-            !isWallMode &&
-            !wallDrawingMode &&
-            !shapeMode
-          ) {
-            const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-            startRectangularSelectionDrag(x, y);
-            return;
-          }
-
-          if (isPenMode || isWallMode) {
+        
+        // In snap-to-anchor mode, handle ALL clicks (on canvas, assets, or anywhere)
+        // The asset handlers will let clicks through in snap mode
+        if (snapToAnchorMode) {
+          // Always handle snap mode clicks, regardless of target
+          // This ensures clicks on assets are processed
+        } else if (e.target !== canvasRef.current && 
+                   !(canvasRef.current && canvasRef.current.contains(e.target as Node))) {
+          // Not in snap mode and click is not on canvas - let asset handlers deal with it
+          return;
+        }
+        
+        if (e.target === canvasRef.current || snapToAnchorMode || 
+            (canvasRef.current && canvasRef.current.contains(e.target as Node))) {
+          // Drawing modes take absolute priority - check them FIRST
+          // If in any drawing mode, rectangular selection should NEVER activate
+          if (isPenMode) {
             e.stopPropagation();
             const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
             
-            // Always start wall/pen path; remove cross placement in wall mode
+            // Start pen path
             currentDrawingPath.current = [{ x, y }];
             setIsDrawing(true);
             setCurrentPath([{ x, y }]);
             setTempPath([{ x, y }]);
             return; // Prevent canvas movement when in drawing modes
-          } else if (wallDrawingMode) {
-            // Check if the click target is the canvas itself (not a child element like sidebar buttons)
-            if (e.target !== canvasRef.current) {
+          } else if (isWallMode || wallDrawingMode) {
+            // Check if the click is within the canvas area (including child elements)
+            // Allow clicks on canvas or any child element within the canvas
+            const isCanvasClick = e.target === canvasRef.current || 
+              (canvasRef.current && canvasRef.current.contains(e.target as Node));
+            
+            if (!isCanvasClick) {
               return;
+            }
+            
+            // Ensure wallDrawingMode is set if isWallMode is true
+            if (isWallMode && !wallDrawingMode) {
+              setWallDrawingMode(true);
             }
             
             e.stopPropagation();
@@ -689,8 +766,202 @@ export default function Canvas({
             const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
             startShape({ x, y });
             return;
+          } else if (snapToAnchorMode) {
+            // Snap to anchor mode: 4-step process
+            // Step 1: Click on source item (what to snap) - highlights in green
+            // Step 2: Click on anchor on source item (which anchor to use)
+            // Step 3: Click on target item (where to snap to) - highlights in blue
+            // Step 4: Click on anchor on target item (which anchor to snap to) - performs snap
+            e.stopPropagation();
+            e.preventDefault();
+            const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+            console.log('Snap mode click at:', x, y, 'Current state - source:', snapSourceAssetId, 'sourceAnchor:', snapSourceAnchor, 'target:', snapTargetAssetId, 'targetAnchor:', snapTargetAnchor);
+            
+            // First, check if click is directly on an anchor point (within 15mm threshold for easier clicking)
+            const ANCHOR_CLICK_THRESHOLD = 15; // mm - increased for easier clicking
+            let clickedAnchor: { asset: AssetInstance; anchor: any } | null = null;
+            
+            // Check all assets for anchor points near the click
+            for (const asset of assets) {
+              const isShape = asset.type === "square" || asset.type === "circle";
+              const anchors = isShape
+                ? calculateShapeAnchors({
+                    x: asset.x,
+                    y: asset.y,
+                    width: asset.width || 0,
+                    height: asset.height || 0,
+                  } as any)
+                : calculateAssetAnchors({
+                    x: asset.x,
+                    y: asset.y,
+                    width: asset.width || 0,
+                    height: asset.height || 0,
+                    scale: asset.scale || 1,
+                  } as any);
+              
+              // Check if click is directly on any anchor
+              for (const anchor of anchors) {
+                const dist = Math.hypot(anchor.x - x, anchor.y - y);
+                if (dist <= ANCHOR_CLICK_THRESHOLD) {
+                  clickedAnchor = { asset, anchor };
+                  break;
+                }
+              }
+              if (clickedAnchor) break;
+            }
+            
+            // If clicked directly on an anchor, handle anchor selection
+            if (clickedAnchor) {
+              const { asset, anchor } = clickedAnchor;
+              
+              // Step 2: Select anchor on source item
+              if (snapSourceAssetId && asset.id === snapSourceAssetId && !snapSourceAnchor) {
+                setSnapSource(asset.id, anchor.id);
+                console.log('Selected source anchor:', anchor.id, 'on asset:', asset.id);
+                return;
+              }
+              
+              // Step 4: Select anchor on target item and perform snap
+              if (snapSourceAssetId && snapSourceAnchor && snapTargetAssetId && asset.id === snapTargetAssetId && !snapTargetAnchor) {
+                setSnapTarget(asset.id, anchor.id);
+                console.log('Selected target anchor:', anchor.id, 'on asset:', asset.id, '- performing snap');
+                performSnapToAnchor();
+                // Clear snap mode after snapping
+                useSceneStore.getState().setSnapToAnchorMode(false);
+                return;
+              }
+              
+              // If clicking on an anchor but not in the right state, ignore
+              return;
+            }
+            
+            // Otherwise, find the asset at the click position
+            const clickedAsset = assets.find((asset) => {
+              if (asset.type === "square" || asset.type === "circle") {
+                const halfW = (asset.width || 0) / 2;
+                const halfH = (asset.height || 0) / 2;
+                return (
+                  x >= asset.x - halfW &&
+                  x <= asset.x + halfW &&
+                  y >= asset.y - halfH &&
+                  y <= asset.y + halfH
+                );
+              } else {
+                const halfW = ((asset.width || 0) * (asset.scale || 1)) / 2;
+                const halfH = ((asset.height || 0) * (asset.scale || 1)) / 2;
+                return (
+                  x >= asset.x - halfW &&
+                  x <= asset.x + halfW &&
+                  y >= asset.y - halfH &&
+                  y <= asset.y + halfH
+                );
+              }
+            });
+
+            if (!clickedAsset) return;
+
+            // Step 1: Select source item (what to snap)
+            if (!snapSourceAssetId) {
+              // Only clear any previous TARGET selection; don't wipe existing source state
+              const currentState = useSceneStore.getState();
+              if (currentState.snapTargetAssetId || currentState.snapTargetAnchor) {
+                console.log('Clearing previous target before setting new source');
+                currentState.setSnapTarget(null, null);
+              }
+              setSnapSource(clickedAsset.id, null);
+              console.log('Step 1: Selected SOURCE item (should be GREEN):', clickedAsset.id, clickedAsset.type);
+              return;
+            }
+            
+            // Step 3: Select target item (where to snap to) - only if source anchor is already selected
+            if (snapSourceAssetId && snapSourceAnchor && !snapTargetAssetId) {
+              // Make sure we're not clicking on the same asset
+              if (clickedAsset.id === snapSourceAssetId) {
+                console.log('❌ Cannot select the same asset as both source and target');
+                return;
+              }
+
+              // Choose a target anchor on the clicked asset:
+              // Prefer its CENTER anchor so you can click anywhere inside the rectangle
+              // and still snap to its center; otherwise fall back to the nearest anchor
+              const isShape = clickedAsset.type === "square" || clickedAsset.type === "circle";
+              const anchors = isShape
+                ? calculateShapeAnchors({
+                    x: clickedAsset.x,
+                    y: clickedAsset.y,
+                    width: clickedAsset.width || 0,
+                    height: clickedAsset.height || 0,
+                  } as any)
+                : calculateAssetAnchors({
+                    x: clickedAsset.x,
+                    y: clickedAsset.y,
+                    width: clickedAsset.width || 0,
+                    height: clickedAsset.height || 0,
+                    scale: clickedAsset.scale || 1,
+                  } as any);
+
+              let chosenAnchor = anchors.find((a) => a.id === "center");
+              if (!chosenAnchor && anchors.length > 0) {
+                // Fall back to nearest anchor to the click position
+                let minDist = Infinity;
+                anchors.forEach((anchor) => {
+                  const dist = Math.hypot(anchor.x - x, anchor.y - y);
+                  if (dist < minDist) {
+                    minDist = dist;
+                    chosenAnchor = anchor;
+                  }
+                });
+              }
+
+              if (!chosenAnchor) {
+                console.warn("Snap-to-anchor: no anchors found on target asset", clickedAsset.id);
+                return;
+              }
+
+              // Set target asset + anchor and perform the snap immediately
+              setSnapTarget(clickedAsset.id, chosenAnchor.id);
+              console.log('✅ Step 3: Selected TARGET item (BLUE) and anchor:', chosenAnchor.id, 'asset:', clickedAsset.id);
+              performSnapToAnchor();
+              useSceneStore.getState().setSnapToAnchorMode(false);
+              return;
+            }
+            
+            // If source is selected but no anchor yet, remind user to select anchor
+            if (snapSourceAssetId && !snapSourceAnchor) {
+              console.log('⚠️ Source item selected but no anchor chosen yet. Click on an anchor point on the source item.');
+              return;
+            }
+            
+            // If we get here, something unexpected happened
+            console.log('⚠️ Unexpected state in snap mode:', {
+              snapSourceAssetId,
+              snapSourceAnchor,
+              snapTargetAssetId,
+              snapTargetAnchor,
+              clickedAssetId: clickedAsset.id
+            });
+            
+            return;
           } else {
-            clearSelection();
+            // Handle rectangular selection ONLY if explicitly selected and no drawing modes are active
+            // This must come AFTER all drawing mode checks to prevent interference
+            if (
+              isRectangularSelectionMode &&
+              !isPenMode &&
+              !isWallMode &&
+              !wallDrawingMode &&
+              !shapeMode &&
+              !snapToAnchorMode
+            ) {
+              const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+              startRectangularSelectionDrag(x, y);
+              return;
+            }
+            
+            // Clear selection when clicking on empty workspace (not in active drawing modes)
+            if (!isPenMode && !isWallMode && !wallDrawingMode && !shapeMode && !snapToAnchorMode && !isRectangularSelectionMode) {
+              clearSelection();
+            }
             e.stopPropagation();
             mouseRefs.isMovingCanvas.current = true;
             mouseRefs.lastCanvasPointer.current = {
@@ -707,7 +978,7 @@ export default function Canvas({
       <DrawingPath
         isDrawing={isDrawing}
         tempPath={tempPath}
-        wallDrawingMode={wallDrawingMode}
+        wallDrawingMode={wallDrawingMode || isWallMode}
         currentWallSegments={currentWallSegments}
         currentWallStart={currentWallStart}
         currentWallTempEnd={currentWallTempEnd}
@@ -759,10 +1030,55 @@ export default function Canvas({
         </motion.div>
       )}
 
+      {/* Snap to Anchor Status */}
+      {snapToAnchorMode && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          className='absolute top-4 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap z-50'
+        >
+          {!snapSourceAssetId
+            ? "Step 1: Click on the source item (what to snap)"
+            : !snapSourceAnchor
+            ? "Step 2: Click on an anchor on the source item"
+            : !snapTargetAssetId
+            ? "Step 3: Click on the target item (where to snap to)"
+            : !snapTargetAnchor
+            ? "Step 4: Click on an anchor on the target item"
+            : "Ready to snap"}
+          <div className='absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-green-600'></div>
+        </motion.div>
+      )}
+
       {/* Selection Box */}
       <div style={{ pointerEvents: 'none' }}>
         <SelectionBox mmToPx={mmToPx} />
       </div>
+
+      {/* Anchor Highlights for Snap to Anchor */}
+      <AnchorHighlights mmToPx={mmToPx} />
+
+      {/* Context menu for snap-to-anchor */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-white border border-gray-200 rounded-md shadow-xl text-sm min-w-[180px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100 uppercase">
+            {snapSourceAssetId && snapSourceAnchor ? "Use as Anchor" : "Snap to Anchor"}
+          </div>
+          {anchorMenuOptions.map((option) => (
+            <button
+              key={option.id}
+              className="w-full px-3 py-2 text-left hover:bg-gray-100 text-gray-800"
+              onClick={() => handleSnapMenuSelect(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Chair Radius Preview */}
       {selectedAssetId && assets.find(a => a.id === selectedAssetId)?.type.includes('table') && (
@@ -776,21 +1092,21 @@ export default function Canvas({
             height: `${chairSettings.radius * mmToPx * 2}px`,
           }}
         >
-          {/* <div */}
-          {/*   className="absolute inset-0 rounded-full border-2 border-blue-400 border-dashed opacity-60" */}
-          {/*   style={{ */}
-          {/*     width: '100%', */}
-          {/*     height: '100%', */}
-          {/*   }} */}
-          {/* /> */}
-          {/* {/* Debug text showing current radius */} 
-          {/* <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 font-bold bg-white px-1 rounded"> */}
-          {/*   {chairSettings.radius}mm radius */}
-          {/* </div> */}
-          {/* {/* Show chair count */} 
-          {/* <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 font-bold bg-white px-1 rounded"> */}
-          {/*   {chairSettings.numChairs} chairs */}
-          {/* </div> */}
+          <div
+            className="absolute inset-0 rounded-full border-2 border-blue-400 border-dashed opacity-60"
+            style={{
+              width: '100%',
+              height: '100%',
+            }}
+          />
+          {/* Debug text showing current radius */}
+          <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 font-bold bg-white px-1 rounded">
+            {chairSettings.radius}mm radius
+          </div>
+          {/* Show chair count */}
+          <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 font-bold bg-white px-1 rounded">
+            {chairSettings.numChairs} chairs
+          </div>
         </div>
       )}
 
@@ -806,8 +1122,6 @@ export default function Canvas({
         const leftPx = asset.x * mmToPx;
         const topPx = asset.y * mmToPx;
         const totalRotation = asset.rotation;
-
-                console.log("assets", assets)
 
           // Use GroupRenderer for group assets, AssetRenderer for regular assets
           if (asset.isGroup) {
@@ -836,7 +1150,7 @@ export default function Canvas({
                 onAssetMouseEnter={() => {}}
                 onAssetMouseOver={() => {}}
                 onAssetMouseOut={() => {}}
-                onAssetContextMenu={() => {}}
+                onAssetContextMenu={handleAssetContextMenu}
                 onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
                 onRotationHandleMouseDown={
                   assetHandlers.onRotationHandleMouseDown
@@ -868,221 +1182,15 @@ export default function Canvas({
               onRotationHandleMouseDown={
                 assetHandlers.onRotationHandleMouseDown
               }
+            onAssetContextMenu={handleAssetContextMenu}
           />
         );
       })}
       </div>
-        {/* Export Selection Box - inside canvas for proper positioning */}
-        <ExportSelectionBox mmToPx={mmToPx} />
-        {/* Selection Box */}
-        <SelectionBox mmToPx={mmToPx} />
         </div>
       </div>
       {/* 3D Overlay */}
       <ThreeDOverlay />
-      {/* Export Modal */}
-      <ExportModal
-        isOpen={showExportModal}
-        onClose={() => {
-          setShowExportModal(false);
-          setExportArea(null);
-          setExportSelectionMode(false);
-          useSceneStore.getState().setExportSelectionMode(false);
-        }}
-        exportArea={exportArea}
-        onExport={async (paperSize, format) => {
-          if (!exportArea || !canvasRef.current) return;
-          
-          // Calculate the export area in pixels
-          const minX = Math.min(exportArea.startX, exportArea.endX);
-          const minY = Math.min(exportArea.startY, exportArea.endY);
-          const maxX = Math.max(exportArea.startX, exportArea.endX);
-          const maxY = Math.max(exportArea.startY, exportArea.endY);
-          const widthMm = maxX - minX;
-          const heightMm = maxY - minY;
-          
-          // Get paper size dimensions
-          const PAPER_SIZES: Record<string, { width: number; height: number }> = {
-            A1: { width: 594, height: 841 },
-            A2: { width: 420, height: 594 },
-            A3: { width: 297, height: 420 },
-            A4: { width: 210, height: 297 },
-            A5: { width: 148, height: 210 },
-          };
-          
-          const paperSizeInfo = PAPER_SIZES[paperSize];
-          if (!paperSizeInfo) return;
-          
-          // Get the canvas container element
-          const containerEl = containerRef.current;
-          if (!containerEl) return;
-          
-          // Set canvas size based on paper size (convert mm to pixels at 96 DPI)
-          const dpi = 96;
-          const mmToInch = 0.0393701;
-          const pixelsPerMm = (dpi * mmToInch);
-          
-          try {
-            // Capture the canvas area using html2canvas
-            const canvasElement = canvasRef.current;
-            if (!canvasElement) {
-              alert('Canvas element not found');
-              return;
-            }
-
-            // Calculate the export area in pixels relative to the canvas element
-            // The canvas element is at scenePxWNoZoom x scenePxHNoZoom
-            // Export coordinates are in mm, need to convert to pixels
-            const exportX = minX * mmToPx;
-            const exportY = minY * mmToPx;
-            const exportWidth = widthMm * mmToPx;
-            const exportHeight = heightMm * mmToPx;
-
-            // Capture the entire canvas first
-            // Use try-catch to handle any CSS parsing errors (like lab() color function)
-            let capturedCanvas: HTMLCanvasElement;
-            try {
-              capturedCanvas = await html2canvas(canvasElement, {
-                scale: 2, // Higher quality
-                useCORS: true,
-                backgroundColor: '#ffffff',
-                width: scenePxWNoZoom,
-                height: scenePxHNoZoom,
-                onclone: (clonedDoc) => {
-                  // Fix CSS color issues by removing problematic styles
-                  try {
-                    const styleSheets = Array.from(clonedDoc.styleSheets);
-                    styleSheets.forEach((sheet) => {
-                      try {
-                        const rules = Array.from(sheet.cssRules || []);
-                        rules.forEach((rule) => {
-                          if (rule instanceof CSSStyleRule) {
-                            // Replace lab() colors with rgb equivalents
-                            if (rule.style.color && rule.style.color.includes('lab')) {
-                              rule.style.color = 'rgb(0, 0, 0)';
-                            }
-                            if (rule.style.backgroundColor && rule.style.backgroundColor.includes('lab')) {
-                              rule.style.backgroundColor = 'transparent';
-                            }
-                          }
-                        });
-                      } catch (e) {
-                        // Ignore cross-origin or other CSS errors
-                      }
-                    });
-                  } catch (e) {
-                    // Ignore errors
-                  }
-                },
-                logging: false,
-                allowTaint: false,
-              });
-            } catch (error: any) {
-              console.error('html2canvas error:', error);
-              // If error is about lab() color, try with a workaround
-              if (error?.message?.includes('lab') || error?.message?.includes('color')) {
-                // Fallback: use simpler options and ignore CSS parsing errors
-                try {
-                  capturedCanvas = await html2canvas(canvasElement, {
-                    scale: 1,
-                    useCORS: false,
-                    backgroundColor: '#ffffff',
-                    logging: false,
-                    allowTaint: true,
-                    ignoreElements: () => false,
-                  });
-                } catch (fallbackError) {
-                  alert('Export failed due to CSS compatibility issues. Please try again or contact support.');
-                  return;
-                }
-              } else {
-                alert('Export failed. Please try again.');
-                return;
-              }
-            }
-
-            // Create a new canvas for the cropped area
-            const croppedCanvas = document.createElement('canvas');
-            const croppedCtx = croppedCanvas.getContext('2d');
-            if (!croppedCtx) return;
-
-            // Set size to the export area (scaled for quality)
-            croppedCanvas.width = exportWidth * 2;
-            croppedCanvas.height = exportHeight * 2;
-
-            // Draw the cropped area from the captured canvas
-            // The captured canvas is at 2x scale, so multiply coordinates by 2
-            croppedCtx.drawImage(
-              capturedCanvas,
-              exportX * 2, exportY * 2, exportWidth * 2, exportHeight * 2,
-              0, 0, exportWidth * 2, exportHeight * 2
-            );
-
-            // Now scale to fit paper size
-            const finalCanvas = document.createElement('canvas');
-            const finalCtx = finalCanvas.getContext('2d');
-            if (!finalCtx) return;
-
-            // Calculate scale to fit paper size
-            const paperScaleX = (paperSizeInfo.width * pixelsPerMm) / (exportWidth * 2);
-            const paperScaleY = (paperSizeInfo.height * pixelsPerMm) / (exportHeight * 2);
-            const finalScale = Math.min(paperScaleX, paperScaleY);
-
-            finalCanvas.width = paperSizeInfo.width * pixelsPerMm;
-            finalCanvas.height = paperSizeInfo.height * pixelsPerMm;
-
-            // Fill white background
-            finalCtx.fillStyle = '#ffffff';
-            finalCtx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
-
-            // Center and scale the cropped image
-            const scaledWidth = exportWidth * 2 * finalScale;
-            const scaledHeight = exportHeight * 2 * finalScale;
-            const centerX = (finalCanvas.width - scaledWidth) / 2;
-            const centerY = (finalCanvas.height - scaledHeight) / 2;
-
-            finalCtx.drawImage(
-              croppedCanvas,
-              centerX, centerY, scaledWidth, scaledHeight
-            );
-
-            // Export based on format
-            const fileName = `export-${Date.now()}.${format}`;
-
-            if (format === 'pdf') {
-              const pdf = new jsPDF({
-                orientation: paperSizeInfo.width > paperSizeInfo.height ? 'landscape' : 'portrait',
-                unit: 'mm',
-                format: paperSize.toLowerCase(),
-              });
-              const imgData = finalCanvas.toDataURL('image/png', 1.0);
-              pdf.addImage(imgData, 'PNG', 0, 0, paperSizeInfo.width, paperSizeInfo.height);
-              pdf.save(fileName);
-            } else {
-              // PNG or JPEG
-              const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
-              finalCanvas.toBlob((blob) => {
-                if (blob) {
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = fileName;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }
-              }, mimeType, format === 'jpeg' ? 0.95 : 1.0);
-            }
-
-            setShowExportModal(false);
-            setExportArea(null);
-            setExportSelectionMode(false);
-            useSceneStore.getState().setExportSelectionMode(false);
-          } catch (error) {
-            console.error('Export error:', error);
-            alert('Export failed. Please try again.');
-          }
-        }}
-      />
     </div>
   );
 }

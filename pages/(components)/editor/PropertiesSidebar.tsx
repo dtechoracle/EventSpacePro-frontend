@@ -7,6 +7,8 @@ import ShareModal from "./ShareModal";
 import ExportPanel from "./ExportPanel";
 import { useAssetProperties } from "@/hooks/useAssetProperties";
 import { useSceneStore } from "@/store/sceneStore";
+import { useEditorStore } from "@/store/editorStore"; // NEW STORE
+import { useProjectStore } from "@/store/projectStore";
 import { useUserStore } from "@/store/userStore";
 
 export default function PropertiesSidebar(): React.JSX.Element {
@@ -32,6 +34,28 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const setSelectedGridSizeIndex = useSceneStore((s) => s.setSelectedGridSizeIndex);
   const snapToGridEnabled = useSceneStore((s) => s.snapToGridEnabled);
   const toggleSnapToGrid = useSceneStore((s) => s.toggleSnapToGrid);
+
+  // NEW STORE - sync grid controls
+  const editorStore = useEditorStore();
+
+  // Sync function to toggle grid in both stores
+  const handleToggleGrid = () => {
+    toggleGrid(); // Old store
+    editorStore.toggleGrid(); // New store
+  };
+
+  // Sync function to toggle snap to grid in both stores
+  const handleToggleSnapToGrid = () => {
+    toggleSnapToGrid(); // Old store
+    editorStore.toggleSnapToGrid(); // New store
+  };
+
+  // Sync function to set grid size in both stores
+  const handleSetGridSize = (index: number) => {
+    setSelectedGridSizeIndex(index); // Old store
+    const size = availableGridSizes?.[index] || 10;
+    editorStore.setGridSize(size); // New store
+  };
   // const addAsset = useSceneStore((s) => s.addAsset);
 
   // Wall drawing state
@@ -45,10 +69,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const [showShareModal, setShowShareModal] = useState(false);
   const [modelName, setModelName] = useState<string>("");
   const open3D = useSceneStore((s) => s.open3DOverlay);
-  
+
   // Get logged in user
   const user = useUserStore((s) => s.user);
-  
+
   // Get user's full name
   const getUserName = () => {
     if (!user) return "";
@@ -56,9 +80,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
     const lastName = user.lastName || "";
     return `${firstName} ${lastName}`.trim() || user.email || "";
   };
-  
+
   const userName = getUserName();
-  
+
   // Set model name to user's name when user is loaded
   useEffect(() => {
     if (userName && !modelName) {
@@ -68,7 +92,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
   // Chair placement state from store with fallback
   const chairSettings = useSceneStore((s) => s.chairSettings) || { numChairs: 8, radius: 80 };
-  
+
   // Direct function to update chair settings
   const updateChairSettings = (settings: { numChairs: number; radius: number }) => {
     const state = useSceneStore.getState();
@@ -183,22 +207,20 @@ export default function PropertiesSidebar(): React.JSX.Element {
               <span>Grid</span>
               <div className="inline-flex rounded-lg bg-[#0000000D] p-1">
                 <button
-                  onClick={() => !showGrid && toggleGrid()}
-                  className={`px-4 py-1 text-xs rounded-md transition-all ${
-                    showGrid
-                      ? "bg-white text-gray-900 shadow-sm font-medium"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
+                  onClick={() => !showGrid && handleToggleGrid()}
+                  className={`px-4 py-1 text-xs rounded-md transition-all ${showGrid
+                    ? "bg-white text-gray-900 shadow-sm font-medium"
+                    : "text-gray-600 hover:text-gray-900"
+                    }`}
                 >
                   Show
                 </button>
                 <button
-                  onClick={() => showGrid && toggleGrid()}
-                  className={`px-4 py-1 text-xs rounded-md transition-all ${
-                    !showGrid
-                      ? "bg-white text-gray-900 shadow-sm font-medium"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
+                  onClick={() => showGrid && handleToggleGrid()}
+                  className={`px-4 py-1 text-xs rounded-md transition-all ${!showGrid
+                    ? "bg-white text-gray-900 shadow-sm font-medium"
+                    : "text-gray-600 hover:text-gray-900"
+                    }`}
                 >
                   Hide
                 </button>
@@ -208,19 +230,21 @@ export default function PropertiesSidebar(): React.JSX.Element {
             {/* Grid Size */}
             {showGrid && (
               <div className="py-2">
-                <label className="block text-xs text-gray-600 mb-1">Grid Size (meters)</label>
-                <select 
-                  value={availableGridSizes?.[selectedGridSizeIndex] || 10} 
+                <label className="block text-xs text-gray-600 mb-1">Grid Size</label>
+                <select
+                  value={availableGridSizes?.[selectedGridSizeIndex] || 1000}
                   onChange={(e) => {
                     const selectedSize = Number(e.target.value);
-                    const index = availableGridSizes?.indexOf(selectedSize) || 1;
-                    setSelectedGridSizeIndex(index);
+                    const index = availableGridSizes?.indexOf(selectedSize) ?? 2;
+                    handleSetGridSize(index);
                   }}
                   className="w-full text-xs border rounded px-2 py-1 bg-white"
                 >
-                  {(availableGridSizes || [5, 10, 25, 50, 100]).map((size) => (
-                    <option key={size} value={size}>{(size/1000).toFixed(3)} m</option>
-                  ))}
+                  {(availableGridSizes || [100, 500, 1000, 2000, 5000]).map((size) => {
+                    const meters = size / 1000;
+                    const label = meters >= 1 ? `${meters}m` : `${meters * 1000}mm (${meters}m)`;
+                    return <option key={size} value={size}>{label}</option>;
+                  })}
                 </select>
               </div>
             )}
@@ -231,22 +255,20 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 <span>Snap to Grid</span>
                 <div className="inline-flex rounded-lg bg-[#0000000D] p-1">
                   <button
-                    onClick={() => !snapToGridEnabled && toggleSnapToGrid()}
-                    className={`px-4 py-1 text-xs rounded-md transition-all ${
-                      snapToGridEnabled
-                        ? "bg-white text-gray-900 shadow-sm font-medium"
-                        : "text-gray-600 hover:text-gray-900"
-                    }`}
+                    onClick={() => !snapToGridEnabled && handleToggleSnapToGrid()}
+                    className={`px-4 py-1 text-xs rounded-md transition-all ${snapToGridEnabled
+                      ? "bg-white text-gray-900 shadow-sm font-medium"
+                      : "text-gray-600 hover:text-gray-900"
+                      }`}
                   >
                     On
                   </button>
                   <button
-                    onClick={() => snapToGridEnabled && toggleSnapToGrid()}
-                    className={`px-4 py-1 text-xs rounded-md transition-all ${
-                      !snapToGridEnabled
-                        ? "bg-white text-gray-900 shadow-sm font-medium"
-                        : "text-gray-600 hover:text-gray-900"
-                    }`}
+                    onClick={() => snapToGridEnabled && handleToggleSnapToGrid()}
+                    className={`px-4 py-1 text-xs rounded-md transition-all ${!snapToGridEnabled
+                      ? "bg-white text-gray-900 shadow-sm font-medium"
+                      : "text-gray-600 hover:text-gray-900"
+                      }`}
                   >
                     Off
                   </button>
@@ -355,7 +377,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
                 {/* Shape-specific properties */}
                 {selectedAsset.type === "square" ||
-                selectedAsset.type === "circle" ? (
+                  selectedAsset.type === "circle" ? (
                   <div className="space-y-2 mt-2">
                     <div className="flex justify-between items-center">
                       <span>Fill Color</span>
@@ -675,8 +697,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         const nextZIndex =
                           state.assets.length > 0
                             ? Math.max(
-                                ...state.assets.map((a) => a.zIndex || 0)
-                              ) + 25
+                              ...state.assets.map((a) => a.zIndex || 0)
+                            ) + 25
                             : 25;
                         state.updateAsset(selectedAsset.id, {
                           zIndex: nextZIndex,
@@ -702,7 +724,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   {selectedAsset.type.includes('table') && (
                     <div className="mb-4 p-3 bg-gray-100 border-t">
                       <div className="text-xs font-semibold text-gray-700 mb-3">Chair Placement</div>
-                      
+
                       {/* Number of Chairs */}
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-xs">Number of Chairs</span>
@@ -720,7 +742,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           }}
                         />
                       </div>
-                      
+
                       {/* Radius Around Table */}
                       <div className="flex justify-between items-center mb-3">
                         <span className="text-xs">Radius (mm)</span>
@@ -738,27 +760,27 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           }}
                         />
                       </div>
-                      
+
                       {/* Add Chairs Button */}
                       <button
                         className="w-full text-xs bg-blue-500 hover:bg-blue-600 text-white py-1.5 rounded shadow"
                         onClick={() => {
                           const state = useSceneStore.getState();
                           const addAssetObject = state.addAssetObject;
-                          
+
                           // Get table dimensions for chair sizing
                           const tableWidth = (selectedAsset.width || 100) * selectedAsset.scale;
                           const tableHeight = (selectedAsset.height || 100) * selectedAsset.scale;
                           const chairSize = Math.min(tableWidth, tableHeight) * 0.3; // 30% of smaller table dimension
-                          
+
                           // Use values from state with fallbacks
                           const numChairs = chairSettings.numChairs;
                           const radius = chairSettings.radius;
-                          
+
                           // Calculate chair positions in a circle around the table
                           const chairs = [];
                           const angleStep = 360 / numChairs; // Degrees per chair
-                          
+
                           for (let i = 0; i < numChairs; i++) {
                             const angleDegrees = i * angleStep;
                             const angleRadians = (angleDegrees * Math.PI) / 180;
@@ -770,7 +792,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             const chairRotation = (angleDegrees + 180 + 90) % 360;
                             chairs.push({ x, y, rotation: chairRotation });
                           }
-                          
+
                           // Create chair assets with table-proportional sizing
                           chairs.forEach((chairPos, index) => {
                             const chairAsset = {

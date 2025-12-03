@@ -74,7 +74,8 @@ export default function DrawingPath({
    *
    * We'll render these polygons into the mask (black = transparent area).
    */
-  const wallGap = 8; // thickness gap used for geometry generation (mm)
+  const defaultWallThickness = useSceneStore.getState().getCurrentWallThickness();
+  const wallGap = defaultWallThickness || 8;
   const wallGeometries: Array<{ outerPoints: { x: number; y: number }[]; innerPoints: { x: number; y: number }[] }> = [];
 
   // 1) asset walls (each asset may already contain full polygons or segments)
@@ -82,7 +83,8 @@ export default function DrawingPath({
   for (const asset of wallAssets) {
     try {
       // assume asset.wallSegments is in the same segment format your buildWallGeometry expects
-      const geom = buildWallGeometry(asset.wallSegments!, wallGap);
+      const thickness = asset.wallThickness ?? (defaultWallThickness || 75);
+      const geom = buildWallGeometry(asset.wallSegments!, thickness, thickness);
       if (geom && geom.outerPoints?.length && geom.innerPoints?.length) {
         wallGeometries.push(geom);
       }
@@ -113,7 +115,8 @@ export default function DrawingPath({
     }
 
     try {
-      const geom = buildWallGeometry(mergedSegments, wallGap);
+      const thickness = useSceneStore.getState().getCurrentWallThickness();
+      const geom = buildWallGeometry(mergedSegments, thickness, thickness);
       if (geom && geom.outerPoints?.length && geom.innerPoints?.length) {
         wallGeometries.push(geom);
       }
@@ -122,18 +125,9 @@ export default function DrawingPath({
     }
   }
 
-  // 3) current temp segment (the segment you're currently dragging / previewing)
-  if (currentWallStart && currentWallTempEnd) {
-    try {
-      const tempSegment = { start: currentWallStart, end: currentWallTempEnd };
-      const geom = buildWallGeometry([tempSegment], wallGap);
-      if (geom && geom.outerPoints?.length && geom.innerPoints?.length) {
-        wallGeometries.push(geom);
-      }
-    } catch (err) {
-      // console.warn('Failed building geometry for temp segment', err);
-    }
-  }
+  // 3) NOTE: we deliberately do NOT include the live temp segment here.
+  // It is rendered separately as a preview band below, so it doesn't
+  // interfere with the stable outlines / mask of already committed walls.
 
   // convert all geometries to path d strings (so they can be rendered in mask and stroked)
   const wallPathDs = wallGeometries.map((g) => geometryToPathD(g, mmToPx)).filter(Boolean);
@@ -285,10 +279,9 @@ export default function DrawingPath({
         <>
           {/* Current wall segment preview + guides */}
           {currentWallStart && currentWallTempEnd && (() => {
-            const wallGapLocal = 8;
-            const tempSegment = { start: currentWallStart, end: currentWallTempEnd };
-            const geometry = buildWallGeometry([tempSegment], wallGapLocal);
-            if (!geometry.outerPoints.length) return null;
+            // Get the actual wall thickness from the selected wall type
+            const wallThicknessMm = useSceneStore.getState().getCurrentWallThickness();
+            const wallGapLocal = wallThicknessMm;
 
             const startPx = { x: currentWallStart.x * mmToPx, y: currentWallStart.y * mmToPx };
             const endPx = { x: currentWallTempEnd.x * mmToPx, y: currentWallTempEnd.y * mmToPx };
@@ -301,61 +294,71 @@ export default function DrawingPath({
             const guideLines: React.JSX.Element[] = [];
             const guideTexts: React.JSX.Element[] = [];
 
-            // --- Base guides (for first segment as well)
+            // Always show horizontal and vertical guide lines from the start point
+            // These help with alignment while drawing
+            guideLines.push(
+              <line
+                key="guide-horizontal"
+                x1={0}
+                y1={startPx.y}
+                x2={canvasPxW}
+                y2={startPx.y}
+                stroke="#3b82f6"
+                strokeWidth={1}
+                opacity={0.4}
+                strokeDasharray="4,4"
+              />
+            );
+            guideLines.push(
+              <line
+                key="guide-vertical"
+                x1={startPx.x}
+                y1={0}
+                x2={startPx.x}
+                y2={canvasPxH}
+                stroke="#3b82f6"
+                strokeWidth={1}
+                opacity={0.4}
+                strokeDasharray="4,4"
+              />
+            );
+
+            // Also show guides from the current end point
             const verticalDelta = Math.abs(normalizeAngle(angleDeg - 90));
             const horizontalDelta = Math.abs(normalizeAngle(angleDeg));
             const isVertical = verticalDelta < TOL;
             const isHorizontal = horizontalDelta < TOL;
 
-            const axisColor = isVertical || isHorizontal ? '#22C55E' : '#EF4444';
-            const axisLabel = isVertical
-              ? 'Vertical'
-              : isHorizontal
-              ? 'Horizontal'
-              : 'Axis guide';
-
-            if (isVertical || (!isVertical && !isHorizontal)) {
-              guideLines.push(
-                <line
-                  key="axis-v"
-                  x1={endPx.x}
-                  y1={0}
-                  x2={endPx.x}
-                  y2={canvasPxH}
-                  stroke={axisColor}
-                  strokeWidth={1.5}
-                  opacity={0.9}
-                  strokeDasharray="5,5"
-                />
-              );
-            }
-            if (isHorizontal || (!isVertical && !isHorizontal)) {
-              guideLines.push(
-                <line
-                  key="axis-h"
-                  x1={0}
-                  y1={endPx.y}
-                  x2={canvasPxW}
-                  y2={endPx.y}
-                  stroke={axisColor}
-                  strokeWidth={1.5}
-                  opacity={0.9}
-                  strokeDasharray="5,5"
-                />
-              );
-            }
-
-            guideTexts.push(
-              <text
-                key="axis-text"
-                x={endPx.x + 8}
-                y={endPx.y - 8}
-                fill={axisColor}
-                fontSize={12}
-                fontWeight="600"
-              >
-                {axisLabel}
-              </text>
+            const axisColor = isVertical || isHorizontal ? '#22C55E' : '#3b82f6';
+            
+            // Show vertical guide from end point
+            guideLines.push(
+              <line
+                key="axis-v"
+                x1={endPx.x}
+                y1={0}
+                x2={endPx.x}
+                y2={canvasPxH}
+                stroke={axisColor}
+                strokeWidth={1.5}
+                opacity={0.6}
+                strokeDasharray="5,5"
+              />
+            );
+            
+            // Show horizontal guide from end point
+            guideLines.push(
+              <line
+                key="axis-h"
+                x1={0}
+                y1={endPx.y}
+                x2={canvasPxW}
+                y2={endPx.y}
+                stroke={axisColor}
+                strokeWidth={1.5}
+                opacity={0.6}
+                strokeDasharray="5,5"
+              />
             );
 
             // Keep perpendicular + parallel for later segments
@@ -391,32 +394,250 @@ export default function DrawingPath({
               }
             }
 
-            const fullPath = (() => {
-              const outer = geometry.outerPoints
-                .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x * mmToPx} ${p.y * mmToPx}`)
-                .join(' ');
-              const inner = geometry.innerPoints
-                .slice()
-                .reverse()
-                .map((p) => `L ${p.x * mmToPx} ${p.y * mmToPx}`)
-                .join(' ');
-              return `${outer} ${inner} Z`;
-            })();
+            // wallThicknessMm is already defined above, reuse it
+            const length = Math.sqrt(dx * dx + dy * dy);
+            
+            // Calculate dimension display position (outside the wall)
+            // Position dimension text outside the wall, offset perpendicular to the wall direction
+            const perpX = -dy / length;
+            const perpY = dx / length;
+            const dimensionOffset = 20; // Offset in mm to place dimension outside wall
+            const dimensionX = ((currentWallStart.x + currentWallTempEnd.x) / 2) + perpX * dimensionOffset;
+            const dimensionY = ((currentWallStart.y + currentWallTempEnd.y) / 2) + perpY * dimensionOffset;
+            
+            // Format dimension text
+            const dimensionText = length >= 1000 
+              ? `${(length / 1000).toFixed(2)} m` 
+              : `${length.toFixed(0)} mm`;
+            
+            // Calculate angle for dimension text rotation
+            const dimensionAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+            const textAngle = dimensionAngle < -90 || dimensionAngle > 90 ? dimensionAngle + 180 : dimensionAngle;
 
-            const wallThickness = useSceneStore.getState().getCurrentWallThickness();
+            // If length is tiny, just show a dot and guides
+            if (length < 0.001) {
+              return (
+                <>
+                  <circle
+                    cx={startPx.x}
+                    cy={startPx.y}
+                    r={2}
+                    fill="#000"
+                  />
+                  {guideLines}
+                  {guideTexts}
+                </>
+              );
+            }
 
+            // Build seamless preview using the same geometry approach as actual walls
+            // Combine all current segments with the temp segment for seamless rendering
+            const allSegments = [
+              ...currentWallSegments.map(seg => ({
+                start: { x: seg.start.x, y: seg.start.y },
+                end: { x: seg.end.x, y: seg.end.y }
+              })),
+              {
+                start: { x: currentWallStart.x, y: currentWallStart.y },
+                end: { x: currentWallTempEnd.x, y: currentWallTempEnd.y }
+              }
+            ];
+
+            try {
+              // Use buildWallGeometry to create seamless mitered corners
+              // buildWallGeometry expects wallThickness as the total wall width (distance between lines)
+              // It will divide by 2 internally to calculate the perpendicular offset
+              const previewGeometry = buildWallGeometry(allSegments, wallGapLocal, wallThicknessMm);
+              
+              console.log('Preview geometry:', {
+                outerPoints: previewGeometry?.outerPoints?.length,
+                innerPoints: previewGeometry?.innerPoints?.length,
+                outerSample: previewGeometry?.outerPoints?.[0],
+                innerSample: previewGeometry?.innerPoints?.[0],
+              });
+              
+              if (previewGeometry && previewGeometry.outerPoints?.length > 0 && previewGeometry.innerPoints?.length > 0) {
+                // Build paths for outer and inner lines (open paths, not closed)
+                const outerPath = previewGeometry.outerPoints
+                  .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x * mmToPx} ${p.y * mmToPx}`)
+                  .join(' ');
+                
+                const innerPath = previewGeometry.innerPoints
+                  .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x * mmToPx} ${p.y * mmToPx}`)
+                  .join(' ');
+                
+                // Verify the paths are different
+                const firstOuter = previewGeometry.outerPoints[0];
+                const firstInner = previewGeometry.innerPoints[0];
+                const distance = Math.sqrt(
+                  Math.pow((firstOuter.x - firstInner.x) * mmToPx, 2) +
+                  Math.pow((firstOuter.y - firstInner.y) * mmToPx, 2)
+                );
+
+                console.log('Preview paths:', {
+                  outerPath: outerPath.substring(0, 100),
+                  innerPath: innerPath.substring(0, 100),
+                });
+
+                // Use a professional stroke width (2px) for preview
+                const previewStrokeWidth = 2;
+                
+                return (
+                  <>
+                    {/* Seamless double-line wall preview with mitered corners */}
+                    <path
+                      d={outerPath}
+                      fill="none"
+                      stroke="#000000"
+                      strokeWidth={previewStrokeWidth}
+                      strokeDasharray="6,4"
+                      strokeLinecap="square"
+                      strokeLinejoin="round"
+                      opacity="0.9"
+                    />
+                    <path
+                      d={innerPath}
+                      fill="none"
+                      stroke="#000000"
+                      strokeWidth={previewStrokeWidth}
+                      strokeDasharray="6,4"
+                      strokeLinecap="square"
+                      strokeLinejoin="round"
+                      opacity="0.9"
+                    />
+                    {guideLines}
+                    {guideTexts}
+                    {/* Real-time dimension display outside the wall */}
+                    <g transform={`translate(${dimensionX * mmToPx}, ${dimensionY * mmToPx}) rotate(${textAngle})`}>
+                      <rect
+                        x={-dimensionText.length * 3 - 4}
+                        y={-8}
+                        width={dimensionText.length * 6 + 8}
+                        height={16}
+                        fill="white"
+                        stroke="#3b82f6"
+                        strokeWidth={1}
+                        rx={2}
+                        opacity={0.95}
+                      />
+                      <text
+                        x={0}
+                        y={4}
+                        fill="#1f2937"
+                        fontSize={11}
+                        fontWeight="600"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                      >
+                        {dimensionText}
+                      </text>
+                    </g>
+                  </>
+                );
+              } else {
+                console.warn('Preview geometry is invalid:', previewGeometry);
+              }
+            } catch (err) {
+              // Fallback to simple lines if geometry building fails
+              console.warn('Failed to build preview geometry, using fallback:', err);
+            }
+
+            // Fallback: Simple two-line preview if geometry building fails
+            // Calculate normal vector (perpendicular to the segment)
+            // Normal vector points 90 degrees clockwise from the segment direction
+            const nx = -dy / length;
+            const ny = dx / length;
+            // Offset by half the wall thickness on each side to create two parallel lines
+            // This creates lines that are wallThicknessMm apart
+            const offsetMm = wallThicknessMm / 2;
+
+            const line1StartMm = {
+              x: currentWallStart.x + nx * offsetMm,
+              y: currentWallStart.y + ny * offsetMm,
+            };
+            const line1EndMm = {
+              x: currentWallTempEnd.x + nx * offsetMm,
+              y: currentWallTempEnd.y + ny * offsetMm,
+            };
+
+            const line2StartMm = {
+              x: currentWallStart.x - nx * offsetMm,
+              y: currentWallStart.y - ny * offsetMm,
+            };
+            const line2EndMm = {
+              x: currentWallTempEnd.x - nx * offsetMm,
+              y: currentWallTempEnd.y - ny * offsetMm,
+            };
+
+            console.log('Fallback preview lines:', {
+              offsetMm,
+              wallGapLocal,
+              line1Start: line1StartMm,
+              line1End: line1EndMm,
+              line2Start: line2StartMm,
+              line2End: line2EndMm,
+              distanceBetweenLines: Math.sqrt(
+                Math.pow((line1StartMm.x - line2StartMm.x) * mmToPx, 2) +
+                Math.pow((line1StartMm.y - line2StartMm.y) * mmToPx, 2)
+              ),
+            });
+
+            const previewStrokeWidth = 2;
+            
             return (
               <>
-                <path
-                  d={fullPath}
-                  fill="none"
-                  stroke="#000"
-                  strokeWidth={wallThickness}
+                {/* Fallback double-line wall preview */}
+                <line
+                  x1={line1StartMm.x * mmToPx}
+                  y1={line1StartMm.y * mmToPx}
+                  x2={line1EndMm.x * mmToPx}
+                  y2={line1EndMm.y * mmToPx}
+                  stroke="#000000"
+                  strokeWidth={previewStrokeWidth}
                   strokeDasharray="6,4"
-                  opacity="0.8"
+                  strokeLinecap="square"
+                  strokeLinejoin="round"
+                  opacity="0.9"
+                />
+                <line
+                  x1={line2StartMm.x * mmToPx}
+                  y1={line2StartMm.y * mmToPx}
+                  x2={line2EndMm.x * mmToPx}
+                  y2={line2EndMm.y * mmToPx}
+                  stroke="#000000"
+                  strokeWidth={previewStrokeWidth}
+                  strokeDasharray="6,4"
+                  strokeLinecap="square"
+                  strokeLinejoin="round"
+                  opacity="0.9"
                 />
                 {guideLines}
                 {guideTexts}
+                {/* Real-time dimension display outside the wall */}
+                <g transform={`translate(${dimensionX * mmToPx}, ${dimensionY * mmToPx}) rotate(${textAngle})`}>
+                  <rect
+                    x={-dimensionText.length * 3 - 4}
+                    y={-8}
+                    width={dimensionText.length * 6 + 8}
+                    height={16}
+                    fill="white"
+                    stroke="#3b82f6"
+                    strokeWidth={1}
+                    rx={2}
+                    opacity={0.95}
+                  />
+                  <text
+                    x={0}
+                    y={4}
+                    fill="#1f2937"
+                    fontSize={11}
+                    fontWeight="600"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                  >
+                    {dimensionText}
+                  </text>
+                </g>
               </>
             );
           })()}
@@ -436,4 +657,7 @@ export default function DrawingPath({
     </svg>
   );
 }
+
+
+
 

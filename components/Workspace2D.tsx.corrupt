@@ -1,0 +1,372 @@
+"use client";
+
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useEditorStore } from '@/store/editorStore';
+import { useProjectStore } from '@/store/projectStore';
+import { useSceneStore } from '@/store/sceneStore';
+import WallRenderer from './renderers/WallRenderer';
+import ShapeRenderer from './renderers/ShapeRenderer';
+import AssetRenderer from './renderers/AssetRenderer';
+import GridRenderer from './renderers/GridRenderer';
+import FreehandRenderer from './renderers/FreehandRenderer';
+import WallTool from './tools/WallTool';
+import ShapeTool from './tools/ShapeTool';
+import FreehandTool from './tools/FreehandTool';
+import SelectionTool from './tools/SelectionTool';
+
+interface Workspace2DProps {
+    width?: number;
+    height?: number;
+}
+
+export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DProps) {
+    const canvasRef = useRef<HTMLDivElement>(null);
+    const [viewportSize, setViewportSize] = useState({ width, height });
+    const [mouseWorldPos, setMouseWorldPos] = useState({ x: 0, y: 0 });
+    const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+    const [isDraggingItem, setIsDraggingItem] = useState(false);
+    const [draggedItemStart, setDraggedItemStart] = useState<{ x: number; y: number } | null>(null);
+
+    // Editor state
+    const {
+        zoom,
+        panX,
+        panY,
+        activeTool,
+        selectedIds,
+        hoveredId,
+        isPanning,
+        snapToGrid,
+        gridSize,
+        setZoom,
+        setPan,
+        panBy,
+        setPanning,
+        zoomIn,
+        zoomOut,
+        setCanvasOffset,
+        setSelectedIds,
+        clearSelection,
+    } = useEditorStore();
+
+    // Grid state from sceneStore (controlled by PropertiesSidebar)
+    const showGrid = useSceneStore((s) => s.showGrid);
+    const sceneGridSize = useSceneStore((s) => s.availableGridSizes?.[s.selectedGridSizeIndex] || 10);
+
+    // Project state
+    const {
+        walls,
+        shapes,
+        assets,
+        updateShape,
+        updateAsset,
+    } = useProjectStore();
+
+    // Helper function to snap coordinates to grid
+    const snapToGridFn = useCallback((x: number, y: number) => {
+        if (!snapToGrid) return { x, y };
+        const size = sceneGridSize;
+        // Snap to grid cell centers (not intersections)
+        // Offset by half a grid size so we snap to the center of each cell
+        return {
+            x: Math.round((x - size / 2) / size) * size + size / 2,
+            y: Math.round((y - size / 2) / size) * size + size / 2
+        };
+    }, [snapToGrid, sceneGridSize]);
+
+    // Update viewport size and canvas offset
+    useEffect(() => {
+        const updateSizeAndOffset = () => {
+            if (canvasRef.current) {
+                const rect = canvasRef.current.getBoundingClientRect();
+                setViewportSize({ width: rect.width, height: rect.height });
+                setCanvasOffset({ left: rect.left, top: rect.top });
+            }
+        };
+
+        updateSizeAndOffset();
+
+        const resizeObserver = new ResizeObserver(updateSizeAndOffset);
+        if (canvasRef.current) {
+            resizeObserver.observe(canvasRef.current);
+        }
+
+        window.addEventListener('resize', updateSizeAndOffset);
+        window.addEventListener('scroll', updateSizeAndOffset);
+
+        return () => {
+            resizeObserver.disconnect();
+            window.removeEventListener('resize', updateSizeAndOffset);
+            window.removeEventListener('scroll', updateSizeAndOffset);
+        };
+    }, [setCanvasOffset]);
+
+    // Mouse move handler
+    const handleMouseMove = useCallback((e: React.MouseEvent) => {
+        if (!canvasRef.current) return;
+
+        const rect = canvasRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        // Convert to world coordinates
+        const worldX = (x - panX) / zoom;
+        const worldY = (y - panY) / zoom;
+        setMouseWorldPos({ x: worldX, y: worldY });
+
+        // Handle panning
+        if (isPanning && dragStart) {
+            const dx = x - dragStart.x;
+            const dy = y - dragStart.y;
+            panBy(dx, dy);
+            setDragStart({ x, y });
+            return;
+        }
+
+        // Handle dragging selected item
+        if (isDraggingItem && draggedItemStart && selectedIds.length > 0) {
+            const snapped = snapToGridFn(worldX, worldY);
+            const dx = snapped.x - draggedItemStart.x;
+            const dy = snapped.y - draggedItemStart.y;
+
+            // Update all selected items
+            selectedIds.forEach(id => {
+                const shape = shapes.find(s => s.id === id);
+                const asset = assets.find(a => a.id === id);
+
+                if (shape) {
+                    updateShape(id, {
+                        x: shape.x + dx,
+                        y: shape.y + dy
+                    });
+                } else if (asset) {
+                    updateAsset(id, {
+                        x: asset.x + dx,
+                        y: asset.y + dy
+                    });
+                }
+            });
+
+            setDraggedItemStart(snapped);
+        }
+    }, [panX, panY, zoom, isPanning, dragStart, panBy, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, updateShape, updateAsset, snapToGridFn]);
+
+    // Mouse down handler
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+        if (!canvasRef.current) return;
+
+        const rect = canvasRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        // Middle mouse or shift+left mouse for panning
+        if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
+            setPanning(true);
+            setDragStart({ x, y });
+            e.preventDefault();
+            return;
+        }
+
+        // Left mouse for tool interaction
+        if (e.button === 0) {
+            const worldX = (x - panX) / zoom;
+            const worldY = (y - panY) / zoom;
+
+            // If select tool is active, try to select an item
+            if (activeTool === 'select') {
+                let itemSelected = false;
+
+                // Check shapes first (on top)
+                for (let i = shapes.length - 1; i >= 0; i--) {
+                    const shape = shapes[i];
+                    const halfW = shape.width / 2;
+                    const halfH = shape.height / 2;
+
+                    if (
+                        worldX >= shape.x - halfW &&
+                        worldX <= shape.x + halfW &&
+                        worldY >= shape.y - halfH &&
+                        worldY <= shape.y + halfH
+                    ) {
+                        // Check if already selected
+                        if (selectedIds.includes(shape.id)) {
+                            // Start dragging
+                            setIsDraggingItem(true);
+                            setDraggedItemStart({ x: worldX, y: worldY });
+                        } else {
+                            setSelectedIds([shape.id]);
+                        }
+                        itemSelected = true;
+                        return;
+                    }
+                }
+
+                // Check assets
+                for (let i = assets.length - 1; i >= 0; i--) {
+                    const asset = assets[i];
+                    const halfW = (asset.width * asset.scale) / 2;
+                    const halfH = (asset.height * asset.scale) / 2;
+
+                    if (
+                        worldX >= asset.x - halfW &&
+                        worldX <= asset.x + halfW &&
+                        worldY >= asset.y - halfH &&
+                        worldY <= asset.y + halfH
+                    ) {
+                        if (selectedIds.includes(asset.id)) {
+                            setIsDraggingItem(true);
+                            setDraggedItemStart({ x: worldX, y: worldY });
+                        } else {
+                            setSelectedIds([asset.id]);
+                        }
+                        itemSelected = true;
+                        return;
+                    }
+                }
+
+                // Check walls
+                for (const wall of walls) {
+                    const nodeMap = new Map(wall.nodes.map((n) => [n.id, n]));
+                    for (const edge of wall.edges) {
+                        const nodeA = nodeMap.get(edge.nodeA);
+                        const nodeB = nodeMap.get(edge.nodeB);
+                        if (!nodeA || !nodeB) continue;
+
+                        const dx = nodeB.x - nodeA.x;
+                        const dy = nodeB.y - nodeA.y;
+                        const lengthSquared = dx * dx + dy * dy;
+                        if (lengthSquared === 0) continue;
+
+                        const t = Math.max(
+                            0,
+                            Math.min(
+                                1,
+                                ((worldX - nodeA.x) * dx + (worldY - nodeA.y) * dy) / lengthSquared
+                            )
+                        );
+
+                        const projX = nodeA.x + t * dx;
+                        const projY = nodeA.y + t * dy;
+                        const dist = Math.sqrt((worldX - projX) ** 2 + (worldY - projY) ** 2);
+
+                        if (dist <= edge.thickness / 2 + 20) {
+                            setSelectedIds([wall.id]);
+                            itemSelected = true;
+                            return;
+                        }
+                    }
+                }
+
+                if (!itemSelected) {
+                    clearSelection();
+                }
+            } else if (activeTool === 'pan') {
+                setPanning(true);
+                setDragStart({ x, y });
+            }
+        }
+    }, [activeTool, setPanning, panX, panY, zoom, shapes, assets, walls, setSelectedIds, clearSelection, selectedIds]);
+
+    // Mouse up handler
+    const handleMouseUp = useCallback(() => {
+        setPanning(false);
+        setDragStart(null);
+        setIsDraggingItem(false);
+        setDraggedItemStart(null);
+    }, [setPanning]);
+
+    // Wheel handler for zoom - use passive:false to prevent browser zoom
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const handleWheel = (e: WheelEvent) => {
+            e.preventDefault(); // Prevent browser zoom
+            e.stopPropagation();
+
+            if (e.ctrlKey || e.metaKey) {
+                // Zoom workspace
+                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                const newZoom = zoom * delta;
+
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                const worldX = (mouseX - panX) / zoom;
+                const worldY = (mouseY - panY) / zoom;
+
+                const newPanX = mouseX - worldX * newZoom;
+                const newPanY = mouseY - worldY * newZoom;
+
+                setZoom(newZoom);
+                setPan(newPanX, newPanY);
+            } else {
+                // Pan
+                panBy(-e.deltaX, -e.deltaY);
+            }
+        };
+
+        // Add with passive:false to allow preventDefault
+        canvas.addEventListener('wheel', handleWheel, { passive: false });
+        return () => canvas.removeEventListener('wheel', handleWheel);
+    }, [zoom, panX, panY, setZoom, setPan, panBy]);
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === '=') {
+                e.preventDefault();
+                zoomIn();
+            } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+                e.preventDefault();
+                zoomOut();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [zoomIn, zoomOut]);
+
+    return (
+        <div
+            ref={canvasRef}
+            className="relative w-full h-full overflow-hidden bg-gray-50"
+            onMouseMove={handleMouseMove}
+            onMouseDown={handleMouseDown}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            style={{
+                cursor: isPanning ? 'grabbing' : activeTool === 'pan' ? 'grab' : 'crosshair',
+            }}
+        >
+            {/* SVG Canvas */}
+            <svg
+                width={viewportSize.width}
+                height={viewportSize.height}
+                className="absolute inset-0"
+                isHovered={hoveredId === shape.id}
+            />
+            );
+                            }
+            return (
+            <ShapeRenderer
+                key={shape.id}
+                shape={shape}
+                isSelected={selectedIds.includes(shape.id)}
+                isHovered={hoveredId === shape.id}
+            />
+            );
+                        })}
+        </g>
+
+                    {/* Assets */ }
+    <g id="assets-layer">
+        {assets.map((asset) => (
+                            <AssetRenderer
+                                key={asset.id}
+                <div>Tool: {activeTool}</div>
+            </div>
+                </div >
+                );
+}

@@ -1,0 +1,439 @@
+"use client";
+
+import React, { useState, useCallback, useEffect } from 'react';
+import { useEditorStore } from '@/store/editorStore';
+import { useProjectStore, WallNode, WallEdge, Wall } from '@/store/projectStore';
+import { snapTo90Degrees } from '@/lib/wallGeometry';
+
+interface WallToolProps {
+    isActive: boolean;
+    thickness?: number;
+}
+
+export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
+    const { canvasOffset, zoom, panX, panY, snapToGrid, gridSize, setSelectedIds, setActiveTool } = useEditorStore();
+    const { addWall, getNextZIndex, walls } = useProjectStore();
+
+    // Screen to world conversion
+    const screenToWorld = useCallback((screenX: number, screenY: number) => {
+        const x = screenX - canvasOffset.left;
+        const y = screenY - canvasOffset.top;
+        return {
+            x: (x - panX) / zoom,
+            y: (y - panY) / zoom,
+        };
+    }, [canvasOffset, zoom, panX, panY]);
+
+    const [draftNodes, setDraftNodes] = useState<WallNode[]>([]);
+    const [tempNode, setTempNode] = useState<{ x: number; y: number } | null>(null);
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [lastClickTime, setLastClickTime] = useState(0);
+
+    // Snap distance for closing the wall loop
+    const SNAP_DISTANCE = 10; // mm
+
+    // Handle mouse move for preview
+    const handleMouseMove = useCallback((e: MouseEvent) => {
+        if (!isActive || !isDrawing) return;
+
+        const worldPos = screenToWorld(e.clientX, e.clientY);
+        let snapped = snapToGrid
+            ? {
+                x: Math.round((worldPos.x - gridSize / 2) / gridSize) * gridSize + gridSize / 2,
+                y: Math.round((worldPos.y - gridSize / 2) / gridSize) * gridSize + gridSize / 2
+            }
+            : worldPos;
+
+        // Apply 90-degree snapping if we have at least one node
+        if (draftNodes.length > 0) {
+            const lastNode = draftNodes[draftNodes.length - 1];
+            snapped = snapTo90Degrees(lastNode, snapped, 6); // 6 degree tolerance
+        }
+
+        // Edge snapping: snap to existing wall edges
+        const EDGE_SNAP_THRESHOLD = 10; // mm
+        for (const wall of walls) {
+            for (let i = 0; i < wall.edges.length; i++) {
+                const edge = wall.edges[i];
+                const nodeA = wall.nodes.find(n => n.id === edge.nodeA);
+                const nodeB = wall.nodes.find(n => n.id === edge.nodeB);
+
+                if (!nodeA || !nodeB) continue;
+
+                // Project point onto edge
+                const dx = nodeB.x - nodeA.x;
+                const dy = nodeB.y - nodeA.y;
+                const lengthSq = dx * dx + dy * dy;
+
+                if (lengthSq === 0) continue;
+
+                const t = Math.max(0, Math.min(1, ((snapped.x - nodeA.x) * dx + (snapped.y - nodeA.y) * dy) / lengthSq));
+                const projX = nodeA.x + t * dx;
+                const projY = nodeA.y + t * dy;
+                const dist = Math.hypot(snapped.x - projX, snapped.y - projY);
+
+                if (dist < EDGE_SNAP_THRESHOLD) {
+                    snapped = { x: projX, y: projY };
+                    break;
+                }
+            }
+        }
+
+        // Check if near first node to close the loop
+        if (draftNodes.length > 2) {
+            const firstNode = draftNodes[0];
+            const dist = Math.hypot(snapped.x - firstNode.x, snapped.y - firstNode.y);
+
+            if (dist < SNAP_DISTANCE) {
+                setTempNode({ x: firstNode.x, y: firstNode.y });
+                return;
+            }
+        }
+
+        setTempNode(snapped);
+    }, [isActive, isDrawing, draftNodes, screenToWorld, snapToGrid, gridSize, walls]);
+
+    // Handle click to add node
+    const handleClick = useCallback((e: MouseEvent) => {
+        if (!isActive) return;
+
+        // Double-click detection (within 300ms)
+        const now = Date.now();
+        const timeSinceLastClick = now - lastClickTime;
+        setLastClickTime(now);
+
+        if (timeSinceLastClick < 300 && draftNodes.length >= 2) {
+            // Double-click detected - finish the wall
+            finishWall(false);
+            return;
+        }
+
+        const worldPos = screenToWorld(e.clientX, e.clientY);
+        let snapped = snapToGrid
+            ? {
+                x: Math.round((worldPos.x - gridSize / 2) / gridSize) * gridSize + gridSize / 2,
+                y: Math.round((worldPos.y - gridSize / 2) / gridSize) * gridSize + gridSize / 2
+            }
+            : worldPos;
+
+        // Apply 90-degree snapping
+        if (draftNodes.length > 0) {
+            const lastNode = draftNodes[draftNodes.length - 1];
+            snapped = snapTo90Degrees(lastNode, snapped, 6);
+        }
+
+        // Check if clicking near first node to close the loop
+        if (draftNodes.length > 2) {
+            const firstNode = draftNodes[0];
+            const dist = Math.hypot(snapped.x - firstNode.x, snapped.y - firstNode.y);
+
+            if (dist < SNAP_DISTANCE) {
+                finishWall(true);
+                return;
+            }
+        }
+
+        // Add new node
+        const newNode: WallNode = {
+            id: `node-${Date.now()}-${Math.random()}`,
+            x: snapped.x,
+            y: snapped.y,
+        };
+
+        setDraftNodes([...draftNodes, newNode]);
+        setIsDrawing(true);
+    }, [isActive, draftNodes, screenToWorld, snapToGrid, gridSize, lastClickTime]);
+
+    // Handle double-click or Escape to finish wall
+    const finishWall = useCallback((closed: boolean = false) => {
+        if (draftNodes.length < 2) {
+            setDraftNodes([]);
+            setTempNode(null);
+            setIsDrawing(false);
+            return;
+        }
+
+        // Create edges from nodes
+        const edges: WallEdge[] = [];
+        for (let i = 0; i < draftNodes.length - 1; i++) {
+            edges.push({
+                id: `edge-${Date.now()}-${i}`,
+                nodeA: draftNodes[i].id,
+                nodeB: draftNodes[i + 1].id,
+                thickness,
+            });
+        }
+
+        // Close the loop if needed
+        if (closed && draftNodes.length > 2) {
+            edges.push({
+                id: `edge-${Date.now()}-close`,
+                nodeA: draftNodes[draftNodes.length - 1].id,
+                nodeB: draftNodes[0].id,
+                thickness,
+            });
+        }
+
+        // Create wall object
+        const wall: Wall = {
+            id: `wall-${Date.now()}`,
+            nodes: draftNodes,
+            edges,
+            zIndex: getNextZIndex(),
+        };
+
+        addWall(wall);
+
+        // Auto-select the newly created wall and switch to select tool
+        setSelectedIds([wall.id]);
+        setActiveTool('select');
+
+        // Reset state
+        setDraftNodes([]);
+        setTempNode(null);
+        setIsDrawing(false);
+    }, [draftNodes, thickness, addWall, getNextZIndex, setSelectedIds, setActiveTool]);
+
+    // Handle keyboard shortcuts
+    const handleKeyDown = useCallback((e: KeyboardEvent) => {
+        if (!isActive) return;
+
+        if (e.key === 'Escape') {
+            if (isDrawing) {
+                finishWall(false);
+            }
+        } else if (e.key === 'Enter') {
+            if (isDrawing && draftNodes.length >= 2) {
+                finishWall(false);
+            }
+        }
+    }, [isActive, isDrawing, draftNodes, finishWall]);
+
+    // Attach event listeners
+    useEffect(() => {
+        if (!isActive) {
+            setDraftNodes([]);
+            setTempNode(null);
+            setIsDrawing(false);
+            return;
+        }
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('click', handleClick);
+        window.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            {
+                draftNodes.map((node, index) => (
+                    <circle
+                        key={node.id}
+                        cx={node.x}
+                        cy={node.y}
+                        r={4}
+                        fill={index === 0 ? '#10b981' : '#3b82f6'}
+                        stroke="#ffffff"
+                        strokeWidth={2}
+                    />
+                ))
+            }
+
+            {/* Render draft edges with corner blending */ }
+            {
+                draftNodes.map((node, index) => {
+                    if (index === draftNodes.length - 1) return null;
+                    const nextNode = draftNodes[index + 1];
+
+                    const dx = nextNode.x - node.x;
+                    const dy = nextNode.y - node.y;
+                    const length = Math.sqrt(dx * dx + dy * dy);
+
+                    if (length === 0) return null;
+
+                    const perpX = -dy / length;
+                    const perpY = dx / length;
+                    const gap = 20;
+                    const offset = gap / 2;
+                    const lineStrokeWidth = Math.max(1, thickness / 75);
+
+                    const line1Start = { x: node.x + perpX * offset, y: node.y + perpY * offset };
+                    const line1End = { x: nextNode.x + perpX * offset, y: nextNode.y + perpY * offset };
+                    const line2Start = { x: node.x - perpX * offset, y: node.y - perpY * offset };
+                    const line2End = { x: nextNode.x - perpX * offset, y: nextNode.y - perpY * offset };
+
+                    return (
+                        <g key={`edge-${index}`}>
+                            {/* Gap fill between the two lines */}
+                            <path
+                                d={`M ${line1Start.x} ${line1Start.y} L ${line1End.x} ${line1End.y} L ${line2End.x} ${line2End.y} L ${line2Start.x} ${line2Start.y} Z`}
+                                fill="#bfdbfe"
+                                opacity={0.3}
+                            />
+                            <line
+                                x1={line1Start.x} y1={line1Start.y}
+                                x2={line1End.x} y2={line1End.y}
+                                stroke="#3b82f6"
+                                strokeWidth={lineStrokeWidth}
+                                strokeLinecap="butt"
+                                opacity={0.7}
+                            />
+                            <line
+                                x1={line2Start.x} y1={line2Start.y}
+                                x2={line2End.x} y2={line2End.y}
+                                stroke="#3b82f6"
+                                strokeWidth={lineStrokeWidth}
+                                strokeLinecap="butt"
+                                opacity={0.7}
+                            />
+                            {/* Corner fill at intermediate nodes */}
+                            {index > 0 && (() => {
+                                const prevNode = draftNodes[index - 1];
+                                const prevDx = node.x - prevNode.x;
+                                const prevDy = node.y - prevNode.y;
+                                const prevLength = Math.sqrt(prevDx * prevDx + prevDy * prevDy);
+                                if (prevLength === 0) return null;
+                                const prevPerpX = -prevDy / prevLength;
+                                const prevPerpY = prevDx / prevLength;
+                                const prevLine1End = { x: node.x + prevPerpX * offset, y: node.y + prevPerpY * offset };
+                                const prevLine2End = { x: node.x - prevPerpX * offset, y: node.y - prevPerpY * offset };
+                                return (
+                                    <path
+                                        d={`M ${prevLine1End.x} ${prevLine1End.y} L ${line1Start.x} ${line1Start.y} L ${line2Start.x} ${line2Start.y} L ${prevLine2End.x} ${prevLine2End.y} Z`}
+                                        fill="#bfdbfe"
+                                        opacity={0.3}
+                                    />
+                                );
+                            })()}
+                            <text
+                                x={(node.x + nextNode.x) / 2}
+                                y={(node.y + nextNode.y) / 2 - 10}
+                                fill="#1f2937"
+                                fontSize="12"
+                                fontWeight="600"
+                                textAnchor="middle"
+                                style={{ pointerEvents: 'none', userSelect: 'none' }}
+                            >
+                                {length.toFixed(0)}mm
+                            </text>
+                        </g>
+                    );
+                })
+            }
+
+            {/* Render temp preview line with visual guides */ }
+            {
+                tempNode && draftNodes.length > 0 && (() => {
+                    const lastNode = draftNodes[draftNodes.length - 1];
+                    const dx = tempNode.x - lastNode.x;
+                    const dy = tempNode.y - lastNode.y;
+                    const length = Math.sqrt(dx * dx + dy * dy);
+
+                    if (length === 0) return null;
+
+                    const perpX = -dy / length;
+                    const perpY = dx / length;
+                    const gap = 20;
+                    const offset = gap / 2;
+                    const lineStrokeWidth = Math.max(1, thickness / 75);
+
+                    // Calculate angle for alignment detection
+                    const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+                    const normalizeAngle = (a: number) => {
+                        let angle = ((a + 180) % 360) - 180;
+                        if (angle < -180) angle += 360;
+                        return angle;
+                    };
+
+                    const verticalDelta = Math.abs(normalizeAngle(angleDeg - 90));
+                    const horizontalDelta = Math.abs(normalizeAngle(angleDeg));
+                    const isVertical = verticalDelta < 3;
+                    const isHorizontal = horizontalDelta < 3;
+
+                    const axisColor = isVertical || isHorizontal ? '#22C55E' : '#EF4444';
+                    const axisLabel = isVertical ? 'Vertical' : isHorizontal ? 'Horizontal' : 'Axis guide';
+
+                    return (
+                        <g>
+                            {/* Visual alignment guides */}
+                            {isVertical && (
+                                <line
+                                    x1={tempNode.x} y1={-10000}
+                                    x2={tempNode.x} y2={10000}
+                                    stroke={axisColor}
+                                    strokeWidth={1.5}
+                                    opacity={0.9}
+                                    strokeDasharray="5,5"
+                                />
+                            )}
+                            {isHorizontal && (
+                                <line
+                                    x1={-10000} y1={tempNode.y}
+                                    x2={10000} y2={tempNode.y}
+                                    stroke={axisColor}
+                                    strokeWidth={1.5}
+                                    opacity={0.9}
+                                    strokeDasharray="5,5"
+                                />
+                            )}
+
+                            {/* Axis label */}
+                            <text
+                                x={tempNode.x + 8}
+                                y={tempNode.y - 8}
+                                fill={axisColor}
+                                fontSize={12}
+                                fontWeight="600"
+                                style={{ pointerEvents: 'none', userSelect: 'none' }}
+                            >
+                                {axisLabel}
+                            </text>
+
+                            {/* Preview lines */}
+                            <line
+                                x1={lastNode.x + perpX * offset}
+                                y1={lastNode.y + perpY * offset}
+                                x2={tempNode.x + perpX * offset}
+                                y2={tempNode.y + perpY * offset}
+                                stroke="#3b82f6"
+                                strokeWidth={lineStrokeWidth}
+                                opacity={0.5}
+                                strokeDasharray="5,5"
+                            />
+                            <line
+                                x1={lastNode.x - perpX * offset}
+                                y1={lastNode.y - perpY * offset}
+                                x2={tempNode.x - perpX * offset}
+                                y2={tempNode.y - perpY * offset}
+                                stroke="#3b82f6"
+                                strokeWidth={lineStrokeWidth}
+                                opacity={0.5}
+                                strokeDasharray="5,5"
+                            />
+
+                            {/* Dimension label */}
+                            <text
+                                x={(lastNode.x + tempNode.x) / 2}
+                                y={(lastNode.y + tempNode.y) / 2 - 10}
+                                fill="#1f2937"
+                                fontSize="12"
+                                fontWeight="600"
+                                textAnchor="middle"
+                                style={{ pointerEvents: 'none', userSelect: 'none' }}
+                            >
+                                {length.toFixed(0)}mm
+                            </text>
+
+                            <circle
+                                cx={tempNode.x}
+                                cy={tempNode.y}
+                                r={3}
+                                fill="#3b82f6"
+                                opacity={0.5}
+                            />
+                        </g>
+                    );
+                })()
+            }
+        </g >
+    );
+}

@@ -37,40 +37,33 @@ export default function EventCard({ event }: EventCardProps) {
 
   return (
     <div
-      className='relative w-full h-60 rounded-3xl overflow-hidden shadow-lg cursor-pointer'
+      className='relative w-full min-h-[220px] rounded-3xl overflow-hidden shadow-lg cursor-pointer transition hover:-translate-y-1 hover:shadow-xl'
       onClick={() =>
         router.push(`/dashboard/editor/${slug}/${event?._id || ""}`)
       }
     >
       {/* Background with placeholder circles */}
-      <div className='absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200'>
-        <div className='absolute -top-10 -left-10 w-40 h-40 bg-cyan-300 rounded-full blur-3xl opacity-70' />
-        <div className='absolute top-10 right-10 w-32 h-32 bg-yellow-300 rounded-full blur-3xl opacity-70' />
-        <div className='absolute bottom-10 left-1/3 w-32 h-32 bg-blue-300 rounded-full blur-3xl opacity-70' />
+      <div className='absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#E0EAFF] via-[#D4E4FF] to-[#C7D2FE]'>
+        <div className='absolute -top-10 -left-10 w-40 h-40 bg-blue-200 rounded-full blur-3xl opacity-70' />
+        <div className='absolute top-8 right-6 w-32 h-32 bg-sky-200 rounded-full blur-3xl opacity-60' />
+        <div className='absolute bottom-8 left-1/3 w-32 h-32 bg-indigo-200 rounded-full blur-3xl opacity-60' />
       </div>
 
       {/* Frosted overlay */}
       <div className='absolute inset-0 bg-white/40 backdrop-blur-lg'></div>
 
-      {/* Stylized grooves */}
-      {/* <div className="absolute top-0 left-0 w-full h-6 flex items-center justify-between px-4">
-        <div className="w-10 h-1 bg-black rounded-full" />
-        <div className="w-10 h-1 bg-black rounded-full" />
-      </div> */}
-
       {/* Content */}
-      <div className='absolute bottom-0 left-0 w-full p-4 flex justify-between items-end'>
+      <div className='absolute bottom-0 left-0 flex w-full items-end justify-between p-4'>
         <div>
-          <h3 className='text-lg font-semibold text-black truncate'>
+          <h3 className='truncate text-lg font-semibold text-black'>
             {event?.name || "Unnamed Event"}
           </h3>
           <p className='text-sm text-gray-600'>
             Updated {getTimeAgo(event?.updatedAt || new Date().toISOString())}
           </p>
-          {/* <p className="text-xs text-gray-500 mt-1">{event.canvasAssets.length} asset{event.canvasAssets.length !== 1 ? 's' : ''}</p> */}
         </div>
         <button
-          className='p-2 rounded-full hover:bg-black/10'
+          className='rounded-full p-2 hover:bg-black/10'
           onClick={(e) => e.stopPropagation()}
         >
           <BsThreeDotsVertical className='text-xl text-gray-700' />

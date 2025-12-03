@@ -53,6 +53,7 @@ export function useToolbarTools(): Tool[] {
       options: [
         { id: "draw-line", label: "Draw Line", icon: <FaPenNib size={14} /> },
         { id: "draw-wall", label: "Draw Wall ►", icon: <FaDrawPolygon size={14} /> },
+        { id: "wall-engine", label: "Wall Engine", icon: <FaDrawPolygon size={14} /> },
         { id: "add-text", label: "Add Text", icon: <FaComment size={14} /> },
       ],
     },
@@ -63,7 +64,8 @@ export function useToolbarTools(): Tool[] {
       options: [
         { id: "rectangle", label: "Rectangle", icon: <FaSquare size={14} /> },
         { id: "circle", label: "Circle", icon: <FaCircle size={14} /> },
-        { id: "arrow", label: "Arrow", icon: <FaArrowRight size={14} /> },
+        { id: "arrow-shape", label: "Arrow", icon: <FaArrowRight size={14} /> },
+        { id: "freehand", label: "Freehand Draw", icon: <FaPenNib size={14} /> },
         { id: "polygon", label: "Polygon", icon: <FaDrawPolygon size={14} /> },
       ],
     },
@@ -109,12 +111,13 @@ export function useToolbarTools(): Tool[] {
         { id: "text-annotation", label: "Text", icon: <FaFont size={14} /> },
       ],
     },
-    // 7) Snapping (unchanged)
+    // 7) Snapping
     {
       icon: <FaMagnet size={18} />,
       label: "Snapping",
       options: [
         { id: "snap-toggle", label: "Toggle Snapping", icon: <FaToggleOn size={14} /> },
+        { id: "snap-to-anchor", label: "Snap to Anchor", icon: <FaBullseye size={14} /> },
         { id: "snap-endpoint", label: "Snap to Endpoint", icon: <FaCrosshairs size={14} /> },
         { id: "snap-midpoint", label: "Snap to Midpoint", icon: <FaBullseye size={14} /> },
         { id: "snap-center", label: "Snap to Center", icon: <FaTimes size={14} /> },

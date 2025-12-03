@@ -5,12 +5,10 @@ import { useEffect, useState } from "react";
 import { Toaster } from "react-hot-toast";
 import { useRouter } from "next/router";
 import Preloader from "./(components)/Preloader";
-import MobileBlocker from "./(components)/MoblileBlocker";
 
 export default function App({ Component, pageProps }: AppProps) {
   const [queryClient] = useState(() => new QueryClient());
   const [loading, setLoading] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -31,31 +29,11 @@ export default function App({ Component, pageProps }: AppProps) {
     };
   }, [router]);
 
-  useEffect(() => {
-    const checkIsMobile = () => {
-      setIsMobile(window.innerWidth < 768); // Tailwind's "md" breakpoint
-    };
-
-    checkIsMobile(); // run once at mount
-    window.addEventListener("resize", checkIsMobile);
-
-    return () => {
-      window.removeEventListener("resize", checkIsMobile);
-    };
-  }, []);
-
-  const isDashboardRoute = router.pathname.startsWith("/dashboard");
-
   return (
     <QueryClientProvider client={queryClient}>
       {loading && <Preloader />}
       <Toaster position="top-right" reverseOrder={false} />
-
-      {isMobile && isDashboardRoute ? (
-        <MobileBlocker />
-      ) : (
-        <Component {...pageProps} />
-      )}
+      <Component {...pageProps} />
     </QueryClientProvider>
   );
 }

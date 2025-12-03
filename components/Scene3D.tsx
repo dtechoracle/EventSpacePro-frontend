@@ -53,7 +53,7 @@ function Wall3D({ asset }: { asset: AssetInstance }) {
           <mesh key={idx} position={[midX, wallHeight / 2, midZ]} rotation={[0, angleY, 0]} castShadow receiveShadow>
             <boxGeometry args={[length, wallHeight, wallThickness]} />
             <meshStandardMaterial color="#e5e7eb" />
-          </mesh>
+    </mesh>
         );
       })}
     </group>

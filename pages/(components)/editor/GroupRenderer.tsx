@@ -137,6 +137,7 @@ const GroupRenderer: React.FC<GroupRendererProps> = ({
             onTextEditKeyDown={(_e, _id) => {}}
             onTextEditBlur={(_id) => {}}
             onTextEditChange={(_text) => {}}
+            onAssetContextMenu={(e, id) => onAssetContextMenu(e, id)}
             onScaleHandleMouseDown={onScaleHandleMouseDown}
             onRotationHandleMouseDown={onRotationHandleMouseDown}
           />

@@ -26,6 +26,7 @@ type AssetRendererProps = {
     handleType: "top-left" | "top-right" | "bottom-left" | "bottom-right"
   ) => void;
   onRotationHandleMouseDown: (e: React.MouseEvent, assetId: string) => void;
+  onAssetContextMenu: (e: React.MouseEvent, assetId: string) => void;
 };
 
 export default function AssetRenderer({
@@ -45,6 +46,7 @@ export default function AssetRenderer({
   onTextEditChange,
   onScaleHandleMouseDown,
   onRotationHandleMouseDown,
+  onAssetContextMenu,
 }: AssetRendererProps) {
   // Early return if asset is undefined (prevents SSR errors)
   if (!asset) {
@@ -59,7 +61,7 @@ export default function AssetRenderer({
     const borderRadius = isCircle ? "50%" : "0%";
 
     return (
-      <div className="relative">
+      <div className="relative" onContextMenu={(e) => onAssetContextMenu(e, asset.id)}>
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -134,7 +136,7 @@ export default function AssetRenderer({
   // Handle line assets
   if (asset.type === "line") {
     return (
-      <div className="relative">
+      <div className="relative" onContextMenu={(e) => onAssetContextMenu(e, asset.id)}>
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -218,7 +220,7 @@ export default function AssetRenderer({
       : lineLength * asset.scale;
 
     return (
-      <div className="relative">
+      <div className="relative" onContextMenu={(e) => onAssetContextMenu(e, asset.id)}>
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -339,7 +341,7 @@ export default function AssetRenderer({
   // Handle drawn-line assets
   if (asset.type === "drawn-line") {
     return (
-      <div className="relative">
+      <div className="relative" onContextMenu={(e) => onAssetContextMenu(e, asset.id)}>
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -427,7 +429,7 @@ export default function AssetRenderer({
   // Handle wall-segments assets (stroke-only; overlay handles blending/dots)
   if (asset.type === "wall-segments") {
     return (
-      <div className="relative">
+      <div className="relative" onContextMenu={(e) => onAssetContextMenu(e, asset.id)}>
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -498,7 +500,7 @@ export default function AssetRenderer({
     const isEditing = editingTextId === asset.id;
 
     return (
-      <div className="relative">
+      <div className="relative" onContextMenu={(e) => onAssetContextMenu(e, asset.id)}>
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -602,7 +604,7 @@ export default function AssetRenderer({
   // Handle custom SVG assets
   if (def.isCustom && def.path) {
     return (
-      <div className="relative">
+      <div className="relative" onContextMenu={(e) => onAssetContextMenu(e, asset.id)}>
         {/* Background layer */}
         {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
           <div
@@ -679,7 +681,7 @@ export default function AssetRenderer({
   if (!Icon) return null;
 
   return (
-    <div className="relative">
+    <div className="relative" onContextMenu={(e) => onAssetContextMenu(e, asset.id)}>
       {/* Background layer */}
       {asset.backgroundColor && asset.backgroundColor !== "transparent" && (
         <div

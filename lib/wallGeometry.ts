@@ -144,10 +144,12 @@ export function detectWallIntersections(
 }
 
 // Helper function to calculate wall geometry with clean rectangular corners
-export function buildWallGeometry(segments: WallSegment[], wallGap: number, wallThickness: number = 8): WallGeometry {
+export function buildWallGeometry(segments: WallSegment[], wallGap: number, wallThickness: number = 75): WallGeometry {
     if (segments.length === 0) {
         return { outerPoints: [], innerPoints: [] };
     }
+
+    const halfWidth = wallThickness / 2;
 
     if (segments.length === 1) {
         // Single segment - with a truncated start cap
@@ -161,11 +163,11 @@ export function buildWallGeometry(segments: WallSegment[], wallGap: number, wall
         }
 
         const angle = Math.atan2(dy, dx);
-        const perpX = Math.cos(angle + Math.PI / 2) * (wallThickness / 2);
-        const perpY = Math.sin(angle + Math.PI / 2) * (wallThickness / 2);
+        const perpX = Math.cos(angle + Math.PI / 2) * halfWidth;
+        const perpY = Math.sin(angle + Math.PI / 2) * halfWidth;
         const normX = dx / length;
         const normY = dy / length;
-        const capOffset = wallGap / 2; // advance the start to create a beveled cap
+        const capOffset = Math.min(length / 2, halfWidth);
         const startAdv = { x: segment.start.x + normX * capOffset, y: segment.start.y + normY * capOffset };
 
         return {
@@ -199,8 +201,8 @@ export function buildWallGeometry(segments: WallSegment[], wallGap: number, wall
         if (length === 0) continue;
 
         const angle = Math.atan2(dy, dx);
-        const perpX = Math.cos(angle + Math.PI / 2) * (wallThickness / 2);
-        const perpY = Math.sin(angle + Math.PI / 2) * (wallThickness / 2);
+        const perpX = Math.cos(angle + Math.PI / 2) * halfWidth;
+        const perpY = Math.sin(angle + Math.PI / 2) * halfWidth;
 
         if (i === 0) {
             if (isClosedLoop) {
@@ -211,8 +213,8 @@ export function buildWallGeometry(segments: WallSegment[], wallGap: number, wall
                 const plen = Math.sqrt(pdx * pdx + pdy * pdy);
                 if (plen > 0) {
                     const pAngle = Math.atan2(pdy, pdx);
-                    const pPerpX = Math.cos(pAngle + Math.PI / 2) * (wallGap / 2);
-                    const pPerpY = Math.sin(pAngle + Math.PI / 2) * (wallGap / 2);
+                    const pPerpX = Math.cos(pAngle + Math.PI / 2) * halfWidth;
+                    const pPerpY = Math.sin(pAngle + Math.PI / 2) * halfWidth;
                     const cornerPoint = { x: segment.start.x, y: segment.start.y };
                     const outerIntersection = calculateLineIntersection(
                         { x: cornerPoint.x + pPerpX, y: cornerPoint.y + pPerpY },
@@ -256,8 +258,8 @@ export function buildWallGeometry(segments: WallSegment[], wallGap: number, wall
 
             if (nextLength > 0) {
                 const nextAngle = Math.atan2(nextDy, nextDx);
-                const nextPerpX = Math.cos(nextAngle + Math.PI / 2) * (wallGap / 2);
-                const nextPerpY = Math.sin(nextAngle + Math.PI / 2) * (wallGap / 2);
+                const nextPerpX = Math.cos(nextAngle + Math.PI / 2) * halfWidth;
+                const nextPerpY = Math.sin(nextAngle + Math.PI / 2) * halfWidth;
 
                 // Calculate intersection points for the corner
                 const cornerPoint = { x: segment.end.x, y: segment.end.y };
@@ -332,8 +334,8 @@ export function buildWallGeometry(segments: WallSegment[], wallGap: number, wall
         
         if (firstLength > 0) {
             const firstAngle = Math.atan2(firstDy, firstDx);
-            const firstPerpX = Math.cos(firstAngle + Math.PI / 2) * (wallThickness / 2);
-            const firstPerpY = Math.sin(firstAngle + Math.PI / 2) * (wallThickness / 2);
+            const firstPerpX = Math.cos(firstAngle + Math.PI / 2) * halfWidth;
+            const firstPerpY = Math.sin(firstAngle + Math.PI / 2) * halfWidth;
             
             capLines.push({
                 start: { x: firstSegment.start.x + firstPerpX, y: firstSegment.start.y + firstPerpY },
@@ -349,8 +351,8 @@ export function buildWallGeometry(segments: WallSegment[], wallGap: number, wall
         
         if (lastLength > 0) {
             const lastAngle = Math.atan2(lastDy, lastDx);
-            const lastPerpX = Math.cos(lastAngle + Math.PI / 2) * (wallThickness / 2);
-            const lastPerpY = Math.sin(lastAngle + Math.PI / 2) * (wallThickness / 2);
+            const lastPerpX = Math.cos(lastAngle + Math.PI / 2) * halfWidth;
+            const lastPerpY = Math.sin(lastAngle + Math.PI / 2) * halfWidth;
             
             capLines.push({
                 start: { x: lastSegment.end.x + lastPerpX, y: lastSegment.end.y + lastPerpY },
@@ -415,11 +417,13 @@ export function buildWallGeometryWithIntersections(
     segments: WallSegment[],
     wallGap: number,
     allWallAssets: AssetInstance[],
-    wallThickness: number = 8
+    wallThickness: number = 75
 ): WallGeometry {
     if (segments.length === 0) {
         return { outerPoints: [], innerPoints: [] };
     }
+
+    const halfWidth = wallThickness / 2;
 
     if (segments.length === 1) {
         // Single segment - simple parallel lines
@@ -433,8 +437,8 @@ export function buildWallGeometryWithIntersections(
         }
 
         const angle = Math.atan2(dy, dx);
-        const perpX = Math.cos(angle + Math.PI / 2) * (wallThickness / 2);
-        const perpY = Math.sin(angle + Math.PI / 2) * (wallThickness / 2);
+        const perpX = Math.cos(angle + Math.PI / 2) * halfWidth;
+        const perpY = Math.sin(angle + Math.PI / 2) * halfWidth;
 
         return {
             outerPoints: [
@@ -467,8 +471,8 @@ export function buildWallGeometryWithIntersections(
         if (length === 0) continue;
 
         const angle = Math.atan2(dy, dx);
-        const perpX = Math.cos(angle + Math.PI / 2) * (wallThickness / 2);
-        const perpY = Math.sin(angle + Math.PI / 2) * (wallThickness / 2);
+        const perpX = Math.cos(angle + Math.PI / 2) * halfWidth;
+        const perpY = Math.sin(angle + Math.PI / 2) * halfWidth;
 
         if (i === 0) {
             // First segment - start with perpendicular offset
@@ -495,8 +499,8 @@ export function buildWallGeometryWithIntersections(
 
             if (nextLength > 0) {
                 const nextAngle = Math.atan2(nextDy, nextDx);
-                const nextPerpX = Math.cos(nextAngle + Math.PI / 2) * (wallGap / 2);
-                const nextPerpY = Math.sin(nextAngle + Math.PI / 2) * (wallGap / 2);
+                const nextPerpX = Math.cos(nextAngle + Math.PI / 2) * halfWidth;
+                const nextPerpY = Math.sin(nextAngle + Math.PI / 2) * halfWidth;
 
                 // Calculate intersection points for the corner
                 const cornerPoint = { x: segment.end.x, y: segment.end.y };
@@ -770,7 +774,7 @@ export function snapTo90Degrees(
 // Helper function to calculate bounding box from wall segments
 export function calculateWallBoundingBox(asset: AssetInstance): { width: number; height: number } {
     // Prefer node-edge data if present; otherwise fall back to legacy segments
-    const wallGap = asset.wallGap ?? 8;
+    const wallGap = asset.wallThickness ?? asset.wallGap ?? 8;
 
     let geometry: WallGeometry = { outerPoints: [], innerPoints: [] };
 
@@ -784,10 +788,10 @@ export function calculateWallBoundingBox(asset: AssetInstance): { width: number;
                 end: { x: b.x - asset.x, y: b.y - asset.y },
             };
         });
-        geometry = buildWallGeometry(segments, wallGap);
+        geometry = buildWallGeometry(segments, wallGap, asset.wallThickness ?? 75);
     } else if (asset.wallSegments && asset.wallSegments.length > 0) {
         const relativeSegments = asset.wallSegments;
-        geometry = buildWallGeometry(relativeSegments, wallGap);
+        geometry = buildWallGeometry(relativeSegments, wallGap, asset.wallThickness ?? 75);
     } else {
         return { width: 200, height: 200 };
     }
