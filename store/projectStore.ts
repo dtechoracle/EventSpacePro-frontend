@@ -130,7 +130,7 @@ export type ProjectState = {
 
     // Methods - Walls (Legacy)
     addWall: (wall: Wall) => void;
-    updateWall: (id: string, updates: Partial<Wall>) => void;
+    updateWall: (id: string, updates: Partial<Wall>, skipHistory?: boolean) => void;
     removeWall: (id: string) => void;
     getWall: (id: string) => Wall | undefined;
 
@@ -152,13 +152,13 @@ export type ProjectState = {
 
     // Methods - Shapes
     addShape: (shape: Shape) => void;
-    updateShape: (id: string, updates: Partial<Shape>) => void;
+    updateShape: (id: string, updates: Partial<Shape>, skipHistory?: boolean) => void;
     removeShape: (id: string) => void;
     getShape: (id: string) => Shape | undefined;
 
     // Methods - Assets
     addAsset: (asset: Asset) => void;
-    updateAsset: (id: string, updates: Partial<Asset>) => void;
+    updateAsset: (id: string, updates: Partial<Asset>, skipHistory?: boolean) => void;
     removeAsset: (id: string) => void;
     getAsset: (id: string) => Asset | undefined;
 
@@ -173,6 +173,7 @@ export type ProjectState = {
     redo: () => void;
     saveToHistory: () => void;
     clearHistory: () => void;
+    commitDragHistory: (snapshot: { walls: Wall[]; shapes: Shape[]; assets: Asset[] }) => void;
 
     // Methods - Utility
     getNextZIndex: () => number;
@@ -249,27 +250,27 @@ export const useProjectStore = create<ProjectState>()(
 
             // Wall methods
             addWall: (wall) => {
+                get().saveToHistory();
                 set((state) => ({
                     walls: [...state.walls, wall],
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
-            updateWall: (id, updates) => {
+            updateWall: (id, updates, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.map((w) => (w.id === id ? { ...w, ...updates } : w)),
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
             removeWall: (id) => {
+                get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.filter((w) => w.id !== id),
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
             getWall: (id) => {
@@ -351,29 +352,29 @@ export const useProjectStore = create<ProjectState>()(
 
             // Wall Segment methods (New Engine)
             addWallSegment: (segment) => {
+                get().saveToHistory();
                 set((state) => ({
                     wallSegments: [...state.wallSegments, segment],
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
             updateWallSegment: (id, updates) => {
+                get().saveToHistory();
                 set((state) => ({
                     wallSegments: state.wallSegments.map((w) =>
                         w.id === id ? { ...w, ...updates } : w
                     ),
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
             removeWallSegment: (id) => {
+                get().saveToHistory();
                 set((state) => ({
                     wallSegments: state.wallSegments.filter((w) => w.id !== id),
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
             getWallSegment: (id) => {
@@ -381,36 +382,36 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             setWallSegments: (segments) => {
+                get().saveToHistory();
                 set({
                     wallSegments: segments,
                     hasUnsavedChanges: true,
                 });
-                get().saveToHistory();
             },
 
             // Shape methods
             addShape: (shape) => {
+                get().saveToHistory();
                 set((state) => ({
                     shapes: [...state.shapes, shape],
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
-            updateShape: (id, updates) => {
+            updateShape: (id, updates, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     shapes: state.shapes.map((s) => (s.id === id ? { ...s, ...updates } : s)),
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
             removeShape: (id) => {
+                get().saveToHistory();
                 set((state) => ({
                     shapes: state.shapes.filter((s) => s.id !== id),
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
             getShape: (id) => {
@@ -419,27 +420,27 @@ export const useProjectStore = create<ProjectState>()(
 
             // Asset methods
             addAsset: (asset) => {
+                get().saveToHistory();
                 set((state) => ({
                     assets: [...state.assets, asset],
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
-            updateAsset: (id, updates) => {
+            updateAsset: (id, updates, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     assets: state.assets.map((a) => (a.id === id ? { ...a, ...updates } : a)),
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
             removeAsset: (id) => {
+                get().saveToHistory();
                 set((state) => ({
                     assets: state.assets.filter((a) => a.id !== id),
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
             getAsset: (id) => {
@@ -526,6 +527,17 @@ export const useProjectStore = create<ProjectState>()(
                 set({
                     history: {
                         past: [],
+                        future: [],
+                    },
+                });
+            },
+
+            commitDragHistory: (snapshot) => {
+                const { history } = get();
+                const newPast = [...history.past, snapshot].slice(-50);
+                set({
+                    history: {
+                        past: newPast,
                         future: [],
                     },
                 });
@@ -685,27 +697,27 @@ export const useProjectStore = create<ProjectState>()(
 
             // Dimension methods
             addDimension: (dimension) => {
+                get().saveToHistory();
                 set((state) => ({
                     dimensions: [...state.dimensions, dimension],
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
             updateDimension: (id, updates) => {
+                get().saveToHistory();
                 set((state) => ({
                     dimensions: state.dimensions.map((d) => (d.id === id ? { ...d, ...updates } : d)),
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
             removeDimension: (id) => {
+                get().saveToHistory();
                 set((state) => ({
                     dimensions: state.dimensions.filter((d) => d.id !== id),
                     hasUnsavedChanges: true,
                 }));
-                get().saveToHistory();
             },
 
             // Wall Junction methods
@@ -742,6 +754,7 @@ export const useProjectStore = create<ProjectState>()(
                     thickness: edge.thickness,
                 };
 
+                get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.map((w) =>
                         w.id === wallId
@@ -755,11 +768,11 @@ export const useProjectStore = create<ProjectState>()(
                     hasUnsavedChanges: true,
                 }));
 
-                get().saveToHistory();
                 return newNode;
             },
 
             connectWallToEdge: (sourceWallId, sourceNodeId, targetWallId, targetEdgeId, point) => {
+                get().saveToHistory();
                 const newNode = get().splitWallEdge(targetWallId, targetEdgeId, point);
                 if (!newNode) return;
 
@@ -782,8 +795,6 @@ export const useProjectStore = create<ProjectState>()(
                     }),
                     hasUnsavedChanges: true,
                 }));
-
-                get().saveToHistory();
             },
 
             reset: () => {

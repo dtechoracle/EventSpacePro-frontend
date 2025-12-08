@@ -203,14 +203,15 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             return;
         }
 
-        // Wall already exists - just clear state and select it
-        setSelectedIds([currentWallId]);
-        setActiveTool('select');
-
+        // Clear state
         setCurrentWallId(null);
         setLastNodeId(null);
         setIsDrawing(false);
         setJunctionTarget(null);
+        
+        // Switch to select mode and clear selection so user can select other assets
+        setActiveTool('select');
+        setSelectedIds([]);
     }, [currentWallId, setSelectedIds, setActiveTool]);
 
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -272,9 +273,9 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                             x2={lastNode.x + guideLength}
                             y2={lastNode.y}
                             stroke="#ef4444"
-                            strokeWidth={1 / zoom}
+                            strokeWidth={1}
                             opacity={0.7}
-                            strokeDasharray={`${4 / zoom},${4 / zoom}`}
+                            strokeDasharray="4,4"
                             vectorEffect="non-scaling-stroke"
                         />
                         {/* Vertical guide (green) from start point */}
@@ -284,9 +285,9 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                             x2={lastNode.x}
                             y2={lastNode.y + guideLength}
                             stroke="#22c55e"
-                            strokeWidth={1 / zoom}
+                            strokeWidth={1}
                             opacity={0.7}
-                            strokeDasharray={`${4 / zoom},${4 / zoom}`}
+                            strokeDasharray="4,4"
                             vectorEffect="non-scaling-stroke"
                         />
                         {/* Horizontal guide (red) from current point */}
@@ -296,9 +297,9 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                             x2={previewPoint.x + guideLength}
                             y2={previewPoint.y}
                             stroke="#ef4444"
-                            strokeWidth={1 / zoom}
+                            strokeWidth={1}
                             opacity={0.7}
-                            strokeDasharray={`${4 / zoom},${4 / zoom}`}
+                            strokeDasharray="4,4"
                             vectorEffect="non-scaling-stroke"
                         />
                         {/* Vertical guide (green) from current point */}
@@ -308,9 +309,9 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                             x2={previewPoint.x}
                             y2={previewPoint.y + guideLength}
                             stroke="#22c55e"
-                            strokeWidth={1 / zoom}
+                            strokeWidth={1}
                             opacity={0.7}
-                            strokeDasharray={`${4 / zoom},${4 / zoom}`}
+                            strokeDasharray="4,4"
                             vectorEffect="non-scaling-stroke"
                         />
                     </>

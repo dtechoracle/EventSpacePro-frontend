@@ -328,10 +328,24 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                         <Tooltip content={tool.label} position="top">
                             <motion.button
                                 onClick={() => {
-                                    // Activate the group's primary option and ensure exclusivity
                                     const primary = tool.options[0];
                                     if (primary) {
-                                        handleOptionClick(primary);
+                                        // Check if this tool's primary option is already active
+                                        const isCurrentlyActive = 
+                                            (primary.id === "draw-wall" && (isWallMode || wallDrawingMode)) ||
+                                            (primary.id === "draw-line" && isPenMode) ||
+                                            (primary.id === "rectangular-select" && activeTool === "rectangular-select") ||
+                                            (activeTool === primary.id);
+                                        
+                                        if (isCurrentlyActive) {
+                                            // Deactivate and return to select mode
+                                            deactivateAllTools();
+                                            setEditorTool("select");
+                                            setActiveTool("pointer-select");
+                                        } else {
+                                            // Activate the primary option
+                                            handleOptionClick(primary);
+                                        }
                                     }
                                     // Close any open dropdown when directly activating
                                     setOpenIndex(null);

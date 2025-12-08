@@ -173,7 +173,7 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
                         updateShape(id, {
                             x: shape.x + snappedDx,
                             y: shape.y + snappedDy,
-                        });
+                        }, true);
                     }
 
                     const asset = assets.find((a) => a.id === id);
@@ -181,7 +181,7 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
                         updateAsset(id, {
                             x: asset.x + snappedDx,
                             y: asset.y + snappedDy,
-                        });
+                        }, true);
                     }
 
                     const wall = walls.find((w) => w.id === id);
@@ -191,7 +191,7 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
                             x: node.x + snappedDx,
                             y: node.y + snappedDy
                         }));
-                        updateWall(id, { nodes: newNodes });
+                        updateWall(id, { nodes: newNodes }, true);
                     }
                 });
 
@@ -383,6 +383,7 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
                             worldY <= shape.y + halfH
                         ) {
                             if (selectedIds.includes(shape.id)) {
+                                useProjectStore.getState().saveToHistory();
                                 setIsDraggingItem(true);
                                 setDraggedItemStart({ x: worldX, y: worldY });
                             } else {
@@ -407,6 +408,7 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
                             worldY <= asset.y + halfH
                         ) {
                             if (selectedIds.includes(asset.id)) {
+                                useProjectStore.getState().saveToHistory();
                                 setIsDraggingItem(true);
                                 setDraggedItemStart({ x: worldX, y: worldY });
                             } else {
@@ -448,6 +450,7 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
                                 // Dimensions are now shown in real-time while drawing
 
                                 if (selectedIds.includes(wall.id)) {
+                                    useProjectStore.getState().saveToHistory();
                                     setIsDraggingItem(true);
                                     setDraggedItemStart({ x: worldX, y: worldY });
                                 } else {
@@ -533,7 +536,7 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
         setDragStart(null);
         setIsDraggingItem(false);
         setDraggedItemStart(null);
-    }, [setPanning, selectionRect, shapes, assets, walls, setSelectedIds]);
+    }, [setPanning, selectionRect, shapes, assets, walls, setSelectedIds, sceneStore]);
 
     const handleAssetDrop = useCallback(
         (e: React.DragEvent<HTMLDivElement>) => {
@@ -747,6 +750,28 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [zoomIn, zoomOut, clearSelection, walls, shapes, assets]);
+
+    // Undo/Redo Keyboard Shortcuts
+    useEffect(() => {
+        const handleUndoRedo = (e: KeyboardEvent) => {
+            // Undo (Ctrl+Z)
+            if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                useProjectStore.getState().undo();
+            }
+            // Redo (Ctrl+Y or Ctrl+Shift+Z)
+            else if (
+                ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
+                ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')
+            ) {
+                e.preventDefault();
+                useProjectStore.getState().redo();
+            }
+        };
+
+        window.addEventListener('keydown', handleUndoRedo);
+        return () => window.removeEventListener('keydown', handleUndoRedo);
+    }, []);
 
     // Context Menu State (store which object was right-clicked)
     const [contextMenu, setContextMenu] = useState<{
