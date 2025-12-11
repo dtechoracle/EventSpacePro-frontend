@@ -62,28 +62,33 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             snapped = snapTo90Degrees(lastNode, snapped, 6);
         }
 
-        // Check for junction opportunities with existing walls
-        const junction = findWallIntersection(snapped, walls, JUNCTION_SNAP_THRESHOLD, currentWallId || undefined);
-
-        if (junction) {
-            snapped = junction.point;
-            setJunctionTarget(junction);
-        } else {
-            setJunctionTarget(null);
-        }
-
-        // Check if near first node to close loop
+        // FIRST PRIORITY: Check if near first node to close loop (before other junctions)
+        let closingLoop = false;
         if (currentWall && currentWall.nodes.length > 2) {
             const firstNode = currentWall.nodes[0];
             const dist = Math.hypot(snapped.x - firstNode.x, snapped.y - firstNode.y);
 
-            if (dist < SNAP_DISTANCE) {
-                // Near first node - show junction indicator
+            if (dist < SNAP_DISTANCE * 2) { // Larger snap radius for closing loop
+                // Snap to first node to close the loop
+                snapped = firstNode;
+                closingLoop = true;
                 setJunctionTarget({
                     wallId: currentWallId!,
                     edgeId: '',
                     point: firstNode,
                 });
+            }
+        }
+
+        // SECOND PRIORITY: Check for junction opportunities with existing walls (only if not closing loop)
+        if (!closingLoop) {
+            const junction = findWallIntersection(snapped, walls, JUNCTION_SNAP_THRESHOLD, currentWallId || undefined);
+
+            if (junction) {
+                snapped = junction.point;
+                setJunctionTarget(junction);
+            } else {
+                setJunctionTarget(null);
             }
         }
 
@@ -118,42 +123,90 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             snapped = snapTo90Degrees(lastNode, snapped, 6);
         }
 
-        // Check for junction opportunity
+        // Check for junction opportunity (edges)
         const junction = findWallIntersection(snapped, walls, JUNCTION_SNAP_THRESHOLD, currentWallId || undefined);
 
-        if (junction) {
+        // Check for existing node snap (corners)
+        let existingNodeId: string | null = null;
+        let existingNodeWallId: string | null = null;
+
+        for (const wall of walls) {
+            // Don't snap to current wall's last node (prevent 0-length edge)
+            if (wall.id === currentWallId && lastNodeId) {
+                const node = wall.nodes.find(n => n.id === lastNodeId);
+                if (node && Math.hypot(node.x - snapped.x, node.y - snapped.y) < SNAP_DISTANCE) {
+                    return; // Ignore click on same node
+                }
+            }
+
+            for (const node of wall.nodes) {
+                if (Math.hypot(node.x - snapped.x, node.y - snapped.y) < SNAP_DISTANCE) {
+                    snapped = { x: node.x, y: node.y };
+                    existingNodeId = node.id;
+                    existingNodeWallId = wall.id;
+                    break;
+                }
+            }
+            if (existingNodeId) break;
+        }
+
+        if (junction && !existingNodeId) {
             snapped = junction.point;
         }
 
         // Check for loop closing (only if we have a current wall with 3+ nodes)
-        if (currentWall && currentWall.nodes.length > 2) {
+        if (currentWall && currentWall.nodes.length > 2 && !existingNodeId) {
             const firstNode = currentWall.nodes[0];
             const dist = Math.hypot(snapped.x - firstNode.x, snapped.y - firstNode.y);
 
             if (dist < SNAP_DISTANCE) {
                 // Close the loop by adding edge from last to first
-                const closeEdge: WallEdge = {
-                    id: `edge-${Date.now()}-close`,
-                    nodeA: lastNodeId!,
-                    nodeB: firstNode.id,
-                    thickness,
-                };
-                updateWall(currentWallId!, {
-                    edges: [...currentWall!.edges, closeEdge],
-                });
+                // Check if edge already exists
+                const edgeExists = currentWall.edges.some(e =>
+                    (e.nodeA === lastNodeId && e.nodeB === firstNode.id) ||
+                    (e.nodeA === firstNode.id && e.nodeB === lastNodeId)
+                );
+
+                if (!edgeExists) {
+                    const closeEdge: WallEdge = {
+                        id: `edge-${Date.now()}-close`,
+                        nodeA: lastNodeId!,
+                        nodeB: firstNode.id,
+                        thickness,
+                    };
+                    updateWall(currentWallId!, {
+                        edges: [...currentWall!.edges, closeEdge],
+                    });
+                }
                 finishWall(true);
                 return;
             }
         }
 
+        // Determine the node ID to use (new or existing)
+        const newNodeId = existingNodeId || `node-${Date.now()}-${Math.random()}`;
         const newNode: WallNode = {
-            id: `node-${Date.now()}-${Math.random()}`,
+            id: newNodeId,
             x: snapped.x,
             y: snapped.y,
         };
 
         if (!currentWallId) {
-            // FIRST CLICK - Create new wall with single node
+            // FIRST CLICK - Create new wall
+            // If we clicked an existing node, we start a new wall connected to it
+            // But we need to be careful not to duplicate the node in the new wall if we want to share it?
+            // Actually, walls are separate objects. If we want to share nodes, we need a different data structure.
+            // Current structure: Wall has its own nodes.
+            // So if we snap to an existing node, we should probably just place a NEW node at the same location
+            // OR, if we want to "connect" them, we might need to merge walls?
+            // For now, let's just place a new node at the exact same location to ensure visual continuity.
+            // Ideally, we would merge, but that's complex.
+
+            // WAIT: The user wants to avoid overlap.
+            // If we start at an existing node, we are fine.
+            // If we END at an existing node, we are fine.
+            // The problem is drawing ON TOP of an existing edge.
+
             const wallId = `wall-${Date.now()}`;
             const wall: Wall = {
                 id: wallId,
@@ -164,30 +217,80 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
 
             addWall(wall);
             setCurrentWallId(wallId);
-            setLastNodeId(newNode.id);
+            setLastNodeId(newNodeId);
             setIsDrawing(true);
         } else {
             // SUBSEQUENT CLICKS - Add node and edge to existing wall
+
+            // Check if edge already exists between lastNode and newNode
+            // We need to check ALL walls to prevent overlap
+            let isDuplicateEdge = false;
+
+            // Check current wall
+            if (currentWall!.edges.some(e =>
+                (e.nodeA === lastNodeId && e.nodeB === newNodeId) ||
+                (e.nodeA === newNodeId && e.nodeB === lastNodeId)
+            )) {
+                isDuplicateEdge = true;
+            }
+
+            // Check other walls (if we are using shared nodes or coincident nodes)
+            // Since nodes are unique per wall usually, checking coincident geometry is better
+            if (!isDuplicateEdge) {
+                const p1 = lastNode!;
+                const p2 = newNode;
+
+                for (const w of walls) {
+                    for (const e of w.edges) {
+                        const nA = w.nodes.find(n => n.id === e.nodeA);
+                        const nB = w.nodes.find(n => n.id === e.nodeB);
+                        if (!nA || !nB) continue;
+
+                        // Check if edge (p1, p2) is same as (nA, nB) geometrically
+                        if (
+                            (Math.hypot(p1.x - nA.x, p1.y - nA.y) < 1 && Math.hypot(p2.x - nB.x, p2.y - nB.y) < 1) ||
+                            (Math.hypot(p1.x - nB.x, p1.y - nB.y) < 1 && Math.hypot(p2.x - nA.x, p2.y - nA.y) < 1)
+                        ) {
+                            isDuplicateEdge = true;
+                            break;
+                        }
+                    }
+                    if (isDuplicateEdge) break;
+                }
+            }
+
+            if (isDuplicateEdge) {
+                // Don't add duplicate edge
+                // Just move lastNodeId to the new node (so we can continue drawing from there)
+                setLastNodeId(newNodeId);
+                return;
+            }
+
             const newEdge: WallEdge = {
                 id: `edge-${Date.now()}`,
                 nodeA: lastNodeId!,
-                nodeB: newNode.id,
+                nodeB: newNodeId,
                 thickness,
             };
 
+            // If it's a new node (not existing in current wall), add it
+            const nodesToUpdate = [...currentWall!.nodes];
+            if (!currentWall!.nodes.some(n => n.id === newNodeId)) {
+                nodesToUpdate.push(newNode);
+            }
+
             updateWall(currentWallId, {
-                nodes: [...currentWall!.nodes, newNode],
+                nodes: nodesToUpdate,
                 edges: [...currentWall!.edges, newEdge],
             });
 
-            setLastNodeId(newNode.id);
+            setLastNodeId(newNodeId);
 
-            // Handle junction connection if detected
-            if (junction) {
-                // Connect this wall to the junction
+            // Handle junction connection if detected (and not snapping to existing node)
+            if (junction && !existingNodeId) {
                 connectWallToEdge(
                     currentWallId,
-                    newNode.id,
+                    newNodeId,
                     junction.wallId,
                     junction.edgeId,
                     junction.point
@@ -208,7 +311,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
         setLastNodeId(null);
         setIsDrawing(false);
         setJunctionTarget(null);
-        
+
         // Switch to select mode and clear selection so user can select other assets
         setActiveTool('select');
         setSelectedIds([]);
@@ -263,7 +366,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                 const dy = previewPoint.y - lastNode.y;
                 const wallLength = Math.sqrt(dx * dx + dy * dy);
                 const guideLength = Math.max(wallLength * 2, 500); // At least 500mm or 2x wall length
-                
+
                 return (
                     <>
                         {/* Horizontal guide (red) from start point */}
@@ -325,11 +428,8 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                 const length = Math.sqrt(dx * dx + dy * dy);
                 if (length === 0) return null;
 
-                // Use actual thickness from wall type selector via sceneStore
-                // Scale down by 6 for visual display (real architectural thickness is 75-225mm)
-                // This matches the WallRenderer scaling for consistent appearance
-                const realThickness = thickness; // Actual architectural thickness (e.g., 75, 100, 150, 225mm)
-                const wallThickness = realThickness / 6; // Scale down for screen display
+                // Use ACTUAL thickness (don't scale down) so users can see the real wall width
+                const wallThickness = thickness; // Full thickness: 75, 100, 150, or 225mm
 
                 // Calculate perpendicular offset for wall thickness
                 const perpX = (-dy / length) * (wallThickness / 2);
@@ -370,7 +470,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                 const dy = previewPoint.y - lastNode.y;
                 const length = Math.sqrt(dx * dx + dy * dy);
                 if (length === 0) return null;
-                
+
                 // Calculate dimension position (outside the wall, perpendicular offset)
                 const perpX = -dy / length;
                 const perpY = dx / length;
@@ -379,12 +479,12 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                 const midY = (lastNode.y + previewPoint.y) / 2;
                 const dimensionX = midX + perpX * dimensionOffset;
                 const dimensionY = midY + perpY * dimensionOffset;
-                
+
                 // Format dimension text
-                const dimensionText = length >= 1000 
-                    ? `${(length / 1000).toFixed(2)} m` 
+                const dimensionText = length >= 1000
+                    ? `${(length / 1000).toFixed(2)} m`
                     : `${length.toFixed(0)} mm`;
-                
+
                 // Calculate angle for text rotation
                 const angle = Math.atan2(dy, dx) * (180 / Math.PI);
                 const textAngle = angle < -90 || angle > 90 ? angle + 180 : angle;

@@ -72,8 +72,8 @@ export function calculateNodeJunctions(
     }
 
     // For 2+ edges, calculate junctions between adjacent edges
-    // Key fix: Only process actual adjacent pairs, don't wrap around for 2 edges
-    const numPairs = sortedEdges.length === 2 ? 1 : sortedEdges.length;
+    // Process all adjacent pairs, including wrapping around for 2 edges to close the miter
+    const numPairs = sortedEdges.length;
 
     for (let i = 0; i < numPairs; i++) {
         const current = sortedEdges[i];

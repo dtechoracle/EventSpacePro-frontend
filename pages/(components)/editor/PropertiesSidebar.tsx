@@ -5,27 +5,29 @@ import { FaUserCircle, FaChevronDown, FaChevronRight } from "react-icons/fa";
 import { IoPlayOutline } from "react-icons/io5";
 import ShareModal from "./ShareModal";
 import ExportPanel from "./ExportPanel";
-import { useAssetProperties } from "@/hooks/useAssetProperties";
 import { useSceneStore } from "@/store/sceneStore";
-import { useEditorStore } from "@/store/editorStore"; // NEW STORE
+import { useEditorStore } from "@/store/editorStore";
 import { useProjectStore } from "@/store/projectStore";
+import { useRouter } from "next/router";
 import { useUserStore } from "@/store/userStore";
 
 export default function PropertiesSidebar(): React.JSX.Element {
+  const { selectedIds } = useEditorStore();
   const {
-    selectedAsset,
-    unit,
-    assetX,
-    assetY,
-    assetScale,
-    assetRotation,
-    onChangeX,
-    onChangeY,
-    onChangeScale,
-    onChangeRotation,
-    onChangeUnit,
-    updateAsset,
-  } = useAssetProperties();
+    shapes, assets, walls,
+    updateShape, updateAsset, updateWall,
+    isSaving, lastSaved, saveEvent, hasUnsavedChanges
+  } = useProjectStore();
+
+  // Resolve the single selected item
+  const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
+
+  const selectedShape = selectedId ? shapes.find(s => s.id === selectedId) : null;
+  const selectedAsset = selectedId ? assets.find(a => a.id === selectedId) : null;
+  const selectedWall = selectedId ? walls.find(w => w.id === selectedId) : null;
+
+  const selectedItem = selectedShape || selectedAsset || selectedWall;
+  const itemType = selectedShape ? 'shape' : selectedAsset ? 'asset' : selectedWall ? 'wall' : null;
 
   const showGrid = useSceneStore((s) => s.showGrid);
   const toggleGrid = useSceneStore((s) => s.toggleGrid);
@@ -35,28 +37,23 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const snapToGridEnabled = useSceneStore((s) => s.snapToGridEnabled);
   const toggleSnapToGrid = useSceneStore((s) => s.toggleSnapToGrid);
 
-  // NEW STORE - sync grid controls
   const editorStore = useEditorStore();
 
-  // Sync function to toggle grid in both stores
   const handleToggleGrid = () => {
-    toggleGrid(); // Old store
-    editorStore.toggleGrid(); // New store
+    toggleGrid();
+    editorStore.toggleGrid();
   };
 
-  // Sync function to toggle snap to grid in both stores
   const handleToggleSnapToGrid = () => {
-    toggleSnapToGrid(); // Old store
-    editorStore.toggleSnapToGrid(); // New store
+    toggleSnapToGrid();
+    editorStore.toggleSnapToGrid();
   };
 
-  // Sync function to set grid size in both stores
   const handleSetGridSize = (index: number) => {
-    setSelectedGridSizeIndex(index); // Old store
+    setSelectedGridSizeIndex(index);
     const size = availableGridSizes?.[index] || 10;
-    editorStore.setGridSize(size); // New store
+    editorStore.setGridSize(size);
   };
-  // const addAsset = useSceneStore((s) => s.addAsset);
 
   // Wall drawing state
   const wallDrawingMode = useSceneStore((s) => s.wallDrawingMode);
@@ -70,10 +67,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const [modelName, setModelName] = useState<string>("");
   const open3D = useSceneStore((s) => s.open3DOverlay);
 
-  // Get logged in user
   const user = useUserStore((s) => s.user);
 
-  // Get user's full name
   const getUserName = () => {
     if (!user) return "";
     const firstName = user.firstName || "";
@@ -83,36 +78,25 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
   const userName = getUserName();
 
-  // Set model name to user's name when user is loaded
+
+
   useEffect(() => {
     if (userName && !modelName) {
       setModelName(userName);
     }
   }, [userName, modelName]);
 
-  // Chair placement state from store with fallback
-  const chairSettings = useSceneStore((s) => s.chairSettings) || { numChairs: 8, radius: 80 };
 
-  // Direct function to update chair settings
-  const updateChairSettings = (settings: { numChairs: number; radius: number }) => {
-    const state = useSceneStore.getState();
-    if (state.setChairSettings) {
-      state.setChairSettings(settings);
+
+  const router = useRouter();
+  const { id } = router.query;
+
+  const handleSave = async () => {
+    if (id && typeof id === 'string') {
+      await saveEvent(id);
     }
   };
 
-  // Auto-populate wall thickness based on current wall type when a wall is selected
-  useEffect(() => {
-    if (selectedAsset && selectedAsset.type === "wall-segments") {
-      const currentWallThickness = useSceneStore.getState().getCurrentWallThickness();
-      // Only update if the asset doesn't already have a thickness set
-      if (!selectedAsset.wallThickness) {
-        updateAsset(selectedAsset.id, {
-          wallThickness: currentWallThickness,
-        });
-      }
-    }
-  }, [selectedAsset, updateAsset]);
   const [canvasName, setCanvasName] = useState<string>("");
 
   const roundForDisplay = (num: number) => Math.round(num * 100) / 100;
@@ -130,6 +114,19 @@ export default function PropertiesSidebar(): React.JSX.Element {
           size={28}
         />
         <div className="flex items-center gap-1">
+          <button
+            className={`px-2 py-1.5 rounded text-xs shadow flex items-center gap-1 transition-colors
+                ${hasUnsavedChanges
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }
+                ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}
+            `}
+            onClick={handleSave}
+            disabled={isSaving}
+          >
+            {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save' : 'Saved'}
+          </button>
           <button className="p-1 rounded hover:bg-gray-100" onClick={() => open3D && open3D()}>
             <IoPlayOutline size={14} />
           </button>
@@ -249,7 +246,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
               </div>
             )}
 
-            {/* Snap to Grid - only show when grid is enabled */}
+            {/* Snap to Grid */}
             {showGrid && (
               <div className="flex justify-between items-center py-2">
                 <span>Snap to Grid</span>
@@ -276,562 +273,159 @@ export default function PropertiesSidebar(): React.JSX.Element {
               </div>
             )}
 
-            {/* Wall Drawing Controls */}
-            {wallDrawingMode && (
-              <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="text-xs font-medium text-blue-800 mb-2">
-                  Wall Drawing
-                </div>
-                <div className="text-xs text-blue-600 mb-3">
-                  Segments: {currentWallSegments.length}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={finishWallDrawing}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs py-2 px-3 rounded shadow"
-                  >
-                    Finish Wall
-                  </button>
-                  <button
-                    onClick={cancelWallDrawing}
-                    className="flex-1 bg-gray-500 hover:bg-gray-600 text-white text-xs py-2 px-3 rounded shadow"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Transform Controls */}
-            {selectedAsset && (
-              <div className="mt-2">
-                <div className="text-xs font-medium mb-2">Selected Asset</div>
-
-                <div className="flex justify-between items-center mb-2">
-                  <span>X ({unit})</span>
-                  <input
-                    type="number"
-                    value={roundForDisplay(assetX)}
-                    onChange={(e) => onChangeX(Number(e.target.value))}
-                    className="sidebar-input w-28 text-xs"
-                    step={0.01}
-                  />
+            {/* SELECTED ITEM PROPERTIES */}
+            {selectedItem && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-500">
+                  {itemType} Properties
                 </div>
 
-                <div className="flex justify-between items-center mb-2">
-                  <span>Y ({unit})</span>
-                  <input
-                    type="number"
-                    value={roundForDisplay(assetY)}
-                    onChange={(e) => onChangeY(Number(e.target.value))}
-                    className="sidebar-input w-28 text-xs"
-                    step={0.01}
-                  />
-                </div>
-
-                <div className="flex justify-between items-center mb-2">
-                  <span>Scale</span>
-                  <input
-                    type="number"
-                    value={assetScale}
-                    onChange={(e) => onChangeScale(Number(e.target.value))}
-                    step={0.01}
-                    min={0.01}
-                    className="sidebar-input w-28 text-xs"
-                  />
-                </div>
-
-                {/* Universal sizing properties - disabled for text */}
-                {selectedAsset.type !== "text" && (
-                  <div className="space-y-2 mt-2">
-                    <div className="flex justify-between items-center">
-                      <span>Width (px)</span>
+                {/* Position */}
+                {(itemType === 'shape' || itemType === 'asset') && (
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">X</span>
                       <input
                         type="number"
-                        value={selectedAsset.width || 24}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            width: Number(e.target.value),
-                          })
-                        }
-                        className="sidebar-input w-28 text-xs"
-                        min={1}
+                        value={roundForDisplay((selectedItem as any).x)}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          if (itemType === 'shape') updateShape(selectedItem.id, { x: val });
+                          if (itemType === 'asset') updateAsset(selectedItem.id, { x: val });
+                        }}
+                        className="sidebar-input w-16 text-right"
                       />
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span>Height (px)</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Y</span>
                       <input
                         type="number"
-                        value={selectedAsset.height || 24}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            height: Number(e.target.value),
-                          })
-                        }
-                        className="sidebar-input w-28 text-xs"
-                        min={1}
+                        value={roundForDisplay((selectedItem as any).y)}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          if (itemType === 'shape') updateShape(selectedItem.id, { y: val });
+                          if (itemType === 'asset') updateAsset(selectedItem.id, { y: val });
+                        }}
+                        className="sidebar-input w-16 text-right"
                       />
                     </div>
                   </div>
                 )}
 
-                {/* Shape-specific properties */}
-                {selectedAsset.type === "square" ||
-                  selectedAsset.type === "circle" ? (
-                  <div className="space-y-2 mt-2">
-                    <div className="flex justify-between items-center">
-                      <span>Fill Color</span>
-                      <input
-                        type="color"
-                        value={selectedAsset.fillColor || "transparent"}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            fillColor: e.target.value,
-                          })
-                        }
-                        className="w-28 h-6 p-0 border-none"
-                      />
-                    </div>
-                  </div>
-                ) : selectedAsset.type === "line" ? (
-                  <div className="space-y-2 mt-2">
-                    <div className="flex justify-between items-center">
-                      <span>Stroke Width</span>
+                {/* Dimensions (Shape/Asset) */}
+                {(itemType === 'shape' || itemType === 'asset') && (
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">W</span>
                       <input
                         type="number"
-                        value={selectedAsset.strokeWidth || 2}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            strokeWidth: Number(e.target.value),
-                          })
-                        }
-                        className="sidebar-input w-28 text-xs"
-                        min={1}
-                      />
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Stroke Color</span>
-                      <input
-                        type="color"
-                        value={selectedAsset.strokeColor || "#000000"}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            strokeColor: e.target.value,
-                          })
-                        }
-                        className="w-28 h-6 p-0 border-none"
-                      />
-                    </div>
-                  </div>
-                ) : selectedAsset.type === "double-line" ? (
-                  <div className="space-y-2 mt-2">
-                    <div className="flex justify-between items-center">
-                      <span>Line Width</span>
-                      <input
-                        type="number"
-                        value={selectedAsset.strokeWidth || 2}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            strokeWidth: Number(e.target.value),
-                          })
-                        }
-                        className="sidebar-input w-28 text-xs"
-                        min={1}
-                      />
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Line Gap</span>
-                      <input
-                        type="number"
-                        value={selectedAsset.lineGap || 8}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            lineGap: Number(e.target.value),
-                          })
-                        }
-                        className="sidebar-input w-28 text-xs"
-                        min={1}
-                      />
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Line Color</span>
-                      <input
-                        type="color"
-                        value={selectedAsset.lineColor || "#000000"}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            lineColor: e.target.value,
-                          })
-                        }
-                        className="w-28 h-6 p-0 border-none"
-                      />
-                    </div>
-                  </div>
-                ) : selectedAsset.type === "drawn-line" ? (
-                  <div className="space-y-2 mt-2">
-                    <div className="flex justify-between items-center">
-                      <span>Stroke Width</span>
-                      <input
-                        type="number"
-                        value={selectedAsset.strokeWidth || 2}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            strokeWidth: Number(e.target.value),
-                          })
-                        }
-                        className="sidebar-input w-28 text-xs"
-                        min={1}
-                      />
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Stroke Color</span>
-                      <input
-                        type="color"
-                        value={selectedAsset.strokeColor || "#000000"}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            strokeColor: e.target.value,
-                          })
-                        }
-                        className="w-28 h-6 p-0 border-none"
-                      />
-                    </div>
-                  </div>
-                ) : selectedAsset.type === "text" ? (
-                  <div className="space-y-2 mt-2">
-                    <div className="flex justify-between items-center">
-                      <span>Text</span>
-                      <input
-                        type="text"
-                        value={selectedAsset.text || ""}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            text: e.target.value,
-                          })
-                        }
-                        className="sidebar-input w-28 text-xs"
-                        placeholder="Enter text"
-                      />
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Font Size</span>
-                      <input
-                        type="number"
-                        value={selectedAsset.fontSize || 16}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            fontSize: Number(e.target.value),
-                          })
-                        }
-                        className="sidebar-input w-28 text-xs"
-                        min={8}
-                        max={72}
-                      />
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Text Color</span>
-                      <input
-                        type="color"
-                        value={selectedAsset.textColor || "#000000"}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            textColor: e.target.value,
-                          })
-                        }
-                        className="w-28 h-6 p-0 border-none"
-                      />
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Font Family</span>
-                      <select
-                        value={selectedAsset.fontFamily || "Arial"}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            fontFamily: e.target.value,
-                          })
-                        }
-                        className="sidebar-input w-28 text-xs"
-                      >
-                        <option value="Arial">Arial</option>
-                        <option value="Helvetica">Helvetica</option>
-                        <option value="Times New Roman">Times New Roman</option>
-                        <option value="Georgia">Georgia</option>
-                        <option value="Verdana">Verdana</option>
-                        <option value="Courier New">Courier New</option>
-                      </select>
-                    </div>
-                  </div>
-                ) : selectedAsset.type === "wall-segments" ? (
-                  <div className="space-y-2 mt-2">
-                    <div className="flex justify-between items-center">
-                      <span>Line Color</span>
-                      <input
-                        type="color"
-                        value={selectedAsset.lineColor || "#000000"}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            lineColor: e.target.value,
-                          })
-                        }
-                        className="w-28 h-6 p-0 border-none"
-                      />
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Line</span>
-                      <input
-                        type="number"
-                        value={selectedAsset.wallThickness || useSceneStore.getState().getCurrentWallThickness()}
+                        value={roundForDisplay((selectedItem as any).width)}
                         onChange={(e) => {
-                          updateAsset(selectedAsset.id, {
-                            wallThickness: Number(e.target.value),
-                          });
+                          const val = Number(e.target.value);
+                          if (itemType === 'shape') updateShape(selectedItem.id, { width: val });
+                          if (itemType === 'asset') updateAsset(selectedItem.id, { width: val });
                         }}
-                        className="sidebar-input w-28 text-xs"
-                        min={1}
-                        max={20}
+                        className="sidebar-input w-16 text-right"
                       />
                     </div>
-                    <div className="text-xs text-gray-500 ml-2">
-                      Current wall type: {useSceneStore.getState().getCurrentWallThickness()}px
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Wall Thickness</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">H</span>
                       <input
                         type="number"
-                        value={selectedAsset.wallGap || 8}
-                        onChange={(e) =>
-                          updateAsset(selectedAsset.id, {
-                            wallGap: Number(e.target.value),
-                          })
-                        }
-                        className="sidebar-input w-28 text-xs"
-                        min={2}
-                        max={50}
+                        value={roundForDisplay((selectedItem as any).height)}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          if (itemType === 'shape') updateShape(selectedItem.id, { height: val });
+                          if (itemType === 'asset') updateAsset(selectedItem.id, { height: val });
+                        }}
+                        className="sidebar-input w-16 text-right"
                       />
                     </div>
                   </div>
-                ) : null}
-
-                {/* Background Color */}
-                <div className="flex justify-between items-center mb-2 mt-2">
-                  <span>Background</span>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={
-                        !!(
-                          selectedAsset.backgroundColor &&
-                          selectedAsset.backgroundColor !== "transparent"
-                        )
-                      }
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          updateAsset(selectedAsset.id, {
-                            backgroundColor: "#FFFFFF",
-                          });
-                        } else {
-                          updateAsset(selectedAsset.id, {
-                            backgroundColor: "transparent",
-                          });
-                        }
-                      }}
-                      className="w-4 h-4"
-                    />
-                    {selectedAsset.backgroundColor &&
-                      selectedAsset.backgroundColor !== "transparent" && (
-                        <input
-                          type="color"
-                          value={selectedAsset.backgroundColor}
-                          onChange={(e) =>
-                            updateAsset(selectedAsset.id, {
-                              backgroundColor: e.target.value,
-                            })
-                          }
-                          className="w-8 h-6 p-0 border-none"
-                        />
-                      )}
-                  </div>
-                </div>
+                )}
 
                 {/* Rotation */}
-                <div className="flex justify-between items-center mb-2 mt-2">
-                  <span>Rotation (deg)</span>
-                  <input
-                    type="number"
-                    value={assetRotation}
-                    onChange={(e) => onChangeRotation(Number(e.target.value))}
-                    step={1}
-                    className="sidebar-input w-28 text-xs"
-                  />
-                </div>
-
-                {/* Unit dropdown */}
-                <div className="flex justify-between items-center mt-3">
-                  <span>Unit</span>
-                  <select
-                    value={unit}
-                    onChange={(e) => onChangeUnit(e.target.value)}
-                    className="sidebar-input w-22"
-                  >
-                    <option>px</option>
-                    <option>cm</option>
-                    <option>mm</option>
-                  </select>
-                </div>
-
-                {/* Layering Controls */}
-                <div className="mt-4 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-medium text-gray-700">
-                      Layer Order
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      Z: {selectedAsset.zIndex || 0}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      className="flex-1 text-xs bg-blue-500 hover:bg-blue-600 text-white py-1.5 rounded shadow"
-                      onClick={() => {
-                        const state = useSceneStore.getState();
-                        const nextZIndex =
-                          state.assets.length > 0
-                            ? Math.max(
-                              ...state.assets.map((a) => a.zIndex || 0)
-                            ) + 25
-                            : 25;
-                        state.updateAsset(selectedAsset.id, {
-                          zIndex: nextZIndex,
-                        });
-                      }}
-                    >
-                      Send to Front
-                    </button>
-                    <button
-                      className="flex-1 text-xs bg-gray-500 hover:bg-gray-600 text-white py-1.5 rounded shadow"
-                      onClick={() => {
-                        const state = useSceneStore.getState();
-                        state.updateAsset(selectedAsset.id, {
-                          zIndex: -1,
-                        });
-                      }}
-                    >
-                      Send to Back
-                    </button>
-                  </div>
-
-                  {/* Chair Placement Controls for Tables */}
-                  {selectedAsset.type.includes('table') && (
-                    <div className="mb-4 p-3 bg-gray-100 border-t">
-                      <div className="text-xs font-semibold text-gray-700 mb-3">Chair Placement</div>
-
-                      {/* Number of Chairs */}
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs">Number of Chairs</span>
-                        <input
-                          type="number"
-                          value={chairSettings.numChairs}
-                          min={2}
-                          max={20}
-                          className="sidebar-input w-16 text-xs"
-                          onChange={(e) => {
-                            updateChairSettings({
-                              numChairs: Number(e.target.value),
-                              radius: chairSettings.radius
-                            });
-                          }}
-                        />
-                      </div>
-
-                      {/* Radius Around Table */}
-                      <div className="flex justify-between items-center mb-3">
-                        <span className="text-xs">Radius (mm)</span>
-                        <input
-                          type="number"
-                          value={chairSettings.radius}
-                          min={40}
-                          max={200}
-                          className="sidebar-input w-16 text-xs"
-                          onChange={(e) => {
-                            updateChairSettings({
-                              numChairs: chairSettings.numChairs,
-                              radius: Number(e.target.value)
-                            });
-                          }}
-                        />
-                      </div>
-
-                      {/* Add Chairs Button */}
-                      <button
-                        className="w-full text-xs bg-blue-500 hover:bg-blue-600 text-white py-1.5 rounded shadow"
-                        onClick={() => {
-                          const state = useSceneStore.getState();
-                          const addAssetObject = state.addAssetObject;
-
-                          // Get table dimensions for chair sizing
-                          const tableWidth = (selectedAsset.width || 100) * selectedAsset.scale;
-                          const tableHeight = (selectedAsset.height || 100) * selectedAsset.scale;
-                          const chairSize = Math.min(tableWidth, tableHeight) * 0.3; // 30% of smaller table dimension
-
-                          // Use values from state with fallbacks
-                          const numChairs = chairSettings.numChairs;
-                          const radius = chairSettings.radius;
-
-                          // Calculate chair positions in a circle around the table
-                          const chairs = [];
-                          const angleStep = 360 / numChairs; // Degrees per chair
-
-                          for (let i = 0; i < numChairs; i++) {
-                            const angleDegrees = i * angleStep;
-                            const angleRadians = (angleDegrees * Math.PI) / 180;
-                            const x = selectedAsset.x + Math.cos(angleRadians) * radius;
-                            const y = selectedAsset.y + Math.sin(angleRadians) * radius;
-                            // Calculate rotation so chair faces the table center
-                            // Chair should point directly toward the table center (like spokes on a wheel)
-                            // Add 180 degrees to make chair point toward table center, then rotate 90 degrees left
-                            const chairRotation = (angleDegrees + 180 + 90) % 360;
-                            chairs.push({ x, y, rotation: chairRotation });
-                          }
-
-                          // Create chair assets with table-proportional sizing
-                          chairs.forEach((chairPos, index) => {
-                            const chairAsset = {
-                              id: `chair-${Date.now()}-${index}`,
-                              type: 'normal-chair',
-                              x: chairPos.x,
-                              y: chairPos.y,
-                              scale: 1,
-                              rotation: chairPos.rotation,
-                              zIndex: state.assets.length > 0 ? Math.max(...state.assets.map(a => a.zIndex || 0)) + 1 : 1,
-                              width: chairSize,
-                              height: chairSize,
-                              backgroundColor: '#f3f4f6'
-                            };
-                            addAssetObject(chairAsset);
-                          });
+                {(itemType === 'shape' || itemType === 'asset') && (
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-500">Rotation</span>
+                    <div className="flex items-center">
+                      <input
+                        type="number"
+                        value={roundForDisplay((selectedItem as any).rotation || 0)}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          if (itemType === 'shape') updateShape(selectedItem.id, { rotation: val });
+                          if (itemType === 'asset') updateAsset(selectedItem.id, { rotation: val });
                         }}
-                      >
-                        Add Chairs
-                      </button>
+                        className="sidebar-input w-16 text-right"
+                      />
+                      <span className="ml-1 text-gray-400">°</span>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {/* Remove Asset Button */}
-                  <button
-                    className="w-full text-xs bg-red-500 hover:bg-red-600 text-white py-1.5 rounded shadow"
-                    onClick={() => {
-                      useSceneStore.getState().removeAsset(selectedAsset.id);
-                    }}
-                  >
-                    Remove Asset
-                  </button>
-                </div>
+                {/* Appearance (Shape) */}
+                {itemType === 'shape' && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="text-xs font-semibold mb-2 text-gray-600">Appearance</div>
+
+                    {/* Fill */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Fill</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={(selectedItem as any).fill || '#ffffff'}
+                          onChange={(e) => updateShape(selectedItem.id, { fill: e.target.value })}
+                          className="sidebar-input w-20 text-xs"
+                        />
+                        <input
+                          type="color"
+                          value={(selectedItem as any).fill || '#ffffff'}
+                          onChange={(e) => updateShape(selectedItem.id, { fill: e.target.value })}
+                          className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Stroke */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Stroke</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={(selectedItem as any).stroke || '#000000'}
+                          onChange={(e) => updateShape(selectedItem.id, { stroke: e.target.value })}
+                          className="sidebar-input w-20 text-xs"
+                        />
+                        <input
+                          type="color"
+                          value={(selectedItem as any).stroke || '#000000'}
+                          onChange={(e) => updateShape(selectedItem.id, { stroke: e.target.value })}
+                          className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Stroke Width */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Stroke Width</span>
+                      <input
+                        type="number"
+                        value={(selectedItem as any).strokeWidth || 1}
+                        onChange={(e) => updateShape(selectedItem.id, { strokeWidth: Number(e.target.value) })}
+                        className="sidebar-input w-16 text-right"
+                        min={0}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
+
           </div>
         )}
       </div>
-      {/* Export Panel - shows when assets are selected */}
       <ExportPanel />
     </aside>
   );

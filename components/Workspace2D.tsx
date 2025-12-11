@@ -12,6 +12,7 @@ import AssetRenderer from './renderers/AssetRenderer';
 import GridRenderer from './renderers/GridRenderer';
 import FreehandRenderer from './renderers/FreehandRenderer';
 import { DimensionRenderer } from './renderers/DimensionRenderer';
+import CommentRenderer from './renderers/CommentRenderer';
 import WallTool from './tools/WallTool';
 import ShapeTool from './tools/ShapeTool';
 import FreehandTool from './tools/FreehandTool';
@@ -20,10 +21,16 @@ import DimensionTool from './tools/DimensionTool';
 import ContextMenu from './ui/ContextMenu';
 import { AnchorType, getAnchorsForObject } from '@/utils/snapAnchors';
 import { ASSET_LIBRARY } from '@/lib/assets';
+import { CursorOverlay } from './ui/CursorOverlay';
+import type { RemoteCursor } from '@/hooks/useMultiplayer';
+import { findSnapPoint } from '@/utils/wallSnapping';
+
 
 interface Workspace2DProps {
     width?: number;
     height?: number;
+    remoteCursors?: RemoteCursor[];
+    updateCursor?: (x: number, y: number) => void;
 }
 
 type SnapObject =
@@ -31,7 +38,13 @@ type SnapObject =
     | { type: 'asset'; object: Asset }
     | { type: 'wall'; object: Wall };
 
-export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DProps) {
+
+export default function Workspace2D({
+    width = 1200,
+    height = 800,
+    remoteCursors = [],
+    updateCursor
+}: Workspace2DProps) {
     const canvasRef = useRef<HTMLDivElement>(null);
     const [viewportSize, setViewportSize] = useState({ width, height });
     const [mouseWorldPos, setMouseWorldPos] = useState({ x: 0, y: 0 });
@@ -41,6 +54,7 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
     const [selectionRect, setSelectionRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
     const [gridHud, setGridHud] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
     const gridHudTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
 
     const {
         zoom,
@@ -68,7 +82,12 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
         setSnapMode,
     } = useEditorStore();
 
-    const { walls, shapes, assets, dimensions, updateShape, updateAsset, updateWall, addAsset, addDimension, removeDimension } = useProjectStore();
+    const {
+        walls, shapes, assets, dimensions, comments,
+        updateShape, updateAsset, updateWall,
+        addAsset, addDimension, removeDimension,
+        addComment, updateComment, removeComment, resolveComment
+    } = useProjectStore();
 
     const sceneStore = useSceneStore();
     const showGrid = sceneStore.showGrid;
@@ -76,15 +95,22 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
     const availableGridSizes = sceneStore.availableGridSizes || [];
     const selectedGridSizeIndex = sceneStore.selectedGridSizeIndex || 0;
     const currentGridSizeValue = availableGridSizes[selectedGridSizeIndex] || sceneStore.gridSize || 1000;
+    const unitSystem = sceneStore.unitSystem || 'metric';
+    const setUnitSystem = sceneStore.setUnitSystem;
     const initialGridHudSkip = useRef(true);
 
     const formatGridSize = useCallback((size: number) => {
+        if (unitSystem === 'imperial') {
+            const feet = size / 304.8; // mm to feet
+            const rounded = feet >= 10 ? feet.toFixed(0) : feet.toFixed(1);
+            return `${rounded}ft`;
+        }
         if (size >= 1000) {
             const meters = size / 1000;
             return `${Number.isInteger(meters) ? meters : meters.toFixed(1)}m`;
         }
         return `${size}mm`;
-    }, []);
+    }, [unitSystem]);
 
     const showGridHud = useCallback((size: number) => {
         if (gridHudTimeoutRef.current) {
@@ -120,6 +146,19 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
     // ESC key handler to cancel snap mode
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault();
+                // handleDelete(); // Assuming handleDelete is defined elsewhere
+            }
+            // Undo/Redo shortcuts
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                useProjectStore.getState().undo();
+            }
+            if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+                e.preventDefault();
+                useProjectStore.getState().redo();
+            }
             if (e.key === 'Escape' && isSnapMode) {
                 setSnapMode(false);
                 console.log('Snap mode cancelled with ESC');
@@ -155,6 +194,11 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
             const worldY = (y - panY) / zoom;
             setMouseWorldPos({ x: worldX, y: worldY });
 
+            // Broadcast cursor position to other users
+            if (updateCursor) {
+                updateCursor(x, y);
+            }
+
             if (isPanning && dragStart) {
                 const dx = x - dragStart.x;
                 const dy = y - dragStart.y;
@@ -164,8 +208,28 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
 
             if (isDraggingItem && draggedItemStart && selectedIds.length > 0) {
                 const snapped = snapToGridFn({ x: worldX, y: worldY });
-                const snappedDx = snapped.x - draggedItemStart.x;
-                const snappedDy = snapped.y - draggedItemStart.y;
+
+                // Apply wall snapping first if walls exist
+                let finalX = snapped.x;
+                let finalY = snapped.y;
+
+                if (walls.length > 0) {
+                    const wallSnap = findSnapPoint(
+                        { x: worldX, y: worldY },
+                        walls,
+                        snapToGrid,
+                        gridSize,
+                        15 // snap distance in mm
+                    );
+                    if (wallSnap.snapped && wallSnap.snapType !== 'grid') {
+                        // Wall snap takes priority over grid snap
+                        finalX = wallSnap.x;
+                        finalY = wallSnap.y;
+                    }
+                }
+
+                const snappedDx = finalX - draggedItemStart.x;
+                const snappedDy = finalY - draggedItemStart.y;
 
                 selectedIds.forEach((id) => {
                     const shape = shapes.find((s) => s.id === id);
@@ -208,7 +272,7 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
                 });
             }
         },
-        [panX, panY, zoom, isPanning, dragStart, panBy, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, walls, updateShape, updateAsset, updateWall, snapToGridFn, selectionRect]
+        [panX, panY, zoom, isPanning, dragStart, panBy, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, walls, updateShape, updateAsset, updateWall, snapToGridFn, selectionRect, updateCursor]
     );
 
     const handleMouseDown = useCallback(
@@ -714,6 +778,12 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
             }
             // Delete key
             else if (e.key === 'Delete' || e.key === 'Backspace') {
+                // Don't handle delete if user is typing in an input
+                const target = e.target as HTMLElement;
+                if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+                    return;
+                }
+
                 e.preventDefault();
                 const { selectedIds, selectedEdgeId, setSelectedEdgeId } = useEditorStore.getState();
                 const { removeWall, removeShape, removeAsset, removeWallEdge, walls } = useProjectStore.getState();
@@ -931,6 +1001,28 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
                         console.error("Failed to add selection to AI chat context", err);
                     }
                 },
+            });
+            actions.push({ separator: true });
+        }
+
+        // Add Comment Action
+        if (!hasSelection && !isSnapMode) {
+            actions.push({
+                label: "Add comment",
+                action: () => {
+                    const id = crypto.randomUUID();
+                    addComment({
+                        id,
+                        x: contextMenu?.worldX || 0,
+                        y: contextMenu?.worldY || 0,
+                        content: '',
+                        author: 'User', // TODO: Get from user store
+                        timestamp: Date.now(),
+                        resolved: false,
+                    });
+                    setActiveCommentId(id);
+                    closeContextMenu();
+                }
             });
             actions.push({ separator: true });
         }
@@ -1225,6 +1317,18 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
                     {gridHud.message}
                 </div>
             )}
+            {/* Grid unit / size control */}
+            <div className="absolute top-3 right-3 z-50 flex items-center gap-2 bg-white/90 shadow-sm rounded-md px-3 py-2 text-xs sm:text-sm text-slate-700 border border-slate-200">
+                <span className="font-semibold whitespace-nowrap">Grid: {formatGridSize(currentGridSizeValue)}</span>
+                <select
+                    className="text-xs sm:text-sm border border-slate-300 rounded px-1 py-0.5 bg-white focus:outline-none"
+                    value={unitSystem}
+                    onChange={(e) => setUnitSystem?.(e.target.value as 'metric' | 'imperial')}
+                >
+                    <option value="metric">Meters</option>
+                    <option value="imperial">Feet</option>
+                </select>
+            </div>
             {/* Snap to Anchor HUD for old right-click snap mode */}
             {isSnapMode && snapSourceId && snapAnchor && (
                 <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 px-3 py-1 rounded-md text-xs font-medium bg-blue-600 text-white shadow">
@@ -1249,7 +1353,7 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
                 className="absolute inset-0"
             >
                 <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>
-                    {showGrid && <GridRenderer gridSize={sceneGridSize} viewportSize={viewportSize} zoom={zoom} panX={panX} panY={panY} />}
+                    {showGrid && <GridRenderer gridSize={sceneGridSize} viewportSize={viewportSize} zoom={zoom} panX={panX} panY={panY} unitSystem={unitSystem} />}
 
                     <g id="walls-layer">
                         {walls.map((wall) => (
@@ -1407,6 +1511,22 @@ export default function Workspace2D({ width = 1200, height = 800 }: Workspace2DP
                 {/* Render SelectionTool outside scaled group so handles stay fixed size */}
                 <SelectionTool isActive={activeTool === 'select'} />
             </svg>
-        </div>
+
+            {/* Comments Layer */}
+            {comments.map((comment) => (
+                <CommentRenderer
+                    key={comment.id}
+                    comment={comment}
+                    zoom={zoom}
+                    panX={panX}
+                    panY={panY}
+                    isActive={activeCommentId === comment.id}
+                    onActivate={setActiveCommentId}
+                    onDeactivate={() => setActiveCommentId(null)}
+                    onUpdate={updateComment}
+                    onResolve={resolveComment}
+                    onDelete={removeComment}
+                />
+            ))}        </div>
     );
 }

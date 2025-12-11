@@ -12,6 +12,11 @@ import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
 import { useEditorStore } from "@/store/editorStore";
 import { useProjectStore } from "@/store/projectStore";
+import { useMultiplayer } from "@/hooks/useMultiplayer";
+import { CursorOverlay } from "@/components/ui/CursorOverlay";
+import { useAutoSave } from "@/hooks/useAutoSave";
+import SyncStatusBanner from "@/components/SyncStatusBanner";
+import toast from "react-hot-toast";
 import {
   useSceneStore,
   EventData,
@@ -32,7 +37,7 @@ export default function Editor() {
   const [show3D, setShow3D] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
   const router = useRouter();
-  const { slug, id, preview } = router.query;
+  const { slug, id, preview, venueLayout } = router.query;
 
   // Detect if we're in an iframe or preview mode
   useEffect(() => {
@@ -41,8 +46,85 @@ export default function Editor() {
 
   // New stores
   const { activeTool, zoom, panX, panY, setZoom, setPan } = useEditorStore();
-  const { assets: projectAssets, walls, shapes } = useProjectStore();
+  const { assets: projectAssets, walls, shapes, addWall, addShape } = useProjectStore();
   const sceneAssets = useSceneStore((s) => s.assets);
+
+  // Multiplayer cursors
+  const { remoteCursors, updateCursor } = useMultiplayer(id as string | undefined, true);
+
+  // Auto-save with offline detection (saves every 30 seconds)
+  useAutoSave({ interval: 30000, enabled: !isInIframe });
+
+  //  Handle AI-analyzed venue layout
+  useEffect(() => {
+    if (!venueLayout || typeof venueLayout !== 'string') return;
+
+    try {
+      const layout = JSON.parse(venueLayout);
+      console.log('Auto-populating venue layout:', layout);
+
+      // Set canvas dimensions if provided
+      if (layout.dimensions) {
+        useProjectStore.setState({
+          canvas: {
+            width: layout.dimensions.width,
+            height: layout.dimensions.height,
+          }
+        });
+      }
+
+      // Add walls
+      if (layout.walls && Array.isArray(layout.walls)) {
+        layout.walls.forEach((wallData: any) => {
+          const wallId = `wall-${Date.now()}-${Math.random()}`;
+          addWall({
+            id: wallId,
+            nodes: [
+              { id: `${wallId}-node-0`, x: wallData.start.x, y: wallData.start.y },
+              { id: `${wallId}-node-1`, x: wallData.end.x, y: wallData.end.y },
+            ],
+            edges: [
+              {
+                id: `${wallId}-edge-0`,
+                nodeA: `${wallId}-node-0`,
+                nodeB: `${wallId}-node-1`,
+                thickness: wallData.thickness || 150,
+              },
+            ],
+            layerId: 'default',
+          });
+        });
+      }
+
+      // Add furniture as shapes
+      if (layout.furniture && Array.isArray(layout.furniture)) {
+        layout.furniture.forEach((item: any) => {
+          addShape({
+            id: `shape-${Date.now()}-${Math.random()}`,
+            type: item.type === 'circle' ? 'ellipse' : 'rectangle',
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            rotation: item.rotation || 0,
+            fillColor: '#E5E7EB',
+            strokeColor: '#6B7280',
+            strokeWidth: 2,
+            layerId: 'default',
+            zIndex: 1,
+          });
+        });
+      }
+
+      // Clear venueLayout from URL to prevent re-applying on refresh
+      router.replace(`/dashboard/editor/${slug}/${id}`, undefined, { shallow: true });
+
+      toast.success('Venue layout created from AI analysis!');
+    } catch (error) {
+      console.error('Failed to parse venue layout:', error);
+      toast.error('Failed to load venue layout');
+    }
+  }, [venueLayout, addWall, addShape, router, slug, id]);
 
   // Old scene store methods (for compatibility)
   const hasUnsavedChanges = useSceneStore((s) => s.hasUnsavedChanges);
@@ -85,78 +167,22 @@ export default function Editor() {
   useEffect(() => {
     if (eventData && eventData !== currentEventData) {
       setCurrentEventData(eventData);
-      
-      // Load event data into stores for Workspace2D
-      if (eventData.canvasAssets && Array.isArray(eventData.canvasAssets) && eventData.canvasAssets.length > 0) {
-        // Load into sceneStore (new editor) - use the store's set method
+
+      // Load event data into projectStore using the new action
+      if (id && typeof id === 'string') {
+        // IMPORTANT: Clear workspace first to prevent localStorage pollution
+        // This ensures new events start clean even if persist middleware hydrated old data
+        useProjectStore.getState().clearWorkspace?.();
+
+        useProjectStore.getState().loadEvent(id);
+      }
+
+      // Also keep sceneStore in sync for now if needed, or rely on projectStore
+      if (eventData.canvasAssets) {
         useSceneStore.setState({ assets: eventData.canvasAssets });
-        
-        // Also load into projectStore for Workspace2D compatibility
-        // Convert canvasAssets to projectStore format
-        const projectStore = useProjectStore.getState();
-        
-        // Clear existing data first
-        projectStore.reset();
-        
-        // Convert and add assets
-        eventData.canvasAssets.forEach((asset: AssetInstance) => {
-          // Check if it's a wall
-          if (asset.type === 'wall-segments' && asset.wallNodes && asset.wallEdges) {
-            // Convert to Wall format
-            const wallNodes = asset.wallNodes.map((node, idx) => ({
-              id: `node-${asset.id}-${idx}`,
-              x: node.x,
-              y: node.y
-            }));
-            
-            const wallEdges = asset.wallEdges.map((edge, idx) => ({
-              id: `edge-${asset.id}-${idx}`,
-              nodeA: wallNodes[edge.a]?.id || '',
-              nodeB: wallNodes[edge.b]?.id || '',
-              thickness: asset.wallThickness || 75
-            }));
-            
-            if (wallNodes.length > 0 && wallEdges.length > 0) {
-              projectStore.addWall({
-                id: asset.id,
-                nodes: wallNodes,
-                edges: wallEdges,
-                zIndex: asset.zIndex || 0
-              });
-            }
-          } else if (asset.type && ['rectangle', 'ellipse', 'line', 'arrow', 'freehand'].includes(asset.type)) {
-            // Convert to Shape format
-            projectStore.addShape({
-              id: asset.id,
-              type: asset.type as 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand',
-              x: asset.x,
-              y: asset.y,
-              width: asset.width || 50,
-              height: asset.height || 50,
-              rotation: asset.rotation || 0,
-              fill: asset.fillColor,
-              stroke: asset.strokeColor,
-              strokeWidth: asset.strokeWidth,
-              zIndex: asset.zIndex || 0
-            });
-          } else if (asset.type) {
-            // Convert to Asset format
-            projectStore.addAsset({
-              id: asset.id,
-              type: asset.type,
-              x: asset.x,
-              y: asset.y,
-              width: asset.width || 50,
-              height: asset.height || 50,
-              rotation: asset.rotation || 0,
-              scale: asset.scale || 1,
-              zIndex: asset.zIndex || 0,
-            });
-          }
-        });
       }
     }
-  }, [eventData, currentEventData]);
+  }, [eventData, currentEventData, id]);
 
   // Auto-fit content when in preview mode
   useEffect(() => {
@@ -243,7 +269,7 @@ export default function Editor() {
         const padding = 100; // mm padding around content
         const viewportWidthMm = viewportWidth / 2; // Approximate conversion
         const viewportHeightMm = viewportHeight / 2;
-        
+
         const zoomX = (viewportWidthMm - padding * 2) / Math.max(contentWidth, 100);
         const zoomY = (viewportHeightMm - padding * 2) / Math.max(contentHeight, 100);
         const fitZoom = Math.min(zoomX, zoomY, 1.5); // Cap at 1.5x zoom max for preview
@@ -251,7 +277,7 @@ export default function Editor() {
         // Set zoom
         const finalZoom = Math.max(0.3, Math.min(fitZoom, 1.5));
         setZoom(finalZoom);
-        
+
         // Center the content in viewport
         const screenCenterX = viewportWidth / 2;
         const screenCenterY = viewportHeight / 2;
@@ -270,38 +296,33 @@ export default function Editor() {
 
   // Auto-save functionality
   useEffect(() => {
-    if (!currentEventData || !hasUnsavedChanges) return;
+    if (!currentEventData || !id || typeof id !== 'string') return;
 
     const timeoutId = setTimeout(() => {
-      const currentHasChanges = useSceneStore.getState().hasUnsavedChanges;
+      const projectStore = useProjectStore.getState();
+      // Check if projectStore has changes (we might need a dirty flag in projectStore)
+      // For now, let's rely on the manual save or add a dirty flag check if available
+      // Or we can check useSceneStore.hasUnsavedChanges as a proxy if they are synced
 
-      if (currentHasChanges) {
-        const updatedAssets = useSceneStore.getState().assets;
-        const payload = {
-          canvasAssets: updatedAssets,
-        };
-        saveCanvasAssets.mutate(payload);
+      if (projectStore.hasUnsavedChanges) {
+        projectStore.saveEvent(id);
       }
     }, 3000);
 
     return () => clearTimeout(timeoutId);
-  }, [hasUnsavedChanges, currentEventData, saveCanvasAssets]);
+  }, [currentEventData, id]);
 
   // Manual save function
-  const handleSave = useCallback(() => {
-    if (!hasUnsavedChanges || !currentEventData) {
+  const handleSave = useCallback(async () => {
+    if (!currentEventData || !id || typeof id !== 'string') {
       return;
     }
 
-    const updatedAssets = syncToEventData();
-    const payload = {
-      name: currentEventData.name,
-      type: currentEventData.type || "workshop",
-      canvases: currentEventData.canvases,
-      canvasAssets: updatedAssets,
-    };
-    saveCanvasAssets.mutate(payload);
-  }, [hasUnsavedChanges, currentEventData, syncToEventData, saveCanvasAssets]);
+    await useProjectStore.getState().saveEvent(id);
+
+    // Update local state to reflect save
+    markAsSaved();
+  }, [currentEventData, id, markAsSaved]);
 
   // Keyboard shortcut for saving (Ctrl+S)
   useEffect(() => {
@@ -319,61 +340,66 @@ export default function Editor() {
   // Render content based on iframe/preview status
   const renderContent = () => {
     const isPreviewMode = preview === 'true' || isInIframe;
-    
+
     return (
-    <div className={`${isPreviewMode ? 'h-full w-full' : 'h-screen'} flex flex-col overflow-hidden`}>
-      {!isPreviewMode && (
-        <>
-          <AssetsModal
-            isOpen={showAssetsModal}
-            onClose={() => setShowAssetsModal(false)}
-          />
-          <BottomToolbar setShowAssetsModal={setShowAssetsModal} />
-        </>
-      )}
+      <div className={`${isPreviewMode ? 'h-full w-full' : 'h-screen'} flex flex-col overflow-hidden`}>
+        {!isPreviewMode && (
+          <>
+            <AssetsModal
+              isOpen={showAssetsModal}
+              onClose={() => setShowAssetsModal(false)}
+            />
+            <BottomToolbar setShowAssetsModal={setShowAssetsModal} />
+          </>
+        )}
 
-      {/* Main Content Area */}
-      <div className={`flex-1 flex overflow-hidden ${isPreviewMode ? '' : ''}`}>
-        {/* NEW WORKSPACE */}
-        <div className="flex-1 relative overflow-hidden">
-          {!show3D && (
-            <div className="absolute inset-0">
-              <Workspace2D />
-            </div>
-          )}
+        {/* Main Content Area */}
+        <div className={`flex-1 flex overflow-hidden ${isPreviewMode ? '' : ''}`}>
+          {/* NEW WORKSPACE */}
+          <div className="flex-1 relative overflow-hidden">
+            {!show3D && (
+              <div className="absolute inset-0">
+                <SyncStatusBanner />
+                <Workspace2D
+                  remoteCursors={remoteCursors}
+                  updateCursor={updateCursor}
+                />
+                <CursorOverlay cursors={remoteCursors} />
+              </div>
+            )}
 
-          {/* 3D Preview - disabled in preview mode */}
-          {show3D && !isPreviewMode && (
-            <div className="absolute inset-0">
-              <Scene3D
-                assets={eventData?.canvasAssets || []}
-                width={isPreviewMode ? window.innerWidth : window.innerWidth - 256}
-                height={isPreviewMode ? window.innerHeight : window.innerHeight - 120}
-              />
-            </div>
-          )}
+            {/* 3D Preview - disabled in preview mode */}
+            {show3D && !isPreviewMode && (
+              <div className="absolute inset-0">
+                <Scene3D
+                  assets={eventData?.canvasAssets || []}
+                  width={isPreviewMode ? window.innerWidth : window.innerWidth - 256}
+                  height={isPreviewMode ? window.innerHeight : window.innerHeight - 120}
+                />
+              </div>
+            )}
 
-          {/* View Toggle - only show if not in preview mode */}
+            {/* View Toggle - only show if not in preview mode */}
+            {!isPreviewMode && (
+              <div className="absolute bottom-4 right-4 z-10">
+                <button
+                  onClick={() => setShow3D(!show3D)}
+                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  {show3D ? '📐 2D View' : '🎨 3D Preview'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Properties Sidebar - only show if not in preview mode */}
           {!isPreviewMode && (
-            <div className="absolute bottom-4 right-4 z-10">
-              <button
-                onClick={() => setShow3D(!show3D)}
-                className="px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                {show3D ? '📐 2D View' : '🎨 3D Preview'}
-              </button>
+            <div className="flex-shrink-0 w-64 bg-white border-l border-gray-200">
+              <PropertiesSidebar />
             </div>
           )}
         </div>
-
-        {/* Properties Sidebar - only show if not in preview mode */}
-        {!isPreviewMode && (
-          <div className="flex-shrink-0 w-64 bg-white border-l border-gray-200">
-            <PropertiesSidebar />
-          </div>
-        )}
       </div>
-    </div>
     );
   };
 

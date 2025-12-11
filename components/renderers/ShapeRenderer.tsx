@@ -10,83 +10,93 @@ interface ShapeRendererProps {
 }
 
 export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRendererProps) {
-    const strokeColor = isSelected ? '#3b82f6' : isHovered ? '#60a5fa' : shape.stroke || '#1f2937';
+    const strokeColor = shape.stroke || '#1f2937';
     const fillColor = shape.fill || 'transparent';
     const strokeWidth = shape.strokeWidth || 2;
 
     const transform = `translate(${shape.x}, ${shape.y}) rotate(${shape.rotation})`;
 
-    if (shape.type === 'rectangle') {
-        return (
-            <rect
-                x={-shape.width / 2}
-                y={-shape.height / 2}
-                width={shape.width}
-                height={shape.height}
-                fill={fillColor}
-                stroke={strokeColor}
-                strokeWidth={strokeWidth}
-                transform={transform}
-                style={{ cursor: 'pointer' }}
-            />
-        );
-    }
+    // Selection/Hover highlight color
+    const highlightColor = isSelected ? '#3b82f6' : '#60a5fa';
+    const showHighlight = isSelected || isHovered;
 
-    if (shape.type === 'ellipse') {
-        return (
-            <ellipse
-                cx={0}
-                cy={0}
-                rx={shape.width / 2}
-                ry={shape.height / 2}
-                fill={fillColor}
-                stroke={strokeColor}
-                strokeWidth={strokeWidth}
-                transform={transform}
-                style={{ cursor: 'pointer' }}
-            />
-        );
-    }
+    const renderShape = (isHighlight: boolean) => {
+        const commonProps = {
+            fill: isHighlight ? 'transparent' : fillColor,
+            stroke: isHighlight ? highlightColor : strokeColor,
+            strokeWidth: isHighlight ? strokeWidth + 4 : strokeWidth,
+            opacity: isHighlight ? 0.5 : 1,
+        };
 
-    if (shape.type === 'line') {
-        return (
-            <line
-                x1={-shape.width / 2}
-                y1={0}
-                x2={shape.width / 2}
-                y2={0}
-                stroke={strokeColor}
-                strokeWidth={strokeWidth}
-                transform={transform}
-                style={{ cursor: 'pointer' }}
-            />
-        );
-    }
+        if (shape.type === 'rectangle') {
+            return (
+                <rect
+                    x={-shape.width / 2}
+                    y={-shape.height / 2}
+                    width={shape.width}
+                    height={shape.height}
+                    {...commonProps}
+                />
+            );
+        }
 
-    if (shape.type === 'arrow') {
-        // Draw an arrow from left to right
-        const arrowHeadSize = Math.min(shape.width / 4, 20);
-        return (
-            <g transform={transform} style={{ cursor: 'pointer' }}>
-                {/* Arrow line */}
+        if (shape.type === 'ellipse') {
+            return (
+                <ellipse
+                    cx={0}
+                    cy={0}
+                    rx={shape.width / 2}
+                    ry={shape.height / 2}
+                    {...commonProps}
+                />
+            );
+        }
+
+        if (shape.type === 'line') {
+            return (
                 <line
                     x1={-shape.width / 2}
                     y1={0}
-                    x2={shape.width / 2 - arrowHeadSize}
+                    x2={shape.width / 2}
                     y2={0}
-                    stroke={strokeColor}
-                    strokeWidth={strokeWidth}
+                    {...commonProps}
                 />
-                {/* Arrow head */}
-                <polygon
-                    points={`${shape.width / 2},0 ${shape.width / 2 - arrowHeadSize},${-arrowHeadSize / 2} ${shape.width / 2 - arrowHeadSize},${arrowHeadSize / 2}`}
-                    fill={strokeColor}
-                    stroke={strokeColor}
-                    strokeWidth={strokeWidth}
-                />
-            </g>
-        );
-    }
+            );
+        }
 
-    return null;
+        if (shape.type === 'arrow') {
+            const arrowHeadSize = Math.min(shape.width / 4, 20);
+            return (
+                <g>
+                    <line
+                        x1={-shape.width / 2}
+                        y1={0}
+                        x2={shape.width / 2 - arrowHeadSize}
+                        y2={0}
+                        stroke={commonProps.stroke}
+                        strokeWidth={commonProps.strokeWidth}
+                        opacity={commonProps.opacity}
+                    />
+                    <polygon
+                        points={`${shape.width / 2},0 ${shape.width / 2 - arrowHeadSize},${-arrowHeadSize / 2} ${shape.width / 2 - arrowHeadSize},${arrowHeadSize / 2}`}
+                        fill={commonProps.stroke}
+                        stroke={commonProps.stroke}
+                        strokeWidth={commonProps.strokeWidth}
+                        opacity={commonProps.opacity}
+                    />
+                </g>
+            );
+        }
+
+        return null;
+    };
+
+    return (
+        <g transform={transform} style={{ cursor: 'pointer' }}>
+            {/* Render highlight behind the shape */}
+            {showHighlight && renderShape(true)}
+            {/* Render actual shape */}
+            {renderShape(false)}
+        </g>
+    );
 }

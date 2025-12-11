@@ -2,13 +2,14 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { findContainingObjects, findNearestObject, getAnchorsForObject, AnchorType } from '@/utils/snapAnchors';
+import { apiRequest } from "@/helpers/Config";
 // Temporary type until wallEngine is implemented
 export type WallSegment = {
-  id: string;
-  start: { x: number; y: number };
-  end: { x: number; y: number };
-  thickness: number;
-  rightOffsetLine?: { start: { x: number; y: number }; end: { x: number; y: number } };
+    id: string;
+    start: { x: number; y: number };
+    end: { x: number; y: number };
+    thickness: number;
+    rightOffsetLine?: { start: { x: number; y: number }; end: { x: number; y: number } };
 };
 
 // ============================================================================
@@ -65,6 +66,25 @@ export type Asset = {
     zIndex: number;
     attachedToWallId?: string; // For doors/windows attached to walls
     metadata?: Record<string, any>;
+
+    // Visual properties
+    fillColor?: string;
+    strokeColor?: string;
+    strokeWidth?: number;
+    opacity?: number;
+
+    // Text properties
+    text?: string;
+    fontSize?: number;
+    textColor?: string;
+    fontFamily?: string;
+
+    // Line/Wall properties
+    lineColor?: string;
+    lineGap?: number;
+    wallThickness?: number;
+    wallGap?: number;
+    backgroundColor?: string;
 };
 
 export type Layer = {
@@ -94,6 +114,16 @@ export type Dimension = {
     zIndex: number;
 };
 
+export type Comment = {
+    id: string;
+    x: number;
+    y: number;
+    content: string;
+    author: string;
+    timestamp: number;
+    resolved: boolean;
+};
+
 // ============================================================================
 // Store
 // ============================================================================
@@ -111,6 +141,7 @@ export type ProjectState = {
     wallSegments: WallSegment[]; // New wall engine (segment-based)
     shapes: Shape[];
     assets: Asset[];
+    comments: Comment[];
     layers: Layer[];
 
     // Active layer
@@ -122,10 +153,21 @@ export type ProjectState = {
         future: Array<{ walls: Wall[]; shapes: Shape[]; assets: Asset[] }>;
     };
 
-    // Dirty flag
+    // Persistence
+    isSaving: boolean;
+    lastSaved: Date | null;
     hasUnsavedChanges: boolean;
 
-    // Methods - Canvas
+    // Actions
+    setCanvasSize: (width: number, height: number, unit: 'mm' | 'cm' | 'm') => void;
+    splitWallAtIntersection: (wallId: string, point: Point) => void;
+
+    // Persistence Actions
+    clearWorkspace: () => void;
+    loadEvent: (eventId: string) => Promise<void>;
+    saveEvent: (eventId: string) => Promise<void>;
+
+    // Shape Actions
     setCanvas: (canvas: Canvas) => void;
 
     // Methods - Walls (Legacy)
@@ -195,6 +237,12 @@ export type ProjectState = {
     updateDimension: (id: string, updates: Partial<Dimension>) => void;
     removeDimension: (id: string) => void;
 
+    // Methods - Comments
+    addComment: (comment: Comment) => void;
+    updateComment: (id: string, updates: Partial<Comment>) => void;
+    removeComment: (id: string) => void;
+    resolveComment: (id: string) => void;
+
     // Methods - Wall Junctions
     splitWallEdge: (wallId: string, edgeId: string, point: { x: number; y: number }) => WallNode;
     connectWallToEdge: (
@@ -240,12 +288,122 @@ export const useProjectStore = create<ProjectState>()(
                 future: [],
             },
             hasUnsavedChanges: false,
+            isSaving: false,
+            lastSaved: null,
             clipboard: [],
             dimensions: [],
+            comments: [],
 
             // Canvas methods
             setCanvas: (canvas) => {
                 set({ canvas, hasUnsavedChanges: true });
+            },
+
+            setCanvasSize: (width, height, unit) => {
+                set((state) => ({
+                    canvas: { ...state.canvas, width, height, unit },
+                    hasUnsavedChanges: true
+                }));
+            },
+
+            setProjectId: (id) => {
+                set({ projectId: id });
+            },
+
+            // Persistence Actions
+            clearWorkspace: () => {
+                console.log('→ Clearing workspace (preventing localStorage pollution)');
+                set({
+                    shapes: [],
+                    assets: [],
+                    walls: [],
+                    layers: [DEFAULT_LAYER],
+                    canvas: DEFAULT_CANVAS,
+                    hasUnsavedChanges: false,
+                    lastSaved: undefined,
+                });
+            },
+
+            loadEvent: async (eventId: string) => {
+                set({ isSaving: true });
+                try {
+                    const response = await apiRequest(`/events/${eventId}`, 'GET');
+                    const data = response.data;
+
+                    if (data.canvasData) {
+                        // Load from rich canvasData if available
+                        const { shapes, assets, walls, layers, canvas } = data.canvasData;
+                        set({
+                            shapes: shapes || [],
+                            assets: assets || [],
+                            walls: walls || [],
+                            layers: layers || [DEFAULT_LAYER],
+                            canvas: canvas || DEFAULT_CANVAS,
+                            hasUnsavedChanges: false,
+                            lastSaved: new Date(),
+                        });
+                        console.log(`✓ Loaded event ${eventId} from backend`);
+                    } else if (data.canvasAssets) {
+                        // Fallback to legacy canvasAssets
+                        set({ hasUnsavedChanges: false, lastSaved: new Date() });
+                        console.log(`✓ Loaded event ${eventId} from backend (legacy format)`);
+                    }
+                } catch (error: any) {
+                    // Check if it's a 404 (new event that doesn't exist yet)
+                    if (error?.response?.status === 404 || error?.status === 404) {
+                        console.log(`→ Event ${eventId} doesn't exist yet (new event), starting with empty workspace`);
+                        // Clear workspace for new events - don't use localStorage data
+                        set({
+                            shapes: [],
+                            assets: [],
+                            walls: [],
+                            layers: [DEFAULT_LAYER],
+                            canvas: DEFAULT_CANVAS,
+                            hasUnsavedChanges: false,
+                            lastSaved: undefined,
+                        });
+                    } else {
+                        // For other errors (network issues, etc), use localStorage as fallback
+                        console.warn(`⚠ Failed to load event ${eventId} from backend:`, error);
+                        console.log(`→ Using localStorage data for event ${eventId} (Zustand persist handles this automatically)`);
+                        // Don't set anything - Zustand's persist middleware will use localStorage data
+                    }
+                } finally {
+                    set({ isSaving: false });
+                }
+            },
+
+            saveEvent: async (eventId: string) => {
+                const { shapes, assets, walls, layers, canvas } = get();
+                set({ isSaving: true });
+                try {
+                    const canvasData = { shapes, assets, walls, layers, canvas };
+                    const canvasAssets = [...shapes, ...assets, ...walls].map(item => ({
+                        id: item.id,
+                        type: (item as any).type || 'unknown',
+                        x: (item as any).x || 0,
+                        y: (item as any).y || 0,
+                    }));
+
+                    await apiRequest(`/events/${eventId}`, 'PUT', {
+                        canvasData,
+                        canvasAssets
+                    });
+
+                    set({ hasUnsavedChanges: false, lastSaved: new Date() });
+                    console.log("Event saved successfully");
+                } catch (error: any) {
+                    // Silently fail - auto-save will retry
+                    // Errors are only logged in development
+                    if (process.env.NODE_ENV === 'development') {
+                        console.warn('Save failed (silent):', error?.message);
+                    }
+
+                    // Re-throw so auto-save can handle offline state
+                    throw error;
+                } finally {
+                    set({ isSaving: false });
+                }
             },
 
             // Wall methods
@@ -716,6 +874,40 @@ export const useProjectStore = create<ProjectState>()(
                 get().saveToHistory();
                 set((state) => ({
                     dimensions: state.dimensions.filter((d) => d.id !== id),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            // Comment methods
+            addComment: (comment) => {
+                get().saveToHistory();
+                const newComment = { ...comment, author: 'Jeremiah' };
+                set((state) => ({
+                    comments: [...state.comments, newComment],
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            updateComment: (id, updates) => {
+                get().saveToHistory();
+                set((state) => ({
+                    comments: state.comments.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            removeComment: (id) => {
+                get().saveToHistory();
+                set((state) => ({
+                    comments: state.comments.filter((c) => c.id !== id),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            resolveComment: (id) => {
+                get().saveToHistory();
+                set((state) => ({
+                    comments: state.comments.map((c) => (c.id === id ? { ...c, resolved: true } : c)),
                     hasUnsavedChanges: true,
                 }));
             },

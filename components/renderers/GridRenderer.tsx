@@ -8,9 +8,10 @@ interface GridRendererProps {
     zoom: number;
     panX: number;
     panY: number;
+    unitSystem?: 'metric' | 'imperial';
 }
 
-export default function GridRenderer({ gridSize, viewportSize, zoom, panX, panY }: GridRendererProps) {
+export default function GridRenderer({ gridSize, viewportSize, zoom, panX, panY, unitSystem = 'metric' }: GridRendererProps) {
     // Calculate visible area in world coordinates
     const worldLeft = -panX / zoom;
     const worldTop = -panY / zoom;
@@ -35,11 +36,18 @@ export default function GridRenderer({ gridSize, viewportSize, zoom, panX, panY 
         horizontalLines.push(y);
     }
 
-    // Convert grid size from mm to meters for display
-    const gridSizeInMeters = gridSize / 1000;
-    const displayText = gridSizeInMeters >= 1
-        ? `${gridSizeInMeters}m`
-        : `${gridSize}mm`;
+    // Convert grid size for display based on unit system
+    let displayText = '';
+    if (unitSystem === 'imperial') {
+        const feet = gridSize / 304.8; // mm to feet
+        const rounded = feet >= 10 ? feet.toFixed(0) : feet.toFixed(1);
+        displayText = `${rounded}ft`;
+    } else {
+        const gridSizeInMeters = gridSize / 1000;
+        displayText = gridSizeInMeters >= 1
+            ? `${gridSizeInMeters}m`
+            : `${gridSize}mm`;
+    }
 
     // Calculate position for grid size label (top-left in world coordinates)
     const labelX = worldLeft + 20 / zoom;

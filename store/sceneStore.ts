@@ -82,6 +82,7 @@ type SceneState = {
   isInitialized: boolean;
   hasUnsavedChanges: boolean;
   showGrid: boolean;
+  unitSystem: 'metric' | 'imperial'; // metric = mm/m, imperial = feet display
   showDebugOutlines?: boolean;
   gridSize: number; // Grid size in mm
   snapToGridEnabled: boolean; // Whether to snap to grid
@@ -192,6 +193,7 @@ type SceneState = {
   toggleGrid: () => void;
   toggleDebugOutlines: () => void;
   setGridSize: (size: number) => void;
+  setUnitSystem: (unit: 'metric' | 'imperial') => void;
   toggleSnapToGrid: () => void;
   snapToGrid: (x: number, y: number) => { x: number; y: number };
 
@@ -300,6 +302,7 @@ export const useSceneStore = create<SceneState>()(
       hasUnsavedChanges: false,
       hasHydrated: false,
       showGrid: false,
+      unitSystem: 'metric',
       showDebugOutlines: false,
       // Grid in millimetres (mm). We treat 1000mm = 1m.
       // Available sizes in meters: 0.1m, 0.5m, 1m, 2m, 5m
@@ -455,6 +458,15 @@ export const useSceneStore = create<SceneState>()(
         const state = get();
         const updatedAssets = state.assets.map((a) => {
           if (a.id === id) {
+            // If updating groupAssets directly, merge them properly
+            if (updates.groupAssets !== undefined && a.isGroup) {
+              const updatedAsset = { 
+                ...a, 
+                groupAssets: updates.groupAssets 
+              };
+              return updatedAsset;
+            }
+            
             const updatedAsset = { ...a, ...updates };
 
             // If this is a group and we're updating scale/width/height/rotation, update all child assets
@@ -588,6 +600,8 @@ export const useSceneStore = create<SceneState>()(
       selectAsset: (id) => set({ selectedAssetId: id }),
 
       toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
+
+      setUnitSystem: (unit: 'metric' | 'imperial') => set({ unitSystem: unit }),
 
       toggleDebugOutlines: () => set((state) => ({ showDebugOutlines: !state.showDebugOutlines })),
 
@@ -2650,6 +2664,7 @@ export const useSceneStore = create<SceneState>()(
         assets: state.assets,
         selectedAssetId: state.selectedAssetId,
         showGrid: state.showGrid,
+        unitSystem: state.unitSystem,
         gridSize: state.gridSize,
         snapToGridEnabled: state.snapToGridEnabled,
         wallType: state.wallType,

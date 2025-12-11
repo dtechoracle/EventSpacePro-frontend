@@ -32,6 +32,7 @@ export default function AiTrigger() {
   const workspaceAssets = useProjectStore((s) => s.assets);
   const workspaceShapes = useProjectStore((s) => s.shapes);
   const workspaceWalls = useProjectStore((s) => s.walls);
+  const projectCanvas = useProjectStore((s) => s.canvas);
   const updateWorkspaceAsset = useProjectStore((s) => s.updateAsset);
   const updateWorkspaceShape = useProjectStore((s) => s.updateShape);
   const editorSelectedIds = useEditorStore((s) => s.selectedIds);
@@ -43,29 +44,34 @@ export default function AiTrigger() {
 
   // Resolve current selected assets (from either new editor or Workspace2D),
   // optionally using IDs pushed from "Add to AI chat"
+  // Returns empty array if no assets are explicitly selected for AI chat
   const getResolvedSelection = (): ResolvedSelection[] => {
     let idsFromContext: string[] | undefined;
     try {
       idsFromContext = (window as any).__ESP_AI_SELECTED_IDS__ as string[] | undefined;
+      // If no explicit AI context IDs, return empty (general mode)
+      if (!idsFromContext || idsFromContext.length === 0) {
+        return [];
+      }
     } catch {
-      idsFromContext = undefined;
+      return [];
     }
 
     // Priority: explicit AI context IDs -> editor selection (Workspace2D) -> scene selection
     const sceneSelectionIds =
       selectedAssetId || (selectedAssetIds && selectedAssetIds.length)
         ? [
-            ...(selectedAssetId ? [selectedAssetId] : []),
-            ...(selectedAssetIds || []),
-          ]
+          ...(selectedAssetId ? [selectedAssetId] : []),
+          ...(selectedAssetIds || []),
+        ]
         : [];
 
     const baseIds =
       Array.isArray(idsFromContext) && idsFromContext.length > 0
         ? idsFromContext
         : editorSelectedIds && editorSelectedIds.length > 0
-        ? editorSelectedIds
-        : sceneSelectionIds;
+          ? editorSelectedIds
+          : sceneSelectionIds;
 
     if (!baseIds || baseIds.length === 0) return [];
 
@@ -110,6 +116,9 @@ export default function AiTrigger() {
           rotation: shape.rotation,
           scale: 1,
           zIndex: shape.zIndex,
+          fillColor: shape.fill,
+          strokeColor: shape.stroke,
+          strokeWidth: shape.strokeWidth,
         };
         results.push({ asset: aiAsset, source: "project-shape" });
         return;
@@ -206,14 +215,16 @@ export default function AiTrigger() {
   }, []);
 
   const handleAIClick = () => {
+    // When clicking the CTA button, clear any selected assets and open in general mode
+    // Only "Add to AI chat" should set selected assets
     try {
-      const globalSelected = (window as any).__ESP_AI_SELECTED_IDS__ as string[] | undefined;
-      if (Array.isArray(globalSelected) && globalSelected.length > 0) {
-        const scene = useSceneStore.getState();
-        scene.selectMultipleAssets(globalSelected);
-      }
+      (window as any).__ESP_AI_SELECTED_IDS__ = undefined;
+      // Clear selection in scene store
+      const scene = useSceneStore.getState();
+      scene.selectAsset(null);
+      scene.selectedAssetIds = [];
     } catch (e) {
-      console.warn("Failed to sync selection from AI context", e);
+      console.warn("Failed to clear selection", e);
     }
     setIsOpen(true);
   };
@@ -222,7 +233,7 @@ export default function AiTrigger() {
     if (!plan) return;
     const createdAssetIds: string[] = [];
     const createdAssetsInBatch: AssetInstance[] = []; // Track assets created in this batch
-    
+
     // Get canvas center - use actual canvas center or default to (0, 0) for safety
     const getCanvasCenter = () => {
       if (canvas?.width && canvas?.height) {
@@ -232,16 +243,16 @@ export default function AiTrigger() {
       return { x: 0, y: 0 };
     };
     const canvasCenter = getCanvasCenter();
-    
+
     // Find empty space on canvas by checking existing asset bounding boxes
     // Keep assets away from canvas edges (at least 1000mm margin)
     const findEmptySpace = (requiredWidth: number, requiredHeight: number, margin = 100): { x: number; y: number } | null => {
       const edgeMargin = 1000; // Keep assets away from canvas edges
-      
+
       if (existingAssets.length === 0 && createdAssetsInBatch.length === 0) {
         // No existing assets, use canvas center (but ensure it's away from edges)
         if (canvas?.width && canvas?.height) {
-          const safeCenterX = Math.max(edgeMargin + requiredWidth / 2, 
+          const safeCenterX = Math.max(edgeMargin + requiredWidth / 2,
             Math.min(canvas.width - edgeMargin - requiredWidth / 2, canvas.width / 2));
           const safeCenterY = Math.max(edgeMargin + requiredHeight / 2,
             Math.min(canvas.height - edgeMargin - requiredHeight / 2, canvas.height / 2));
@@ -249,7 +260,7 @@ export default function AiTrigger() {
         }
         return canvasCenter;
       }
-      
+
       // Get bounding boxes of all existing assets + newly created assets in this batch
       const occupiedAreas: Array<{ minX: number; minY: number; maxX: number; maxY: number }> = [];
       [...existingAssets, ...createdAssetsInBatch].forEach(asset => {
@@ -277,48 +288,48 @@ export default function AiTrigger() {
           });
         }
       });
-      
+
       // Try to find empty space - start from top-left, scan grid-like
       const canvasWidth = canvas?.width || 10000;
       const canvasHeight = canvas?.height || 10000;
       const stepSize = 500; // mm - grid step for searching
       const halfW = requiredWidth / 2 + margin;
       const halfH = requiredHeight / 2 + margin;
-      
+
       // Start from top-left corner, but keep away from edges
       const startY = edgeMargin;
       const endY = canvasHeight - edgeMargin;
       const startX = edgeMargin;
       const endX = canvasWidth - edgeMargin;
-      
+
       for (let y = startY; y < endY; y += stepSize) {
         for (let x = startX; x < endX; x += stepSize) {
           const testX = x;
           const testY = y;
-          
+
           // Ensure position is away from edges
           if (testX - halfW < edgeMargin || testX + halfW > canvasWidth - edgeMargin ||
-              testY - halfH < edgeMargin || testY + halfH > canvasHeight - edgeMargin) {
+            testY - halfH < edgeMargin || testY + halfH > canvasHeight - edgeMargin) {
             continue;
           }
-          
+
           // Check if this position overlaps with any existing asset
           const overlaps = occupiedAreas.some(area => {
-            return !(testX + halfW < area.minX - margin || 
-                    testX - halfW > area.maxX + margin ||
-                    testY + halfH < area.minY - margin ||
-                    testY - halfH > area.maxY + margin);
+            return !(testX + halfW < area.minX - margin ||
+              testX - halfW > area.maxX + margin ||
+              testY + halfH < area.minY - margin ||
+              testY - halfH > area.maxY + margin);
           });
-          
+
           if (!overlaps) {
             return { x: testX, y: testY };
           }
         }
       }
-      
+
       // If no empty space found, place at safe center (away from edges)
       if (canvas?.width && canvas?.height) {
-        const safeCenterX = Math.max(edgeMargin + requiredWidth / 2, 
+        const safeCenterX = Math.max(edgeMargin + requiredWidth / 2,
           Math.min(canvas.width - edgeMargin - requiredWidth / 2, canvas.width / 2));
         const safeCenterY = Math.max(edgeMargin + requiredHeight / 2,
           Math.min(canvas.height - edgeMargin - requiredHeight / 2, canvas.height / 2));
@@ -326,18 +337,18 @@ export default function AiTrigger() {
       }
       return canvasCenter;
     };
-    
+
     // Derive a primary wall bounding box if available (first rectangular wall)
     let wallBounds: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
     if (Array.isArray(plan.walls) && plan.walls.length > 0) {
       const w = plan.walls[0];
       const width = Number(w.widthMm || 0);
       const height = Number(w.heightMm || 0);
-      
+
       // Find empty space for the wall
       let cx = Number(w.centerX);
       let cy = Number(w.centerY);
-      
+
       // If position not provided or invalid, find empty space
       if (!cx || !cy || !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
         const emptySpace = findEmptySpace(width, height, 200);
@@ -348,7 +359,7 @@ export default function AiTrigger() {
           // Use safe center away from edges
           const edgeMargin = 1000;
           if (canvas?.width && canvas?.height) {
-            cx = Math.max(edgeMargin + width / 2, 
+            cx = Math.max(edgeMargin + width / 2,
               Math.min(canvas.width - edgeMargin - width / 2, canvas.width / 2));
             cy = Math.max(edgeMargin + height / 2,
               Math.min(canvas.height - edgeMargin - height / 2, canvas.height / 2));
@@ -358,7 +369,7 @@ export default function AiTrigger() {
           }
         }
       }
-      
+
       const halfW = width / 2;
       const halfH = height / 2;
       wallBounds = { minX: cx - halfW, minY: cy - halfH, maxX: cx + halfW, maxY: cy + halfH };
@@ -369,7 +380,7 @@ export default function AiTrigger() {
       // If position is NaN, Infinity, or way too large (likely error), use safe center
       if (!isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
         if (canvas?.width && canvas?.height) {
-          const safeX = Math.max(edgeMargin + width / 2, 
+          const safeX = Math.max(edgeMargin + width / 2,
             Math.min(canvas.width - edgeMargin - width / 2, canvas.width / 2));
           const safeY = Math.max(edgeMargin + height / 2,
             Math.min(canvas.height - edgeMargin - height / 2, canvas.height / 2));
@@ -386,7 +397,7 @@ export default function AiTrigger() {
       }
       return { x, y };
     };
-    
+
     const clampInWall = (x: number, y: number, margin = 50, width = 0, height = 0) => {
       const valid = validatePosition(x, y, width, height);
       if (!wallBounds) return valid;
@@ -401,7 +412,7 @@ export default function AiTrigger() {
         const height = Number(w.heightMm || 0);
         let cx: number;
         let cy: number;
-        
+
         if (idx === 0 && wallBounds) {
           // First wall uses the calculated position from wallBounds
           cx = (wallBounds.minX + wallBounds.maxX) / 2;
@@ -410,8 +421,8 @@ export default function AiTrigger() {
           // For additional walls, find empty space
           let providedCx = Number(w.centerX);
           let providedCy = Number(w.centerY);
-          if (!providedCx || !providedCy || !isFinite(providedCx) || !isFinite(providedCy) || 
-              Math.abs(providedCx) > 100000 || Math.abs(providedCy) > 100000) {
+          if (!providedCx || !providedCy || !isFinite(providedCx) || !isFinite(providedCy) ||
+            Math.abs(providedCx) > 100000 || Math.abs(providedCy) > 100000) {
             const emptySpace = findEmptySpace(width, height, 200);
             if (emptySpace) {
               cx = emptySpace.x;
@@ -440,7 +451,7 @@ export default function AiTrigger() {
           { a: 3, b: 0 },
         ];
         const wall: AssetInstance = {
-          id: `wall-segments-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+          id: `wall-segments-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           type: "wall-segments",
           x: cx,
           y: cy,
@@ -470,7 +481,7 @@ export default function AiTrigger() {
         // Validate and auto-calculate position if missing or invalid
         // Check if x/y are undefined/null or invalid (NaN, Infinity, or way too large)
         if (t.xMm === undefined || t.xMm === null || t.yMm === undefined || t.yMm === null ||
-            !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
+          !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
           if (wallBounds) {
             const cols = Math.ceil(Math.sqrt(plan.tables.length));
             const row = Math.floor(idx / cols);
@@ -484,7 +495,7 @@ export default function AiTrigger() {
         }
         const pos = clampInWall(x, y, Math.max(width, height) / 2 + 20, width, height);
         const a: AssetInstance = {
-          id: `table-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+          id: `table-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           type: t.assetType || "rectangular-table",
           x: pos.x,
           y: pos.y,
@@ -508,7 +519,7 @@ export default function AiTrigger() {
         let y = Number(c.yMm);
         // Validate and auto-calculate position if missing or invalid
         if (c.xMm === undefined || c.xMm === null || c.yMm === undefined || c.yMm === null ||
-            !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
+          !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
           if (wallBounds) {
             const cols = Math.ceil(Math.sqrt(plan.chairs.length));
             const row = Math.floor(idx / cols);
@@ -522,7 +533,7 @@ export default function AiTrigger() {
         }
         const pos = clampInWall(x, y, size / 2 + 10, size, size);
         const a: AssetInstance = {
-          id: `chair-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+          id: `chair-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           type: c.assetType || "normal-chair",
           x: pos.x,
           y: pos.y,
@@ -545,7 +556,7 @@ export default function AiTrigger() {
         let cy = Number(spec.centerY);
         // Validate and auto-calculate center if missing or invalid
         if (spec.centerX === undefined || spec.centerX === null || spec.centerY === undefined || spec.centerY === null ||
-            !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
+          !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
           if (wallBounds) {
             const cols = Math.ceil(Math.sqrt(plan.chairsAround.length));
             const row = Math.floor(idx / cols);
@@ -562,19 +573,19 @@ export default function AiTrigger() {
         const minRadius = Math.ceil((tableSize / 2) + chairSize + 10);
         const r = Math.max(minRadius, Number(spec.radiusMm || minRadius));
         const count = Math.max(1, Number(spec.count || 1));
-        
+
         // Ensure center position is away from canvas edges
         const edgeMargin = 1000;
         const totalRadius = r + chairSize; // Maximum extent from center
         if (canvas?.width && canvas?.height) {
-          cx = Math.max(edgeMargin + totalRadius, 
+          cx = Math.max(edgeMargin + totalRadius,
             Math.min(canvas.width - edgeMargin - totalRadius, cx));
           cy = Math.max(edgeMargin + totalRadius,
             Math.min(canvas.height - edgeMargin - totalRadius, cy));
         }
         if (spec.tableAsset) {
           const table: AssetInstance = {
-            id: `table-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+            id: `table-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             type: spec.tableAsset,
             x: cx,
             y: cy,
@@ -589,12 +600,12 @@ export default function AiTrigger() {
           createdAssetIds.push(table.id);
           createdAssetsInBatch.push(table); // Track for empty space detection
         }
-        for (let i=0;i<count;i++) {
+        for (let i = 0; i < count; i++) {
           const angle = (i / count) * Math.PI * 2;
           const x = cx + Math.cos(angle) * r;
           const y = cy + Math.sin(angle) * r;
           const chair: AssetInstance = {
-            id: `chair-${Date.now()}-${i}-${Math.random().toString(36).slice(2,5)}`,
+            id: `chair-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 5)}`,
             type: spec.chairAsset || 'normal-chair',
             x,
             y,
@@ -611,14 +622,14 @@ export default function AiTrigger() {
         }
       });
     }
-    
+
     // Auto-center viewport on newly created assets
     if (createdAssetIds.length > 0) {
       setTimeout(() => {
         const assets = useSceneStore.getState().assets;
         const createdAssets = assets.filter(a => createdAssetIds.includes(a.id));
         if (createdAssets.length === 0) return;
-        
+
         // Calculate bounding box of all created assets
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         createdAssets.forEach(asset => {
@@ -638,7 +649,7 @@ export default function AiTrigger() {
             maxY = Math.max(maxY, asset.y + h / 2);
           }
         });
-        
+
         if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY)) {
           // Select the first created asset to trigger auto-center in Canvas.tsx
           // The Canvas component will automatically center on the selected asset
@@ -652,20 +663,85 @@ export default function AiTrigger() {
   const handleInteractiveCommand = async (prompt: string) => {
     const resolved = getResolvedSelection();
     const selectedAssets = resolved.map((r) => r.asset);
-    
+
     if (selectedAssets.length === 0) {
-      setMessages((m) => [...m, { 
-        role: 'assistant', 
-        content: 'Please select an asset first. Click on a shape, table, or other item to select it.' 
+      setMessages((m) => [...m, {
+        role: 'assistant',
+        content: 'Please select an asset first. Click on a shape, table, or other item to select it.'
       }]);
       return;
+    }
+
+    // Check if selected asset is a group
+    const groupAsset = selectedAssets.find(a => a.isGroup && a.groupAssets);
+    let groupContext = undefined;
+
+    if (groupAsset && groupAsset.groupAssets) {
+      // Calculate group bounds from child assets
+      const childAssets = groupAsset.groupAssets;
+      const minX = Math.min(...childAssets.map(a => {
+        const w = (a.width || 0) * (a.scale || 1);
+        return (a.x || 0) - w / 2;
+      }));
+      const maxX = Math.max(...childAssets.map(a => {
+        const w = (a.width || 0) * (a.scale || 1);
+        return (a.x || 0) + w / 2;
+      }));
+      const minY = Math.min(...childAssets.map(a => {
+        const h = (a.height || 0) * (a.scale || 1);
+        return (a.y || 0) - h / 2;
+      }));
+      const maxY = Math.max(...childAssets.map(a => {
+        const h = (a.height || 0) * (a.scale || 1);
+        return (a.y || 0) + h / 2;
+      }));
+
+      groupContext = {
+        groupId: groupAsset.id,
+        groupBounds: {
+          minX,
+          minY,
+          maxX,
+          maxY,
+          width: maxX - minX,
+          height: maxY - minY,
+        },
+        childAssets: childAssets.map(a => ({
+          id: a.id,
+          type: a.type || 'unknown',
+          x: a.x || 0,
+          y: a.y || 0,
+          width: a.width,
+          height: a.height,
+          fillColor: a.fillColor,
+          strokeColor: a.strokeColor,
+          scale: a.scale || 1,
+          rotation: a.rotation || 0,
+          // Add descriptive labels to help AI identify items
+          description: a.type === 'ellipse' || a.type === 'circle' ? 'circle' : 
+                       a.type === 'rectangle' ? 'rectangle' : 
+                       a.type === 'wall-segments' ? 'wall' :
+                       a.type || 'item',
+        })),
+      };
+      
+      console.log('Group context created:', {
+        groupId: groupAsset.id,
+        childCount: childAssets.length,
+        children: childAssets.map(a => ({
+          id: a.id,
+          type: a.type,
+          fillColor: a.fillColor,
+          description: a.type === 'ellipse' || a.type === 'circle' ? 'circle' : a.type
+        }))
+      });
     }
 
     try {
       const res = await fetch("/api/ai/command", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           prompt,
           selectedAssets: selectedAssets.map(a => ({
             id: a.id,
@@ -675,17 +751,56 @@ export default function AiTrigger() {
             width: a.width,
             height: a.height,
             scale: a.scale,
-            rotation: a.rotation
+            rotation: a.rotation,
+            fill: a.fillColor,
+            stroke: a.strokeColor,
+            strokeWidth: a.strokeWidth,
+            isGroup: a.isGroup,
+            groupAssets: a.groupAssets?.map(ga => ({
+              id: ga.id,
+              type: ga.type || 'unknown',
+              x: ga.x || 0,
+              y: ga.y || 0,
+              width: ga.width,
+              height: ga.height,
+            })),
           })),
-          canvas 
+          canvas: canvas || projectCanvas,
+          groupContext,
         }),
       });
+      console.log('Sending to AI:', {
+        prompt,
+        selectedAssets: selectedAssets.map(a => ({
+          id: a.id,
+          type: a.type,
+          width: a.width,
+          height: a.height,
+          fill: a.fillColor,
+          stroke: a.strokeColor
+        })),
+        canvas: canvas || projectCanvas
+      }); // Debug log
       const data = await res.json();
-      
+
+      if (data?.error) {
+        // If AI returns an error, it means it can't handle this as a command
+        // Throw to fall back to plan generation
+        throw new Error(data.error);
+      }
+
       if (data?.action) {
+        console.log('AI Action Received:', data.action); // Debug log
+        // Capture groupContext and prompt in closure for use in handlers
+        const capturedGroupContext = groupContext;
+        const capturedPrompt = prompt;
         // Apply the action to selected assets (both new editor + Workspace2D)
         resolved.forEach(({ asset, source }) => {
+          console.log(`Applying action to ${source} asset:`, asset.id); // Debug log
           const applyToScene = () => {
+            // Use captured groupContext and prompt
+            const ctx = capturedGroupContext;
+            const userPrompt = capturedPrompt;
             if (data.action.type === 'resize') {
               const scaleFactor = data.action.scaleFactor ?? 1;
               const nextWidth =
@@ -731,6 +846,212 @@ export default function AiTrigger() {
               });
             } else if (data.action.type === 'update') {
               updateAsset(asset.id, data.action.updates || {});
+            } else if (data.action.type === 'moveWithinGroup') {
+              // Handle moving a child asset within a group
+              const groupAsset = existingAssets.find(a => a.id === asset.id && a.isGroup);
+              if (!groupAsset || !groupAsset.groupAssets) {
+                console.error('Group not found or has no child assets');
+                return;
+              }
+
+              // Try to find child asset by ID first, then by type/description/color
+              let targetChildId = data.action.targetAssetId;
+              let childAsset = groupAsset.groupAssets.find(ca => ca.id === targetChildId);
+              
+              console.log('🔍 Looking for child asset:', {
+                targetAssetId: targetChildId,
+                found: !!childAsset,
+                availableChildren: groupAsset.groupAssets.map(ca => ({ 
+                  id: ca.id, 
+                  type: ca.type, 
+                  fillColor: ca.fillColor,
+                  description: ca.type === 'ellipse' || ca.type === 'circle' ? 'circle' : ca.type
+                }))
+              });
+              
+              // If not found by ID, try to find by type/description/color from prompt
+              if (!childAsset) {
+                const userPrompt = capturedPrompt || '';
+                const promptLower = userPrompt.toLowerCase();
+                
+                // Try multiple matching strategies
+                const matchingStrategies = [
+                  // Match by "blue circle" (both color and type)
+                  () => promptLower.includes('blue') && promptLower.includes('circle') && groupAsset.groupAssets.find(ca => 
+                    (ca.type === 'ellipse' || ca.type === 'circle') && 
+                    (ca.fillColor === '#3b82f6' || ca.fillColor === '#0000ff' || ca.fillColor === '#60a5fa')
+                  ),
+                  // Match by "circle" keyword
+                  () => promptLower.includes('circle') && groupAsset.groupAssets.find(ca => 
+                    ca.type === 'ellipse' || ca.type === 'circle'
+                  ),
+                  // Match by "blue" color alone
+                  () => promptLower.includes('blue') && groupAsset.groupAssets.find(ca => 
+                    ca.fillColor === '#3b82f6' || ca.fillColor === '#0000ff' || ca.fillColor === '#60a5fa'
+                  ),
+                  // Match by "rectangle"
+                  () => promptLower.includes('rectangle') && groupAsset.groupAssets.find(ca => 
+                    ca.type === 'rectangle'
+                  ),
+                  // Match by "wall"
+                  () => promptLower.includes('wall') && groupAsset.groupAssets.find(ca => 
+                    ca.type === 'wall-segments'
+                  ),
+                ];
+                
+                for (const strategy of matchingStrategies) {
+                  childAsset = strategy();
+                  if (childAsset) {
+                    targetChildId = childAsset.id;
+                    console.log('✅ Found child asset via fallback matching:', { id: childAsset.id, type: childAsset.type, fillColor: childAsset.fillColor });
+                    break;
+                  }
+                }
+              }
+              
+              if (!childAsset) {
+                console.error('❌ Child asset not found!', {
+                  targetAssetId: targetChildId,
+                  prompt: capturedPrompt,
+                  availableChildren: groupAsset.groupAssets.map(ca => ({ 
+                    id: ca.id, 
+                    type: ca.type, 
+                    fillColor: ca.fillColor 
+                  }))
+                });
+                setMessages((m) => [...m, { 
+                  role: 'assistant', 
+                  content: `Could not find the item you mentioned. Available items in the group: ${groupAsset.groupAssets.map(ca => ca.type || 'unknown').join(', ')}` 
+                }]);
+                return;
+              }
+
+              // Calculate new position based on position string or relative coordinates
+              // Note: child assets have relative positions (centered at group origin)
+              let newX = childAsset.x || 0;
+              let newY = childAsset.y || 0;
+
+              // Use group bounds from context or calculate from group asset
+              const ctx = capturedGroupContext;
+              const bounds = ctx?.groupBounds || {
+                minX: -(groupAsset.width || 1000) / 2,
+                minY: -(groupAsset.height || 1000) / 2,
+                maxX: (groupAsset.width || 1000) / 2,
+                maxY: (groupAsset.height || 1000) / 2,
+                width: groupAsset.width || 1000,
+                height: groupAsset.height || 1000,
+              };
+              
+              console.log('MoveWithinGroup - Using bounds:', bounds, 'from context:', !!ctx);
+
+              const childWidth = (childAsset.width || 0) * (childAsset.scale || 1);
+              const childHeight = (childAsset.height || 0) * (childAsset.scale || 1);
+
+              if (data.action.position) {
+                switch (data.action.position) {
+                  case 'top-left':
+                    newX = bounds.minX + childWidth / 2;
+                    newY = bounds.minY + childHeight / 2;
+                    break;
+                  case 'top-right':
+                    newX = bounds.maxX - childWidth / 2;
+                    newY = bounds.minY + childHeight / 2;
+                    break;
+                  case 'bottom-left':
+                    newX = bounds.minX + childWidth / 2;
+                    newY = bounds.maxY - childHeight / 2;
+                    break;
+                  case 'bottom-right':
+                    newX = bounds.maxX - childWidth / 2;
+                    newY = bounds.maxY - childHeight / 2;
+                    break;
+                  case 'center':
+                    newX = (bounds.minX + bounds.maxX) / 2;
+                    newY = (bounds.minY + bounds.maxY) / 2;
+                    break;
+                  case 'top-center':
+                    newX = (bounds.minX + bounds.maxX) / 2;
+                    newY = bounds.minY + childHeight / 2;
+                    break;
+                  case 'bottom-center':
+                    newX = (bounds.minX + bounds.maxX) / 2;
+                    newY = bounds.maxY - childHeight / 2;
+                    break;
+                  case 'left-center':
+                    newX = bounds.minX + childWidth / 2;
+                    newY = (bounds.minY + bounds.maxY) / 2;
+                    break;
+                  case 'right-center':
+                    newX = bounds.maxX - childWidth / 2;
+                    newY = (bounds.minY + bounds.maxY) / 2;
+                    break;
+                }
+              } else if (data.action.relativeX !== undefined || data.action.relativeY !== undefined) {
+                if (data.action.relativeX !== undefined) {
+                  newX = bounds.minX + (bounds.width * data.action.relativeX);
+                }
+                if (data.action.relativeY !== undefined) {
+                  newY = bounds.minY + (bounds.height * data.action.relativeY);
+                }
+              } else if (data.action.offsetX !== undefined || data.action.offsetY !== undefined) {
+                // Apply offset from current position
+                newX = (childAsset.x || 0) + (data.action.offsetX || 0);
+                newY = (childAsset.y || 0) + (data.action.offsetY || 0);
+              }
+
+              // Update the child asset's position within the group
+              const updatedGroupAssets = groupAsset.groupAssets.map(ca =>
+                ca.id === targetChildId
+                  ? { ...ca, x: newX, y: newY }
+                  : ca
+              );
+
+              console.log('Updating group asset:', {
+                groupId: groupAsset.id,
+                targetChildId,
+                oldPosition: { x: childAsset.x, y: childAsset.y },
+                newPosition: { x: newX, y: newY },
+                bounds,
+                updatedChildren: updatedGroupAssets.length,
+                allChildren: groupAsset.groupAssets.map(ca => ({ id: ca.id, type: ca.type, x: ca.x, y: ca.y }))
+              });
+
+              // Update the group asset with new child positions
+              // Make sure we're updating the actual asset in the store
+              const currentState = useSceneStore.getState();
+              const currentGroupAsset = currentState.assets.find(a => a.id === groupAsset.id);
+              
+              if (currentGroupAsset) {
+                console.log('Before update - current groupAssets:', currentGroupAsset.groupAssets?.map(ca => ({ id: ca.id, x: ca.x, y: ca.y })));
+                
+                // Update the asset with new groupAssets
+                updateAsset(groupAsset.id, {
+                  groupAssets: updatedGroupAssets,
+                });
+                
+                // Verify the update
+                setTimeout(() => {
+                  const verifyState = useSceneStore.getState();
+                  const updatedGroup = verifyState.assets.find(a => a.id === groupAsset.id);
+                  console.log('After update - new groupAssets:', updatedGroup?.groupAssets?.map(ca => ({ id: ca.id, x: ca.x, y: ca.y })));
+                  
+                  if (updatedGroup?.groupAssets) {
+                    const movedChild = updatedGroup.groupAssets.find(ca => ca.id === targetChildId);
+                    if (movedChild && (movedChild.x !== childAsset.x || movedChild.y !== childAsset.y)) {
+                      console.log('✅ Successfully moved child asset!');
+                    } else {
+                      console.error('❌ Child asset position not updated!');
+                    }
+                  }
+                }, 100);
+                
+                // Force a re-render by marking as changed
+                useSceneStore.getState().hasUnsavedChanges = true;
+                
+                console.log('Group asset update called');
+              } else {
+                console.error('Group asset not found in store after update attempt');
+              }
             }
           };
 
@@ -829,25 +1150,36 @@ export default function AiTrigger() {
           if (source === "scene") {
             applyToScene();
           } else {
+            console.log('Applying to workspace (project-shape/asset/wall)'); // Debug log
             applyToWorkspace();
           }
         });
-        
-        setMessages((m) => [...m, { 
-          role: 'assistant', 
-          content: data.message || 'Action completed successfully.' 
+
+        setMessages((m) => [...m, {
+          role: 'assistant',
+          content: data.message || 'Action completed successfully.'
         }]);
+      } else if (data?.error) {
+        // If error indicates this should go to plan generation, throw to trigger fallback
+        if (data.error.includes('plan generation') || data.error.includes('not applicable')) {
+          throw new Error(data.error);
+        }
+        setMessages((m) => [...m, { role: 'assistant', content: `Error: ${data.error}` }]);
       } else if (data?.message) {
         setMessages((m) => [...m, { role: 'assistant', content: data.message }]);
       } else {
-        setMessages((m) => [...m, { 
-          role: 'assistant', 
-          content: 'I couldn\'t understand that command. Try: "resize to 500mm", "make it smaller", "move to center", etc.' 
-        }]);
+        // No action and no error - AI couldn't understand as a command
+        // Throw to fall back to plan generation
+        throw new Error('Request not recognized as a command');
       }
-    } catch (e) {
+    } catch (e: any) {
+      // Re-throw if it's a "fallback to plan" error, otherwise show error message
+      if (e?.message?.includes('plan generation') || e?.message?.includes('not applicable') || e?.message?.includes('not recognized')) {
+        throw e; // Re-throw to trigger fallback in handleSubmit
+      }
       console.error(e);
       setMessages((m) => [...m, { role: 'assistant', content: 'Sorry, I could not process that command.' }]);
+      throw e; // Re-throw to trigger fallback
     }
   };
 
@@ -856,51 +1188,49 @@ export default function AiTrigger() {
     const prompt = inputValue.trim();
     setMessages((m) => [...m, { role: 'user', content: prompt }]);
     setIsLoading(true);
-    
-    // Check if this is an interactive command (has selected assets and command-like prompt)
+
     const selectedAssets = getCurrentSelectedAssets();
-    
-    const isInteractiveCommand = selectedAssets.length > 0 && (
-      prompt.toLowerCase().includes('resize') ||
-      prompt.toLowerCase().includes('size') ||
-      prompt.toLowerCase().includes('make it') ||
-      prompt.toLowerCase().includes('move') ||
-      prompt.toLowerCase().includes('rotate') ||
-      prompt.toLowerCase().includes('change') ||
-      prompt.toLowerCase().includes('set') ||
-      prompt.toLowerCase().includes('update')
-    );
 
     try {
-      if (isInteractiveCommand) {
-        await handleInteractiveCommand(prompt);
-      } else {
-        // Original plan generation flow
-        const res = await fetch("/api/ai/plan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            messages: [...messages, { role: 'user', content: prompt }], 
-            canvas,
-            selectedAssets: selectedAssets.length > 0 ? selectedAssets.map(a => ({
-              id: a.id,
-              type: a.type,
-              x: a.x,
-              y: a.y,
-              width: a.width,
-              height: a.height
-            })) : undefined
-          }),
-        });
-        const data = await res.json();
-        if (data?.followUp) {
-          setMessages((m) => [...m, { role: 'assistant', content: data.followUp }]);
-        } else if (data?.plan) {
-          applyPlan(data.plan);
-          setMessages((m) => [...m, { role: 'assistant', content: 'Plan generated and applied to canvas.' }]);
-        } else {
-          setMessages((m) => [...m, { role: 'assistant', content: 'I need more details. What are the wall dimensions?' }]);
+      // If there are selected assets, try interactive command handler first
+      // The AI will determine if it can handle the request
+      if (selectedAssets.length > 0) {
+        try {
+          await handleInteractiveCommand(prompt);
+          // If successful, we're done
+          return;
+        } catch (commandError: any) {
+          // If command handler fails or returns an error, check if it's a "not applicable" error
+          console.log('Command handler result:', commandError);
+          // Continue to plan generation as fallback
         }
+      }
+
+      // Fallback to plan generation for general queries or when no assets selected
+      const res = await fetch("/api/ai/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...messages, { role: 'user', content: prompt }],
+          canvas,
+          selectedAssets: selectedAssets.length > 0 ? selectedAssets.map(a => ({
+            id: a.id,
+            type: a.type,
+            x: a.x,
+            y: a.y,
+            width: a.width,
+            height: a.height
+          })) : undefined
+        }),
+      });
+      const data = await res.json();
+      if (data?.followUp) {
+        setMessages((m) => [...m, { role: 'assistant', content: data.followUp }]);
+      } else if (data?.plan) {
+        applyPlan(data.plan);
+        setMessages((m) => [...m, { role: 'assistant', content: 'Plan generated and applied to canvas.' }]);
+      } else {
+        setMessages((m) => [...m, { role: 'assistant', content: 'I need more details. What are the wall dimensions?' }]);
       }
     } catch (e) {
       console.error(e);
@@ -963,6 +1293,24 @@ export default function AiTrigger() {
                     const selectedAssets = getCurrentSelectedAssets();
                     if (!selectedAssets.length) return null;
                     const primary = selectedAssets[0];
+                    // Get full asset data from store to ensure groupAssets is populated
+                    // Use existingAssets which is already reactive from the hook
+                    const fullAsset = existingAssets.find(a => a.id === primary.id);
+                    const isGroup = fullAsset?.isGroup && fullAsset?.groupAssets && fullAsset.groupAssets.length > 0;
+                    const groupAssets = fullAsset?.groupAssets || primary.groupAssets;
+                    
+                    // Debug logging
+                    console.log('AI Display Check:', {
+                      primaryId: primary.id,
+                      primaryIsGroup: primary.isGroup,
+                      primaryHasGroupAssets: !!primary.groupAssets,
+                      primaryGroupAssetsLength: primary.groupAssets?.length,
+                      fullAssetFound: !!fullAsset,
+                      fullAssetIsGroup: fullAsset?.isGroup,
+                      fullAssetGroupAssetsLength: fullAsset?.groupAssets?.length,
+                      isGroup: isGroup,
+                      groupAssetsLength: groupAssets?.length
+                    });
                     const w = Math.round((primary.width || 0) * (primary.scale || 1));
                     const h = Math.round((primary.height || 0) * (primary.scale || 1));
                     return (
@@ -972,12 +1320,79 @@ export default function AiTrigger() {
                             Working on
                           </span>
                           <span className="text-sm text-gray-800">
-                            {selectedAssets.length === 1
-                              ? `${primary.type} — ${w || "?"}mm × ${h || "?"}mm`
-                              : `${selectedAssets.length} items selected`}
+                            {(() => {
+                              // Always check for group first, even if primary doesn't show it
+                              if (fullAsset?.isGroup && fullAsset?.groupAssets && fullAsset.groupAssets.length > 0) {
+                                return (
+                                  <div className="mt-1">
+                                    <div className="font-medium">Group ({fullAsset.groupAssets.length} items)</div>
+                                    <div className="text-xs text-gray-600 mt-1.5 space-y-1 max-h-32 overflow-y-auto">
+                                      {fullAsset.groupAssets.map((child: any, idx: number) => (
+                                        <div key={child.id || idx} className="flex items-center gap-2">
+                                          <span 
+                                            className="w-3 h-3 rounded-full border border-gray-300 flex-shrink-0" 
+                                            style={{ backgroundColor: child.fillColor || 'transparent' }}
+                                          ></span>
+                                          <span className="capitalize">{child.type || 'unknown'}</span>
+                                          {child.fillColor && (
+                                            <span className="text-gray-400 text-xs">({child.fillColor})</span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              
+                              // Fallback to single item display
+                              if (selectedAssets.length === 1) {
+                                if (primary.type === "wall-segments") {
+                                  // Calculate wall bounding box from nodes
+                                  const nodes = (primary as any).wallNodes as { x: number; y: number }[] | undefined;
+                                  const thickness = (primary as any).wallThickness || 150;
+
+                                  if (nodes && nodes.length > 0) {
+                                    const xs = nodes.map(n => n.x);
+                                    const ys = nodes.map(n => n.y);
+                                    const width = Math.round(Math.max(...xs) - Math.min(...xs));
+                                    const height = Math.round(Math.max(...ys) - Math.min(...ys));
+
+                                    return `${primary.type} — ${width}mm × ${height}mm (${thickness}mm thick)`;
+                                  }
+                                  return `${primary.type} — ${thickness}mm thick`;
+                                }
+                                return `${primary.type} — ${w || "?"}mm × ${h || "?"}mm`;
+                              }
+                              // Multiple selection: show a concise list of selected items
+                              const maxItemsToShow = 6;
+                              const items = selectedAssets.slice(0, maxItemsToShow);
+                              return (
+                                <div className="mt-1 space-y-1">
+                                  <div className="font-medium">{selectedAssets.length} items selected</div>
+                                  <div className="text-xs text-gray-600 space-y-0.5 max-h-32 overflow-y-auto">
+                                    {items.map((item) => (
+                                      <div key={item.id} className="flex items-center gap-2">
+                                        <span
+                                          className="w-3 h-3 rounded-full border border-gray-300 flex-shrink-0"
+                                          style={{ backgroundColor: (item as any).fillColor || 'transparent' }}
+                                        ></span>
+                                        <span className="capitalize">{item.type || 'unknown'}</span>
+                                      </div>
+                                    ))}
+                                    {selectedAssets.length > maxItemsToShow && (
+                                      <div className="text-gray-400">+{selectedAssets.length - maxItemsToShow} more...</div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </span>
                           <span className="mt-1 text-xs text-gray-500">
-                            Ask: “Resize to 500mm × 800mm”, “Move 1000mm right”, or “Center this item”.
+                            Ask: {isGroup
+                              ? '"Move the circle to the top right corner", "Position the table in the center", etc.'
+                              : primary.type === "wall-segments"
+                              ? '"Make this wall thicker", "Move 1000mm right", or "Change thickness to 225mm".'
+                              : '"Resize to 500mm × 800mm", "Move 1000mm right", or "Center this item".'}
                           </span>
                           <button
                             type="button"
@@ -1026,9 +1441,9 @@ export default function AiTrigger() {
                     <div className="text-left">
                       <span className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-white border">
                         <span className="inline-flex gap-1">
-                          <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{animationDelay:'0ms'}}></span>
-                          <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{animationDelay:'120ms'}}></span>
-                          <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{animationDelay:'240ms'}}></span>
+                          <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                          <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '120ms' }}></span>
+                          <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '240ms' }}></span>
                         </span>
                         Thinking…
                       </span>
@@ -1036,7 +1451,7 @@ export default function AiTrigger() {
                   )}
                 </div>
               </div>
-              
+
               <div className="w-full max-w-lg relative flex-shrink-0 mt-4">
                 {/* Left icon */}
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 bg-gray-200 p-2 rounded-full">

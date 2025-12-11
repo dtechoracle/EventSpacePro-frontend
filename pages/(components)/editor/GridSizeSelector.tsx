@@ -18,7 +18,9 @@ export default function GridSizeSelector({ className = "" }: GridSizeSelectorPro
     showGrid,
     toggleGrid,
     snapToGridEnabled,
-    toggleSnapToGrid
+    toggleSnapToGrid,
+    unitSystem,
+    setUnitSystem,
   } = useSceneStore();
 
   // Fallback grid sizes if store doesn't have them
@@ -27,6 +29,10 @@ export default function GridSizeSelector({ className = "" }: GridSizeSelectorPro
   const currentGridSize = gridSizes[selectedGridSizeIndex] || gridSizes[1] || 10;
 
   const formatGridSize = (size: number) => {
+    if (unitSystem === 'imperial') {
+      const feet = size / 304.8;
+      return feet >= 10 ? `${feet.toFixed(0)} ft` : `${feet.toFixed(1)} ft`;
+    }
     if (size < 1) {
       return `${size * 1000}μm`; // Show in micrometers for very small sizes
     } else if (size < 10) {
@@ -53,6 +59,17 @@ export default function GridSizeSelector({ className = "" }: GridSizeSelectorPro
         >
           <Grid3X3 size={16} />
         </button>
+
+        {/* Unit Selector */}
+        <select
+          className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+          value={unitSystem || 'metric'}
+          onChange={(e) => setUnitSystem?.(e.target.value as 'metric' | 'imperial')}
+          title="Units"
+        >
+          <option value="metric">Meters</option>
+          <option value="imperial">Feet</option>
+        </select>
 
         {/* Grid Size Selector */}
         <div className="relative">

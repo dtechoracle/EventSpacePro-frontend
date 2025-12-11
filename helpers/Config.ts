@@ -45,9 +45,14 @@ export const apiRequest = async (
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || "Request failed");
+
+    // Silent failures in production - only log in development
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('API Request Failed:', endpoint, response.status);
+    }
+
+    throw new Error(errorData.message || `Request failed: ${response.status} ${response.statusText}`);
   }
 
   return response.json();
 };
-

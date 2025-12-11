@@ -6,6 +6,7 @@ import { calculateNodeJunctions, Point } from '@/utils/geometry';
 import { useEditorStore } from '@/store/editorStore';
 import { useProjectStore } from '@/store/projectStore';
 import { pointToLineDistance } from '@/utils/wallOpenings';
+import { calculateAllCutouts, getCutoutsForEdge, WallCutout } from '@/utils/wallCutouts';
 
 interface WallRendererProps {
     wall: Wall;
@@ -16,7 +17,12 @@ interface WallRendererProps {
 export default function WallRenderer({ wall, isSelected, isHovered }: WallRendererProps) {
     const { nodes, edges } = wall;
     const { selectedEdgeId, setSelectedEdgeId } = useEditorStore();
-    const { assets } = useProjectStore();
+    const { assets, walls: allWalls } = useProjectStore();
+
+    // Calculate all cutouts for doors/windows
+    const wallCutouts = useMemo(() => {
+        return calculateAllCutouts(assets, allWalls);
+    }, [assets, allWalls]);
 
     // Create a map of node IDs to nodes for quick lookup
     const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
@@ -24,28 +30,83 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
     // Calculate junctions for all nodes
     const junctions = useMemo(() => {
         const nodeEdges = new Map<string, Array<{ id: string; otherNode: Point; thickness: number }>>();
+        const { walls: allWalls } = useProjectStore.getState();
 
-        // Build adjacency list with each edge's actual thickness
-        edges.forEach(edge => {
-            const nodeA = nodeMap.get(edge.nodeA);
-            const nodeB = nodeMap.get(edge.nodeB);
-            if (!nodeA || !nodeB) return;
+        // Helper to process edges from any wall
+        const processEdges = (wallEdges: typeof edges, wallNodes: typeof nodes) => {
+            const wNodeMap = new Map(wallNodes.map((node) => [node.id, node]));
 
-            if (!nodeEdges.has(edge.nodeA)) nodeEdges.set(edge.nodeA, []);
-            if (!nodeEdges.has(edge.nodeB)) nodeEdges.set(edge.nodeB, []);
+            wallEdges.forEach(edge => {
+                const nodeA = wNodeMap.get(edge.nodeA);
+                const nodeB = wNodeMap.get(edge.nodeB);
+                if (!nodeA || !nodeB) return;
 
-            // Use the edge's actual thickness from wall data (set by wall type selector)
-            // We render in mm-space, so a 100mm wall will visually span exactly 100mm in the grid.
-            const realThickness = edge.thickness || 25; // Actual architectural thickness in mm
-            nodeEdges.get(edge.nodeA)!.push({ id: edge.id, otherNode: nodeB, thickness: realThickness });
-            nodeEdges.get(edge.nodeB)!.push({ id: edge.id, otherNode: nodeA, thickness: realThickness });
+                // Find corresponding nodes in OUR wall by position (not ID!)
+                const POSITION_TOLERANCE = 1; // mm
+                const ourNodeA = nodes.find(n =>
+                    Math.abs(n.x - nodeA.x) < POSITION_TOLERANCE &&
+                    Math.abs(n.y - nodeA.y) < POSITION_TOLERANCE
+                );
+                const ourNodeB = nodes.find(n =>
+                    Math.abs(n.x - nodeB.x) < POSITION_TOLERANCE &&
+                    Math.abs(n.y - nodeB.y) < POSITION_TOLERANCE
+                );
+
+                // Only process if at least one endpoint is at one of OUR node positions
+                if (!ourNodeA && !ourNodeB) return;
+
+                // Use OUR node IDs as keys, so edges from different walls get grouped together
+                const keyA = ourNodeA ? ourNodeA.id : edge.nodeA;
+                const keyB = ourNodeB ? ourNodeB.id : edge.nodeB;
+
+                if (!nodeEdges.has(keyA)) nodeEdges.set(keyA, []);
+                if (!nodeEdges.has(keyB)) nodeEdges.set(keyB, []);
+
+                const realThickness = edge.thickness || 150; // Default to 150 if missing
+
+                // Add edges using our node positions
+                const existingA = nodeEdges.get(keyA)!.find(e => e.id === edge.id);
+                if (!existingA) {
+                    nodeEdges.get(keyA)!.push({ id: edge.id, otherNode: nodeB, thickness: realThickness });
+                }
+
+                const existingB = nodeEdges.get(keyB)!.find(e => e.id === edge.id);
+                if (!existingB) {
+                    nodeEdges.get(keyB)!.push({ id: edge.id, otherNode: nodeA, thickness: realThickness });
+                }
+            });
+        };
+
+        // 1. Process our own edges
+        processEdges(edges, nodes);
+
+        // 2. Process edges from other walls that have nodes at the same POSITION (not same ID)
+        // This is critical for T-junctions and cross-junctions where different walls
+        // have separate node objects at the same intersection point
+        const POSITION_TOLERANCE = 1; // mm - nodes within 1mm are considered the same position
+
+        allWalls.forEach(otherWall => {
+            if (otherWall.id === wall.id) return;
+
+            // Check if this wall has any node at the same position as our nodes
+            const sharesPosition = otherWall.nodes.some(otherNode =>
+                nodes.some(ourNode =>
+                    Math.abs(otherNode.x - ourNode.x) < POSITION_TOLERANCE &&
+                    Math.abs(otherNode.y - ourNode.y) < POSITION_TOLERANCE
+                )
+            );
+
+            if (sharesPosition) {
+                processEdges(otherWall.edges, otherWall.nodes);
+            }
         });
 
         // Calculate geometry for each node
         const results = new Map<string, Record<string, { left: Point; right: Point }>>();
         nodeEdges.forEach((connectedEdges, nodeId) => {
-            const node = nodeMap.get(nodeId);
-            if (node) {
+            // Only calculate for nodes that belong to THIS wall
+            if (nodeMap.has(nodeId)) {
+                const node = nodeMap.get(nodeId)!;
                 results.set(nodeId, calculateNodeJunctions(node, connectedEdges));
             }
         });
@@ -188,6 +249,16 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                 });
             });
 
+            // Add door/window cutouts as openings
+            const edgeCutouts = getCutoutsForEdge(wall.id, edge.id, wallCutouts);
+            edgeCutouts.forEach(cutout => {
+                openings.push({
+                    type: 'door-window',
+                    startT: cutout.startParam,
+                    endT: cutout.endParam
+                });
+            });
+
             // Sort openings by position and merge overlapping ones
             openings.sort((a, b) => a.startT - b.startT);
 
@@ -241,44 +312,44 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
         // Calculate vectors
         const v1 = { x: p1.x - p2.x, y: p1.y - p2.y };
         const v2 = { x: p3.x - p2.x, y: p3.y - p2.y };
-        
+
         // Normalize
         const len1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
         const len2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
         if (len1 === 0 || len2 === 0) return `L ${p2.x} ${p2.y}`;
-        
+
         const n1 = { x: v1.x / len1, y: v1.y / len1 };
         const n2 = { x: v2.x / len2, y: v2.y / len2 };
-        
+
         // Calculate angle bisector
         const bisector = { x: n1.x + n2.x, y: n1.y + n2.y };
         const bisectorLen = Math.sqrt(bisector.x * bisector.x + bisector.y * bisector.y);
         if (bisectorLen === 0) return `L ${p2.x} ${p2.y}`;
-        
+
         const bisectorNorm = { x: bisector.x / bisectorLen, y: bisector.y / bisectorLen };
-        
+
         // Calculate distance from corner to arc center
         const angle = Math.acos(Math.max(-1, Math.min(1, n1.x * n2.x + n1.y * n2.y)));
         if (angle === 0 || angle === Math.PI) return `L ${p2.x} ${p2.y}`;
         const dist = radius / Math.sin(angle / 2);
-        
+
         // Arc center
         const center = { x: p2.x + bisectorNorm.x * dist, y: p2.y + bisectorNorm.y * dist };
-        
+
         // Start and end points of arc
         const startVec = { x: p1.x - center.x, y: p1.y - center.y };
         const endVec = { x: p3.x - center.x, y: p3.y - center.y };
-        
+
         // Calculate angles
         const startAngle = Math.atan2(startVec.y, startVec.x);
         const endAngle = Math.atan2(endVec.y, endVec.x);
-        
+
         // Determine sweep flag (large arc if angle > 180°)
         let sweepFlag = 0;
         let angleDiff = endAngle - startAngle;
         if (angleDiff < 0) angleDiff += 2 * Math.PI;
         if (angleDiff > Math.PI) sweepFlag = 1;
-        
+
         // Create arc command
         return `A ${radius} ${radius} 0 ${sweepFlag} 1 ${p3.x} ${p3.y}`;
     }, []);
@@ -310,25 +381,25 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
 
                 // Check if nodes are shared with other walls to prevent overlapping inner lines
                 const { walls: allWalls } = useProjectStore.getState();
-                
+
                 // Find other walls that share nodeA
-                const otherWallsAtNodeA = allWalls.filter(otherWall => 
-                    otherWall.id !== wall.id && 
+                const otherWallsAtNodeA = allWalls.filter(otherWall =>
+                    otherWall.id !== wall.id &&
                     otherWall.nodes.some(n => Math.abs(n.x - nodeA.x) < 0.1 && Math.abs(n.y - nodeA.y) < 0.1)
                 );
-                
+
                 // Find other walls that share nodeB
-                const otherWallsAtNodeB = allWalls.filter(otherWall => 
-                    otherWall.id !== wall.id && 
+                const otherWallsAtNodeB = allWalls.filter(otherWall =>
+                    otherWall.id !== wall.id &&
                     otherWall.nodes.some(n => Math.abs(n.x - nodeB.x) < 0.1 && Math.abs(n.y - nodeB.y) < 0.1)
                 );
-                
+
                 // At shared junctions, only the wall with the "smaller" ID draws the inner line
                 // This ensures consistent assignment and prevents overlap
-                const shouldDrawInnerAtNodeA = otherWallsAtNodeA.length === 0 || 
+                const shouldDrawInnerAtNodeA = otherWallsAtNodeA.length === 0 ||
                     otherWallsAtNodeA.every(otherWall => wall.id < otherWall.id);
-                    
-                const shouldDrawInnerAtNodeB = otherWallsAtNodeB.length === 0 || 
+
+                const shouldDrawInnerAtNodeB = otherWallsAtNodeB.length === 0 ||
                     otherWallsAtNodeB.every(otherWall => wall.id < otherWall.id);
 
                 const openings = edgeOpenings.get(edge.id) || [];
@@ -368,12 +439,12 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                             // Don't draw inner line if segment touches a shared junction where we're not responsible
                             const isAtStartJunction = segment.startT === 0;
                             const isAtEndJunction = segment.endT === 1;
-                            
+
                             // If segment starts at a shared junction and we're not responsible, don't draw inner line
                             const canDrawAtStart = !isAtStartJunction || shouldDrawInnerAtNodeA;
                             // If segment ends at a shared junction and we're not responsible, don't draw inner line
                             const canDrawAtEnd = !isAtEndJunction || shouldDrawInnerAtNodeB;
-                            
+
                             // Only draw inner line if we can draw at both ends
                             const shouldDrawInnerLine = canDrawAtStart && canDrawAtEnd;
 
@@ -383,10 +454,10 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
 
                             // For rounded corners, we'll use quadratic bezier curves at junction points
                             // This creates smooth transitions without needing to look at adjacent segments
-                            
+
                             // Build fill path with rounded corners using quadratic curves
                             let fillPath = `M ${p1.x} ${p1.y}`;
-                            
+
                             // Outer edge (left side) - add rounded corner at end if at junction
                             if (isAtEndJunction) {
                                 // Use quadratic curve for smooth corner
@@ -396,11 +467,11 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                             } else {
                                 fillPath += ` L ${p2.x} ${p2.y}`;
                             }
-                            
+
                             // Inner edge (right side)
                             if (shouldDrawInnerLine) {
                                 fillPath += ` L ${p3.x} ${p3.y}`;
-                                
+
                                 // Start corner with rounded transition
                                 if (isAtStartJunction) {
                                     const midX = p4.x;
@@ -412,7 +483,7 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                             } else {
                                 fillPath += ` L ${p3.x} ${p3.y} L ${p4.x} ${p4.y}`;
                             }
-                            
+
                             fillPath += ' Z';
 
                             // Build outer edge path with rounded corners using strokeLinejoin
@@ -509,13 +580,23 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                 const junctionB = junctions.get(edge.nodeB)?.[edge.id];
                 if (!junctionA || !junctionB) return null;
 
-                // Check if nodeA is an endpoint (only has this one edge)
+                // Check if nodeA is an endpoint (only has this one edge in THIS wall)
                 const nodeAEdges = edges.filter(e => e.nodeA === edge.nodeA || e.nodeB === edge.nodeA);
-                const nodeAIsEndpoint = nodeAEdges.length === 1;
+                // AND check if it's shared with any other wall
+                const { walls: allWalls } = useProjectStore.getState();
+                const isNodeAShared = allWalls.some(w =>
+                    w.id !== wall.id &&
+                    w.nodes.some(n => Math.abs(n.x - nodeA.x) < 0.1 && Math.abs(n.y - nodeA.y) < 0.1)
+                );
+                const nodeAIsEndpoint = nodeAEdges.length === 1 && !isNodeAShared;
 
-                // Check if nodeB is an endpoint (only has this one edge)
+                // Check if nodeB is an endpoint
                 const nodeBEdges = edges.filter(e => e.nodeA === edge.nodeB || e.nodeB === edge.nodeB);
-                const nodeBIsEndpoint = nodeBEdges.length === 1;
+                const isNodeBShared = allWalls.some(w =>
+                    w.id !== wall.id &&
+                    w.nodes.some(n => Math.abs(n.x - nodeB.x) < 0.1 && Math.abs(n.y - nodeB.y) < 0.1)
+                );
+                const nodeBIsEndpoint = nodeBEdges.length === 1 && !isNodeBShared;
 
                 return (
                     <g key={`cap-${edge.id}`}>
