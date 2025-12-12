@@ -2,19 +2,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800.000" height="600.000" viewBox="0.0 0.0 800.000 600.000" version="1.1">
   <desc>Produce by Acme CAD Converter</desc>
 <path d="M69.26 369.04L382.64 369.04"
-fill="none" stroke="black" stroke-width="0.5"/>
+fill="none" stroke="black" stroke-width="5"/>
 <path d="M382.64 369.04L382.64 225.05Z"
-fill="none" stroke="black" stroke-width="0.5"/>
+fill="none" stroke="black" stroke-width="5"/>
 <path d="M382.64 225.05L69.26 225.05"
-fill="none" stroke="black" stroke-width="0.5"/>
+fill="none" stroke="black" stroke-width="5"/>
 <path d="M69.26 225.05L69.26 369.04Z"
-fill="none" stroke="black" stroke-width="0.5"/>
+fill="none" stroke="black" stroke-width="5"/>
 <path d="M72.64 365.65L379.25 365.65"
-fill="none" stroke="black" stroke-width="0.5"/>
+fill="none" stroke="black" stroke-width="5"/>
 <path d="M379.25 365.65L379.25 228.44Z"
-fill="none" stroke="black" stroke-width="0.5"/>
+fill="none" stroke="black" stroke-width="5"/>
 <path d="M379.25 228.44L72.64 228.44"
-fill="none" stroke="black" stroke-width="0.5"/>
+fill="none" stroke="black" stroke-width="5"/>
 <path d="M72.64 228.44L72.64 365.65Z"
-fill="none" stroke="black" stroke-width="0.5"/>
+fill="none" stroke="black" stroke-width="5"/>
 </svg>
