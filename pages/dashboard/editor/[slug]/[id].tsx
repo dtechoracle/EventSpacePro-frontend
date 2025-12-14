@@ -169,12 +169,12 @@ export default function Editor() {
       setCurrentEventData(eventData);
 
       // Load event data into projectStore using the new action
-      if (id && typeof id === 'string') {
+      if (id && typeof id === 'string' && slug && typeof slug === 'string') {
         // IMPORTANT: Clear workspace first to prevent localStorage pollution
         // This ensures new events start clean even if persist middleware hydrated old data
         useProjectStore.getState().clearWorkspace?.();
 
-        useProjectStore.getState().loadEvent(id);
+        useProjectStore.getState().loadEvent(id, slug);
       }
 
       // Also keep sceneStore in sync for now if needed, or rely on projectStore
@@ -296,7 +296,7 @@ export default function Editor() {
 
   // Auto-save functionality
   useEffect(() => {
-    if (!currentEventData || !id || typeof id !== 'string') return;
+    if (!currentEventData || !id || typeof id !== 'string' || !slug || typeof slug !== "string") return;
 
     const timeoutId = setTimeout(() => {
       const projectStore = useProjectStore.getState();
@@ -305,24 +305,24 @@ export default function Editor() {
       // Or we can check useSceneStore.hasUnsavedChanges as a proxy if they are synced
 
       if (projectStore.hasUnsavedChanges) {
-        projectStore.saveEvent(id);
+        projectStore.saveEvent(id, slug);
       }
     }, 3000);
 
     return () => clearTimeout(timeoutId);
-  }, [currentEventData, id]);
+  }, [currentEventData, id, slug]);
 
   // Manual save function
   const handleSave = useCallback(async () => {
-    if (!currentEventData || !id || typeof id !== 'string') {
+    if (!currentEventData || !id || typeof id !== 'string' || !slug || typeof slug !== 'string') {
       return;
     }
 
-    await useProjectStore.getState().saveEvent(id);
+    await useProjectStore.getState().saveEvent(id, slug);
 
     // Update local state to reflect save
     markAsSaved();
-  }, [currentEventData, id, markAsSaved]);
+  }, [currentEventData, id, markAsSaved, slug]);
 
   // Keyboard shortcut for saving (Ctrl+S)
   useEffect(() => {
