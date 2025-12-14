@@ -89,11 +89,11 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
 
   const router = useRouter();
-  const { id } = router.query;
+  const { id, slug } = router.query;
 
   const handleSave = async () => {
-    if (id && typeof id === 'string') {
-      await saveEvent(id);
+    if (id && typeof id === 'string' && slug && typeof slug === 'string') {
+      await saveEvent(id, slug);
     }
   };
 
@@ -412,10 +412,14 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span className="text-gray-500">Stroke Width</span>
                       <input
                         type="number"
-                        value={(selectedItem as any).strokeWidth || 1}
-                        onChange={(e) => updateShape(selectedItem.id, { strokeWidth: Number(e.target.value) })}
+                        value={(selectedItem as any).strokeWidth !== undefined ? (selectedItem as any).strokeWidth : 2}
+                        onChange={(e) => {
+                          const value = Number(e.target.value);
+                          updateShape(selectedItem.id, { strokeWidth: value >= 0 ? value : 2 });
+                        }}
                         className="sidebar-input w-16 text-right"
                         min={0}
+                        step={0.5}
                       />
                     </div>
                   </div>

@@ -1,14 +1,15 @@
 "use client";
 
-import MainLayout from "../layouts/MainLayout";
-import { BsStars, BsClock, BsCalendar } from "react-icons/bs";
+import { BsStars, BsClock, BsCalendar, BsSearch, BsBoxArrowUpRight, BsStar, BsStarFill } from "react-icons/bs";
 import { useUserStore } from "@/store/userStore";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import { useRouter } from "next/router";
 import { motion } from "framer-motion";
 import WorkspacePreview from "@/components/WorkspacePreview";
+import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
+import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
 
 interface EventData {
   _id: string;
@@ -44,42 +45,140 @@ interface ApiResponse {
 const Dashboard = () => {
   const { user, fetchUser } = useUserStore();
   const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showCreateEventModal, setShowCreateEventModal] = useState(false);
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+
+  // Load favorites from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedFavorites = localStorage.getItem('event-favorites');
+      if (savedFavorites) {
+        try {
+          setFavorites(new Set(JSON.parse(savedFavorites)));
+        } catch (e) {
+          console.error('Failed to load favorites:', e);
+        }
+      }
+    }
+  }, []);
+
+  // Save favorites to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('event-favorites', JSON.stringify(Array.from(favorites)));
+    }
+  }, [favorites]);
+
+  const toggleFavorite = (eventId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    setFavorites(prev => {
+      const newFavorites = new Set(prev);
+      if (newFavorites.has(eventId)) {
+        newFavorites.delete(eventId);
+      } else {
+        newFavorites.add(eventId);
+      }
+      return newFavorites;
+    });
+  };
 
   useEffect(() => {
+    // Fetch user on mount and check periodically
     fetchUser();
+    
+    // Set up interval to check user status every 30 seconds
+    const interval = setInterval(() => {
+      fetchUser();
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, [fetchUser]);
 
   const { data, isLoading } = useQuery<ApiResponse>({
     queryKey: ["projects"],
-    queryFn: () => apiRequest("/projects", "GET", null, true),
+    queryFn: () => {
+      console.log('[Dashboard] Fetching projects from DATABASE');
+      return apiRequest("/projects", "GET", null, true);
+    },
+    staleTime: 0, // Always refetch
+    gcTime: 0, // Don't cache
   });
 
   // Fetch events for all projects separately to get full event data
+  // CRITICAL: Fetch each event individually to get full canvasData
   const { data: allProjectEvents, isLoading: isLoadingEvents } = useQuery({
     queryKey: ["all-events", data?.data?.map(p => p.slug)],
     queryFn: async () => {
       if (!data?.data) return [];
+      
+      console.log('[Dashboard] Fetching ALL events from DATABASE for projects:', data.data.map(p => p.slug));
 
       // Fetch events for each project
-      const eventPromises = data.data.map(project =>
-        apiRequest(`/projects/${project.slug}/events`, "GET", null, true)
-          .then(res => ({
+      const eventPromises = data.data.map(async (project) => {
+        try {
+          console.log(`[Dashboard] Fetching events from DATABASE for project: ${project.slug}`);
+          const res = await apiRequest(`/projects/${project.slug}/events`, "GET", null, true);
+          const events = res.data || [];
+          
+          console.log(`[Dashboard] ✅ Fetched ${events.length} events from DATABASE for project ${project.slug}`);
+          
+          // CRITICAL: Fetch full event data for each event to get canvasData
+          const fullEventPromises = events.map(async (event: any) => {
+            try {
+              console.log(`[Dashboard] Fetching full event data from DATABASE: ${project.slug}/${event._id}`);
+              const fullEventRes = await apiRequest(`/projects/${project.slug}/events/${event._id}`, "GET", null, true);
+              const fullEvent = fullEventRes.data || fullEventRes;
+              console.log(`[Dashboard] ✅ Fetched full event data from DATABASE: ${event._id}`, {
+                hasCanvasData: !!fullEvent.canvasData,
+                canvasDataWalls: fullEvent.canvasData?.walls?.length || 0,
+                canvasDataShapes: fullEvent.canvasData?.shapes?.length || 0,
+                canvasDataAssets: fullEvent.canvasData?.assets?.length || 0,
+                hasCanvasAssets: !!fullEvent.canvasAssets,
+                canvasAssetsCount: fullEvent.canvasAssets?.length || 0,
+              });
+              return fullEvent;
+            } catch (error: any) {
+              console.error(`[Dashboard] ❌ Failed to fetch full event ${event._id} from DATABASE:`, {
+                error: error.message,
+                isCorsError: error.message?.includes('CORS'),
+                eventId: event._id,
+                projectSlug: project.slug,
+              });
+              // Return basic event data if full fetch fails
+              return { ...event, canvasData: null, canvasAssets: [] };
+            }
+          });
+          
+          const fullEvents = await Promise.all(fullEventPromises);
+          
+          return {
             projectSlug: project.slug,
             projectName: project.name,
             projectId: project._id,
-            events: res.data || []
-          }))
-          .catch(() => ({
+            events: fullEvents
+          };
+        } catch (error: any) {
+          console.error(`[Dashboard] ❌ Failed to fetch events for project ${project.slug} from DATABASE:`, {
+            error: error.message,
+            isCorsError: error.message?.includes('CORS'),
+            projectSlug: project.slug,
+          });
+          return {
             projectSlug: project.slug,
             projectName: project.name,
             projectId: project._id,
             events: []
-          }))
-      );
+          };
+        }
+      });
 
       return Promise.all(eventPromises);
     },
     enabled: !!data?.data && data.data.length > 0,
+    staleTime: 0, // Always refetch
+    gcTime: 0, // Don't cache
+    refetchOnMount: true, // Always refetch on mount
   });
 
   // Flatten all events from separately fetched event data
@@ -108,8 +207,15 @@ const Dashboard = () => {
     });
   }, [allProjectEvents]);
 
-  // Get recent events (limit to 6)
-  const recentEvents = allEvents.slice(0, 6);
+  // Filter events by search query
+  const filteredEvents = useMemo(() => {
+    if (!searchQuery) return allEvents;
+    const query = searchQuery.toLowerCase();
+    return allEvents.filter(event => 
+      event.name?.toLowerCase().includes(query) ||
+      event.projectName?.toLowerCase().includes(query)
+    );
+  }, [allEvents, searchQuery]);
 
   const getTimeAgo = (dateString: string | undefined) => {
     if (!dateString) return "Recently";
@@ -122,27 +228,78 @@ const Dashboard = () => {
     const diffInMs = now.getTime() - updated.getTime();
     const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
 
-    if (diffInDays === 0) return "Today";
-    if (diffInDays === 1) return "Yesterday";
-    if (diffInDays < 7) return `${diffInDays} days ago`;
-    if (diffInDays < 30) return `${Math.floor(diffInDays / 7)} weeks ago`;
-    return `${Math.floor(diffInDays / 30)} months ago`;
+    if (diffInDays === 0) return "Edited now";
+    if (diffInDays === 1) return "Edited yesterday";
+    if (diffInDays < 7) return `Edited ${diffInDays} days ago`;
+    if (diffInDays < 30) return `Edited ${Math.floor(diffInDays / 7)} weeks ago`;
+    return `Edited ${Math.floor(diffInDays / 30)} months ago`;
   };
 
-  // Calculate stats
-  const totalProjects = data?.data?.length || 0;
-  const totalEvents = allEvents.length;
-
   // Normalize event data into preview-friendly shapes/walls/assets
+  // IMPORTANT: This should ONLY use data from the database (event parameter), NOT localStorage
   const buildPreviewData = (event: EventData) => {
+    // PRIORITY 1: Use canvasData if available (preferred format)
     const walls = (event.canvasData?.walls as any[]) || [];
-    const shapes = (event.canvasData?.shapes as any[]) || [];
-    const assets = (event.canvasData?.assets as any[]) || [];
+    const rawShapes = (event.canvasData?.shapes as any[]) || [];
+    const rawAssets = (event.canvasData?.assets as any[]) || [];
+    
+    // Normalize shapes to ensure fill property is set
+    // Preserve ALL properties including width, height, x, y, etc.
+    const shapes = rawShapes.map((s: any) => {
+      const fill = (s.fill && s.fill !== 'transparent' && s.fill !== '') 
+        ? s.fill 
+        : (s.backgroundColor || 'transparent');
+      return {
+        ...s, // Preserve all original properties (width, height, x, y, rotation, etc.)
+        fill: fill, // Override fill with normalized value
+      };
+    });
+    
+    // Debug log to verify dimensions are preserved
+    if (shapes.length > 0) {
+      console.log(`[Dashboard] Normalized shapes with dimensions:`, shapes.map((s: any) => ({
+        id: s.id,
+        type: s.type,
+        width: s.width,
+        height: s.height,
+        x: s.x,
+        y: s.y,
+        fill: s.fill,
+      })));
+    }
+    
+    // Normalize assets to ensure fillColor property is set
+    const assets = rawAssets.map((a: any) => ({
+      ...a,
+      fillColor: a.fillColor || a.backgroundColor || '#3B82F6',
+    }));
 
     // If canvasData already has preview data, use it
     if (walls.length > 0 || shapes.length > 0 || assets.length > 0) {
+      console.log(`[Dashboard] Using canvasData for preview:`, {
+        eventId: event._id,
+        walls: walls.length,
+        shapes: shapes.length,
+        assets: assets.length,
+        sampleShape: shapes[0] ? { 
+          id: shapes[0].id, 
+          type: shapes[0].type,
+          width: shapes[0].width, 
+          height: shapes[0].height,
+          x: shapes[0].x,
+          y: shapes[0].y,
+          fill: shapes[0].fill, 
+        } : null,
+      });
       return { walls, shapes, assets };
     }
+    
+    // PRIORITY 2: Fallback to canvasAssets (most events use this format)
+    console.log(`[Dashboard] canvasData empty, using canvasAssets for preview:`, {
+      eventId: event._id,
+      hasCanvasAssets: !!event.canvasAssets,
+      canvasAssetsCount: event.canvasAssets?.length || 0,
+    });
 
     // Fallback: derive preview data from canvasAssets (new editor format)
     const fallbackWalls: any[] = [];
@@ -150,8 +307,44 @@ const Dashboard = () => {
     const fallbackAssets: any[] = [];
 
     if (event.canvasAssets && Array.isArray(event.canvasAssets)) {
+      console.log(`[Dashboard] Building preview from canvasAssets for event ${event._id}:`, {
+        canvasAssetsCount: event.canvasAssets.length,
+        assetTypes: event.canvasAssets.map((a: any) => a.type),
+      });
+
       event.canvasAssets.forEach((asset: any) => {
-        if (asset.type === "wall-segments" && asset.wallNodes && asset.wallEdges) {
+        // Handle wall-polygon type (new format)
+        if (asset.type === "wall-polygon" && asset.wallPolygon && Array.isArray(asset.wallPolygon)) {
+          // Convert wall-polygon to wall format with nodes and edges
+          const wallNodes = asset.wallPolygon.map((point: any, idx: number) => ({
+            id: `node-${asset.id}-${idx}`,
+            x: asset.x + (point.x || 0),
+            y: asset.y + (point.y || 0),
+          }));
+
+          // Create edges connecting consecutive nodes
+          const wallEdges = [];
+          for (let i = 0; i < wallNodes.length; i++) {
+            const nextIdx = (i + 1) % wallNodes.length;
+            wallEdges.push({
+              id: `edge-${asset.id}-${i}`,
+              nodeA: wallNodes[i].id,
+              nodeB: wallNodes[nextIdx].id,
+              thickness: asset.wallThickness || 75,
+            });
+          }
+
+          if (wallNodes.length > 0 && wallEdges.length > 0) {
+            fallbackWalls.push({
+              id: asset.id,
+              nodes: wallNodes,
+              edges: wallEdges,
+              zIndex: asset.zIndex || 0,
+            });
+          }
+        }
+        // Handle wall-segments type (legacy format)
+        else if (asset.type === "wall-segments" && asset.wallNodes && asset.wallEdges) {
           const wallNodes = asset.wallNodes.map((node: any, idx: number) => ({
             id: `node-${asset.id}-${idx}`,
             x: node.x,
@@ -171,169 +364,327 @@ const Dashboard = () => {
             edges: wallEdges,
             zIndex: asset.zIndex || 0,
           });
-        } else if (
+        }
+        // Handle line-segment type (convert to line shape)
+        else if (asset.type === "line-segment" && asset.startPoint && asset.endPoint) {
+          // Convert line-segment to line shape format
+          const startX = asset.startPoint.x || asset.x;
+          const startY = asset.startPoint.y || asset.y;
+          const endX = asset.endPoint.x || (asset.x + asset.width);
+          const endY = asset.endPoint.y || (asset.y + asset.height);
+          
+          fallbackShapes.push({
+            id: asset.id,
+            type: "line",
+            x: (startX + endX) / 2, // Center point
+            y: (startY + endY) / 2, // Center point
+            width: Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2)), // Length
+            height: 2, // Line thickness
+            rotation: asset.rotation || 0,
+            fill: asset.backgroundColor || "transparent",
+            stroke: asset.strokeColor || "#3B82F6",
+            strokeWidth: asset.strokeWidth || 2,
+            points: [
+              { x: startX - (startX + endX) / 2, y: startY - (startY + endY) / 2 },
+              { x: endX - (startX + endX) / 2, y: endY - (startY + endY) / 2 },
+            ],
+            zIndex: asset.zIndex || 0,
+          });
+        }
+        // Handle standard shape types (rectangle, ellipse, line, arrow, freehand)
+        else if (
           asset.type &&
           ["rectangle", "ellipse", "line", "arrow", "freehand"].includes(asset.type)
         ) {
+          // Use reasonable defaults for missing dimensions
+          const defaultWidth = asset.width || 100;
+          const defaultHeight = asset.height || 100;
+          
           fallbackShapes.push({
             id: asset.id,
             type: asset.type,
-            x: asset.x,
-            y: asset.y,
-            width: asset.width || 50,
-            height: asset.height || 50,
+            x: asset.x || 0,
+            y: asset.y || 0,
+            width: defaultWidth,
+            height: defaultHeight,
             rotation: asset.rotation || 0,
-            fill: asset.fillColor,
-            stroke: asset.strokeColor,
-            strokeWidth: asset.strokeWidth,
+            fill: asset.fillColor || asset.backgroundColor || "#3B82F6",
+            stroke: asset.strokeColor || "#1E40AF",
+            strokeWidth: asset.strokeWidth || 2,
             points: asset.points,
             zIndex: asset.zIndex || 0,
           });
-        } else if (asset.type) {
+          
+          console.log(`[Dashboard] Converted ${asset.type} shape for preview:`, {
+            id: asset.id,
+            x: asset.x,
+            y: asset.y,
+            width: defaultWidth,
+            height: defaultHeight,
+          });
+        }
+        // Handle other asset types (furniture, etc.)
+        else if (asset.type) {
+          // Use reasonable defaults based on asset type for preview
+          let defaultWidth = asset.width || 100;
+          let defaultHeight = asset.height || 100;
+          
+          if (asset.type.includes('chair')) {
+            defaultWidth = asset.width || 80;
+            defaultHeight = asset.height || 80;
+          } else if (asset.type.includes('table') || asset.type.includes('cocktail')) {
+            defaultWidth = asset.width || 200;
+            defaultHeight = asset.height || 200;
+          }
+          
           fallbackAssets.push({
             id: asset.id,
             type: asset.type,
-            x: asset.x,
-            y: asset.y,
-            width: asset.width || 50,
-            height: asset.height || 50,
+            x: asset.x || 0,
+            y: asset.y || 0,
+            width: defaultWidth,
+            height: defaultHeight,
             rotation: asset.rotation || 0,
             scale: asset.scale || 1,
             zIndex: asset.zIndex || 0,
           });
+          
+          console.log(`[Dashboard] Converted ${asset.type} asset for preview:`, {
+            id: asset.id,
+            x: asset.x,
+            y: asset.y,
+            width: defaultWidth,
+            height: defaultHeight,
+          });
         }
+      });
+
+      console.log(`[Dashboard] Built preview data for event ${event._id}:`, {
+        walls: fallbackWalls.length,
+        shapes: fallbackShapes.length,
+        assets: fallbackAssets.length,
+        shapesData: fallbackShapes.map(s => ({ id: s.id, type: s.type, x: s.x, y: s.y, width: s.width, height: s.height })),
       });
     }
 
-    return { walls: fallbackWalls, shapes: fallbackShapes, assets: fallbackAssets };
+    const result = { walls: fallbackWalls, shapes: fallbackShapes, assets: fallbackAssets };
+    console.log(`[Dashboard] Final preview data for event ${event._id}:`, {
+      totalWalls: result.walls.length,
+      totalShapes: result.shapes.length,
+      totalAssets: result.assets.length,
+      hasAnyContent: result.walls.length > 0 || result.shapes.length > 0 || result.assets.length > 0,
+    });
+    return result;
   };
 
   return (
-    <MainLayout>
-      <div className="p-6">
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
+      {/* Left Sidebar */}
+      <DashboardSidebar />
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-4xl font-bold">Hi, {user?.firstName}!</h1>
-            <p className="text-gray-500 mt-1">Welcome back to your workspace</p>
-          </div>
-          <button
-            onClick={() => router.push("/dashboard/projects")}
-            className="bg-[var(--accent)] flex items-center gap-3 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition"
-          >
-            <BsStars />
-            Create Event with AI
-          </button>
-        </div>
-
-        {/* Quick Stats Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <div className="bg-white rounded-xl p-6 shadow-md">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-sm mb-1">Total Projects</p>
-                <p className="text-3xl font-bold">{totalProjects}</p>
-              </div>
-              <BsCalendar className="text-3xl text-[var(--accent)] opacity-50" />
+        <div className="bg-white/60 backdrop-blur-sm border-b border-gray-300/50 px-8 py-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-[var(--accent)]">
+                My Events
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">Manage and organize your event spaces</p>
             </div>
-          </div>
-
-          <div className="bg-white rounded-xl p-6 shadow-md">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-sm mb-1">Total Events</p>
-                <p className="text-3xl font-bold">{totalEvents}</p>
-              </div>
-              <BsStars className="text-3xl text-purple-500 opacity-50" />
-            </div>
-          </div>
-        </div>
-
-        {/* Recent Events Section */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <BsCalendar className="text-xl text-gray-600" />
-              <h2 className="text-2xl font-semibold">Recent Events</h2>
-            </div>
-            <button
-              onClick={() => router.push("/dashboard/projects")}
-              className="text-[var(--accent)] hover:underline text-sm"
-            >
-              View all projects
-            </button>
-          </div>
-
-          {(isLoading || isLoadingEvents) ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div
-                  key={i}
-                  className="bg-gray-100 rounded-xl h-64 animate-pulse"
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <BsSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search events..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent w-64 bg-white/80"
                 />
-              ))}
-            </div>
-          ) : recentEvents.length === 0 ? (
-            <div className="bg-gray-50 rounded-xl p-12 text-center">
-              <BsCalendar className="text-4xl text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 mb-4">No events yet</p>
+              </div>
+              <select className="px-4 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--accent)] bg-white/80">
+                <option>Last modified ↓</option>
+                <option>Last modified ↑</option>
+                <option>Name A-Z</option>
+                <option>Name Z-A</option>
+              </select>
               <button
                 onClick={() => router.push("/dashboard/projects")}
-                className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+                className="px-5 py-2.5 text-sm font-medium border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors bg-white/80"
               >
-                Create your first event
+                Import
+              </button>
+              <button
+                onClick={() => setShowCreateEventModal(true)}
+                className="px-5 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-xl hover:opacity-90 flex items-center gap-2 shadow-md transition-opacity"
+              >
+                <BsStars className="w-4 h-4" />
+                <span>New Event</span>
               </button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {recentEvents.map((event) => {
-                // Extract workspace data (with fallback from canvasAssets)
-                const { walls, shapes, assets } = buildPreviewData(event);
-
-                return (
-                  <motion.div
-                    key={event._id}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => router.push(`/dashboard/editor/${event.projectSlug}/${event._id}`)}
-                    className="bg-white rounded-xl shadow-md overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
-                  >
-                    {/* Workspace Preview - Auto-cropped */}
-                    <div className="relative">
-                      <WorkspacePreview
-                        walls={walls}
-                        shapes={shapes}
-                        assets={assets}
-                        width={400}
-                        height={192}
-                        backgroundColor="#f9fafb"
-                      />
-                      {/* Subtle overlay for better text readability */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent pointer-events-none" />
-                    </div>
-
-                    {/* Event Info */}
-                    <div className="p-4">
-                      <h3 className="font-semibold text-lg mb-1 truncate">
-                        {event.name || "Unnamed Event"}
-                      </h3>
-                      <p className="text-xs text-gray-400 mb-2 truncate">
-                        {event.projectName || "Unknown Project"}
-                      </p>
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <BsClock className="text-xs" />
-                        <span>Updated {getTimeAgo(event.updatedAt || event.createdAt)}</span>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          )}
+          </div>
         </div>
 
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-8">
+          {showCreateEventModal && (
+            <CreateEventModal onClose={() => setShowCreateEventModal(false)} />
+          )}
+          
+          {/* Events Section */}
+          <div className="mb-10">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-800">Recent Events</h2>
+              <span className="text-sm text-gray-500">{filteredEvents.length} {filteredEvents.length === 1 ? 'event' : 'events'}</span>
+            </div>
+            {(isLoading || isLoadingEvents) ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="bg-gray-100 rounded-lg h-48 animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : filteredEvents.length === 0 ? (
+              <div className="bg-gray-50 rounded-lg p-12 text-center">
+                <BsCalendar className="text-4xl text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 mb-4">No models yet</p>
+                <button
+                  onClick={() => setShowCreateEventModal(true)}
+                  className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
+                >
+                  Create your first model
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {filteredEvents.map((event) => {
+                  const { walls, shapes, assets } = buildPreviewData(event);
+                  
+                  // Debug logging - always log to track preview data
+                  console.log(`[Dashboard] Event ${event._id} preview data from DATABASE:`, {
+                    eventName: event.name,
+                    eventId: event._id,
+                    walls: walls.length,
+                    shapes: shapes.length,
+                    assets: assets.length,
+                    hasCanvasData: !!event.canvasData,
+                    canvasDataWalls: event.canvasData?.walls?.length || 0,
+                    canvasDataShapes: event.canvasData?.shapes?.length || 0,
+                    canvasDataAssets: event.canvasData?.assets?.length || 0,
+                    hasCanvasAssets: !!event.canvasAssets,
+                    canvasAssetsCount: event.canvasAssets?.length || 0,
+                  });
+
+                  const isFavorite = favorites.has(event._id);
+
+                  return (
+                    <div key={event._id} className="flex flex-col">
+                      {/* Card with Preview Only */}
+                      <div
+                        onClick={() => {
+                          console.log(`[Dashboard] Navigating to event: ${event.projectSlug}/${event._id}`);
+                          router.push(`/dashboard/editor/${event.projectSlug}/${event._id}`);
+                        }}
+                        className="bg-white rounded-lg border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-colors group relative"
+                      >
+                        {/* Star Icon - Top Right Corner */}
+                        <button
+                          onClick={(e) => toggleFavorite(event._id, e)}
+                          className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-white/90 backdrop-blur-sm shadow-md hover:bg-white transition-colors"
+                          aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                        >
+                          {isFavorite ? (
+                            <BsStarFill className="w-4 h-4 text-yellow-500" />
+                          ) : (
+                            <BsStar className="w-4 h-4 text-gray-400 hover:text-yellow-500 transition-colors" />
+                          )}
+                        </button>
+
+                        {/* Workspace Preview - Wider than tall */}
+                        <div className="bg-white w-full relative overflow-hidden" style={{ aspectRatio: '2.5/1', height: '160px' }}>
+                          <WorkspacePreview
+                            walls={walls}
+                            shapes={shapes}
+                            assets={assets}
+                            width={400}
+                            height={160}
+                            backgroundColor="#ffffff"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Event Info - Outside the card, below */}
+                      <div className="mt-2">
+                        <h3 className="font-semibold text-sm mb-1 truncate text-gray-800 hover:text-blue-600 transition-colors cursor-pointer" onClick={() => router.push(`/dashboard/editor/${event.projectSlug}/${event._id}`)}>
+                          {event.name || "Unnamed Event"}
+                        </h3>
+                        <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                          <BsClock className="w-3 h-3" />
+                          {getTimeAgo(event.updatedAt || event.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Templates Section */}
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-800">Templates</h2>
+              <a href="#" className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                View all <BsBoxArrowUpRight className="w-3 h-3" />
+              </a>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {/* Template Placeholder Cards */}
+              <motion.div
+                whileHover={{ scale: 1.03, y: -4 }}
+                className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
+              >
+                <div className="h-40 bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center">
+                  <div className="text-white text-5xl">🛏️</div>
+                </div>
+                <div className="p-4">
+                  <h3 className="font-semibold text-sm text-gray-800">Bedroom</h3>
+                  <p className="text-xs text-gray-500 mt-1">Bedroom layout template</p>
+                </div>
+              </motion.div>
+              <motion.div
+                whileHover={{ scale: 1.03, y: -4 }}
+                className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
+              >
+                <div className="h-40 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+                  <div className="text-white text-5xl">💼</div>
+                </div>
+                <div className="p-4">
+                  <h3 className="font-semibold text-sm text-gray-800">Office Space</h3>
+                  <p className="text-xs text-gray-500 mt-1">Office layout template</p>
+                </div>
+              </motion.div>
+              <motion.div
+                whileHover={{ scale: 1.03, y: -4 }}
+                className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
+              >
+                <div className="h-40 bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center">
+                  <div className="text-gray-500 text-4xl">📐</div>
+                </div>
+                <div className="p-4">
+                  <h3 className="font-semibold text-sm text-gray-800">Starter Template</h3>
+                  <p className="text-xs text-gray-500 mt-1">Begin with a blank canvas</p>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </div>
       </div>
-    </MainLayout>
+    </div>
   );
 };
 

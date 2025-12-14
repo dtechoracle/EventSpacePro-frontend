@@ -1,10 +1,12 @@
 import EventCard from "@/pages/(components)/projects/EventCard";
-import TopBar from "@/pages/(components)/projects/TopBar";
-import MainLayout from "@/pages/layouts/MainLayout";
+import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import { useRouter } from "next/router";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import { AssetInstance } from "@/store/sceneStore";
+import { BsSearch } from "react-icons/bs";
+import { useState } from "react";
+import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
 
 interface EventData {
   _id: string;
@@ -55,6 +57,8 @@ const EventCardShimmer = () => (
 const Events = () => {
   const router = useRouter();
   const { slug } = router.query;
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showCreateEventModal, setShowCreateEventModal] = useState(false);
 
   const { data, isLoading, error } = useQuery<ApiResponse>({
     queryKey: ["events", slug],
@@ -63,10 +67,59 @@ const Events = () => {
   });
 
   return (
-    <MainLayout>
-      <div className="w-full min-h-screen bg-gray-50/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-          <TopBar mainText={`Project ${slug}`} subText="Events" type="event" />
+    <div className="h-screen flex overflow-hidden bg-gray-50">
+      <DashboardSidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="bg-white/60 backdrop-blur-sm border-b border-gray-300/50 px-8 py-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-[var(--accent)]">
+                {slug ? `Project ${slug}` : "Events"}
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">Manage and organize your events</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <BsSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search events..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent w-64 bg-white/80"
+                />
+              </div>
+              <select className="px-4 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--accent)] bg-white/80">
+                <option>Last modified ↓</option>
+                <option>Last modified ↑</option>
+                <option>Name A-Z</option>
+                <option>Name Z-A</option>
+              </select>
+              <button
+                className="px-5 py-2.5 text-sm font-medium border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors bg-white/80"
+              >
+                Import
+              </button>
+              <button
+                onClick={() => setShowCreateEventModal(true)}
+                className="px-5 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-xl hover:opacity-90 flex items-center gap-2 shadow-md transition-opacity"
+              >
+                <span>New Event</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-8">
+          {showCreateEventModal && (
+            <CreateEventModal onClose={() => setShowCreateEventModal(false)} />
+          )}
+          
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold">Events</h2>
+          </div>
 
           {isLoading && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -99,7 +152,7 @@ const Events = () => {
           )}
         </div>
       </div>
-    </MainLayout>
+    </div>
   );
 };
 

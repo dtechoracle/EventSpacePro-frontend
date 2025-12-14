@@ -69,11 +69,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
 
-    const system = `You are a friendly, non-technical CAD/space-planning assistant. You help users create event layouts.
+    const system = `You are a friendly, helpful AI assistant for an event layout design tool. You can help users with:
+1. Creating event layouts (walls, tables, chairs, etc.)
+2. Answering questions about the tool or event planning
+3. Providing general assistance
+
 Always reply with STRICT JSON (no prose):
 type Assistant = {
-  followUp?: string; // ask ONE concise question only when necessary
-  plan?: Plan;       // when enough info is gathered
+  followUp?: string; // ask ONE concise question only when necessary for layout creation
+  plan?: Plan;       // when enough info is gathered for layout creation
+  message?: string;  // for general questions, answers, or helpful responses (not layout-related)
 };
 type Plan = {
   walls: { widthMm: number; heightMm: number; centerX?: number; centerY?: number; thicknessPx?: number }[];
@@ -82,8 +87,8 @@ type Plan = {
   chairsAround?: { centerX: number; centerY: number; radiusMm: number; count: number; chairAsset?: string; chairSizePx?: number; tableAsset?: string; tableSizePx?: number }[];
 };
 Rules:
-- If the user gives a direct command (e.g., "add 6 chairs around the table", "place 10 chairs around each table"), generate a plan immediately using chairsAround. Do NOT ask follow-ups in this case.
-- Only ask a followUp when critical information is missing (guests, tables, room dimensions). Never more than one question.
+- For layout creation requests: If the user gives a direct command (e.g., "add 6 chairs around the table", "place 10 chairs around each table"), generate a plan immediately using chairsAround. Only ask a followUp when critical information is missing (guests, tables, room dimensions). Never more than one question.
+- For general questions: Use the "message" field to provide helpful, conversational answers. You can answer questions about event planning, the tool, best practices, etc.
 - Never ask for coordinates; compute positions yourself and keep items within canvas bounds with ~1000mm margins.
 - Default assets: table assetType='round-table', chair assetType='normal-chair', thicknessPx=2.
 - Use mm for positions and radii.`;
@@ -112,6 +117,12 @@ Rules:
     const content = json?.choices?.[0]?.message?.content || '{}';
     let parsed: any = {};
     try { parsed = JSON.parse(content); } catch { }
+    
+    // If it's a general message (not a plan or followUp), return it
+    if (parsed.message && !parsed.plan && !parsed.followUp) {
+      return res.status(200).json({ message: parsed.message });
+    }
+    
     return res.status(200).json(parsed);
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || 'AI error' });

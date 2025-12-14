@@ -23,12 +23,14 @@ export function calculateWorkspaceBounds(
         });
     });
 
-    // Process shapes
+    // Process shapes (shapes are centered at x, y)
     shapes.forEach(shape => {
-        const left = shape.x;
-        const top = shape.y;
-        const right = shape.x + shape.width;
-        const bottom = shape.y + shape.height;
+        const halfWidth = shape.width / 2;
+        const halfHeight = shape.height / 2;
+        const left = shape.x - halfWidth;
+        const top = shape.y - halfHeight;
+        const right = shape.x + halfWidth;
+        const bottom = shape.y + halfHeight;
 
         minX = Math.min(minX, left);
         minY = Math.min(minY, top);
@@ -36,12 +38,16 @@ export function calculateWorkspaceBounds(
         maxY = Math.max(maxY, bottom);
     });
 
-    // Process assets
+    // Process assets (assets are centered at x, y)
     assets.forEach(asset => {
-        const left = asset.x;
-        const top = asset.y;
-        const right = asset.x + asset.width;
-        const bottom = asset.y + asset.height;
+        const scaledWidth = (asset.width || 50) * (asset.scale || 1);
+        const scaledHeight = (asset.height || 50) * (asset.scale || 1);
+        const halfWidth = scaledWidth / 2;
+        const halfHeight = scaledHeight / 2;
+        const left = asset.x - halfWidth;
+        const top = asset.y - halfHeight;
+        const right = asset.x + halfWidth;
+        const bottom = asset.y + halfHeight;
 
         minX = Math.min(minX, left);
         minY = Math.min(minY, top);
@@ -132,19 +138,28 @@ export function fitWorkspaceToContainer(
     }
 
     // Calculate zoom to fit content
-    const availableWidth = containerWidth - (padding * 2);
-    const availableHeight = containerHeight - (padding * 2);
+    // Use smaller padding for better cropping in previews
+    const effectivePadding = Math.min(padding, 20);
+    const availableWidth = containerWidth - (effectivePadding * 2);
+    const availableHeight = containerHeight - (effectivePadding * 2);
+
+    // Ensure we have valid dimensions
+    if (bounds.width <= 0 || bounds.height <= 0) {
+        return { zoom: 1, panX: 0, panY: 0 };
+    }
 
     const zoomX = availableWidth / bounds.width;
     const zoomY = availableHeight / bounds.height;
-    const zoom = Math.min(zoomX, zoomY, 1); // Don't zoom in, only out
+    // Use the smaller zoom to ensure everything fits (like Figma - always zoom out to fit all)
+    const zoom = Math.min(zoomX, zoomY);
 
-    // Calculate pan to center the content
+    // Calculate pan to center the content within the boundary
     const scaledWidth = bounds.width * zoom;
     const scaledHeight = bounds.height * zoom;
 
-    const panX = (containerWidth - scaledWidth) / 2 - (bounds.minX * zoom);
-    const panY = (containerHeight - scaledHeight) / 2 - (bounds.minY * zoom);
+    // Center the content in the container, accounting for the boundary
+    const panX = (containerWidth - scaledWidth) / 2 - (bounds.minX * zoom) + effectivePadding;
+    const panY = (containerHeight - scaledHeight) / 2 - (bounds.minY * zoom) + effectivePadding;
 
     return { zoom, panX, panY };
 }

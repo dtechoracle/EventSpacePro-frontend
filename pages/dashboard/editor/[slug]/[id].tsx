@@ -5,24 +5,31 @@ import BottomToolbar from "@/pages/(components)/editor/BottomToolBar";
 import PropertiesSidebar from "@/pages/(components)/editor/PropertiesSidebar";
 import Workspace2D from "@/components/Workspace2D"; // NEW WORKSPACE
 import Scene3D from "@/components/Scene3D";
-import MainLayout from "@/pages/layouts/MainLayout";
-import { useState, useEffect, useCallback } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
+import AiTrigger from "@/pages/(components)/AiTrigger";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
 import { useEditorStore } from "@/store/editorStore";
 import { useProjectStore } from "@/store/projectStore";
-import { useMultiplayer } from "@/hooks/useMultiplayer";
-import { CursorOverlay } from "@/components/ui/CursorOverlay";
-import { useAutoSave } from "@/hooks/useAutoSave";
-import SyncStatusBanner from "@/components/SyncStatusBanner";
-import toast from "react-hot-toast";
 import {
   useSceneStore,
-  EventData,
+  EventData as BaseEventData,
   AssetInstance,
   CanvasData,
 } from "@/store/sceneStore";
+
+// Extended EventData type with canvasData
+type EventData = BaseEventData & {
+  canvasData?: {
+    walls: any[];
+    shapes: any[];
+    assets: any[];
+    layers?: any[];
+    canvas?: any;
+  };
+};
 
 // Type for the payload we send to the API
 type UpdateEventPayload = {
@@ -30,6 +37,13 @@ type UpdateEventPayload = {
   type?: string;
   canvases: CanvasData[];
   canvasAssets: AssetInstance[];
+  canvasData?: {
+    walls: any[];
+    shapes: any[];
+    assets: any[];
+    layers?: any[];
+    canvas?: any;
+  };
 };
 
 export default function Editor() {
@@ -37,7 +51,41 @@ export default function Editor() {
   const [show3D, setShow3D] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
   const router = useRouter();
-  const { slug, id, preview, venueLayout } = router.query;
+  const { slug, id, preview, aiMode } = router.query;
+  const queryClient = useQueryClient();
+  
+  // Open AI modal if aiMode is set
+  useEffect(() => {
+    if (aiMode === 'true' && typeof window !== 'undefined') {
+      // Retry mechanism to ensure AiTrigger is mounted
+      let attempts = 0;
+      const maxAttempts = 10;
+      const tryOpenAI = () => {
+        attempts++;
+        try {
+          const openAI = (window as any).__ESP_OPEN_AI_CHAT__;
+          if (openAI && typeof openAI === 'function') {
+            openAI();
+            // Clear the query parameter after opening
+            router.replace({
+              pathname: router.pathname,
+              query: { ...router.query, aiMode: undefined }
+            }, undefined, { shallow: true });
+          } else if (attempts < maxAttempts) {
+            // Retry after 200ms if not ready
+            setTimeout(tryOpenAI, 200);
+          }
+        } catch (e) {
+          console.warn('Could not open AI chat:', e);
+        }
+      };
+      // Start trying after a short delay
+      setTimeout(tryOpenAI, 300);
+    }
+  }, [aiMode, router]);
+  
+  // Wait for router to be ready before enabling queries
+  const isRouterReady = router.isReady;
 
   // Detect if we're in an iframe or preview mode
   useEffect(() => {
@@ -46,88 +94,12 @@ export default function Editor() {
 
   // New stores
   const { activeTool, zoom, panX, panY, setZoom, setPan } = useEditorStore();
-  const { assets: projectAssets, walls, shapes, addWall, addShape } = useProjectStore();
+  const { assets: projectAssets, walls, shapes } = useProjectStore();
   const sceneAssets = useSceneStore((s) => s.assets);
-
-  // Multiplayer cursors
-  const { remoteCursors, updateCursor } = useMultiplayer(id as string | undefined, true);
-
-  // Auto-save with offline detection (saves every 30 seconds)
-  useAutoSave({ interval: 30000, enabled: !isInIframe });
-
-  //  Handle AI-analyzed venue layout
-  useEffect(() => {
-    if (!venueLayout || typeof venueLayout !== 'string') return;
-
-    try {
-      const layout = JSON.parse(venueLayout);
-      console.log('Auto-populating venue layout:', layout);
-
-      // Set canvas dimensions if provided
-      if (layout.dimensions) {
-        useProjectStore.setState({
-          canvas: {
-            width: layout.dimensions.width,
-            height: layout.dimensions.height,
-          }
-        });
-      }
-
-      // Add walls
-      if (layout.walls && Array.isArray(layout.walls)) {
-        layout.walls.forEach((wallData: any) => {
-          const wallId = `wall-${Date.now()}-${Math.random()}`;
-          addWall({
-            id: wallId,
-            nodes: [
-              { id: `${wallId}-node-0`, x: wallData.start.x, y: wallData.start.y },
-              { id: `${wallId}-node-1`, x: wallData.end.x, y: wallData.end.y },
-            ],
-            edges: [
-              {
-                id: `${wallId}-edge-0`,
-                nodeA: `${wallId}-node-0`,
-                nodeB: `${wallId}-node-1`,
-                thickness: wallData.thickness || 150,
-              },
-            ],
-            layerId: 'default',
-          });
-        });
-      }
-
-      // Add furniture as shapes
-      if (layout.furniture && Array.isArray(layout.furniture)) {
-        layout.furniture.forEach((item: any) => {
-          addShape({
-            id: `shape-${Date.now()}-${Math.random()}`,
-            type: item.type === 'circle' ? 'ellipse' : 'rectangle',
-            x: item.x,
-            y: item.y,
-            width: item.width,
-            height: item.height,
-            rotation: item.rotation || 0,
-            fillColor: '#E5E7EB',
-            strokeColor: '#6B7280',
-            strokeWidth: 2,
-            layerId: 'default',
-            zIndex: 1,
-          });
-        });
-      }
-
-      // Clear venueLayout from URL to prevent re-applying on refresh
-      router.replace(`/dashboard/editor/${slug}/${id}`, undefined, { shallow: true });
-
-      toast.success('Venue layout created from AI analysis!');
-    } catch (error) {
-      console.error('Failed to parse venue layout:', error);
-      toast.error('Failed to load venue layout');
-    }
-  }, [venueLayout, addWall, addShape, router, slug, id]);
 
   // Old scene store methods (for compatibility)
   const hasUnsavedChanges = useSceneStore((s) => s.hasUnsavedChanges);
+  const projectHasUnsavedChanges = useProjectStore((s) => s.hasUnsavedChanges);
   const syncToEventData = useSceneStore((s) => s.syncToEventData);
   const markAsSaved = useSceneStore((s) => s.markAsSaved);
 
@@ -140,46 +112,362 @@ export default function Editor() {
     data: eventData,
     isLoading,
     error,
+    refetch,
   } = useQuery<EventData>({
     queryKey: ["event", slug, id],
-    queryFn: () =>
-      apiRequest(`/projects/${slug}/events/${id}`, "GET", null, true),
-    enabled: !!(slug && id),
+    queryFn: async () => {
+      const eventSlug = slug as string;
+      const eventId = id as string;
+      console.log(`[Editor] Fetching event from DATABASE: ${eventSlug}/${eventId}`);
+      const response = await apiRequest(`/projects/${eventSlug}/events/${eventId}`, "GET", null, true);
+      // apiRequest may return data directly or wrapped in response.data
+      const data = (response.data || response) as EventData;
+      const receivedId = data._id || (data as any).id;
+      console.log(`[Editor] Received event data from DATABASE:`, { 
+        requestedId: eventId, 
+        receivedId, 
+        name: data.name,
+        hasCanvasData: !!data.canvasData,
+        canvasDataWalls: data.canvasData?.walls?.length || 0,
+        canvasDataShapes: data.canvasData?.shapes?.length || 0,
+        canvasDataAssets: data.canvasData?.assets?.length || 0,
+      });
+      return data;
+    },
+    enabled: !!(isRouterReady && slug && id), // Only enable when router is ready
+    staleTime: 0, // Always refetch when route changes
+    gcTime: 0, // Don't cache (formerly cacheTime)
+    refetchOnMount: true, // Always refetch when component mounts
+    refetchOnWindowFocus: false, // Don't refetch on window focus
+    refetchInterval: false, // Don't auto-refetch periodically
   });
+
+  // Track if we just saved to prevent reloading
+  const justSavedRef = useRef(false);
 
   // Mutation to save canvas assets
   const saveCanvasAssets = useMutation({
     mutationFn: async (
       payload: UpdateEventPayload | { canvasAssets: AssetInstance[] }
     ) => {
+      console.log('[Editor] Saving to DATABASE...', { id, slug });
       return apiRequest(`/projects/${slug}/events/${id}`, "PUT", payload, true);
     },
     onSuccess: (savedData) => {
+      console.log('[Editor] ✅ Saved successfully to DATABASE');
       markAsSaved();
+      // Mark that we just saved to prevent reloading
+      justSavedRef.current = true;
+      // Update current event data but don't reload workspace
       setCurrentEventData(savedData);
+      // Reset the flag after a short delay
+      setTimeout(() => {
+        justSavedRef.current = false;
+      }, 1000);
     },
     onError: (error) => {
-      console.error("Failed to save canvas assets:", error);
+      console.error("[Editor] ❌ Failed to save canvas assets:", error);
+      justSavedRef.current = false;
     },
   });
 
+  // Reset currentEventData when route changes to ensure new event loads
+  useEffect(() => {
+    if (isRouterReady && id && slug) {
+      const eventId = id as string;
+      const eventSlug = slug as string;
+      console.log(`[Editor] Route changed to: ${eventSlug}/${eventId}, clearing ALL data`);
+      
+      // Clear current event data
+      setCurrentEventData(null);
+      
+      // CRITICAL: Reset project store to clear localStorage data
+      // This prevents loading old event data from localStorage
+      const projectStore = useProjectStore.getState();
+      projectStore.reset();
+      projectStore.clearWorkspace();
+      
+      // Clear the query cache for this specific event to force fresh fetch
+      queryClient.removeQueries({ queryKey: ["event", eventSlug, eventId] });
+      
+      // Invalidate and refetch the query to ensure fresh data from database
+      queryClient.invalidateQueries({ queryKey: ["event", eventSlug, eventId] });
+    }
+  }, [isRouterReady, id, slug, queryClient]);
+
   // Set current event data when loaded and sync to stores
   useEffect(() => {
-    if (eventData && eventData !== currentEventData) {
-      setCurrentEventData(eventData);
-
-      // Load event data into projectStore using the new action
-      if (id && typeof id === 'string' && slug && typeof slug === 'string') {
-        // IMPORTANT: Clear workspace first to prevent localStorage pollution
-        // This ensures new events start clean even if persist middleware hydrated old data
-        useProjectStore.getState().clearWorkspace?.();
-
-        useProjectStore.getState().loadEvent(id, slug);
+    // CRITICAL: Don't reload if we just saved - this prevents clearing newly drawn elements
+    if (justSavedRef.current) {
+      console.log('[Editor] Skipping reload - we just saved');
+      return;
+    }
+    
+    // Only load if we have new event data and it's actually different (by ID)
+    // This prevents clearing workspace when React Query refetches the same event
+    if (eventData && id) {
+      const eventId = eventData._id || (eventData as any).id;
+      const requestedId = id as string;
+      const currentId = currentEventData?._id || (currentEventData as any)?.id;
+      
+      // CRITICAL: Verify we're loading the correct event
+      if (eventId !== requestedId) {
+        console.error(`[Editor] MISMATCH! Requested event ${requestedId} but received ${eventId}`);
+        return;
       }
-
-      // Also keep sceneStore in sync for now if needed, or rely on projectStore
-      if (eventData.canvasAssets) {
+      
+      // CRITICAL: Only load if it's a different event OR if we don't have current event data yet
+      // Don't reload if it's the same event and we already have data (prevents clearing on refetch)
+      // Also check if we just saved to prevent clearing newly drawn elements
+      const shouldLoad = !currentEventData || currentId !== eventId;
+      
+      if (shouldLoad && !justSavedRef.current) {
+        console.log(`[Editor] Loading NEW event from DATABASE: ${eventId} (previous: ${currentId})`);
+      setCurrentEventData(eventData);
+        
+        // Load event data into stores for Workspace2D
+        const projectStore = useProjectStore.getState();
+        const sceneStore = useSceneStore.getState();
+        
+        // Always clear workspace when loading a different event to prevent localStorage pollution
+        const isDifferentEvent = !currentId || currentId !== eventId;
+        
+        if (isDifferentEvent) {
+          console.log(`[Editor] Clearing workspace before loading event ${eventId}`);
+          projectStore.reset();
+          projectStore.clearWorkspace();
+        }
+        
+        // PRIORITY 1: Load from canvasData (preferred format from DATABASE)
+        if (eventData.canvasData) {
+          const { walls = [], shapes = [], assets = [] } = eventData.canvasData;
+          
+          console.log(`[Editor] Loading canvasData from DATABASE:`, {
+            walls: walls.length,
+            shapes: shapes.length,
+            assets: assets.length,
+          });
+          
+          // Always load from DATABASE when opening an event
+          if (isDifferentEvent) {
+            walls.forEach((wall: any) => {
+              console.log(`[Editor] Adding wall:`, wall.id);
+              projectStore.addWall(wall);
+            });
+            shapes.forEach((shape: any) => {
+              console.log(`[Editor] Adding shape:`, shape.id, shape.type);
+              projectStore.addShape(shape);
+            });
+            assets.forEach((asset: any) => {
+              console.log(`[Editor] Adding asset:`, asset.id, asset.type);
+              projectStore.addAsset(asset);
+            });
+            
+            console.log(`[Editor] ✅ Loaded ${walls.length} walls, ${shapes.length} shapes, ${assets.length} assets from DATABASE`);
+          }
+        }
+      // PRIORITY 2: Fallback to canvasAssets (most events use this format)
+      else if (eventData.canvasAssets && Array.isArray(eventData.canvasAssets) && eventData.canvasAssets.length > 0) {
+        console.log(`[Editor] Loading from canvasAssets for event ${eventId} from DATABASE:`, {
+          canvasAssetsCount: eventData.canvasAssets.length,
+          assetTypes: eventData.canvasAssets.map((a: any) => a.type),
+        });
+        
+        // CRITICAL: Always clear and load from database when opening an event
+        // This ensures we show the actual database data, not localStorage
+        console.log(`[Editor] Clearing workspace and loading from DATABASE`);
+        projectStore.reset();
+        projectStore.clearWorkspace();
+        
+        // Load into sceneStore (new editor) - use the store's set method
         useSceneStore.setState({ assets: eventData.canvasAssets });
+        
+        // Always load canvasAssets from database into workspace
+        console.log(`[Editor] Converting canvasAssets to workspace format:`, {
+          canvasAssetsCount: eventData.canvasAssets.length,
+        });
+        
+        let loadedCount = 0;
+        eventData.canvasAssets.forEach((asset: AssetInstance | any) => {
+          // Handle wall-polygon type (new format)
+          if (asset.type === 'wall-polygon' && asset.wallPolygon && Array.isArray(asset.wallPolygon)) {
+            // Convert wall-polygon to wall format with nodes and edges
+            const wallNodes = asset.wallPolygon.map((point: any, idx: number) => ({
+              id: `node-${asset.id}-${idx}`,
+              x: asset.x + (point.x || 0),
+              y: asset.y + (point.y || 0),
+            }));
+
+            // Create edges connecting consecutive nodes
+            const wallEdges = [];
+            for (let i = 0; i < wallNodes.length; i++) {
+              const nextIdx = (i + 1) % wallNodes.length;
+              wallEdges.push({
+                id: `edge-${asset.id}-${i}`,
+                nodeA: wallNodes[i].id,
+                nodeB: wallNodes[nextIdx].id,
+                thickness: asset.wallThickness || 75,
+              });
+            }
+
+            if (wallNodes.length > 0 && wallEdges.length > 0) {
+              const existingWall = projectStore.walls.find(w => w.id === asset.id);
+              if (!existingWall) {
+                projectStore.addWall({
+                  id: asset.id,
+                  nodes: wallNodes,
+                  edges: wallEdges,
+                  zIndex: asset.zIndex || 0
+                });
+              }
+            }
+          }
+          // Check if it's a wall-segments (legacy format)
+          else if (asset.type === 'wall-segments' && asset.wallNodes && asset.wallEdges) {
+            // Convert to Wall format
+            const wallNodes = asset.wallNodes.map((node: any, idx: number) => ({
+              id: `node-${asset.id}-${idx}`,
+              x: node.x,
+              y: node.y
+            }));
+            
+            const wallEdges = asset.wallEdges.map((edge: any, idx: number) => ({
+              id: `edge-${asset.id}-${idx}`,
+              nodeA: wallNodes[edge.a]?.id || '',
+              nodeB: wallNodes[edge.b]?.id || '',
+              thickness: asset.wallThickness || 75
+            }));
+            
+            if (wallNodes.length > 0 && wallEdges.length > 0) {
+              const existingWall = projectStore.walls.find(w => w.id === asset.id);
+              if (!existingWall) {
+                projectStore.addWall({
+                  id: asset.id,
+                  nodes: wallNodes,
+                  edges: wallEdges,
+                  zIndex: asset.zIndex || 0
+                });
+                loadedCount++;
+                console.log(`[Editor] ✅ Loaded wall-segments from DATABASE:`, asset.id);
+              }
+            }
+          }
+          // Handle line-segment type (convert to line shape)
+          else if (asset.type === 'line-segment' && asset.startPoint && asset.endPoint) {
+            // Convert line-segment to line shape format
+            const startX = asset.startPoint.x || asset.x;
+            const startY = asset.startPoint.y || asset.y;
+            const endX = asset.endPoint.x || (asset.x + asset.width);
+            const endY = asset.endPoint.y || (asset.y + asset.height);
+            
+            const existingShape = projectStore.shapes.find(s => s.id === asset.id);
+            if (!existingShape) {
+              projectStore.addShape({
+                id: asset.id,
+                type: 'line',
+                x: (startX + endX) / 2, // Center point
+                y: (startY + endY) / 2, // Center point
+                width: Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2)), // Length
+                height: 2, // Line thickness
+                rotation: asset.rotation || 0,
+                fill: asset.backgroundColor || 'transparent',
+                stroke: asset.strokeColor || '#3B82F6',
+                strokeWidth: asset.strokeWidth || 2,
+                points: [
+                  { x: startX - (startX + endX) / 2, y: startY - (startY + endY) / 2 },
+                  { x: endX - (startX + endX) / 2, y: endY - (startY + endY) / 2 },
+                ],
+                zIndex: asset.zIndex || 0
+              });
+              loadedCount++;
+              console.log(`[Editor] ✅ Loaded line-segment from DATABASE:`, asset.id);
+            }
+          }
+          // Handle standard shape types (rectangle, ellipse, line, arrow, freehand)
+          else if (asset.type && ['rectangle', 'ellipse', 'line', 'arrow', 'freehand'].includes(asset.type)) {
+            // Convert to Shape format
+            const existingShape = projectStore.shapes.find(s => s.id === asset.id);
+            if (!existingShape) {
+              // Use reasonable defaults for missing dimensions
+              const defaultWidth = asset.width || 100;
+              const defaultHeight = asset.height || 100;
+              
+              projectStore.addShape({
+                id: asset.id,
+                type: asset.type as 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand',
+                x: asset.x || 0,
+                y: asset.y || 0,
+                width: defaultWidth,
+                height: defaultHeight,
+                rotation: asset.rotation || 0,
+                fill: asset.fillColor || asset.backgroundColor || "#3B82F6",
+                stroke: asset.strokeColor || "#1E40AF",
+                strokeWidth: asset.strokeWidth || 2,
+                points: asset.points,
+                zIndex: asset.zIndex || 0
+              });
+              
+              console.log(`[Editor] ✅ Loaded ${asset.type} shape from DATABASE:`, {
+                id: asset.id,
+                x: asset.x,
+                y: asset.y,
+                width: defaultWidth,
+                height: defaultHeight,
+              });
+              loadedCount++;
+            }
+          } else if (asset.type) {
+            // Convert to Asset format - load furniture/assets from database
+            const existingAsset = projectStore.assets.find(a => a.id === asset.id);
+            if (!existingAsset) {
+              // Use reasonable defaults based on asset type
+              // Chairs and tables typically need larger dimensions to be visible
+              let defaultWidth = asset.width || 100;
+              let defaultHeight = asset.height || 100;
+              
+              // Set better defaults for common asset types
+              if (asset.type.includes('chair')) {
+                defaultWidth = asset.width || 80;
+                defaultHeight = asset.height || 80;
+              } else if (asset.type.includes('table') || asset.type.includes('cocktail')) {
+                defaultWidth = asset.width || 200;
+                defaultHeight = asset.height || 200;
+              }
+              
+              projectStore.addAsset({
+                id: asset.id,
+                type: asset.type,
+                x: asset.x || 0,
+                y: asset.y || 0,
+                width: defaultWidth,
+                height: defaultHeight,
+                rotation: asset.rotation || 0,
+                scale: asset.scale || 1,
+                zIndex: asset.zIndex || 0,
+              });
+              
+              console.log(`[Editor] ✅ Loaded asset from DATABASE:`, {
+                id: asset.id,
+                type: asset.type,
+                x: asset.x,
+                y: asset.y,
+                width: defaultWidth,
+                height: defaultHeight,
+              });
+              loadedCount++;
+            }
+          }
+        });
+        
+        console.log(`[Editor] ✅ Loaded ${loadedCount} items from DATABASE into workspace`);
+        console.log(`[Editor] Workspace state after load:`, {
+          walls: projectStore.walls.length,
+          shapes: projectStore.shapes.length,
+          assets: projectStore.assets.length,
+        });
+        }
+      } else {
+        console.log(`[Editor] Skipping load - same event and we have current data`);
       }
     }
   }, [eventData, currentEventData, id]);
@@ -269,7 +557,7 @@ export default function Editor() {
         const padding = 100; // mm padding around content
         const viewportWidthMm = viewportWidth / 2; // Approximate conversion
         const viewportHeightMm = viewportHeight / 2;
-
+        
         const zoomX = (viewportWidthMm - padding * 2) / Math.max(contentWidth, 100);
         const zoomY = (viewportHeightMm - padding * 2) / Math.max(contentHeight, 100);
         const fitZoom = Math.min(zoomX, zoomY, 1.5); // Cap at 1.5x zoom max for preview
@@ -277,7 +565,7 @@ export default function Editor() {
         // Set zoom
         const finalZoom = Math.max(0.3, Math.min(fitZoom, 1.5));
         setZoom(finalZoom);
-
+        
         // Center the content in viewport
         const screenCenterX = viewportWidth / 2;
         const screenCenterY = viewportHeight / 2;
@@ -294,112 +582,118 @@ export default function Editor() {
     return () => clearTimeout(timeoutId);
   }, [preview, eventData, sceneAssets, projectAssets, shapes, walls, setZoom, setPan]);
 
-  // Auto-save functionality
+  // Auto-save functionality - automatically save to database
   useEffect(() => {
-    if (!currentEventData || !id || typeof id !== 'string' || !slug || typeof slug !== "string") return;
+    if (!currentEventData || !id || !slug) return;
+    
+    const projectStore = useProjectStore.getState();
+    const hasChanges = projectStore.hasUnsavedChanges;
+    
+    if (!hasChanges) return;
+
+    console.log('[Editor] Auto-save triggered - saving to DATABASE');
 
     const timeoutId = setTimeout(() => {
-      const projectStore = useProjectStore.getState();
-      // Check if projectStore has changes (we might need a dirty flag in projectStore)
-      // For now, let's rely on the manual save or add a dirty flag check if available
-      // Or we can check useSceneStore.hasUnsavedChanges as a proxy if they are synced
-
-      if (projectStore.hasUnsavedChanges) {
-        projectStore.saveEvent(id, slug);
+      const currentHasChanges = useProjectStore.getState().hasUnsavedChanges;
+      
+      if (currentHasChanges && id && typeof id === 'string' && slug && typeof slug === 'string') {
+        const store = useProjectStore.getState();
+        const { walls, shapes, assets } = store;
+        
+        console.log('[Editor] Auto-save: Saving to DATABASE:', {
+          eventId: id,
+          walls: walls.length,
+          shapes: shapes.length,
+          assets: assets.length,
+        });
+        
+        // Mark that we're saving to prevent reload
+        justSavedRef.current = true;
+        
+        // Save to database automatically
+        store.saveEvent(id, slug)
+          .then(() => {
+            console.log('[Editor] ✅ Auto-saved to DATABASE successfully');
+            setTimeout(() => {
+              justSavedRef.current = false;
+            }, 2000);
+          })
+          .catch((error) => {
+            console.error('[Editor] ❌ Auto-save failed:', error);
+            justSavedRef.current = false;
+          });
       }
-    }, 3000);
+    }, 2000); // Auto-save after 2 seconds
 
     return () => clearTimeout(timeoutId);
-  }, [currentEventData, id, slug]);
+  }, [hasUnsavedChanges, currentEventData, id, slug]);
 
-  // Manual save function
-  const handleSave = useCallback(async () => {
-    if (!currentEventData || !id || typeof id !== 'string' || !slug || typeof slug !== 'string') {
-      return;
-    }
-
-    await useProjectStore.getState().saveEvent(id, slug);
-
-    // Update local state to reflect save
-    markAsSaved();
-  }, [currentEventData, id, markAsSaved, slug]);
-
-  // Keyboard shortcut for saving (Ctrl+S)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-        e.preventDefault();
-        handleSave();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleSave]);
+  // Save functionality is handled by PropertiesSidebar
 
   // Render content based on iframe/preview status
   const renderContent = () => {
     const isPreviewMode = preview === 'true' || isInIframe;
-
+    
     return (
-      <div className={`${isPreviewMode ? 'h-full w-full' : 'h-screen'} flex flex-col overflow-hidden`}>
-        {!isPreviewMode && (
-          <>
-            <AssetsModal
-              isOpen={showAssetsModal}
-              onClose={() => setShowAssetsModal(false)}
-            />
-            <BottomToolbar setShowAssetsModal={setShowAssetsModal} />
-          </>
-        )}
+    <div className={`${isPreviewMode ? 'h-full w-full' : 'h-screen'} flex overflow-hidden bg-gray-50`}>
+      {/* Dashboard Sidebar - only show if not in preview mode */}
+      {!isPreviewMode && <DashboardSidebar />}
+      
+      <div className="flex-1 flex flex-col overflow-hidden">
+      {!isPreviewMode && (
+        <>
+          <AssetsModal
+            isOpen={showAssetsModal}
+            onClose={() => setShowAssetsModal(false)}
+          />
+          <BottomToolbar setShowAssetsModal={setShowAssetsModal} />
+          <AiTrigger />
+        </>
+      )}
 
-        {/* Main Content Area */}
-        <div className={`flex-1 flex overflow-hidden ${isPreviewMode ? '' : ''}`}>
-          {/* NEW WORKSPACE */}
-          <div className="flex-1 relative overflow-hidden">
-            {!show3D && (
-              <div className="absolute inset-0">
-                <SyncStatusBanner />
-                <Workspace2D
-                  remoteCursors={remoteCursors}
-                  updateCursor={updateCursor}
-                />
-                <CursorOverlay cursors={remoteCursors} />
-              </div>
-            )}
+      {/* Main Content Area */}
+      <div className={`flex-1 flex overflow-hidden ${isPreviewMode ? '' : ''}`}>
+        {/* NEW WORKSPACE */}
+        <div className="flex-1 relative overflow-hidden">
+          {!show3D && (
+            <div className="absolute inset-0">
+              <Workspace2D />
+            </div>
+          )}
 
-            {/* 3D Preview - disabled in preview mode */}
-            {show3D && !isPreviewMode && (
-              <div className="absolute inset-0">
-                <Scene3D
-                  assets={eventData?.canvasAssets || []}
-                  width={isPreviewMode ? window.innerWidth : window.innerWidth - 256}
-                  height={isPreviewMode ? window.innerHeight : window.innerHeight - 120}
-                />
-              </div>
-            )}
+          {/* 3D Preview - disabled in preview mode */}
+          {show3D && !isPreviewMode && (
+            <div className="absolute inset-0">
+              <Scene3D
+                assets={eventData?.canvasAssets || []}
+                width={isPreviewMode ? window.innerWidth : window.innerWidth - 256}
+                height={isPreviewMode ? window.innerHeight : window.innerHeight - 120}
+              />
+            </div>
+          )}
 
-            {/* View Toggle - only show if not in preview mode */}
-            {!isPreviewMode && (
-              <div className="absolute bottom-4 right-4 z-10">
-                <button
-                  onClick={() => setShow3D(!show3D)}
-                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-lg hover:bg-gray-50 transition-colors font-medium"
-                >
-                  {show3D ? '📐 2D View' : '🎨 3D Preview'}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Properties Sidebar - only show if not in preview mode */}
+          {/* View Toggle - only show if not in preview mode */}
           {!isPreviewMode && (
-            <div className="flex-shrink-0 w-64 bg-white border-l border-gray-200">
-              <PropertiesSidebar />
+            <div className="absolute bottom-4 right-4 z-10">
+              <button
+                onClick={() => setShow3D(!show3D)}
+                className="px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                {show3D ? '📐 2D View' : '🎨 3D Preview'}
+              </button>
             </div>
           )}
         </div>
+
+        {/* Properties Sidebar - only show if not in preview mode */}
+        {!isPreviewMode && (
+          <div className="flex-shrink-0 w-64 bg-white border-l border-gray-200">
+            <PropertiesSidebar />
+          </div>
+        )}
       </div>
+      </div>
+    </div>
     );
   };
 
@@ -411,11 +705,12 @@ export default function Editor() {
         <div className="text-lg">Loading event data...</div>
       </div>
     ) : (
-      <MainLayout>
-        <div className="h-screen flex items-center justify-center">
+      <div className="flex h-screen bg-gray-50 overflow-hidden">
+        <DashboardSidebar />
+        <div className="flex-1 flex items-center justify-center">
           <div className="text-lg">Loading event data...</div>
         </div>
-      </MainLayout>
+      </div>
     );
   }
 
@@ -427,13 +722,14 @@ export default function Editor() {
         </div>
       </div>
     ) : (
-      <MainLayout>
-        <div className="h-screen flex items-center justify-center">
+      <div className="flex h-screen bg-gray-50 overflow-hidden">
+        <DashboardSidebar />
+        <div className="flex-1 flex items-center justify-center">
           <div className="text-lg text-red-600">
             Error loading event: {error.message}
           </div>
         </div>
-      </MainLayout>
+      </div>
     );
   }
 
@@ -443,19 +739,14 @@ export default function Editor() {
         <div className="text-lg">No event data found</div>
       </div>
     ) : (
-      <MainLayout>
-        <div className="h-screen flex items-center justify-center">
+      <div className="flex h-screen bg-gray-50 overflow-hidden">
+        <DashboardSidebar />
+        <div className="flex-1 flex items-center justify-center">
           <div className="text-lg">No event data found</div>
         </div>
-      </MainLayout>
+      </div>
     );
   }
 
-  return isPreviewMode ? (
-    renderContent()
-  ) : (
-    <MainLayout>
-      {renderContent()}
-    </MainLayout>
-  );
+  return renderContent();
 }

@@ -855,13 +855,14 @@ export default function AiTrigger() {
               }
 
               // Try to find child asset by ID first, then by type/description/color
+              const groupAssets = groupAsset.groupAssets || [];
               let targetChildId = data.action.targetAssetId;
-              let childAsset = groupAsset.groupAssets.find(ca => ca.id === targetChildId);
+              let childAsset = groupAssets.find(ca => ca.id === targetChildId);
               
               console.log('🔍 Looking for child asset:', {
                 targetAssetId: targetChildId,
                 found: !!childAsset,
-                availableChildren: groupAsset.groupAssets.map(ca => ({ 
+                availableChildren: groupAssets.map(ca => ({ 
                   id: ca.id, 
                   type: ca.type, 
                   fillColor: ca.fillColor,
@@ -875,28 +876,53 @@ export default function AiTrigger() {
                 const promptLower = userPrompt.toLowerCase();
                 
                 // Try multiple matching strategies
-                const matchingStrategies = [
+                const matchingStrategies: Array<() => AssetInstance | undefined> = [
                   // Match by "blue circle" (both color and type)
-                  () => promptLower.includes('blue') && promptLower.includes('circle') && groupAsset.groupAssets.find(ca => 
-                    (ca.type === 'ellipse' || ca.type === 'circle') && 
-                    (ca.fillColor === '#3b82f6' || ca.fillColor === '#0000ff' || ca.fillColor === '#60a5fa')
-                  ),
+                  () => {
+                    if (promptLower.includes('blue') && promptLower.includes('circle')) {
+                      return groupAssets.find(ca => 
+                        (ca.type === 'ellipse' || ca.type === 'circle') && 
+                        (ca.fillColor === '#3b82f6' || ca.fillColor === '#0000ff' || ca.fillColor === '#60a5fa')
+                      );
+                    }
+                    return undefined;
+                  },
                   // Match by "circle" keyword
-                  () => promptLower.includes('circle') && groupAsset.groupAssets.find(ca => 
-                    ca.type === 'ellipse' || ca.type === 'circle'
-                  ),
+                  () => {
+                    if (promptLower.includes('circle')) {
+                      return groupAssets.find(ca => 
+                        ca.type === 'ellipse' || ca.type === 'circle'
+                      );
+                    }
+                    return undefined;
+                  },
                   // Match by "blue" color alone
-                  () => promptLower.includes('blue') && groupAsset.groupAssets.find(ca => 
-                    ca.fillColor === '#3b82f6' || ca.fillColor === '#0000ff' || ca.fillColor === '#60a5fa'
-                  ),
+                  () => {
+                    if (promptLower.includes('blue')) {
+                      return groupAssets.find(ca => 
+                        ca.fillColor === '#3b82f6' || ca.fillColor === '#0000ff' || ca.fillColor === '#60a5fa'
+                      );
+                    }
+                    return undefined;
+                  },
                   // Match by "rectangle"
-                  () => promptLower.includes('rectangle') && groupAsset.groupAssets.find(ca => 
-                    ca.type === 'rectangle'
-                  ),
+                  () => {
+                    if (promptLower.includes('rectangle')) {
+                      return groupAssets.find(ca => 
+                        ca.type === 'rectangle'
+                      );
+                    }
+                    return undefined;
+                  },
                   // Match by "wall"
-                  () => promptLower.includes('wall') && groupAsset.groupAssets.find(ca => 
-                    ca.type === 'wall-segments'
-                  ),
+                  () => {
+                    if (promptLower.includes('wall')) {
+                      return groupAssets.find(ca => 
+                        ca.type === 'wall-segments'
+                      );
+                    }
+                    return undefined;
+                  },
                 ];
                 
                 for (const strategy of matchingStrategies) {
@@ -913,7 +939,7 @@ export default function AiTrigger() {
                 console.error('❌ Child asset not found!', {
                   targetAssetId: targetChildId,
                   prompt: capturedPrompt,
-                  availableChildren: groupAsset.groupAssets.map(ca => ({ 
+                  availableChildren: groupAssets.map(ca => ({ 
                     id: ca.id, 
                     type: ca.type, 
                     fillColor: ca.fillColor 
@@ -921,7 +947,7 @@ export default function AiTrigger() {
                 });
                 setMessages((m) => [...m, { 
                   role: 'assistant', 
-                  content: `Could not find the item you mentioned. Available items in the group: ${groupAsset.groupAssets.map(ca => ca.type || 'unknown').join(', ')}` 
+                  content: `Could not find the item you mentioned. Available items in the group: ${groupAssets.map(ca => ca.type || 'unknown').join(', ')}` 
                 }]);
                 return;
               }
@@ -1000,7 +1026,7 @@ export default function AiTrigger() {
               }
 
               // Update the child asset's position within the group
-              const updatedGroupAssets = groupAsset.groupAssets.map(ca =>
+              const updatedGroupAssets = groupAssets.map(ca =>
                 ca.id === targetChildId
                   ? { ...ca, x: newX, y: newY }
                   : ca
@@ -1013,7 +1039,7 @@ export default function AiTrigger() {
                 newPosition: { x: newX, y: newY },
                 bounds,
                 updatedChildren: updatedGroupAssets.length,
-                allChildren: groupAsset.groupAssets.map(ca => ({ id: ca.id, type: ca.type, x: ca.x, y: ca.y }))
+                allChildren: groupAssets.map(ca => ({ id: ca.id, type: ca.type, x: ca.x, y: ca.y }))
               });
 
               // Update the group asset with new child positions
@@ -1224,13 +1250,17 @@ export default function AiTrigger() {
         }),
       });
       const data = await res.json();
-      if (data?.followUp) {
+      if (data?.message) {
+        // General question/answer
+        setMessages((m) => [...m, { role: 'assistant', content: data.message }]);
+      } else if (data?.followUp) {
         setMessages((m) => [...m, { role: 'assistant', content: data.followUp }]);
       } else if (data?.plan) {
         applyPlan(data.plan);
         setMessages((m) => [...m, { role: 'assistant', content: 'Plan generated and applied to canvas.' }]);
       } else {
-        setMessages((m) => [...m, { role: 'assistant', content: 'I need more details. What are the wall dimensions?' }]);
+        // Fallback for errors or unexpected responses
+        setMessages((m) => [...m, { role: 'assistant', content: data?.error || 'I can help you with that. Could you provide more details?' }]);
       }
     } catch (e) {
       console.error(e);
@@ -1388,11 +1418,7 @@ export default function AiTrigger() {
                             })()}
                           </span>
                           <span className="mt-1 text-xs text-gray-500">
-                            Ask: {isGroup
-                              ? '"Move the circle to the top right corner", "Position the table in the center", etc.'
-                              : primary.type === "wall-segments"
-                              ? '"Make this wall thicker", "Move 1000mm right", or "Change thickness to 225mm".'
-                              : '"Resize to 500mm × 800mm", "Move 1000mm right", or "Center this item".'}
+                            Ask me to manipulate this element: "Resize this", "Move to center", "Change color", "Rotate 45 degrees", etc.
                           </span>
                           <button
                             type="button"
@@ -1422,13 +1448,27 @@ export default function AiTrigger() {
                 </div>
                 <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain rounded-lg p-4 space-y-3 min-h-0">
                   {messages.length === 0 ? (
-                    <div className="space-y-2">
-                      <p className="text-gray-500 text-sm font-semibold mb-3">Try these commands:</p>
-                      <div className="space-y-1 text-sm text-gray-600">
-                        <p>• "Draw a 10000mm by 6000mm rectangular wall and add 6 round tables"</p>
-                        <p>• Select a shape, then: "Resize to 500mm" or "Make it smaller"</p>
-                        <p>• Select an item, then: "Move to center" or "Rotate 45 degrees"</p>
-                      </div>
+                    <div className="space-y-2 flex flex-col items-center justify-center h-full">
+                      <p className="text-gray-700 text-lg font-semibold mb-2">Ask anything</p>
+                      <p className="text-gray-500 text-sm text-center max-w-md">
+                        Ask me anything about your workspace, or select an element and ask me to manipulate it.
+                      </p>
+                      {(() => {
+                        const selectedAssets = getCurrentSelectedAssets();
+                        if (selectedAssets.length > 0) {
+                          return (
+                            <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200 max-w-md">
+                              <p className="text-sm text-blue-800 font-medium mb-1">
+                                {selectedAssets.length} element{selectedAssets.length > 1 ? 's' : ''} selected
+                              </p>
+                              <p className="text-xs text-blue-600">
+                                Try: "Resize this", "Move to center", "Change color", or "Rotate 45 degrees"
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   ) : (
                     messages.map((m, i) => (

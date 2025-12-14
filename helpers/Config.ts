@@ -34,25 +34,63 @@ export const apiRequest = async (
     options.body = JSON.stringify(body);
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+  const url = `${API_BASE_URL}${endpoint}`;
+  
+  try {
+    const response = await fetch(url, options);
 
-  if (response.status === 401 || response.status === 403) {
-    if (typeof window !== "undefined" && requiresAuth) {
-      window.location.href = "/auth/login";
-    }
-    throw new Error("Unauthorized: Redirecting to login");
-  }
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-
-    // Silent failures in production - only log in development
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('API Request Failed:', endpoint, response.status);
+    if (response.status === 401 || response.status === 403) {
+      if (typeof window !== "undefined" && requiresAuth) {
+        window.location.href = "/auth/login";
+      }
+      throw new Error("Unauthorized: Redirecting to login");
     }
 
-    throw new Error(errorData.message || `Request failed: ${response.status} ${response.statusText}`);
-  }
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
 
-  return response.json();
+      // Always log errors to help debug CORS/network issues
+      console.error('❌ API Request Failed:', {
+        endpoint,
+        method,
+        status: response.status,
+        statusText: response.statusText,
+        error: errorData.message || errorData,
+        url,
+      });
+
+      throw new Error(errorData.message || `Request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ API Request Success:', { endpoint, method, url });
+    return data;
+  } catch (error: any) {
+    // Catch CORS errors, network errors, etc.
+    const isCorsError = error.message?.includes('CORS') || 
+                       error.message?.includes('Failed to fetch') ||
+                       error.name === 'TypeError' ||
+                       !error.response;
+    
+    if (isCorsError) {
+      console.error('🚫 CORS or Network Error:', {
+        endpoint,
+        method,
+        url,
+        error: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
+      throw new Error(`CORS/Network Error: Unable to fetch ${endpoint}. Check backend CORS configuration. Original error: ${error.message}`);
+    }
+    
+    // Re-throw other errors
+    console.error('❌ API Request Error:', {
+      endpoint,
+      method,
+      url,
+      error: error.message,
+    });
+    throw error;
+  }
 };

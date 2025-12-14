@@ -27,7 +27,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             : worldPos;
 
         setStartPoint(snapped);
-        setEndPoint(snapped);
+        setEndPoint(snapped); // Initialize endPoint to same as startPoint so preview shows immediately
         setIsDrawing(true);
     }, [isActive, screenToWorld, snapToGrid, gridSize]);
 
@@ -139,19 +139,25 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
     const centerX = (startPoint.x + endPoint.x) / 2;
     const centerY = (startPoint.y + endPoint.y) / 2;
 
+    // Ensure minimum dimensions for visibility
+    const minSize = 1;
+    const previewWidth = Math.max(width, minSize);
+    const previewHeight = Math.max(height, minSize);
+
     return (
-        <g className="shape-tool-overlay">
+        <g className="shape-tool-overlay" style={{ pointerEvents: 'none' }}>
             {shapeType === 'rectangle' && (
                 <rect
-                    x={centerX - width / 2}
-                    y={centerY - height / 2}
-                    width={width}
-                    height={height}
+                    x={centerX - previewWidth / 2}
+                    y={centerY - previewHeight / 2}
+                    width={previewWidth}
+                    height={previewHeight}
                     fill="transparent"
                     stroke="#3b82f6"
                     strokeWidth={2}
                     strokeDasharray="5,5"
                     opacity={0.7}
+                    vectorEffect="non-scaling-stroke"
                 />
             )}
 
@@ -159,13 +165,14 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 <ellipse
                     cx={centerX}
                     cy={centerY}
-                    rx={width / 2}
-                    ry={height / 2}
+                    rx={Math.max(previewWidth / 2, minSize / 2)}
+                    ry={Math.max(previewHeight / 2, minSize / 2)}
                     fill="transparent"
                     stroke="#3b82f6"
                     strokeWidth={2}
                     strokeDasharray="5,5"
                     opacity={0.7}
+                    vectorEffect="non-scaling-stroke"
                 />
             )}
 
@@ -179,6 +186,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                     strokeWidth={2}
                     strokeDasharray="5,5"
                     opacity={0.7}
+                    vectorEffect="non-scaling-stroke"
                 />
             )}
         </g>

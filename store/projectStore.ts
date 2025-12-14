@@ -306,7 +306,104 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
-            setProjectId: (id) => {
+            splitWallAtIntersection: (wallId, point) => {
+                get().saveToHistory();
+                set((state) => {
+                    const wall = state.walls.find((w) => w.id === wallId);
+                    if (!wall) return state;
+
+                    // Find the edge that contains the point
+                    const nodeMap = new Map(wall.nodes.map((n) => [n.id, n]));
+                    let targetEdge: WallEdge | null = null;
+                    let t = 0; // Parameter along the edge (0 to 1)
+
+                    for (const edge of wall.edges) {
+                        const nodeA = nodeMap.get(edge.nodeA);
+                        const nodeB = nodeMap.get(edge.nodeB);
+                        if (!nodeA || !nodeB) continue;
+
+                        // Calculate distance from point to line segment
+                        const dx = nodeB.x - nodeA.x;
+                        const dy = nodeB.y - nodeA.y;
+                        const length = Math.sqrt(dx * dx + dy * dy);
+                        if (length === 0) continue;
+
+                        const toPointX = point.x - nodeA.x;
+                        const toPointY = point.y - nodeA.y;
+                        const tValue = (toPointX * dx + toPointY * dy) / (length * length);
+
+                        // Check if point is on the edge (with tolerance)
+                        if (tValue >= 0 && tValue <= 1) {
+                            const projX = nodeA.x + tValue * dx;
+                            const projY = nodeA.y + tValue * dy;
+                            const dist = Math.sqrt(
+                                (point.x - projX) ** 2 + (point.y - projY) ** 2
+                            );
+
+                            // Tolerance: 5mm
+                            if (dist < 5) {
+                                targetEdge = edge;
+                                t = tValue;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!targetEdge) return state;
+
+                    // Create new node at intersection point
+                    const newNodeId = `node-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+                    const newNode: WallNode = {
+                        id: newNodeId,
+                        x: point.x,
+                        y: point.y,
+                    };
+
+                    // Split the edge into two edges
+                    const nodeA = nodeMap.get(targetEdge.nodeA);
+                    const nodeB = nodeMap.get(targetEdge.nodeB);
+                    if (!nodeA || !nodeB) return state;
+
+                    const newEdge1Id = `edge-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+                    const newEdge2Id = `edge-${Date.now() + 1}-${Math.random().toString(36).slice(2, 11)}`;
+
+                    const newEdge1: WallEdge = {
+                        id: newEdge1Id,
+                        nodeA: targetEdge.nodeA,
+                        nodeB: newNodeId,
+                        thickness: targetEdge.thickness,
+                    };
+
+                    const newEdge2: WallEdge = {
+                        id: newEdge2Id,
+                        nodeA: newNodeId,
+                        nodeB: targetEdge.nodeB,
+                        thickness: targetEdge.thickness,
+                    };
+
+                    // Update wall with new node and split edges
+                    const updatedWalls = state.walls.map((w) =>
+                        w.id === wallId
+                            ? {
+                                  ...w,
+                                  nodes: [...w.nodes, newNode],
+                                  edges: [
+                                      ...w.edges.filter((e) => e.id !== targetEdge.id),
+                                      newEdge1,
+                                      newEdge2,
+                                  ],
+                              }
+                            : w
+                    );
+
+                    return {
+                        walls: updatedWalls,
+                        hasUnsavedChanges: true,
+                    };
+                });
+            },
+
+            setProjectId: (id: string | null) => {
                 set({ projectId: id });
             },
 
@@ -377,28 +474,128 @@ export const useProjectStore = create<ProjectState>()(
                 const { shapes, assets, walls, layers, canvas } = get();
                 set({ isSaving: true });
                 try {
+                    // GET current event to preserve name and other fields
+                    let eventName = 'Untitled Event';
+                    let eventType = 'custom venue';
+                    let canvases: any[] = [];
+                    
+                    try {
+                        const currentEvent = await apiRequest(`/projects/${slug}/events/${eventId}`, 'GET', null, true);
+                        const event = currentEvent.data || currentEvent;
+                        eventName = event.name || eventName;
+                        eventType = event.type || eventType;
+                        canvases = event.canvases || [];
+                    } catch (e) {
+                        console.warn('[projectStore] Could not fetch current event, using defaults');
+                    }
+                    
                     const canvasData = { shapes, assets, walls, layers, canvas };
-                    const canvasAssets = [...shapes, ...assets, ...walls].map(item => ({
-                        id: item.id,
-                        type: (item as any).type || 'unknown',
-                        x: (item as any).x || 0,
-                        y: (item as any).y || 0,
-                    }));
-
-                    await apiRequest(`/projects/${slug}/events/${eventId}`, 'PUT', {
-                        canvasData,
-                        canvasAssets
+                    
+                    // CRITICAL: Save complete asset data, not just id/type/x/y
+                    // Convert shapes, assets, and walls to canvasAssets format with ALL properties
+                    const canvasAssets: any[] = [];
+                    
+                    // Convert shapes to canvasAssets
+                    shapes.forEach(shape => {
+                        canvasAssets.push({
+                            id: shape.id,
+                            type: shape.type,
+                            x: shape.x,
+                            y: shape.y,
+                            width: shape.width,
+                            height: shape.height,
+                            rotation: shape.rotation,
+                            fillColor: shape.fill,
+                            strokeColor: shape.stroke,
+                            strokeWidth: shape.strokeWidth,
+                            backgroundColor: shape.fill,
+                            zIndex: shape.zIndex,
+                            points: shape.points,
+                        });
+                    });
+                    
+                    // Convert assets to canvasAssets
+                    assets.forEach(asset => {
+                        canvasAssets.push({
+                            id: asset.id,
+                            type: asset.type,
+                            x: asset.x,
+                            y: asset.y,
+                            width: asset.width,
+                            height: asset.height,
+                            rotation: asset.rotation,
+                            scale: asset.scale,
+                            zIndex: asset.zIndex,
+                            fillColor: asset.fillColor,
+                            strokeColor: asset.strokeColor,
+                            strokeWidth: asset.strokeWidth,
+                            opacity: asset.opacity,
+                        });
+                    });
+                    
+                    // Convert walls to canvasAssets (wall-polygon format)
+                    walls.forEach(wall => {
+                        // Convert wall nodes/edges to wallPolygon format
+                        const wallPolygon = wall.nodes.map(node => ({
+                            x: node.x - wall.nodes[0].x, // Relative to first node
+                            y: node.y - wall.nodes[0].y,
+                        }));
+                        
+                        const centerline = wall.edges.length > 0 ? [
+                            { x: 0, y: 0 },
+                            { x: wall.nodes[wall.nodes.length - 1].x - wall.nodes[0].x, y: wall.nodes[wall.nodes.length - 1].y - wall.nodes[0].y }
+                        ] : [];
+                        
+                        canvasAssets.push({
+                            id: wall.id,
+                            type: 'wall-polygon',
+                            x: wall.nodes[0]?.x || 0,
+                            y: wall.nodes[0]?.y || 0,
+                            wallPolygon,
+                            centerline,
+                            wallThickness: wall.edges[0]?.thickness || 75,
+                            strokeColor: '#1E40AF',
+                            backgroundColor: '#F3F4F6',
+                            strokeWidth: 2,
+                            zIndex: wall.zIndex,
+                        });
                     });
 
-                    set({ hasUnsavedChanges: false, lastSaved: new Date() });
-                    console.log("Event saved successfully");
-                } catch (error: any) {
-                    // Silently fail - auto-save will retry
-                    // Errors are only logged in development
-                    if (process.env.NODE_ENV === 'development') {
-                        console.warn('Save failed (silent):', error?.message);
-                    }
+                    // PUT /projects/{slug}/events/{eventId}
+                    // Include all required fields: name, type, canvases, canvasData, canvasAssets
+                    const payload = {
+                        name: eventName,
+                        type: eventType,
+                        canvases: canvases,
+                        canvasData,
+                        canvasAssets
+                    };
 
+                    console.log(`[projectStore] Saving to DATABASE via PUT /projects/${slug}/events/${eventId}:`, {
+                        eventId,
+                        slug,
+                        name: eventName,
+                        type: eventType,
+                        canvasData: { walls: walls.length, shapes: shapes.length, assets: assets.length },
+                        canvasAssets: canvasAssets.length,
+                        sampleShape: shapes.length > 0 ? {
+                            id: shapes[0].id,
+                            type: shapes[0].type,
+                            width: shapes[0].width,
+                            height: shapes[0].height,
+                            x: shapes[0].x,
+                            y: shapes[0].y,
+                        } : null,
+                        payload
+                    });
+
+                    const response = await apiRequest(`/projects/${slug}/events/${eventId}`, 'PUT', payload, true);
+
+                    set({ hasUnsavedChanges: false, lastSaved: new Date() });
+                    console.log(`[projectStore] ✅ Event saved successfully to DATABASE: ${eventId}`);
+                    return response;
+                } catch (error: any) {
+                    console.error(`[projectStore] ❌ Save failed:`, error);
                     // Re-throw so auto-save can handle offline state
                     throw error;
                 } finally {

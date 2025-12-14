@@ -145,14 +145,14 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
 
     // Calculate openings for each edge (both assets and wall intersections)
     const edgeOpenings = useMemo(() => {
-        const openingsMap = new Map<string, Array<{ type: 'asset' | 'wall'; startT: number; endT: number }>>();
+        const openingsMap = new Map<string, Array<{ type: 'asset' | 'wall' | 'door-window'; startT: number; endT: number }>>();
 
         edges.forEach(edge => {
             const nodeA = nodeMap.get(edge.nodeA);
             const nodeB = nodeMap.get(edge.nodeB);
             if (!nodeA || !nodeB) return;
 
-            const openings: Array<{ type: 'asset' | 'wall'; startT: number; endT: number }> = [];
+            const openings: Array<{ type: 'asset' | 'wall' | 'door-window'; startT: number; endT: number }> = [];
 
             // 1. Find asset openings (doors/windows)
             const attachedAssets = assets.filter(asset =>

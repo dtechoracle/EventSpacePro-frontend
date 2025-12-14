@@ -12,7 +12,10 @@ interface ShapeRendererProps {
 export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRendererProps) {
     const strokeColor = shape.stroke || '#1f2937';
     const fillColor = shape.fill || 'transparent';
-    const strokeWidth = shape.strokeWidth || 2;
+    // Ensure strokeWidth is always a valid number, defaulting to 2 if undefined/null/0
+    const strokeWidth = (shape.strokeWidth !== undefined && shape.strokeWidth !== null && shape.strokeWidth > 0) 
+        ? shape.strokeWidth 
+        : 2;
 
     const transform = `translate(${shape.x}, ${shape.y}) rotate(${shape.rotation})`;
 
