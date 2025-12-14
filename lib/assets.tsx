@@ -26,6 +26,30 @@ export type AssetDef = {
 const CUSTOM_SVG_ASSETS: AssetDef[] = [
   // Basic furniture
   {
+    id: "10-seater-rectangular-table",
+    label: "10 Seater Table",
+    path: "/assets/canvas/new/10-seater-rectangular-table.svg",
+    isCustom: true,
+  },
+  {
+    id: "3-seater-sofa-02",
+    label: "3 Seater Sofa 02",
+    path: "/assets/canvas/new/3-Seater-Sofa-02.svg",
+    isCustom: true,
+  },
+  {
+    id: "6-seater-rectangular-table",
+    label: "6 Seater Table",
+    path: "/assets/canvas/new/6-seater-rectangular-table.svg",
+    isCustom: true,
+  },
+  {
+    id: "8-seater-round-table",
+    label: "8 Seater Round Table",
+    path: "/assets/canvas/new/8-seater-round-table.svg",
+    isCustom: true,
+  },
+  {
     id: "circular-small-table",
     label: "Small Round Table",
     path: "/assets/canvas/circular-small-table.svg",

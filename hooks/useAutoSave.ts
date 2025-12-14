@@ -9,7 +9,7 @@ interface UseAutoSaveOptions {
 
 export function useAutoSave({ interval = 30000, enabled = true }: UseAutoSaveOptions = {}) {
     const router = useRouter();
-    const { id } = router.query;
+    const { id, slug } = router.query;
     const [isOnline, setIsOnline] = useState(true);
     const [pendingSave, setPendingSave] = useState(false);
 
@@ -21,8 +21,8 @@ export function useAutoSave({ interval = 30000, enabled = true }: UseAutoSaveOpt
     useEffect(() => {
         const handleOnline = () => {
             setIsOnline(true);
-            if (pendingSave && id && typeof id === 'string') {
-                saveEvent(id).then(() => {
+            if (pendingSave && id && typeof id === 'string' && slug && typeof slug === "string") {
+                saveEvent(id, slug).then(() => {
                     setPendingSave(false);
                 }).catch(() => {
                     // Silent fail
@@ -47,13 +47,13 @@ export function useAutoSave({ interval = 30000, enabled = true }: UseAutoSaveOpt
 
     // Auto-save at intervals (silently)
     useEffect(() => {
-        if (!enabled || !id || typeof id !== 'string') return;
+        if (!enabled || !id || typeof id !== 'string' || !slug || typeof slug !== 'string') return;
 
         const autoSaveInterval = setInterval(async () => {
             if (hasUnsavedChanges && !isSaving) {
                 if (isOnline) {
                     try {
-                        await saveEvent(id);
+                        await saveEvent(id, slug);
                     } catch (error) {
                         // Silent fail
                         setPendingSave(true);

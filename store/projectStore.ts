@@ -164,8 +164,8 @@ export type ProjectState = {
 
     // Persistence Actions
     clearWorkspace: () => void;
-    loadEvent: (eventId: string) => Promise<void>;
-    saveEvent: (eventId: string) => Promise<void>;
+    loadEvent: (eventId: string, slug: string) => Promise<void>;
+    saveEvent: (eventId: string, slug: string) => Promise<void>;
 
     // Shape Actions
     setCanvas: (canvas: Canvas) => void;
@@ -324,10 +324,10 @@ export const useProjectStore = create<ProjectState>()(
                 });
             },
 
-            loadEvent: async (eventId: string) => {
+            loadEvent: async (eventId: string, slug: string) => {
                 set({ isSaving: true });
                 try {
-                    const response = await apiRequest(`/events/${eventId}`, 'GET');
+                    const response = await apiRequest(`/projects/${slug}/events/${eventId}`, 'GET');
                     const data = response.data;
 
                     if (data.canvasData) {
@@ -373,7 +373,7 @@ export const useProjectStore = create<ProjectState>()(
                 }
             },
 
-            saveEvent: async (eventId: string) => {
+            saveEvent: async (eventId: string, slug: string) => {
                 const { shapes, assets, walls, layers, canvas } = get();
                 set({ isSaving: true });
                 try {
@@ -385,7 +385,7 @@ export const useProjectStore = create<ProjectState>()(
                         y: (item as any).y || 0,
                     }));
 
-                    await apiRequest(`/events/${eventId}`, 'PUT', {
+                    await apiRequest(`/projects/${slug}/events/${eventId}`, 'PUT', {
                         canvasData,
                         canvasAssets
                     });
