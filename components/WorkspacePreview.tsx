@@ -3,6 +3,8 @@
 import React, { useMemo } from 'react';
 import { Wall, Shape, Asset } from '@/store/projectStore';
 import { fitWorkspaceToContainer, calculateWorkspaceBounds } from '@/utils/workspaceBounds';
+import { ASSET_LIBRARY } from '@/lib/assets';
+import AssetRenderer from './renderers/AssetRenderer';
 
 interface WorkspacePreviewProps {
     walls: Wall[];
@@ -95,47 +97,80 @@ export default function WorkspacePreview({
                     <rect width="100%" height="100%" fill="url(#grid)" opacity="0.3" />
                     
                     <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
-                        {/* Render walls */}
-                        {walls.map((wall) => (
-                            <g key={wall.id}>
-                                {wall.edges.map((edge) => {
-                                    const nodeA = wall.nodes.find(n => n.id === edge.nodeA);
-                                    const nodeB = wall.nodes.find(n => n.id === edge.nodeB);
-                                    if (!nodeA || !nodeB) return null;
-                                    
-                                    const thickness = Math.max(edge.thickness || 75, 2) / viewport.zoom;
-                                    
-                                    return (
-                                        <line
-                                            key={edge.id}
-                                            x1={nodeA.x}
-                                            y1={nodeA.y}
-                                            x2={nodeB.x}
-                                            y2={nodeB.y}
-                                            stroke="#1E40AF"
+                        {/* Render walls (support wall-polygon) */}
+                        {walls.map((wall) => {
+                            const hasPolygon = (wall as any).wallPolygon && Array.isArray((wall as any).wallPolygon);
+                            if (hasPolygon) {
+                                const poly = (wall as any).wallPolygon as Array<{ x: number; y: number }>;
+                                const points = poly.map(p => `${p.x + (wall as any).x} ${p.y + (wall as any).y}`).join(' ');
+                                const strokeColor = (wall as any).strokeColor || '#1E40AF';
+                                const fillColor = (wall as any).backgroundColor || 'transparent';
+                                // Keep wall strokes lean in preview to avoid big solid fills
+                                const rawThickness =
+                                    (wall as any).wallThickness ??
+                                    (wall as any).strokeWidth ??
+                                    (wall as any).thickness ??
+                                    6;
+                                const thickness = Math.max(rawThickness, 1) / viewport.zoom;
+                                return (
+                                    <g key={wall.id}>
+                                        <polygon
+                                            points={points}
+                                            fill={fillColor}
+                                            stroke={strokeColor}
                                             strokeWidth={Math.max(thickness, 2)}
-                                            strokeLinecap="round"
                                             strokeLinejoin="round"
                                         />
-                                    );
-                                })}
-                            </g>
-                        ))}
+                                        {/* Optional centerline */}
+                                        {(wall as any).centerline && Array.isArray((wall as any).centerline) && (wall as any).centerline.length >= 2 && (
+                                            <polyline
+                                                points={(wall as any).centerline.map((p: any) => `${p.x + (wall as any).x} ${p.y + (wall as any).y}`).join(' ')}
+                                                fill="none"
+                                                stroke={strokeColor}
+                                                strokeWidth={1}
+                                                strokeDasharray="4,4"
+                                                strokeLinecap="round"
+                                                opacity={0.6}
+                                            />
+                                        )}
+                                    </g>
+                                );
+                            }
 
-                        {/* Render shapes */}
+                            return (
+                                <g key={wall.id}>
+                                    {wall.edges.map((edge) => {
+                                        const nodeA = wall.nodes.find(n => n.id === edge.nodeA);
+                                        const nodeB = wall.nodes.find(n => n.id === edge.nodeB);
+                                        if (!nodeA || !nodeB) return null;
+                                        
+                                        const thickness = Math.max(edge.thickness || 75, 2) / viewport.zoom;
+                                        
+                                        return (
+                                            <line
+                                                key={edge.id}
+                                                x1={nodeA.x}
+                                                y1={nodeA.y}
+                                                x2={nodeB.x}
+                                                y2={nodeB.y}
+                                                stroke="#1E40AF"
+                                                strokeWidth={Math.max(thickness, 2)}
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                            />
+                                        );
+                                    })}
+                                </g>
+                            );
+                        })}
+
+                        {/* Render shapes - match ShapeRenderer exactly */}
                         {shapes.map((shape) => {
                             const transform = `translate(${shape.x}, ${shape.y}) rotate(${shape.rotation || 0})`;
-                            // Check both fill and backgroundColor (from API data)
-                            // If fill is 'transparent' or missing, try backgroundColor as fallback
-                            let fill = shape.fill;
-                            if (!fill || fill === 'transparent' || fill === '') {
-                                fill = (shape as any).backgroundColor || 'transparent';
-                            }
-                            // Debug log for shapes with colors
-                            if (fill && fill !== 'transparent') {
-                                console.log(`[WorkspacePreview] Rendering shape ${shape.id} with fill:`, fill);
-                            }
-                            const stroke = shape.stroke || (shape as any).strokeColor || '#3B82F6';
+                            // Use the same logic as ShapeRenderer - check fill first, then backgroundColor, then fillColor
+                            // Default to 'transparent' if none exists
+                            const fill = shape.fill || (shape as any).backgroundColor || (shape as any).fillColor || 'transparent';
+                            const stroke = shape.stroke || (shape as any).strokeColor || '#1f2937';
                             const strokeWidth = Math.max((shape.strokeWidth || 2) / viewport.zoom, 1);
 
                             if (shape.type === 'rectangle') {
@@ -210,46 +245,20 @@ export default function WorkspacePreview({
                             return null;
                         })}
 
-                        {/* Render assets */}
+                        {/* Render assets using the same renderer as the workspace */}
                         {assets.map((asset) => {
-                            const transform = `translate(${asset.x}, ${asset.y}) rotate(${asset.rotation || 0}) scale(${asset.scale || 1})`;
-                            const w = asset.width || 100;
-                            const h = asset.height || 100;
-                            // Check both fillColor and backgroundColor (from API data)
-                            const fillColor = asset.fillColor || asset.backgroundColor || '#3B82F6';
-                            const strokeColor = asset.strokeColor || '#1E40AF';
-                            const opacity = asset.opacity !== undefined ? asset.opacity : 1;
-
+                            // If an explicit path exists on the asset, prefer it (covers backend-provided paths)
+                            const path = (asset as any).path;
+                            const assetWithPath = path
+                              ? { ...asset, path, type: asset.type, width: asset.width || 100, height: asset.height || 100, metadata: asset.metadata }
+                              : asset;
                             return (
-                                <g key={asset.id} transform={transform}>
-                                    {/* Render asset as a rectangle with label */}
-                                    <rect
-                                        x={-w / 2}
-                                        y={-h / 2}
-                                        width={w}
-                                        height={h}
-                                        fill={fillColor}
-                                        stroke={strokeColor}
-                                        strokeWidth={Math.max((asset.strokeWidth || 2) / viewport.zoom, 1)}
-                                        opacity={opacity}
-                                        rx={4}
-                                        ry={4}
-                                    />
-                                    {/* Show asset type as text for identification */}
-                                    <text
-                                        x={0}
-                                        y={0}
-                                        textAnchor="middle"
-                                        dominantBaseline="middle"
-                                        fontSize={Math.max(Math.min(w, h) * 0.2, 8)}
-                                        fill="#ffffff"
-                                        fontWeight="bold"
-                                        pointerEvents="none"
-                                        style={{ userSelect: 'none' }}
-                                    >
-                                        {asset.type?.substring(0, 3).toUpperCase() || 'A'}
-                                    </text>
-                                </g>
+                              <AssetRenderer
+                                key={asset.id}
+                                asset={assetWithPath as any}
+                                isSelected={false}
+                                isHovered={false}
+                              />
                             );
                         })}
                     </g>

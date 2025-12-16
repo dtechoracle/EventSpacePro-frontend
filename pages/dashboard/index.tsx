@@ -10,6 +10,7 @@ import { motion } from "framer-motion";
 import WorkspacePreview from "@/components/WorkspacePreview";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
+import { ASSET_LIBRARY } from "@/lib/assets";
 
 interface EventData {
   _id: string;
@@ -243,14 +244,17 @@ const Dashboard = () => {
     const rawShapes = (event.canvasData?.shapes as any[]) || [];
     const rawAssets = (event.canvasData?.assets as any[]) || [];
     
-    // Normalize shapes to ensure fill property is set
+    // Normalize shapes to ensure fill property is set - match ShapeRenderer logic
     // Preserve ALL properties including width, height, x, y, etc.
     const shapes = rawShapes.map((s: any) => {
+      // Use fill if it exists and is not empty/transparent, otherwise use backgroundColor, otherwise transparent
       const fill = (s.fill && s.fill !== 'transparent' && s.fill !== '') 
         ? s.fill 
-        : (s.backgroundColor || 'transparent');
+        : (s.backgroundColor && s.backgroundColor !== 'transparent' && s.backgroundColor !== '')
+        ? s.backgroundColor
+        : 'transparent';
       return {
-        ...s, // Preserve all original properties (width, height, x, y, rotation, etc.)
+        ...s, // Preserve all original properties (width, height, x, y, rotation, stroke, strokeWidth, etc.)
         fill: fill, // Override fill with normalized value
       };
     });
@@ -408,8 +412,8 @@ const Dashboard = () => {
             width: defaultWidth,
             height: defaultHeight,
             rotation: asset.rotation || 0,
-            fill: asset.fillColor || asset.backgroundColor || "#3B82F6",
-            stroke: asset.strokeColor || "#1E40AF",
+            fill: asset.fillColor || asset.backgroundColor || asset.fill || 'transparent',
+            stroke: asset.strokeColor || asset.stroke || "#1E40AF",
             strokeWidth: asset.strokeWidth || 2,
             points: asset.points,
             zIndex: asset.zIndex || 0,
@@ -439,15 +443,28 @@ const Dashboard = () => {
           
           fallbackAssets.push({
             id: asset.id,
-            type: asset.type,
+            type: asset.type, // Preserve the original type so ASSET_LIBRARY lookup works
             x: asset.x || 0,
             y: asset.y || 0,
             width: defaultWidth,
             height: defaultHeight,
             rotation: asset.rotation || 0,
             scale: asset.scale || 1,
+            fillColor: asset.fillColor || asset.backgroundColor,
+            strokeColor: asset.strokeColor,
+            strokeWidth: asset.strokeWidth,
+            opacity: asset.opacity,
             zIndex: asset.zIndex || 0,
           });
+          
+          // Debug: Log asset type to help identify mismatches
+          if (asset.type) {
+            console.log(`[Dashboard] Building preview asset:`, {
+              id: asset.id,
+              type: asset.type,
+              hasDefinition: !!ASSET_LIBRARY.find(a => a.id === asset.type),
+            });
+          }
           
           console.log(`[Dashboard] Converted ${asset.type} asset for preview:`, {
             id: asset.id,

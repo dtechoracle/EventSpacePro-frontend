@@ -19,6 +19,7 @@ import {
   AssetInstance,
   CanvasData,
 } from "@/store/sceneStore";
+import WorkspacePreview from "@/components/WorkspacePreview";
 
 // Extended EventData type with canvasData
 type EventData = BaseEventData & {
@@ -30,6 +31,154 @@ type EventData = BaseEventData & {
     canvas?: any;
   };
 };
+
+// Lightweight pane listing all elements on the workspace (walls, shapes, assets)
+function ElementsPane() {
+  const { walls, shapes, assets } = useProjectStore();
+  const { setSelectedIds, zoom, setPan } = useEditorStore();
+
+  const items = [
+    // Walls: compute a rough center from their nodes
+    ...walls.map((w) => {
+      if (!w.nodes || w.nodes.length === 0) {
+        return { id: w.id, label: "Wall", type: "Wall" as const, x: 0, y: 0 };
+      }
+      const xs = w.nodes.map((n) => n.x);
+      const ys = w.nodes.map((n) => n.y);
+      const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+      const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+      return { id: w.id, label: "Wall", type: "Wall" as const, x: centerX, y: centerY };
+    }),
+    // Shapes already have x/y at their center
+    ...shapes.map((s) => ({
+      id: s.id,
+      label: s.type,
+      type: "Shape" as const,
+      x: s.x,
+      y: s.y,
+      shape: s,
+    })),
+    // Assets have x/y at their center
+    ...assets.map((a) => ({
+      id: a.id,
+      label: (a.metadata as any)?.label || a.type || "Asset",
+      type: "Asset" as const,
+      x: a.x,
+      y: a.y,
+      asset: a,
+    })),
+  ];
+
+  const handleSelect = (item: { id: string; x: number; y: number }) => {
+    setSelectedIds([item.id]);
+
+    // Pan the workspace so that the selected element is roughly centered
+    if (typeof window !== "undefined" && zoom > 0) {
+      const availableWidth = window.innerWidth - 260 - 200; // sidebar + properties
+      const availableHeight = window.innerHeight - 140; // account for toolbar/header
+      const targetPanX = availableWidth / 2 - item.x * zoom;
+      const targetPanY = availableHeight / 2 - item.y * zoom;
+      setPan(targetPanX, targetPanY);
+    }
+  };
+
+  if (items.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center text-xs text-gray-400 px-3 text-center">
+        No elements on the workspace yet
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="px-3 py-2 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+        Elements
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {items.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => handleSelect(item)}
+            className="w-full flex items-center gap-1 px-1.5 py-1.5 text-[11px] hover:bg-gray-100 border-b border-gray-100"
+          >
+            {/* Mini preview - approximate but shape-accurate */}
+            <div className="w-7 h-7 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
+              {item.type === "Asset" && item.asset && (
+                <WorkspacePreview
+                  walls={[]}
+                  shapes={[]}
+                  assets={[item.asset]}
+                  width={28}
+                  height={28}
+                  backgroundColor="#ffffff"
+                />
+              )}
+              {item.type === "Shape" && item.shape && (
+                <svg width={24} height={24} viewBox="0 0 24 24">
+                  {item.shape.type === "rectangle" && (
+                    <rect
+                      x={4}
+                      y={7}
+                      width={16}
+                      height={10}
+                      fill={item.shape.fill || "transparent"}
+                      stroke={item.shape.stroke || "#9CA3AF"}
+                      strokeWidth={2}
+                      rx={2}
+                      ry={2}
+                    />
+                  )}
+                  {item.shape.type === "ellipse" && (
+                    <ellipse
+                      cx={12}
+                      cy={12}
+                      rx={8}
+                      ry={9}
+                      fill={item.shape.fill || "transparent"}
+                      stroke={item.shape.stroke || "#9CA3AF"}
+                      strokeWidth={2}
+                    />
+                  )}
+                  {item.shape.type === "line" && (
+                    <line
+                      x1={4}
+                      y1={12}
+                      x2={20}
+                      y2={12}
+                      stroke={item.shape.stroke || "#9CA3AF"}
+                      strokeWidth={2.5}
+                      strokeLinecap="round"
+                    />
+                  )}
+                </svg>
+              )}
+              {item.type === "Wall" && (
+                <svg width={24} height={24} viewBox="0 0 24 24">
+                  <line
+                    x1={4}
+                    y1={12}
+                    x2={20}
+                    y2={12}
+                    stroke="#9CA3AF"
+                    strokeWidth={3}
+                    strokeLinecap="round"
+                  />
+                </svg>
+              )}
+            </div>
+
+            {/* Label and type */}
+            <div className="flex-1 min-w-0">
+              <div className="truncate text-gray-700 leading-tight">{item.label}</div>
+              <div className="text-[0.6rem] text-gray-400 mt-0.5">{item.type}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // Type for the payload we send to the API
 type UpdateEventPayload = {
@@ -635,65 +784,74 @@ export default function Editor() {
     const isPreviewMode = preview === 'true' || isInIframe;
     
     return (
-    <div className={`${isPreviewMode ? 'h-full w-full' : 'h-screen'} flex overflow-hidden bg-gray-50`}>
-      {/* Dashboard Sidebar - only show if not in preview mode */}
-      {!isPreviewMode && <DashboardSidebar />}
-      
-      <div className="flex-1 flex flex-col overflow-hidden">
-      {!isPreviewMode && (
-        <>
-          <AssetsModal
-            isOpen={showAssetsModal}
-            onClose={() => setShowAssetsModal(false)}
-          />
-          <BottomToolbar setShowAssetsModal={setShowAssetsModal} />
-          <AiTrigger />
-        </>
-      )}
-
-      {/* Main Content Area */}
-      <div className={`flex-1 flex overflow-hidden ${isPreviewMode ? '' : ''}`}>
-        {/* NEW WORKSPACE */}
-        <div className="flex-1 relative overflow-hidden">
-          {!show3D && (
-            <div className="absolute inset-0">
-              <Workspace2D />
-            </div>
-          )}
-
-          {/* 3D Preview - disabled in preview mode */}
-          {show3D && !isPreviewMode && (
-            <div className="absolute inset-0">
-              <Scene3D
-                assets={eventData?.canvasAssets || []}
-                width={isPreviewMode ? window.innerWidth : window.innerWidth - 256}
-                height={isPreviewMode ? window.innerHeight : window.innerHeight - 120}
-              />
-            </div>
-          )}
-
-          {/* View Toggle - only show if not in preview mode */}
+      <div className={`${isPreviewMode ? 'h-full w-full' : 'h-screen'} flex overflow-hidden bg-gray-50`}>
+        {/* Dashboard Sidebar - only show if not in preview mode */}
+        {!isPreviewMode && <DashboardSidebar />}
+        
+        <div className="flex-1 flex overflow-hidden">
+          {/* Elements Pane - only show if not in preview mode */}
           {!isPreviewMode && (
-            <div className="absolute bottom-4 right-4 z-10">
-              <button
-                onClick={() => setShow3D(!show3D)}
-                className="px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                {show3D ? '📐 2D View' : '🎨 3D Preview'}
-              </button>
+            <div className="w-40 bg-white border-r border-gray-200 flex-shrink-0 shadow-sm">
+              <ElementsPane />
             </div>
           )}
-        </div>
 
-        {/* Properties Sidebar - only show if not in preview mode */}
-        {!isPreviewMode && (
-          <div className="flex-shrink-0 w-64 bg-white border-l border-gray-200">
-            <PropertiesSidebar />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {!isPreviewMode && (
+              <>
+                <AssetsModal
+                  isOpen={showAssetsModal}
+                  onClose={() => setShowAssetsModal(false)}
+                />
+                <BottomToolbar setShowAssetsModal={setShowAssetsModal} />
+                <AiTrigger />
+              </>
+            )}
+
+            {/* Main Content Area */}
+            <div className="flex-1 flex overflow-hidden">
+              {/* NEW WORKSPACE */}
+              <div className="flex-1 relative overflow-hidden">
+                {!show3D && (
+                  <div className="absolute inset-0">
+                    <Workspace2D />
+                  </div>
+                )}
+
+                {/* 3D Preview - disabled in preview mode */}
+                {show3D && !isPreviewMode && (
+                  <div className="absolute inset-0">
+                    <Scene3D
+                      assets={eventData?.canvasAssets || []}
+                      width={isPreviewMode ? window.innerWidth : window.innerWidth - 256}
+                      height={isPreviewMode ? window.innerHeight : window.innerHeight - 120}
+                    />
+                  </div>
+                )}
+
+                {/* View Toggle - only show if not in preview mode */}
+                {!isPreviewMode && (
+                  <div className="absolute bottom-4 right-4 z-10">
+                    <button
+                      onClick={() => setShow3D(!show3D)}
+                      className="px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-lg hover:bg-gray-50 transition-colors font-medium"
+                    >
+                      {show3D ? '📐 2D View' : '🎨 3D Preview'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Properties Sidebar - only show if not in preview mode */}
+              {!isPreviewMode && (
+                <div className="flex-shrink-0 w-64 bg-white border-l border-gray-200">
+                  <PropertiesSidebar />
+                </div>
+              )}
+            </div>
           </div>
-        )}
+        </div>
       </div>
-      </div>
-    </div>
     );
   };
 
@@ -718,7 +876,7 @@ export default function Editor() {
     return isPreviewMode ? (
       <div className="h-full w-full flex items-center justify-center">
         <div className="text-lg text-red-600">
-          Error loading event: {error.message}
+          Error loading event: {error?.message || 'Unknown error'}
         </div>
       </div>
     ) : (
@@ -726,7 +884,7 @@ export default function Editor() {
         <DashboardSidebar />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-lg text-red-600">
-            Error loading event: {error.message}
+            Error loading event: {error?.message || 'Unknown error'}
           </div>
         </div>
       </div>

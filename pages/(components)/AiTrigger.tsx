@@ -845,7 +845,19 @@ export default function AiTrigger() {
                     : (asset.rotation || 0) + delta,
               });
             } else if (data.action.type === 'update') {
-              updateAsset(asset.id, data.action.updates || {});
+              const rawUpdates = data.action.updates || {};
+              const updates: any = { ...rawUpdates };
+              // Normalize color props so they affect the actual fill/stroke used in the editor
+              if (rawUpdates.fillColor && !rawUpdates.fill) {
+                updates.fill = rawUpdates.fillColor;
+              }
+              if (rawUpdates.backgroundColor && !updates.fill && !rawUpdates.fill) {
+                updates.fill = rawUpdates.backgroundColor;
+              }
+              if (rawUpdates.strokeColor && !rawUpdates.stroke) {
+                updates.stroke = rawUpdates.strokeColor;
+              }
+              updateAsset(asset.id, updates);
             } else if (data.action.type === 'moveWithinGroup') {
               // Handle moving a child asset within a group
               const groupAsset = existingAssets.find(a => a.id === asset.id && a.isGroup);
@@ -1127,7 +1139,18 @@ export default function AiTrigger() {
                       : (asset.rotation || 0) + delta,
                 });
               } else if (data.action.type === 'update') {
-                updateWorkspaceAsset(asset.id, data.action.updates || {});
+                const rawUpdates = data.action.updates || {};
+                const updates: any = { ...rawUpdates };
+                if (rawUpdates.fillColor && !rawUpdates.fill) {
+                  updates.fill = rawUpdates.fillColor;
+                }
+                if (rawUpdates.backgroundColor && !updates.fill && !rawUpdates.fill) {
+                  updates.fill = rawUpdates.backgroundColor;
+                }
+                if (rawUpdates.strokeColor && !rawUpdates.stroke) {
+                  updates.stroke = rawUpdates.strokeColor;
+                }
+                updateWorkspaceAsset(asset.id, updates);
               }
             } else if (source === "project-shape") {
               if (data.action.type === 'resize') {
@@ -1168,7 +1191,18 @@ export default function AiTrigger() {
                       : (asset.rotation || 0) + delta,
                 });
               } else if (data.action.type === 'update') {
-                updateWorkspaceShape(asset.id, data.action.updates || {});
+                const rawUpdates = data.action.updates || {};
+                const updates: any = { ...rawUpdates };
+                if (rawUpdates.fillColor && !rawUpdates.fill) {
+                  updates.fill = rawUpdates.fillColor;
+                }
+                if (rawUpdates.backgroundColor && !updates.fill && !rawUpdates.fill) {
+                  updates.fill = rawUpdates.backgroundColor;
+                }
+                if (rawUpdates.strokeColor && !rawUpdates.stroke) {
+                  updates.stroke = rawUpdates.strokeColor;
+                }
+                updateWorkspaceShape(asset.id, updates);
               }
             }
           };
@@ -1226,9 +1260,19 @@ export default function AiTrigger() {
           // If successful, we're done
           return;
         } catch (commandError: any) {
-          // If command handler fails or returns an error, check if it's a "not applicable" error
           console.log('Command handler result:', commandError);
-          // Continue to plan generation as fallback
+          const msg = (commandError && (commandError.message || String(commandError))) || "";
+          // Only fall back to plan generation for explicit routing errors
+          if (
+            !msg.includes('plan generation') &&
+            !msg.includes('not applicable') &&
+            !msg.includes('not recognized')
+          ) {
+            // Hard failure for command – we've already shown an error message in handleInteractiveCommand
+            // Do NOT fall back to plan (which is layout-only and can't manipulate colors)
+            return;
+          }
+          // Otherwise, continue to plan generation as fallback
         }
       }
 

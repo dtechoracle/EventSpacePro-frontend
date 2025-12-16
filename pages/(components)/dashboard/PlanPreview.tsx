@@ -277,7 +277,7 @@ export default function PlanPreview({
     const x = asset.x - w / 2;
     const y = asset.y - h / 2;
 
-    if (asset.type === 'circle' || asset.type === 'round-table') {
+    if (asset.type === 'circle' || asset.type === 'round-table' || asset.type === 'ellipse') {
       return [
         <ellipse
           key={asset.id}

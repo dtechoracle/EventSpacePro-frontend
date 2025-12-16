@@ -13,14 +13,43 @@ export function calculateWorkspaceBounds(
     let maxX = -Infinity;
     let maxY = -Infinity;
 
-    // Process walls
+    // Process walls (support both node-based walls and wall-polygon from API)
     walls.forEach(wall => {
-        wall.nodes.forEach(node => {
-            minX = Math.min(minX, node.x);
-            minY = Math.min(minY, node.y);
-            maxX = Math.max(maxX, node.x);
-            maxY = Math.max(maxY, node.y);
-        });
+        // Node-based walls
+        if (wall.nodes && wall.nodes.length) {
+            wall.nodes.forEach(node => {
+                minX = Math.min(minX, node.x);
+                minY = Math.min(minY, node.y);
+                maxX = Math.max(maxX, node.x);
+                maxY = Math.max(maxY, node.y);
+            });
+        }
+
+        // Polygon-based walls (API uses wallPolygon + x/y offsets)
+        const poly = (wall as any).wallPolygon as Array<{ x: number; y: number }> | undefined;
+        if (poly && poly.length) {
+            poly.forEach(point => {
+                const px = point.x + ((wall as any).x || 0);
+                const py = point.y + ((wall as any).y || 0);
+                minX = Math.min(minX, px);
+                minY = Math.min(minY, py);
+                maxX = Math.max(maxX, px);
+                maxY = Math.max(maxY, py);
+            });
+        }
+
+        // Centerline fallback if provided
+        const centerline = (wall as any).centerline as Array<{ x: number; y: number }> | undefined;
+        if (centerline && centerline.length) {
+            centerline.forEach(point => {
+                const px = point.x + ((wall as any).x || 0);
+                const py = point.y + ((wall as any).y || 0);
+                minX = Math.min(minX, px);
+                minY = Math.min(minY, py);
+                maxX = Math.max(maxX, px);
+                maxY = Math.max(maxY, py);
+            });
+        }
     });
 
     // Process shapes (shapes are centered at x, y)

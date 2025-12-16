@@ -2,23 +2,28 @@
 
 import { useEffect, useState } from "react";
 import { BsFolder, BsHeart, BsCalendar, BsStars, BsTrash, BsChevronLeft, BsChevronRight } from "react-icons/bs";
+import { FiLogOut } from "react-icons/fi";
 import { useUserStore } from "@/store/userStore";
 import { useRouter } from "next/router";
+import Cookies from "js-cookie";
 
 export default function DashboardSidebar() {
-  const { user, fetchUser } = useUserStore();
+  const { user, fetchUser, clearUser } = useUserStore();
   const router = useRouter();
-  const [isCollapsed, setIsCollapsed] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sidebar-collapsed');
-      return saved === 'true';
-    }
-    return false;
-  });
+  // Avoid SSR hydration mismatch: start uncollapsed, then hydrate from localStorage on client
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
-  // Fetch user on mount to ensure login state is current
+  // Fetch user on mount to ensure login state is current and hydrate collapse state
   useEffect(() => {
     fetchUser();
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("sidebar-collapsed");
+      if (saved === "true") {
+        setIsCollapsed(true);
+      }
+    }
+    setHydrated(true);
   }, [fetchUser]);
 
   const userInitial = user?.firstName?.[0]?.toUpperCase() || "U";
@@ -46,20 +51,44 @@ export default function DashboardSidebar() {
   const toggleCollapse = () => {
     const newState = !isCollapsed;
     setIsCollapsed(newState);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sidebar-collapsed', String(newState));
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sidebar-collapsed", String(newState));
     }
   };
 
+  const handleLogout = () => {
+    // Clear auth cookie (this is what middleware checks)
+    Cookies.remove("authToken");
+    
+    // Clear user state from Zustand store
+    clearUser();
+    
+    // Clear any persisted user storage
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("user-storage");
+        localStorage.removeItem("auth-token");
+      }
+    } catch {
+      // ignore storage errors
+    }
+    
+    // Redirect to login page
+    router.push("/auth/login");
+  };
+
+  // During SSR/hydration, render uncollapsed to match server HTML
+  const collapsed = hydrated ? isCollapsed : false;
+
   return (
-    <div className={`${isCollapsed ? 'w-16' : 'w-56'} bg-white/80 backdrop-blur-sm border-r border-gray-300/50 flex flex-col shadow-sm transition-all duration-300 relative`}>
+    <div className={`${collapsed ? 'w-16' : 'w-56'} bg-white/80 backdrop-blur-sm border-r border-gray-300/50 flex flex-col shadow-sm transition-all duration-300 relative`}>
       {/* Collapse Toggle Button */}
       <button
         onClick={toggleCollapse}
         className="absolute -right-3 top-4 z-10 w-6 h-6 bg-white border border-gray-300 rounded-full flex items-center justify-center shadow-md hover:bg-gray-50 transition-colors"
-        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
-        {isCollapsed ? <BsChevronRight className="w-3 h-3" /> : <BsChevronLeft className="w-3 h-3" />}
+        {collapsed ? <BsChevronRight className="w-3 h-3" /> : <BsChevronLeft className="w-3 h-3" />}
       </button>
       {/* Profile Section */}
       <div className="p-4 border-b border-gray-200/50">
@@ -70,7 +99,7 @@ export default function DashboardSidebar() {
           >
             {userInitial}
           </div>
-          {!isCollapsed && (
+          {!collapsed && (
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-sm truncate text-gray-800">{userName}</div>
               <div className="text-xs text-gray-500 truncate">My Workspace</div>
@@ -156,7 +185,18 @@ export default function DashboardSidebar() {
           </button>
         </div>
       )}
+
+      {/* Logout */}
+      <div className="p-4 border-t border-gray-200/50">
+        <button
+          onClick={handleLogout}
+          className={`w-full flex items-center ${isCollapsed ? "justify-center" : "gap-2"} px-3 py-2 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors`}
+          title="Logout"
+        >
+          <FiLogOut className="w-4 h-4" />
+          {!isCollapsed && <span>Logout</span>}
+        </button>
+      </div>
     </div>
   );
 }
-

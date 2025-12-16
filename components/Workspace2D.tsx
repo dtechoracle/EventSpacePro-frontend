@@ -143,13 +143,9 @@ export default function Workspace2D({
         }
     }, [setCanvasOffset]);
 
-    // ESC key handler to cancel snap mode
+    // ESC handler for snap mode and global undo/redo
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Delete' || e.key === 'Backspace') {
-                e.preventDefault();
-                // handleDelete(); // Assuming handleDelete is defined elsewhere
-            }
             // Undo/Redo shortcuts
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
                 e.preventDefault();
@@ -651,8 +647,10 @@ export default function Workspace2D({
             e.preventDefault();
             e.stopPropagation();
 
-            if (e.ctrlKey || e.metaKey) {
-                // Inverted zoom: scroll down (positive) -> zoom in, scroll up (negative) -> zoom out
+            // Treat wheel as zoom by default (external mouse): down = zoom in, up = zoom out
+            const shouldZoom = e.ctrlKey || e.metaKey || Math.abs(e.deltaY) >= Math.abs(e.deltaX);
+
+            if (shouldZoom) {
                 const delta = e.deltaY > 0 ? 1.1 : 0.9;
                 const newZoom = zoom * delta;
 
@@ -683,6 +681,7 @@ export default function Workspace2D({
                     });
                 }, 100);
             } else {
+                // Horizontal wheel movement still pans
                 panBy(-e.deltaX, -e.deltaY);
             }
         };

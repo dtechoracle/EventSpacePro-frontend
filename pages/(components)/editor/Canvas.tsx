@@ -257,43 +257,27 @@ export default function Canvas({
       return Math.min(3, Math.max(MIN_ZOOM_BASE, padded));
     };
     const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        const rect = el.getBoundingClientRect();
-        const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-        const sceneX = (cursor.x - targetOffset.current.x) / targetZoom.current;
-        const sceneY = (cursor.y - targetOffset.current.y) / targetZoom.current;
-        const delta = -e.deltaY * ZOOM_SENSITIVITY;
-        const desired = targetZoom.current + delta;
-        const minZoom = computeMinZoom();
-        const newZoom = Math.min(3, Math.max(minZoom, desired));
-        const newOffset = {
-          x: cursor.x - sceneX * newZoom,
-          y: cursor.y - sceneY * newZoom,
-        };
-        targetZoom.current = newZoom;
-        targetOffset.current = clampOffset(newOffset, newZoom, false);
-      }
+      // Treat mouse wheel vertical scroll as zoom (no modifier needed),
+      // but still support pinch-to-zoom (ctrl/meta) as before.
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const sceneX = (cursor.x - targetOffset.current.x) / targetZoom.current;
+      const sceneY = (cursor.y - targetOffset.current.y) / targetZoom.current;
+      const delta = -e.deltaY * ZOOM_SENSITIVITY;
+      const desired = targetZoom.current + delta;
+      const minZoom = computeMinZoom();
+      const newZoom = Math.min(3, Math.max(minZoom, desired));
+      const newOffset = {
+        x: cursor.x - sceneX * newZoom,
+        y: cursor.y - sceneY * newZoom,
+      };
+      targetZoom.current = newZoom;
+      targetOffset.current = clampOffset(newOffset, newZoom, false);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [effectiveWidthMm, effectiveHeightMm, mmToPx]);
-
-  // Wheel-to-pan when not zooming (prevent page scroll)
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const onWheelPan = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) return; // zoom handler handles this
-      e.preventDefault();
-      const dx = e.deltaX;
-      const dy = e.deltaY;
-      const candidate = { x: targetOffset.current.x - dx, y: targetOffset.current.y - dy };
-      targetOffset.current = clampOffset(candidate, targetZoom.current, false);
-    };
-    el.addEventListener("wheel", onWheelPan, { passive: false });
-    return () => el.removeEventListener("wheel", onWheelPan);
-  }, []);
 
   // Enforce minimum zoom on mount/resize and center scene
   useEffect(() => {
