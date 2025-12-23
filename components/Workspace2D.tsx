@@ -18,6 +18,10 @@ import ShapeTool from './tools/ShapeTool';
 import FreehandTool from './tools/FreehandTool';
 import SelectionTool from './tools/SelectionTool';
 import DimensionTool from './tools/DimensionTool';
+import LabelArrowTool from './tools/LabelArrowTool';
+import TextAnnotationTool from './tools/TextAnnotationTool';
+import LabelArrowRenderer from './renderers/LabelArrowRenderer';
+import TextAnnotationRenderer from './renderers/TextAnnotationRenderer';
 import ContextMenu from './ui/ContextMenu';
 import { AnchorType, getAnchorsForObject } from '@/utils/snapAnchors';
 import { ASSET_LIBRARY } from '@/lib/assets';
@@ -83,8 +87,8 @@ export default function Workspace2D({
     } = useEditorStore();
 
     const {
-        walls, shapes, assets, dimensions, comments,
-        updateShape, updateAsset, updateWall,
+        walls, shapes, assets, dimensions, comments, textAnnotations, labelArrows,
+        updateShape, updateAsset, updateWall, updateDimension, updateTextAnnotation,
         addAsset, addDimension, removeDimension,
         addComment, updateComment, removeComment, resolveComment
     } = useProjectStore();
@@ -253,6 +257,42 @@ export default function Workspace2D({
                         }));
                         updateWall(id, { nodes: newNodes }, true);
                     }
+
+                    const textAnnotation = textAnnotations.find((t) => t.id === id);
+                    if (textAnnotation) {
+                        useProjectStore.getState().updateTextAnnotation(id, {
+                            x: textAnnotation.x + snappedDx,
+                            y: textAnnotation.y + snappedDy,
+                        });
+                    }
+
+                    const labelArrow = labelArrows.find((l) => l.id === id);
+                    if (labelArrow) {
+                        useProjectStore.getState().updateLabelArrow(id, {
+                            startPoint: {
+                                x: labelArrow.startPoint.x + snappedDx,
+                                y: labelArrow.startPoint.y + snappedDy,
+                            },
+                            endPoint: {
+                                x: labelArrow.endPoint.x + snappedDx,
+                                y: labelArrow.endPoint.y + snappedDy,
+                            },
+                        });
+                    }
+
+                    const dimension = dimensions.find((d) => d.id === id);
+                    if (dimension) {
+                        useProjectStore.getState().updateDimension(id, {
+                            startPoint: {
+                                x: dimension.startPoint.x + snappedDx,
+                                y: dimension.startPoint.y + snappedDy,
+                            },
+                            endPoint: {
+                                x: dimension.endPoint.x + snappedDx,
+                                y: dimension.endPoint.y + snappedDy,
+                            },
+                        });
+                    }
                 });
 
                 setDraggedItemStart(snapped);
@@ -268,7 +308,7 @@ export default function Workspace2D({
                 });
             }
         },
-        [panX, panY, zoom, isPanning, dragStart, panBy, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, walls, updateShape, updateAsset, updateWall, snapToGridFn, selectionRect, updateCursor]
+        [panX, panY, zoom, isPanning, dragStart, panBy, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, walls, textAnnotations, labelArrows, dimensions, updateShape, updateAsset, updateWall, snapToGridFn, selectionRect, updateCursor]
     );
 
     const handleMouseDown = useCallback(
@@ -287,6 +327,16 @@ export default function Workspace2D({
             }
 
             if (e.button === 0) {
+                // Don't handle clicks when text-annotation tool is active AND tool is focused on creating
+                // But still allow selection of existing items when no tool explicitly active (activeTool may be undefined/null)
+                if (activeTool === 'text-annotation') {
+                    // If we're in creation mode, let the text tool own the click
+                    const textToolActive = useEditorStore.getState().activeTool === 'text-annotation';
+                    if (textToolActive) {
+                        return;
+                    }
+                }
+
                 const worldX = (x - panX) / zoom;
                 const worldY = (y - panY) / zoom;
 
@@ -430,9 +480,144 @@ export default function Workspace2D({
                 if (activeTool === 'select') {
                     let itemSelected = false;
 
+                    // Check dimensions FIRST (before shapes/assets) so they're easier to select
+                    for (let i = dimensions.length - 1; i >= 0; i--) {
+                        const dim = dimensions[i];
+                        // Hit-test the dimension line (the offset line, not the extension lines)
+                        const dx = dim.endPoint.x - dim.startPoint.x;
+                        const dy = dim.endPoint.y - dim.startPoint.y;
+                        const length = Math.sqrt(dx * dx + dy * dy);
+                        if (length === 0) continue;
+
+                        const nx = dx / length;
+                        const ny = dy / length;
+                        const px = -ny;
+                        const py = nx;
+
+                        // Calculate dimension line position
+                        const p1x = dim.startPoint.x + px * dim.offset;
+                        const p1y = dim.startPoint.y + py * dim.offset;
+                        const p2x = dim.endPoint.x + px * dim.offset;
+                        const p2y = dim.endPoint.y + py * dim.offset;
+
+                        // Hit-test the dimension line
+                        const lineDx = p2x - p1x;
+                        const lineDy = p2y - p1y;
+                        const lineLengthSquared = lineDx * lineDx + lineDy * lineDy;
+                        if (lineLengthSquared === 0) continue;
+
+                        const t = Math.max(
+                            0,
+                            Math.min(
+                                1,
+                                ((worldX - p1x) * lineDx + (worldY - p1y) * lineDy) / lineLengthSquared
+                            )
+                        );
+
+                        const projX = p1x + t * lineDx;
+                        const projY = p1y + t * lineDy;
+                        const dist = Math.sqrt((worldX - projX) ** 2 + (worldY - projY) ** 2);
+                        
+                        // Also check if clicking near the text (midpoint)
+                        const midX = (p1x + p2x) / 2;
+                        const midY = (p1y + p2y) / 2;
+                        const distToText = Math.sqrt((worldX - midX) ** 2 + (worldY - midY) ** 2);
+                        
+                        // Also check extension lines
+                        const distToStart = Math.sqrt((worldX - dim.startPoint.x) ** 2 + (worldY - dim.startPoint.y) ** 2);
+                        const distToEnd = Math.sqrt((worldX - dim.endPoint.x) ** 2 + (worldY - dim.endPoint.y) ** 2);
+                        
+                        const hitRadius = 40; // Even larger hit radius for easier clicking
+                        const textHitRadius = 50; // Larger radius for text area
+                        const extensionHitRadius = 30; // For extension lines
+
+                        if (dist <= hitRadius || distToText <= textHitRadius || distToStart <= extensionHitRadius || distToEnd <= extensionHitRadius) {
+                            if (selectedIds.includes(dim.id)) {
+                                useProjectStore.getState().saveToHistory();
+                                setIsDraggingItem(true);
+                                setDraggedItemStart({ x: worldX, y: worldY });
+                            } else {
+                                setSelectedIds([dim.id]);
+                                sceneStore.selectMultipleAssets([dim.id]);
+                            }
+                            itemSelected = true;
+                            return;
+                        }
+                    }
+
                     // Check shapes (reverse order for z-index)
                     for (let i = shapes.length - 1; i >= 0; i--) {
                         const shape = shapes[i];
+
+                        // Improved hit-test for lines/arrows so you can click anywhere on the visible stroke,
+                        // not just inside the tiny bounding box.
+                        if (shape.type === 'line' || shape.type === 'arrow') {
+                            const thickness = (shape.strokeWidth ?? 20) / 2 + 10; // extra padding
+
+                            // If this is a polyline, test each segment
+                            if (shape.points && shape.points.length >= 2) {
+                                let hit = false;
+                                for (let s = 0; s < shape.points.length - 1; s++) {
+                                    const p1 = shape.points[s];
+                                    const p2 = shape.points[s + 1];
+                                    const ax = shape.x + p1.x;
+                                    const ay = shape.y + p1.y;
+                                    const bx = shape.x + p2.x;
+                                    const by = shape.y + p2.y;
+
+                                    const dx = bx - ax;
+                                    const dy = by - ay;
+                                    const lenSq = dx * dx + dy * dy;
+                                    if (lenSq === 0) continue;
+                                    const t = Math.max(0, Math.min(1, ((worldX - ax) * dx + (worldY - ay) * dy) / lenSq));
+                                    const projX = ax + t * dx;
+                                    const projY = ay + t * dy;
+                                    const dist = Math.hypot(worldX - projX, worldY - projY);
+                                    if (dist <= thickness) {
+                                        hit = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!hit) {
+                                    continue;
+                                }
+                            } else {
+                                // Legacy straight line/arrow defined by width + rotation
+                                const rot = (shape.rotation || 0) * (Math.PI / 180);
+                                const cosR = Math.cos(rot);
+                                const sinR = Math.sin(rot);
+                                const halfLen = shape.width / 2;
+                                const ax = shape.x - halfLen * cosR;
+                                const ay = shape.y - halfLen * sinR;
+                                const bx = shape.x + halfLen * cosR;
+                                const by = shape.y + halfLen * sinR;
+                                const dx = bx - ax;
+                                const dy = by - ay;
+                                const lenSq = dx * dx + dy * dy;
+                                if (lenSq === 0) continue;
+                                const t = Math.max(0, Math.min(1, ((worldX - ax) * dx + (worldY - ay) * dy) / lenSq));
+                                const projX = ax + t * dx;
+                                const projY = ay + t * dy;
+                                const dist = Math.hypot(worldX - projX, worldY - projY);
+                                if (dist > thickness) {
+                                    continue;
+                                }
+                            }
+
+                            if (selectedIds.includes(shape.id)) {
+                                useProjectStore.getState().saveToHistory();
+                                setIsDraggingItem(true);
+                                setDraggedItemStart({ x: worldX, y: worldY });
+                            } else {
+                                setSelectedIds([shape.id]);
+                                sceneStore.selectMultipleAssets([shape.id]);
+                            }
+                            itemSelected = true;
+                            return;
+                        }
+
+                        // Default hit-test for rectangles / ellipses / other shapes: axis-aligned bounds
                         const halfW = shape.width / 2;
                         const halfH = shape.height / 2;
 
@@ -523,6 +708,88 @@ export default function Workspace2D({
                         }
                     }
 
+                    // Check text annotations (reverse order for z-index)
+                    for (let i = textAnnotations.length - 1; i >= 0; i--) {
+                        const annotation = textAnnotations[i];
+                        // Approximate hit-test: check if click is near the text position
+                        // We'll use a generous hit area since text size varies
+                        const fontSize = annotation.fontSize || 14;
+                        const textLength = annotation.text.length || 1;
+                        const estimatedWidth = textLength * fontSize * 0.6;
+                        const estimatedHeight = fontSize * 1.2;
+                        const hitRadius = Math.max(Math.max(estimatedWidth, estimatedHeight) / 2, 30); // At least 30mm radius
+                        
+                        const dist = Math.hypot(worldX - annotation.x, worldY - annotation.y);
+                        if (dist <= hitRadius) {
+                            if (selectedIds.includes(annotation.id)) {
+                                // Check if double-click for editing
+                                const now = Date.now();
+                                const lastClickTime = (window as any).__lastTextClickTime || 0;
+                                const lastClickId = (window as any).__lastTextClickId;
+                                
+                                if (now - lastClickTime < 300 && lastClickId === annotation.id) {
+                                    // Double-click detected - trigger editing
+                                    (window as any).__lastTextClickTime = 0;
+                                    (window as any).__lastTextClickId = null;
+                                    // The TextAnnotationTool will handle this via selectedIds
+                                    setSelectedIds([annotation.id]);
+                                    sceneStore.selectMultipleAssets([annotation.id]);
+                                } else {
+                                    // Single click - start dragging
+                                    useProjectStore.getState().saveToHistory();
+                                    setIsDraggingItem(true);
+                                    setDraggedItemStart({ x: worldX, y: worldY });
+                                }
+                                (window as any).__lastTextClickTime = now;
+                                (window as any).__lastTextClickId = annotation.id;
+                            } else {
+                                setSelectedIds([annotation.id]);
+                                sceneStore.selectMultipleAssets([annotation.id]);
+                                (window as any).__lastTextClickTime = Date.now();
+                                (window as any).__lastTextClickId = annotation.id;
+                            }
+                            itemSelected = true;
+                            return;
+                        }
+                    }
+
+                    // Check label arrows (reverse order for z-index)
+                    for (let i = labelArrows.length - 1; i >= 0; i--) {
+                        const arrow = labelArrows[i];
+                        // Hit-test the arrow line
+                        const dx = arrow.endPoint.x - arrow.startPoint.x;
+                        const dy = arrow.endPoint.y - arrow.startPoint.y;
+                        const lengthSquared = dx * dx + dy * dy;
+                        if (lengthSquared === 0) continue;
+
+                        const t = Math.max(
+                            0,
+                            Math.min(
+                                1,
+                                ((worldX - arrow.startPoint.x) * dx + (worldY - arrow.startPoint.y) * dy) / lengthSquared
+                            )
+                        );
+
+                        const projX = arrow.startPoint.x + t * dx;
+                        const projY = arrow.startPoint.y + t * dy;
+                        const dist = Math.sqrt((worldX - projX) ** 2 + (worldY - projY) ** 2);
+                        const strokeWidth = arrow.strokeWidth || 2;
+                        const hitRadius = strokeWidth / 2 + 10; // Extra padding for easier clicking
+
+                        if (dist <= hitRadius) {
+                            if (selectedIds.includes(arrow.id)) {
+                                useProjectStore.getState().saveToHistory();
+                                setIsDraggingItem(true);
+                                setDraggedItemStart({ x: worldX, y: worldY });
+                            } else {
+                                setSelectedIds([arrow.id]);
+                                sceneStore.selectMultipleAssets([arrow.id]);
+                            }
+                            itemSelected = true;
+                            return;
+                        }
+                    }
+
                     if (!itemSelected) {
                         // Clear selection and any auto-generated wall dimensions when clicking empty space
                         clearSelection();
@@ -544,6 +811,7 @@ export default function Workspace2D({
                     setPanning(true);
                     setDragStart({ x, y });
                 }
+                // For text-annotation and other tools (wall, shape-*, freehand, dimension), don't handle - let tool handle it
                 // For other tools (wall, shape-*, freehand, dimension), don't handle - let tool handle it
             }
         },
@@ -584,6 +852,39 @@ export default function Workspace2D({
                 }
             });
 
+            // Select text annotations within rectangle
+            textAnnotations.forEach(annotation => {
+                if (annotation.x >= minX && annotation.x <= maxX && annotation.y >= minY && annotation.y <= maxY) {
+                    selectedItems.push(annotation.id);
+                }
+            });
+
+            // Select label arrows within rectangle (check if any point is in rectangle)
+            labelArrows.forEach(arrow => {
+                const startInRect = arrow.startPoint.x >= minX && arrow.startPoint.x <= maxX && 
+                                   arrow.startPoint.y >= minY && arrow.startPoint.y <= maxY;
+                const endInRect = arrow.endPoint.x >= minX && arrow.endPoint.x <= maxX && 
+                                 arrow.endPoint.y >= minY && arrow.endPoint.y <= maxY;
+                if (startInRect || endInRect) {
+                    selectedItems.push(arrow.id);
+                }
+            });
+
+            // Select dimensions within rectangle (check if any point is in rectangle)
+            dimensions.forEach(dim => {
+                const startInRect = dim.startPoint.x >= minX && dim.startPoint.x <= maxX && 
+                                   dim.startPoint.y >= minY && dim.startPoint.y <= maxY;
+                const endInRect = dim.endPoint.x >= minX && dim.endPoint.x <= maxX && 
+                                 dim.endPoint.y >= minY && dim.endPoint.y <= maxY;
+                // Also check the dimension line midpoint
+                const midX = (dim.startPoint.x + dim.endPoint.x) / 2;
+                const midY = (dim.startPoint.y + dim.endPoint.y) / 2;
+                const midInRect = midX >= minX && midX <= maxX && midY >= minY && midY <= maxY;
+                if (startInRect || endInRect || midInRect) {
+                    selectedItems.push(dim.id);
+                }
+            });
+
             if (selectedItems.length > 0) {
                 setSelectedIds(selectedItems);
                 sceneStore.selectMultipleAssets(selectedItems);
@@ -596,7 +897,7 @@ export default function Workspace2D({
         setDragStart(null);
         setIsDraggingItem(false);
         setDraggedItemStart(null);
-    }, [setPanning, selectionRect, shapes, assets, walls, setSelectedIds, sceneStore]);
+    }, [setPanning, selectionRect, shapes, assets, walls, textAnnotations, labelArrows, setSelectedIds, sceneStore]);
 
     const handleAssetDrop = useCallback(
         (e: React.DragEvent<HTMLDivElement>) => {
@@ -644,13 +945,15 @@ export default function Workspace2D({
         let zoomToastTimeout: NodeJS.Timeout | null = null;
 
         const handleWheel = (e: WheelEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
+            // Trackpad behavior like other design tools:
+            // - Two-finger scroll (no Ctrl/Meta) -> pan
+            // - Pinch zoom (Ctrl/Meta held) -> zoom
+            const isPinchZoom = e.ctrlKey || e.metaKey;
 
-            // Treat wheel as zoom by default (external mouse): down = zoom in, up = zoom out
-            const shouldZoom = e.ctrlKey || e.metaKey || Math.abs(e.deltaY) >= Math.abs(e.deltaX);
+            if (isPinchZoom) {
+                e.preventDefault();
+                e.stopPropagation();
 
-            if (shouldZoom) {
                 const delta = e.deltaY > 0 ? 1.1 : 0.9;
                 const newZoom = zoom * delta;
 
@@ -681,7 +984,8 @@ export default function Workspace2D({
                     });
                 }, 100);
             } else {
-                // Horizontal wheel movement still pans
+                // Two-finger scroll / mouse wheel without modifier -> pan
+                // Do NOT preventDefault so browser scrollbars / page scroll work if needed
                 panBy(-e.deltaX, -e.deltaY);
             }
         };
@@ -719,6 +1023,24 @@ export default function Workspace2D({
             } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
                 e.preventDefault();
                 zoomOut();
+            }
+            // Delete key (global delete for selected items)
+            else if (e.key === 'Delete' || e.key === 'Backspace') {
+                const active = useEditorStore.getState().activeTool;
+                // If user is typing in text tool, let TextAnnotationTool handle it
+                if (active === 'text-annotation') return;
+                const { selectedIds } = useEditorStore.getState();
+                if (!selectedIds.length) return;
+                const state = useProjectStore.getState();
+                selectedIds.forEach((id) => {
+                    state.removeShape(id);
+                    state.removeWall(id);
+                    state.removeAsset(id);
+                    state.removeDimension(id);
+                    state.removeLabelArrow(id);
+                    state.removeTextAnnotation(id);
+                });
+                useEditorStore.getState().clearSelection();
             }
             // Duplicate (Ctrl+D)
             else if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
@@ -852,6 +1174,372 @@ export default function Workspace2D({
         targetId: string | null;
     } | null>(null);
 
+    const alignSelection = (mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => {
+        const selectedIds = useEditorStore.getState().selectedIds;
+        if (selectedIds.length < 2) return;
+
+        // Gather all selected items with bounds
+        const items: Array<{
+            id: string;
+            type: 'shape' | 'asset' | 'wall' | 'dimension' | 'textAnnotation';
+            bounds: { x1: number; y1: number; x2: number; y2: number };
+        }> = [];
+
+        const addItemBounds = (id: string) => {
+            const shape = shapes.find(s => s.id === id);
+            if (shape) {
+                const halfW = shape.width / 2;
+                const halfH = shape.height / 2;
+                items.push({ id, type: 'shape', bounds: { x1: shape.x - halfW, y1: shape.y - halfH, x2: shape.x + halfW, y2: shape.y + halfH } });
+                return;
+            }
+            const asset = assets.find(a => a.id === id);
+            if (asset) {
+                const w = asset.width * asset.scale;
+                const h = asset.height * asset.scale;
+                items.push({ id, type: 'asset', bounds: { x1: asset.x - w / 2, y1: asset.y - h / 2, x2: asset.x + w / 2, y2: asset.y + h / 2 } });
+                return;
+            }
+            const wall = walls.find(w => w.id === id);
+            if (wall && wall.nodes.length > 0) {
+                const xs = wall.nodes.map(n => n.x);
+                const ys = wall.nodes.map(n => n.y);
+                items.push({ id, type: 'wall', bounds: { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) } });
+                return;
+            }
+            const dimension = dimensions.find(d => d.id === id);
+            if (dimension) {
+                const pts = [
+                    dimension.startPoint,
+                    dimension.endPoint,
+                ];
+                // include offset line endpoints
+                const dx = dimension.endPoint.x - dimension.startPoint.x;
+                const dy = dimension.endPoint.y - dimension.startPoint.y;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                if (len > 0 && dimension.offset !== undefined) {
+                    const px = -dy / len;
+                    const py = dx / len;
+                    pts.push(
+                        { x: dimension.startPoint.x + px * dimension.offset, y: dimension.startPoint.y + py * dimension.offset },
+                        { x: dimension.endPoint.x + px * dimension.offset, y: dimension.endPoint.y + py * dimension.offset },
+                    );
+                }
+                const xs = pts.map(p => p.x);
+                const ys = pts.map(p => p.y);
+                items.push({ id, type: 'dimension', bounds: { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) } });
+                return;
+            }
+            const text = textAnnotations.find(t => t.id === id);
+            if (text) {
+                const fontSize = text.fontSize || 14;
+                const width = Math.max(10, (text.text?.length || 1) * (fontSize * 0.6));
+                const height = fontSize * 1.2;
+                items.push({ id, type: 'textAnnotation', bounds: { x1: text.x, y1: text.y - height / 2, x2: text.x + width, y2: text.y + height / 2 } });
+            }
+        };
+
+        selectedIds.forEach(addItemBounds);
+        if (items.length < 2) return;
+
+        // Compute group bounds
+        const x1 = Math.min(...items.map(i => i.bounds.x1));
+        const y1 = Math.min(...items.map(i => i.bounds.y1));
+        const x2 = Math.max(...items.map(i => i.bounds.x2));
+        const y2 = Math.max(...items.map(i => i.bounds.y2));
+        const centerX = (x1 + x2) / 2;
+        const centerY = (y1 + y2) / 2;
+
+        items.forEach(item => {
+            const bounds = item.bounds;
+            let targetX = 0;
+            let targetY = 0;
+            const width = bounds.x2 - bounds.x1;
+            const height = bounds.y2 - bounds.y1;
+
+            if (mode === 'left') targetX = x1;
+            if (mode === 'center') targetX = centerX - width / 2;
+            if (mode === 'right') targetX = x2 - width;
+            if (mode === 'top') targetY = y1;
+            if (mode === 'middle') targetY = centerY - height / 2;
+            if (mode === 'bottom') targetY = y2 - height;
+
+            const deltaX = (mode === 'left' || mode === 'center' || mode === 'right') ? targetX - bounds.x1 : 0;
+            const deltaY = (mode === 'top' || mode === 'middle' || mode === 'bottom') ? targetY - bounds.y1 : 0;
+
+            if (item.type === 'shape') {
+                const shape = shapes.find(s => s.id === item.id);
+                if (shape) updateShape(item.id, { x: shape.x + deltaX, y: shape.y + deltaY });
+            } else if (item.type === 'asset') {
+                const asset = assets.find(a => a.id === item.id);
+                if (asset) updateAsset(item.id, { x: asset.x + deltaX, y: asset.y + deltaY });
+            } else if (item.type === 'wall') {
+                const wall = walls.find(w => w.id === item.id);
+                if (wall) updateWall(item.id, { nodes: wall.nodes.map(n => ({ ...n, x: n.x + deltaX, y: n.y + deltaY })) });
+            } else if (item.type === 'dimension') {
+                const dim = dimensions.find(d => d.id === item.id);
+                if (dim) {
+                    updateDimension(item.id, {
+                        startPoint: { x: dim.startPoint.x + deltaX, y: dim.startPoint.y + deltaY },
+                        endPoint: { x: dim.endPoint.x + deltaX, y: dim.endPoint.y + deltaY },
+                    });
+                }
+            } else if (item.type === 'textAnnotation') {
+                const t = textAnnotations.find(tt => tt.id === item.id);
+                if (t) updateTextAnnotation(item.id, { x: t.x + deltaX, y: t.y + deltaY });
+            }
+        });
+    };
+
+    const distributeSelection = (mode: 'horizontal' | 'vertical' | 'circle') => {
+        const selectedIds = useEditorStore.getState().selectedIds;
+        if (mode === 'circle' && selectedIds.length < 3) return;
+        if ((mode === 'horizontal' || mode === 'vertical') && selectedIds.length < 3) return;
+
+        // Get fresh values from store
+        const store = useProjectStore.getState();
+        const currentShapes = store.shapes;
+        const currentAssets = store.assets;
+        const currentWalls = store.walls;
+        const currentDimensions = store.dimensions;
+        const currentTextAnnotations = store.textAnnotations;
+
+        const items: Array<{ id: string; type: 'shape' | 'asset' | 'wall' | 'dimension' | 'textAnnotation'; bounds: { x1: number; y1: number; x2: number; y2: number }; center: { x: number; y: number } }> = [];
+
+        const addItemBounds = (id: string) => {
+            const shape = currentShapes.find(s => s.id === id);
+            if (shape) {
+                const halfW = shape.width / 2;
+                const halfH = shape.height / 2;
+                items.push({ id, type: 'shape', bounds: { x1: shape.x - halfW, y1: shape.y - halfH, x2: shape.x + halfW, y2: shape.y + halfH }, center: { x: shape.x, y: shape.y } });
+                return;
+            }
+            const asset = currentAssets.find(a => a.id === id);
+            if (asset) {
+                const w = asset.width * asset.scale;
+                const h = asset.height * asset.scale;
+                items.push({ id, type: 'asset', bounds: { x1: asset.x - w / 2, y1: asset.y - h / 2, x2: asset.x + w / 2, y2: asset.y + h / 2 }, center: { x: asset.x, y: asset.y } });
+                return;
+            }
+            const wall = currentWalls.find(w => w.id === id);
+            if (wall && wall.nodes.length > 0) {
+                const xs = wall.nodes.map(n => n.x);
+                const ys = wall.nodes.map(n => n.y);
+                const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+                const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+                items.push({ id, type: 'wall', bounds: { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) }, center: { x: cx, y: cy } });
+                return;
+            }
+            const dimension = currentDimensions.find(d => d.id === id);
+            if (dimension) {
+                const pts = [
+                    dimension.startPoint,
+                    dimension.endPoint,
+                ];
+                const dx = dimension.endPoint.x - dimension.startPoint.x;
+                const dy = dimension.endPoint.y - dimension.startPoint.y;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                if (len > 0 && dimension.offset !== undefined) {
+                    const px = -dy / len;
+                    const py = dx / len;
+                    pts.push(
+                        { x: dimension.startPoint.x + px * dimension.offset, y: dimension.startPoint.y + py * dimension.offset },
+                        { x: dimension.endPoint.x + px * dimension.offset, y: dimension.endPoint.y + py * dimension.offset },
+                    );
+                }
+                const xs = pts.map(p => p.x);
+                const ys = pts.map(p => p.y);
+                const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+                const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+                items.push({ id, type: 'dimension', bounds: { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) }, center: { x: cx, y: cy } });
+                return;
+            }
+            const text = currentTextAnnotations.find(t => t.id === id);
+            if (text) {
+                const fontSize = text.fontSize || 14;
+                const width = Math.max(10, (text.text?.length || 1) * (fontSize * 0.6));
+                const height = fontSize * 1.2;
+                items.push({ id, type: 'textAnnotation', bounds: { x1: text.x, y1: text.y - height / 2, x2: text.x + width, y2: text.y + height / 2 }, center: { x: text.x + width / 2, y: text.y } });
+            }
+        };
+
+        selectedIds.forEach(addItemBounds);
+        if (items.length < 3) return;
+
+        if (mode === 'circle') {
+            // Distribute items evenly around a circle based on their centers
+            const centers = items.map(i => i.center);
+            const avgX = centers.reduce((s, c) => s + c.x, 0) / centers.length;
+            const avgY = centers.reduce((s, c) => s + c.y, 0) / centers.length;
+            // Radius based on max distance from center, with a bit of padding
+            const maxDist = Math.max(
+                ...centers.map(c => Math.hypot(c.x - avgX, c.y - avgY))
+            ) || 1;
+            const radius = maxDist * 1.2;
+
+            items.forEach((item, idx) => {
+                const angle = (2 * Math.PI * idx) / items.length - Math.PI / 2; // start at top
+                const targetX = avgX + radius * Math.cos(angle);
+                const targetY = avgY + radius * Math.sin(angle);
+                const deltaX = targetX - item.center.x;
+                const deltaY = targetY - item.center.y;
+
+                if (item.type === 'shape') {
+                    const shape = currentShapes.find(s => s.id === item.id);
+                    if (shape) updateShape(item.id, { x: shape.x + deltaX, y: shape.y + deltaY });
+                } else if (item.type === 'asset') {
+                    const asset = currentAssets.find(a => a.id === item.id);
+                    if (asset) updateAsset(item.id, { x: asset.x + deltaX, y: asset.y + deltaY });
+                } else if (item.type === 'wall') {
+                    const wall = currentWalls.find(w => w.id === item.id);
+                    if (wall) updateWall(item.id, { nodes: wall.nodes.map(n => ({ ...n, x: n.x + deltaX, y: n.y + deltaY })) });
+                } else if (item.type === 'dimension') {
+                    const dim = currentDimensions.find(d => d.id === item.id);
+                    if (dim) {
+                        updateDimension(item.id, {
+                            startPoint: { x: dim.startPoint.x + deltaX, y: dim.startPoint.y + deltaY },
+                            endPoint: { x: dim.endPoint.x + deltaX, y: dim.endPoint.y + deltaY },
+                        });
+                    }
+                } else if (item.type === 'textAnnotation') {
+                    const t = currentTextAnnotations.find(tt => tt.id === item.id);
+                    if (t) updateTextAnnotation(item.id, { x: t.x + deltaX, y: t.y + deltaY });
+                }
+            });
+        } else if (mode === 'horizontal') {
+            // Calculate average Y center to align all items on same horizontal line
+            const avgY = items.reduce((sum, item) => sum + item.center.y, 0) / items.length;
+            
+            // Sort by X (left to right)
+            const sorted = items.slice().sort((a, b) => a.center.x - b.center.x);
+            
+            // Calculate total width of all items combined (sum of widths)
+            const totalWidth = sorted.reduce((sum, item) => {
+                const width = item.bounds.x2 - item.bounds.x1;
+                return sum + width;
+            }, 0);
+            
+            // Calculate average item width for spacing
+            const avgWidth = totalWidth / sorted.length;
+            
+            // Use a minimum spacing between items (at least 1.5x average width)
+            const minSpacing = avgWidth * 1.5;
+            
+            // Calculate distribution range: total width + spacing between items
+            const distributionWidth = totalWidth + (minSpacing * (sorted.length - 1));
+            
+            // Start position: leftmost item's left edge minus some padding
+            const leftmostLeft = Math.min(...sorted.map(item => item.bounds.x1));
+            const startX = leftmostLeft - (distributionWidth - totalWidth) / 2;
+            
+            // Calculate all target positions: align Y to avgY, distribute X evenly
+            const updates: Array<{ id: string; type: string; deltaX: number; deltaY: number }> = [];
+            let currentX = startX;
+            
+            sorted.forEach((item, idx) => {
+                const itemWidth = item.bounds.x2 - item.bounds.x1;
+                // Position item's center at currentX + half its width
+                const targetX = currentX + itemWidth / 2;
+                const deltaX = targetX - item.center.x;
+                const deltaY = avgY - item.center.y;
+                updates.push({ id: item.id, type: item.type, deltaX, deltaY });
+                // Move to next position: current position + item width + spacing
+                currentX += itemWidth + minSpacing;
+            });
+            
+            // Apply all updates
+            updates.forEach(({ id, type, deltaX, deltaY }) => {
+                if (type === 'shape') {
+                    const shape = currentShapes.find(s => s.id === id);
+                    if (shape) updateShape(id, { x: shape.x + deltaX, y: shape.y + deltaY });
+                } else if (type === 'asset') {
+                    const asset = currentAssets.find(a => a.id === id);
+                    if (asset) updateAsset(id, { x: asset.x + deltaX, y: asset.y + deltaY });
+                } else if (type === 'wall') {
+                    const wall = currentWalls.find(w => w.id === id);
+                    if (wall) updateWall(id, { nodes: wall.nodes.map(n => ({ ...n, x: n.x + deltaX, y: n.y + deltaY })) });
+                } else if (type === 'dimension') {
+                    const dim = currentDimensions.find(d => d.id === id);
+                    if (dim) {
+                        updateDimension(id, {
+                            startPoint: { x: dim.startPoint.x + deltaX, y: dim.startPoint.y + deltaY },
+                            endPoint: { x: dim.endPoint.x + deltaX, y: dim.endPoint.y + deltaY },
+                        });
+                    }
+                } else if (type === 'textAnnotation') {
+                    const t = currentTextAnnotations.find(tt => tt.id === id);
+                    if (t) updateTextAnnotation(id, { x: t.x + deltaX, y: t.y + deltaY });
+                }
+            });
+        } else {
+            // Vertical distribute: align all items on same vertical line, then distribute evenly
+            // Calculate average X center to align all items on same vertical line
+            const avgX = items.reduce((sum, item) => sum + item.center.x, 0) / items.length;
+            
+            // Sort by Y center (top to bottom)
+            const sorted = items.slice().sort((a, b) => a.center.y - b.center.y);
+            
+            // Calculate total height of all items combined (sum of heights)
+            const totalHeight = sorted.reduce((sum, item) => {
+                const height = item.bounds.y2 - item.bounds.y1;
+                return sum + height;
+            }, 0);
+            
+            // Calculate average item height for spacing
+            const avgHeight = totalHeight / sorted.length;
+            
+            // Use a minimum spacing between items (at least 1.5x average height)
+            const minSpacing = avgHeight * 1.5;
+            
+            // Calculate distribution range: total height + spacing between items
+            const distributionHeight = totalHeight + (minSpacing * (sorted.length - 1));
+            
+            // Start position: topmost item's top edge minus some padding
+            const topmostTop = Math.min(...sorted.map(item => item.bounds.y1));
+            const startY = topmostTop - (distributionHeight - totalHeight) / 2;
+            
+            // Calculate all target positions: align X to avgX, distribute Y evenly
+            const updates: Array<{ id: string; type: string; deltaX: number; deltaY: number }> = [];
+            let currentY = startY;
+            
+            sorted.forEach((item, idx) => {
+                const itemHeight = item.bounds.y2 - item.bounds.y1;
+                // Position item's center at currentY + half its height
+                const targetY = currentY + itemHeight / 2;
+                const deltaX = avgX - item.center.x;
+                const deltaY = targetY - item.center.y;
+                updates.push({ id: item.id, type: item.type, deltaX, deltaY });
+                // Move to next position: current position + item height + spacing
+                currentY += itemHeight + minSpacing;
+            });
+            
+            // Apply all updates
+            updates.forEach(({ id, type, deltaX, deltaY }) => {
+                if (type === 'shape') {
+                    const shape = currentShapes.find(s => s.id === id);
+                    if (shape) updateShape(id, { x: shape.x + deltaX, y: shape.y + deltaY });
+                } else if (type === 'asset') {
+                    const asset = currentAssets.find(a => a.id === id);
+                    if (asset) updateAsset(id, { x: asset.x + deltaX, y: asset.y + deltaY });
+                } else if (type === 'wall') {
+                    const wall = currentWalls.find(w => w.id === id);
+                    if (wall) updateWall(id, { nodes: wall.nodes.map(n => ({ ...n, x: n.x + deltaX, y: n.y + deltaY })) });
+                } else if (type === 'dimension') {
+                    const dim = currentDimensions.find(d => d.id === id);
+                    if (dim) {
+                        updateDimension(id, {
+                            startPoint: { x: dim.startPoint.x + deltaX, y: dim.startPoint.y + deltaY },
+                            endPoint: { x: dim.endPoint.x + deltaX, y: dim.endPoint.y + deltaY },
+                        });
+                    }
+                } else if (type === 'textAnnotation') {
+                    const t = currentTextAnnotations.find(tt => tt.id === id);
+                    if (t) updateTextAnnotation(id, { x: t.x + deltaX, y: t.y + deltaY });
+                }
+            });
+        }
+    };
+
     const handleContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
 
@@ -976,6 +1664,15 @@ export default function Workspace2D({
         ];
 
         if (hasSelection) {
+            // Distribute submenu (horizontal, vertical, circular)
+            actions.push({
+                label: "Distribute",
+                children: [
+                    { label: "Distribute Horizontally", action: () => { distributeSelection('horizontal'); closeContextMenu(); } },
+                    { label: "Distribute Vertically", action: () => { distributeSelection('vertical'); closeContextMenu(); } },
+                    { label: "Distribute in Circle", action: () => { distributeSelection('circle'); closeContextMenu(); } },
+                ],
+            });
             actions.push({
                 label: "Add to AI chat",
                 action: () => {
@@ -1272,22 +1969,108 @@ export default function Workspace2D({
             actions.push({ separator: true });
         }
 
-        actions.push(
-            {
-                label: "Delete",
-                shortcut: "Del",
-                disabled: !hasSelection,
-                action: () => {
-                    const state = useProjectStore.getState();
-                    selectedIds.forEach(id => {
-                        state.removeShape(id);
-                        state.removeWall(id);
-                        state.removeAsset(id);
-                    });
-                    useEditorStore.getState().clearSelection();
+        if (hasSelection) {
+            const state = useProjectStore.getState();
+            const {
+                walls,
+                shapes,
+                assets,
+                dimensions,
+                textAnnotations,
+                labelArrows,
+                updateShape,
+                updateWall,
+                updateAsset,
+                updateDimension,
+                updateTextAnnotation,
+                updateLabelArrow,
+            } = state;
+
+            const allItems = [
+                ...walls,
+                ...shapes,
+                ...assets,
+                ...dimensions,
+                ...textAnnotations,
+                ...labelArrows,
+            ];
+
+            const currentMaxZ = allItems.length
+                ? Math.max(...allItems.map((i: any) => i.zIndex || 0))
+                : 0;
+            const currentMinZ = allItems.length
+                ? Math.min(...allItems.map((i: any) => i.zIndex || 0))
+                : 0;
+
+            actions.push(
+                {
+                    label: "Bring to front",
+                    shortcut: "Shift+]",
+                    disabled: !hasSelection,
+                    action: () => {
+                        state.saveToHistory();
+                        let z = currentMaxZ + 1;
+                        selectedIds.forEach((id) => {
+                            if (shapes.find((s) => s.id === id)) {
+                                updateShape(id, { zIndex: z++ });
+                            } else if (walls.find((w) => w.id === id)) {
+                                updateWall(id, { zIndex: z++ });
+                            } else if (assets.find((a) => a.id === id)) {
+                                updateAsset(id, { zIndex: z++ });
+                            } else if (dimensions.find((d) => d.id === id)) {
+                                updateDimension(id, { zIndex: z++ });
+                            } else if (labelArrows.find((la) => la.id === id)) {
+                                updateLabelArrow(id, { zIndex: z++ });
+                            } else if (textAnnotations.find((t) => t.id === id)) {
+                                updateTextAnnotation(id, { zIndex: z++ });
+                            }
+                        });
+                    },
+                },
+                {
+                    label: "Send to back",
+                    shortcut: "Shift+[",
+                    disabled: !hasSelection,
+                    action: () => {
+                        state.saveToHistory();
+                        let z = currentMinZ - 1;
+                        selectedIds.forEach((id) => {
+                            if (shapes.find((s) => s.id === id)) {
+                                updateShape(id, { zIndex: z-- });
+                            } else if (walls.find((w) => w.id === id)) {
+                                updateWall(id, { zIndex: z-- });
+                            } else if (assets.find((a) => a.id === id)) {
+                                updateAsset(id, { zIndex: z-- });
+                            } else if (dimensions.find((d) => d.id === id)) {
+                                updateDimension(id, { zIndex: z-- });
+                            } else if (labelArrows.find((la) => la.id === id)) {
+                                updateLabelArrow(id, { zIndex: z-- });
+                            } else if (textAnnotations.find((t) => t.id === id)) {
+                                updateTextAnnotation(id, { zIndex: z-- });
+                            }
+                        });
+                    },
                 }
-            }
-        );
+            );
+        }
+
+        actions.push({
+            label: "Delete",
+            shortcut: "Del",
+            disabled: !hasSelection,
+            action: () => {
+                const state = useProjectStore.getState();
+                selectedIds.forEach((id) => {
+                    state.removeShape(id);
+                    state.removeWall(id);
+                    state.removeAsset(id);
+                    state.removeDimension(id);
+                    state.removeLabelArrow(id);
+                    state.removeTextAnnotation(id);
+                });
+                useEditorStore.getState().clearSelection();
+            },
+        });
 
         return actions;
     };
@@ -1308,7 +2091,7 @@ export default function Workspace2D({
             }
             }
             style={{
-                cursor: isSnapMode ? 'crosshair' : isPanning ? 'grabbing' : activeTool === 'pan' ? 'grab' : 'crosshair',
+                cursor: isSnapMode ? 'crosshair' : isPanning ? 'grabbing' : activeTool === 'pan' ? 'grab' : activeTool === 'text-annotation' ? 'text' : 'crosshair',
             }}
         >
             {gridHud.visible && showGrid && (
@@ -1350,12 +2133,26 @@ export default function Workspace2D({
                 width={viewportSize.width}
                 height={viewportSize.height}
                 className="absolute inset-0"
+                data-workspace-root="true"
             >
                 <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>
                     {showGrid && <GridRenderer gridSize={sceneGridSize} viewportSize={viewportSize} zoom={zoom} panX={panX} panY={panY} unitSystem={unitSystem} />}
 
-                    <g id="walls-layer">
-                        {walls.map((wall) => (
+                    {/* Sort drawable items by zIndex so bring-to-front / send-to-back works visually */}
+                    {(() => {
+                        const byZ = <T extends { zIndex?: number }>(items: T[]): T[] =>
+                            [...items].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+                        const sortedWalls = byZ(walls);
+                        const sortedShapes = byZ(shapes);
+                        const sortedAssets = byZ(assets);
+                        const sortedDimensions = byZ(dimensions);
+                        const sortedLabelArrows = byZ(labelArrows);
+                        const sortedTextAnnotations = byZ(textAnnotations);
+
+                        return (
+                            <>
+                                <g id="walls-layer">
+                                    {sortedWalls.map((wall) => (
                             <WallRenderer
                                 key={wall.id}
                                 wall={wall}
@@ -1365,49 +2162,72 @@ export default function Workspace2D({
                         ))}
                     </g>
 
-                    <g id="shapes-layer">
-                        {shapes.map((shape) => {
-                            if (shape.type === 'freehand') {
-                                return (
-                                    <FreehandRenderer
-                                        key={shape.id}
-                                        shape={shape}
-                                        isSelected={selectedIds.includes(shape.id)}
-                                        isHovered={hoveredId === shape.id}
-                                    />
-                                );
-                            }
-                            return (
-                                <ShapeRenderer
-                                    key={shape.id}
-                                    shape={shape}
-                                    isSelected={selectedIds.includes(shape.id)}
-                                    isHovered={hoveredId === shape.id}
-                                />
-                            );
-                        })}
-                    </g>
+                                <g id="shapes-layer">
+                                    {sortedShapes.map((shape) => {
+                                        if (shape.type === 'freehand') {
+                                            return (
+                                                <FreehandRenderer
+                                                    key={shape.id}
+                                                    shape={shape}
+                                                    isSelected={selectedIds.includes(shape.id)}
+                                                    isHovered={hoveredId === shape.id}
+                                                />
+                                            );
+                                        }
+                                        return (
+                                            <ShapeRenderer
+                                                key={shape.id}
+                                                shape={shape}
+                                                isSelected={selectedIds.includes(shape.id)}
+                                                isHovered={hoveredId === shape.id}
+                                            />
+                                        );
+                                    })}
+                                </g>
 
-                    <g id="assets-layer">
-                        {assets.map((asset) => (
-                            <AssetRenderer
-                                key={asset.id}
-                                asset={asset}
-                                isSelected={selectedIds.includes(asset.id)}
-                                isHovered={hoveredId === asset.id}
-                            />
-                        ))}
-                    </g>
+                                <g id="assets-layer">
+                                    {sortedAssets.map((asset) => (
+                                        <AssetRenderer
+                                            key={asset.id}
+                                            asset={asset}
+                                            isSelected={selectedIds.includes(asset.id)}
+                                            isHovered={hoveredId === asset.id}
+                                        />
+                                    ))}
+                                </g>
 
-                    <g id="dimensions-layer">
-                        {dimensions.map((dim) => (
-                            <DimensionRenderer
-                                key={dim.id}
-                                dimension={dim}
-                                zoom={zoom}
-                            />
-                        ))}
-                    </g>
+                                <g id="dimensions-layer" style={{ pointerEvents: 'all' }}>
+                                    {sortedDimensions.map((dim) => (
+                                        <DimensionRenderer
+                                            key={dim.id}
+                                            dimension={dim}
+                                            zoom={zoom}
+                                        />
+                                    ))}
+                                </g>
+
+                                <g id="label-arrows-layer">
+                                    {sortedLabelArrows.map((arrow) => (
+                                        <LabelArrowRenderer
+                                            key={arrow.id}
+                                            arrow={arrow}
+                                            zoom={zoom}
+                                        />
+                                    ))}
+                                </g>
+
+                                <g id="text-annotations-layer">
+                                    {sortedTextAnnotations.map((annotation) => (
+                                        <TextAnnotationRenderer
+                                            key={annotation.id}
+                                            annotation={annotation}
+                                            zoom={zoom}
+                                        />
+                                    ))}
+                                </g>
+                            </>
+                        );
+                    })()}
 
                     {/* Snap Mode Source Highlight */}
                     {isSnapMode && snapSourceId && (() => {
@@ -1479,11 +2299,13 @@ export default function Workspace2D({
                     />
 
                     <DimensionTool isActive={activeTool === 'dimension'} />
+                    <LabelArrowTool isActive={activeTool === 'label-arrow'} />
+                    <TextAnnotationTool isActive={activeTool === 'text-annotation'} />
 
-                    {['shape-rectangle', 'shape-ellipse', 'shape-line', 'shape-arrow'].includes(activeTool) && (
+                    {['shape-rectangle', 'shape-ellipse', 'shape-line', 'shape-arrow', 'shape-polygon'].includes(activeTool) && (
                         <ShapeTool
                             isActive={true}
-                            shapeType={activeTool.replace('shape-', '') as 'rectangle' | 'ellipse' | 'line' | 'arrow'}
+                            shapeType={activeTool.replace('shape-', '') as 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'polygon'}
                         />
                     )}
 

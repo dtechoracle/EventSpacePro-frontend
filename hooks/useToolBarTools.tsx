@@ -29,6 +29,7 @@ import {
   FaTimes,
   FaFileExport,
   FaExpand,
+  FaMinus,
 } from "react-icons/fa";
 
 export interface ToolOption {
@@ -53,7 +54,6 @@ export function useToolbarTools(): Tool[] {
       options: [
         { id: "draw-line", label: "Draw Line", icon: <FaPenNib size={14} /> },
         { id: "draw-wall", label: "Draw Wall ►", icon: <FaDrawPolygon size={14} /> },
-        { id: "wall-engine", label: "Wall Engine", icon: <FaDrawPolygon size={14} /> },
         { id: "add-text", label: "Add Text", icon: <FaComment size={14} /> },
       ],
     },
@@ -64,6 +64,7 @@ export function useToolbarTools(): Tool[] {
       options: [
         { id: "rectangle", label: "Rectangle", icon: <FaSquare size={14} /> },
         { id: "circle", label: "Circle", icon: <FaCircle size={14} /> },
+        { id: "line", label: "Line", icon: <FaMinus size={14} /> },
         { id: "arrow-shape", label: "Arrow", icon: <FaArrowRight size={14} /> },
         { id: "freehand", label: "Freehand Draw", icon: <FaPenNib size={14} /> },
         { id: "polygon", label: "Polygon", icon: <FaDrawPolygon size={14} /> },

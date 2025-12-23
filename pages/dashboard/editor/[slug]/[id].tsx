@@ -7,7 +7,7 @@ import Workspace2D from "@/components/Workspace2D"; // NEW WORKSPACE
 import Scene3D from "@/components/Scene3D";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import AiTrigger from "@/pages/(components)/AiTrigger";
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
@@ -20,6 +20,7 @@ import {
   CanvasData,
 } from "@/store/sceneStore";
 import WorkspacePreview from "@/components/WorkspacePreview";
+import { ASSET_LIBRARY } from "@/lib/assets";
 
 // Extended EventData type with canvasData
 type EventData = BaseEventData & {
@@ -34,7 +35,7 @@ type EventData = BaseEventData & {
 
 // Lightweight pane listing all elements on the workspace (walls, shapes, assets)
 function ElementsPane() {
-  const { walls, shapes, assets } = useProjectStore();
+  const { walls, shapes, assets, textAnnotations, dimensions, labelArrows } = useProjectStore();
   const { setSelectedIds, zoom, setPan } = useEditorStore();
 
   const items = [
@@ -67,6 +68,33 @@ function ElementsPane() {
       y: a.y,
       asset: a,
     })),
+    // Text annotations
+    ...textAnnotations.map((t) => ({
+      id: t.id,
+      label: t.text || "Text",
+      type: "Text" as const,
+      x: t.x,
+      y: t.y,
+      text: t,
+    })),
+    // Dimensions
+    ...dimensions.map((d) => ({
+      id: d.id,
+      label: d.type === "wall" ? "Wall Dimension" : "Dimension",
+      type: "Dimension" as const,
+      x: (d.startPoint.x + d.endPoint.x) / 2,
+      y: (d.startPoint.y + d.endPoint.y) / 2,
+      dimension: d,
+    })),
+    // Label arrows
+    ...labelArrows.map((la) => ({
+      id: la.id,
+      label: la.label || "Label",
+      type: "Label" as const,
+      x: (la.startPoint.x + la.endPoint.x) / 2,
+      y: (la.startPoint.y + la.endPoint.y) / 2,
+      labelArrow: la,
+    })),
   ];
 
   const handleSelect = (item: { id: string; x: number; y: number }) => {
@@ -95,8 +123,20 @@ function ElementsPane() {
       <div className="px-3 py-2 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide">
         Elements
       </div>
-      <div className="flex-1 overflow-y-auto">
-        {items.map((item) => (
+      <div 
+        className="flex-1 overflow-y-auto"
+        onWheel={(e) => {
+          // Stop wheel events from propagating to canvas zoom handlers
+          e.stopPropagation();
+        }}
+      >
+        {items.map((item) => {
+          // Get asset definition for icon/path
+          const assetDef = item.type === "Asset" && item.asset 
+            ? ASSET_LIBRARY.find(a => a.id === item.asset.type)
+            : null;
+
+          return (
           <button
             key={item.id}
             onClick={() => handleSelect(item)}
@@ -105,14 +145,22 @@ function ElementsPane() {
             {/* Mini preview - approximate but shape-accurate */}
             <div className="w-7 h-7 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
               {item.type === "Asset" && item.asset && (
-                <WorkspacePreview
-                  walls={[]}
-                  shapes={[]}
-                  assets={[item.asset]}
-                  width={28}
-                  height={28}
-                  backgroundColor="#ffffff"
-                />
+                assetDef?.path ? (
+                  <img
+                    src={assetDef.path}
+                    alt={assetDef.label}
+                    className="w-full h-full object-contain"
+                    style={{ maxWidth: '100%', maxHeight: '100%' }}
+                  />
+                ) : assetDef?.icon ? (
+                  <div className="w-full h-full flex items-center justify-center text-gray-600">
+                    {React.createElement(assetDef.icon, { size: 18 } as any)}
+                  </div>
+                ) : (
+                  <div className="text-[8px] text-gray-400 text-center px-1">
+                    {item.asset.type}
+                  </div>
+                )
               )}
               {item.type === "Shape" && item.shape && (
                 <svg width={24} height={24} viewBox="0 0 24 24">
@@ -151,6 +199,31 @@ function ElementsPane() {
                       strokeLinecap="round"
                     />
                   )}
+                  {item.shape.type === "polygon" && (
+                    <polygon
+                      points={(() => {
+                        const sides =
+                          item.shape.polygonSides ||
+                          (item.shape.points ? item.shape.points.length : 4);
+                        const s = Math.max(4, Math.min(12, sides || 4));
+                        const cx = 12;
+                        const cy = 12;
+                        const r = 8;
+                        const pts: string[] = [];
+                        for (let i = 0; i < s; i++) {
+                          const angle = ((Math.PI * 2) / s) * i - Math.PI / 2;
+                          const x = cx + r * Math.cos(angle);
+                          const y = cy + r * Math.sin(angle);
+                          pts.push(`${x},${y}`);
+                        }
+                        return pts.join(" ");
+                      })()}
+                      fill={item.shape.fill || "transparent"}
+                      stroke={item.shape.stroke || "#9CA3AF"}
+                      strokeWidth={2}
+                      strokeLinejoin="round"
+                    />
+                  )}
                 </svg>
               )}
               {item.type === "Wall" && (
@@ -166,6 +239,107 @@ function ElementsPane() {
                   />
                 </svg>
               )}
+              {item.type === "Text" && item.text && (
+                <svg width={24} height={24} viewBox="0 0 24 24">
+                  <text
+                    x={12}
+                    y={14}
+                    textAnchor="middle"
+                    fontSize={12}
+                    fill="#111827"
+                    fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                  >
+                    T
+                  </text>
+                </svg>
+              )}
+              {item.type === "Dimension" && item.dimension && (
+                <svg width={24} height={24} viewBox="0 0 24 24">
+                  {/* main dimension line */}
+                  <line
+                    x1={4}
+                    y1={12}
+                    x2={20}
+                    y2={12}
+                    stroke="#111827"
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                  />
+                  {/* arrows */}
+                  <polyline
+                    points="6,10 4,12 6,14"
+                    fill="none"
+                    stroke="#111827"
+                    strokeWidth={1.2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <polyline
+                    points="18,10 20,12 18,14"
+                    fill="none"
+                    stroke="#111827"
+                    strokeWidth={1.2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  {/* text */}
+                  <text
+                    x={12}
+                    y={10}
+                    textAnchor="middle"
+                    fontSize={7}
+                    fill="#111827"
+                    fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                  >
+                    dim
+                  </text>
+                </svg>
+              )}
+              {item.type === "Label" && item.labelArrow && (
+                <svg width={24} height={24} viewBox="0 0 24 24">
+                  {/* arrow line */}
+                  <line
+                    x1={6}
+                    y1={16}
+                    x2={18}
+                    y2={16}
+                    stroke="#111827"
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                  />
+                  {/* arrow head */}
+                  <polyline
+                    points="16,14 18,16 16,18"
+                    fill="none"
+                    stroke="#111827"
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  {/* label text bubble */}
+                  <rect
+                    x={5}
+                    y={5}
+                    width={14}
+                    height={7}
+                    rx={2}
+                    ry={2}
+                    fill="#F3F4F6"
+                    stroke="#9CA3AF"
+                    strokeWidth={1}
+                  />
+                  <text
+                    x={12}
+                    y={10}
+                    textAnchor="middle"
+                    fontSize={6}
+                    fill="#111827"
+                    fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                  >
+                    Aa
+                  </text>
+                </svg>
+              )}
             </div>
 
             {/* Label and type */}
@@ -174,7 +348,8 @@ function ElementsPane() {
               <div className="text-[0.6rem] text-gray-400 mt-0.5">{item.type}</div>
             </div>
           </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -818,28 +993,7 @@ export default function Editor() {
                   </div>
                 )}
 
-                {/* 3D Preview - disabled in preview mode */}
-                {show3D && !isPreviewMode && (
-                  <div className="absolute inset-0">
-                    <Scene3D
-                      assets={eventData?.canvasAssets || []}
-                      width={isPreviewMode ? window.innerWidth : window.innerWidth - 256}
-                      height={isPreviewMode ? window.innerHeight : window.innerHeight - 120}
-                    />
-                  </div>
-                )}
-
-                {/* View Toggle - only show if not in preview mode */}
-                {!isPreviewMode && (
-                  <div className="absolute bottom-4 right-4 z-10">
-                    <button
-                      onClick={() => setShow3D(!show3D)}
-                      className="px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-lg hover:bg-gray-50 transition-colors font-medium"
-                    >
-                      {show3D ? '📐 2D View' : '🎨 3D Preview'}
-                    </button>
-                  </div>
-                )}
+                {/* 3D Preview / toggle removed per request */}
               </div>
 
               {/* Properties Sidebar - only show if not in preview mode */}

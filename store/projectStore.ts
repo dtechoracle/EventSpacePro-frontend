@@ -41,7 +41,7 @@ export type Wall = {
 
 export type Shape = {
     id: string;
-    type: 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand';
+    type: 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand' | 'polygon';
     x: number;
     y: number;
     width: number;
@@ -50,7 +50,8 @@ export type Shape = {
     fill?: string;
     stroke?: string;
     strokeWidth?: number;
-    points?: { x: number; y: number }[]; // For freehand paths
+    points?: { x: number; y: number }[]; // For freehand paths and polygons
+    polygonSides?: number; // For regular polygons
     zIndex: number;
 };
 
@@ -124,6 +125,29 @@ export type Comment = {
     resolved: boolean;
 };
 
+export type TextAnnotation = {
+    id: string;
+    x: number;
+    y: number;
+    text: string;
+    fontSize?: number;
+    color?: string;
+    fontFamily?: string;
+    rotation?: number; // Rotation in degrees
+    zIndex: number;
+};
+
+export type LabelArrow = {
+    id: string;
+    startPoint: { x: number; y: number };
+    endPoint: { x: number; y: number };
+    label: string;
+    fontSize?: number;
+    color?: string;
+    strokeWidth?: number;
+    zIndex: number;
+};
+
 // ============================================================================
 // Store
 // ============================================================================
@@ -142,6 +166,8 @@ export type ProjectState = {
     shapes: Shape[];
     assets: Asset[];
     comments: Comment[];
+    textAnnotations: TextAnnotation[];
+    labelArrows: LabelArrow[];
     layers: Layer[];
 
     // Active layer
@@ -237,6 +263,16 @@ export type ProjectState = {
     updateDimension: (id: string, updates: Partial<Dimension>) => void;
     removeDimension: (id: string) => void;
 
+    // Methods - Text Annotations
+    addTextAnnotation: (annotation: TextAnnotation) => void;
+    updateTextAnnotation: (id: string, updates: Partial<TextAnnotation>) => void;
+    removeTextAnnotation: (id: string) => void;
+
+    // Methods - Label Arrows
+    addLabelArrow: (arrow: LabelArrow) => void;
+    updateLabelArrow: (id: string, updates: Partial<LabelArrow>) => void;
+    removeLabelArrow: (id: string) => void;
+
     // Methods - Comments
     addComment: (comment: Comment) => void;
     updateComment: (id: string, updates: Partial<Comment>) => void;
@@ -293,6 +329,8 @@ export const useProjectStore = create<ProjectState>()(
             clipboard: [],
             dimensions: [],
             comments: [],
+            textAnnotations: [],
+            labelArrows: [],
 
             // Canvas methods
             setCanvas: (canvas) => {
@@ -416,6 +454,9 @@ export const useProjectStore = create<ProjectState>()(
                     walls: [],
                     layers: [DEFAULT_LAYER],
                     canvas: DEFAULT_CANVAS,
+                    textAnnotations: [],
+                    labelArrows: [],
+                    dimensions: [],
                     hasUnsavedChanges: false,
                     lastSaved: undefined,
                 });
@@ -1075,6 +1116,56 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
+            // Text Annotation methods
+            addTextAnnotation: (annotation) => {
+                get().saveToHistory();
+                set((state) => ({
+                    textAnnotations: [...state.textAnnotations, annotation],
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            updateTextAnnotation: (id, updates) => {
+                get().saveToHistory();
+                set((state) => ({
+                    textAnnotations: state.textAnnotations.map((a) => (a.id === id ? { ...a, ...updates } : a)),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            removeTextAnnotation: (id) => {
+                get().saveToHistory();
+                set((state) => ({
+                    textAnnotations: state.textAnnotations.filter((a) => a.id !== id),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            // Label Arrow methods
+            addLabelArrow: (arrow) => {
+                get().saveToHistory();
+                set((state) => ({
+                    labelArrows: [...state.labelArrows, arrow],
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            updateLabelArrow: (id, updates) => {
+                get().saveToHistory();
+                set((state) => ({
+                    labelArrows: state.labelArrows.map((a) => (a.id === id ? { ...a, ...updates } : a)),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            removeLabelArrow: (id) => {
+                get().saveToHistory();
+                set((state) => ({
+                    labelArrows: state.labelArrows.filter((a) => a.id !== id),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
             // Comment methods
             addComment: (comment) => {
                 get().saveToHistory();
@@ -1200,6 +1291,8 @@ export const useProjectStore = create<ProjectState>()(
                     history: { past: [], future: [] },
                     hasUnsavedChanges: false,
                     dimensions: [],
+                    textAnnotations: [],
+                    labelArrows: [],
                     clipboard: [],
                 });
             },

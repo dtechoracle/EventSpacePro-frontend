@@ -63,7 +63,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     const [activeTool, setActiveTool] = useState<string | null>(null);
 
     // NEW STORE
-    const { setActiveTool: setEditorTool } = useEditorStore();
+    const { setActiveTool: setEditorTool, activeTool: editorActiveTool } = useEditorStore();
 
     const {
         isPenMode,
@@ -177,6 +177,9 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 setActiveTool("freehand");
                 break;
             case "polygon":
+                deactivateAllTools();
+                setEditorTool("shape-polygon");
+                setActiveTool("polygon");
                 break;
 
             // Drawing tools
@@ -232,10 +235,19 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
 
             // Annotation tools
             case "label-arrow":
+                deactivateAllTools();
+                setEditorTool("label-arrow");
+                setActiveTool("label-arrow");
                 break;
             case "dimensions":
+                deactivateAllTools();
+                setEditorTool("dimension");
+                setActiveTool("dimensions");
                 break;
             case "text-annotation":
+                deactivateAllTools();
+                setEditorTool("text-annotation");
+                setActiveTool("text-annotation");
                 break;
 
             // Snapping tools
@@ -323,60 +335,58 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-lg relative"
             >
                 {tools.map((tool, index) => (
-                    <div key={index} className="flex items-center relative">
+                    <div
+                        key={index}
+                        className="flex items-center relative"
+                        // Keep dropdown open while hovering over button or menu
+                        onMouseLeave={() => setOpenIndex(null)}
+                    >
                         {/* Main Button with Tooltip */}
                         <Tooltip content={tool.label} position="top">
-                            <motion.button
-                                onClick={() => {
-                                    const primary = tool.options[0];
-                                    if (primary) {
-                                        // Check if this tool's primary option is already active
-                                        const isCurrentlyActive = 
-                                            (primary.id === "draw-wall" && (isWallMode || wallDrawingMode)) ||
-                                            (primary.id === "draw-line" && isPenMode) ||
-                                            (primary.id === "rectangular-select" && activeTool === "rectangular-select") ||
-                                            (activeTool === primary.id);
-                                        
-                                        if (isCurrentlyActive) {
-                                            // Deactivate and return to select mode
-                                            deactivateAllTools();
-                                            setEditorTool("select");
-                                            setActiveTool("pointer-select");
-                                        } else {
-                                            // Activate the primary option
-                                            handleOptionClick(primary);
-                                        }
-                                    }
-                                    // Close any open dropdown when directly activating
-                                    setOpenIndex(null);
-                                }}
-                                whileTap={{ scale: 0.95 }}
-                                whileHover={{ scale: 1.03 }}
-                                className={`w-8 h-8 border-2 flex items-center justify-center rounded-md ${(tool.options.some((opt) => opt.id === "draw-line") &&
-                                        isPenMode) ||
-                                        (tool.options.some((opt) => opt.id === "draw-wall") &&
-                                            (isWallMode || wallDrawingMode)) ||
-                                        (tool.options.some((opt) => opt.id === "rectangular-select") &&
-                                            activeTool === "rectangular-select")
-                                        ? "border-blue-500 text-blue-500"
-                                        : "border-[var(--accent)] text-[var(--accent)]"
-                                    }`}
-                                aria-expanded={openIndex === index}
-                                aria-haspopup="menu"
+                            <div
+                                onMouseEnter={() => setOpenIndex(index)}
+                                className="flex items-center"
                             >
-                                {tool.icon}
-                            </motion.button>
+                                <motion.button
+                                    onClick={() => {
+                                        const primary = tool.options[0];
+                                        if (primary) {
+                                            const isCurrentlyActive = 
+                                                (primary.id === "draw-wall" && (isWallMode || wallDrawingMode)) ||
+                                                (primary.id === "draw-line" && isPenMode) ||
+                                                (primary.id === "rectangular-select" && activeTool === "rectangular-select") ||
+                                                (activeTool === primary.id);
+                                            
+                                            if (isCurrentlyActive) {
+                                                deactivateAllTools();
+                                                setEditorTool("select");
+                                                setActiveTool("pointer-select");
+                                            } else {
+                                                handleOptionClick(primary);
+                                            }
+                                        }
+                                        setOpenIndex(null);
+                                    }}
+                                    whileTap={{ scale: 0.95 }}
+                                    whileHover={{ scale: 1.03 }}
+                                    className={`w-8 h-8 border-2 flex items-center justify-center rounded-md ${(tool.options.some((opt) => opt.id === "draw-line") &&
+                                            isPenMode) ||
+                                            (tool.options.some((opt) => opt.id === "draw-wall") &&
+                                                (isWallMode || wallDrawingMode)) ||
+                                            (tool.options.some((opt) => opt.id === "rectangular-select") &&
+                                                activeTool === "rectangular-select") ||
+                                            (tool.options.some((opt) => ["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(opt.id) &&
+                                                activeTool === opt.id))
+                                            ? "border-blue-500 text-blue-500"
+                                            : "border-[var(--accent)] text-[var(--accent)]"
+                                        }`}
+                                    aria-expanded={openIndex === index}
+                                    aria-haspopup="menu"
+                                >
+                                    {tool.icon}
+                                </motion.button>
+                            </div>
                         </Tooltip>
-
-                        {/* Dropdown Toggle */}
-                        <button
-                            onClick={() =>
-                                setOpenIndex(openIndex === index ? null : index)
-                            }
-                            className="ml-0.5 text-gray-600 hover:text-black"
-                        >
-                            <ChevronDown size={14} />
-                        </button>
 
                         {/* Dropdown Menu */}
                         <AnimatePresence>
@@ -387,6 +397,8 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                                     exit={{ opacity: 0, y: 8, scale: 0.98 }}
                                     transition={{ duration: 0.15 }}
                                     className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-white rounded-md shadow-lg border p-1.5 w-48 z-[10000]"
+                                    onMouseEnter={() => setOpenIndex(index)}
+                                    onMouseLeave={() => setOpenIndex(null)}
                                 >
                                     <ul className="space-y-0.5 text-xs text-gray-700">
                                         {tool.options.map((option) => (
@@ -396,7 +408,9 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                                                         (option.id === "draw-wall" &&
                                                             (isWallMode || wallDrawingMode)) ||
                                                         (option.id === "rectangular-select" &&
-                                                            activeTool === "rectangular-select")
+                                                            activeTool === "rectangular-select") ||
+                                                        (["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(option.id) &&
+                                                            activeTool === option.id)
                                                         ? "bg-blue-100 text-blue-800"
                                                         : ""
                                                     }`}
@@ -429,7 +443,9 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                                                     (option.id === "draw-wall" &&
                                                         (isWallMode || wallDrawingMode)) ||
                                                     (option.id === "rectangular-select" &&
-                                                        activeTool === "rectangular-select") ? (
+                                                        activeTool === "rectangular-select") ||
+                                                    (["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(option.id) &&
+                                                        activeTool === option.id) ? (
                                                     <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                                                 ) : null}
                                             </li>
@@ -576,20 +592,6 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 )}
             </AnimatePresence>
 
-            {/* Merge Walls Button */}
-            <Tooltip content="Merge Wall Intersections" position="top">
-                <motion.button
-                    onClick={() => {
-                        const count = mergeAllWallIntersections();
-                        alert(`Merged ${count} wall intersections!`);
-                    }}
-                    whileTap={{ scale: 0.95 }}
-                    whileHover={{ scale: 1.05 }}
-                    className="ml-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg shadow-md transition-colors"
-                >
-                    Merge Walls
-                </motion.button>
-            </Tooltip>
         </div>
     );
 }

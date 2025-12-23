@@ -130,35 +130,50 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
     };
 
     const onWheel = (e: WheelEvent) => {
-      // Use mouse wheel directly for zoom (no need to press the wheel first)
       e.preventDefault();
 
-      const rect = el.getBoundingClientRect();
-      const cursor = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      };
+      // Heuristic: distinguish trackpad vs mouse wheel.
+      const isPixelMode = e.deltaMode === WheelEvent.DOM_DELTA_PIXEL;
+      const absDeltaY = Math.abs(e.deltaY);
+      const absDeltaX = Math.abs(e.deltaX);
+      const isTrackpadLike = isPixelMode && absDeltaY < 80 && absDeltaX < 80;
 
-      // Convert cursor to scene coordinates before zoom
-      const sceneX = (cursor.x - targetOffset.current.x) / targetZoom.current;
-      const sceneY = (cursor.y - targetOffset.current.y) / targetZoom.current;
+      const shouldZoom =
+        // Pinch gesture: ctrl/meta + wheel
+        e.ctrlKey ||
+        e.metaKey ||
+        // External mouse wheel (non‑trackpad) should zoom vertically
+        (!isTrackpadLike && absDeltaY > absDeltaX && absDeltaY > 0);
 
-      // Compute new zoom and clamp to dynamic minimum
-      const delta = -e.deltaY * ZOOM_SENSITIVITY;
-      const desired = targetZoom.current + delta;
-      const minZoom = computeMinZoom();
-      const newZoom = Math.min(3, Math.max(minZoom, desired));
+      if (shouldZoom) {
+        const rect = el.getBoundingClientRect();
+        const cursor = {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        };
+        const sceneX = (cursor.x - targetOffset.current.x) / targetZoom.current;
+        const sceneY = (cursor.y - targetOffset.current.y) / targetZoom.current;
+        // Flip so pinch-in (positive deltaY on most trackpads) zooms OUT, pinch-out zooms IN.
+        const delta = -e.deltaY * ZOOM_SENSITIVITY;
+        const desired = targetZoom.current + delta;
+        const minZoom = computeMinZoom();
+        const newZoom = Math.min(3, Math.max(minZoom, desired));
+        const newOffset = {
+          x: cursor.x - sceneX * newZoom,
+          y: cursor.y - sceneY * newZoom,
+        };
+        targetZoom.current = newZoom;
+        targetOffset.current = clampOffset(newOffset, newZoom, false);
+        return;
+      }
 
-      // Compute new offset so that scene point under cursor stays fixed
+      // Two-finger scroll on trackpad: pan (both vertical and horizontal)
+      const panSpeed = 1;
       const newOffset = {
-        x: cursor.x - sceneX * newZoom,
-        y: cursor.y - sceneY * newZoom,
+        x: targetOffset.current.x - e.deltaX * panSpeed,
+        y: targetOffset.current.y - e.deltaY * panSpeed,
       };
-
-      // Apply targets (smoothly animated in RAF loop)
-      targetZoom.current = newZoom;
-      // clamp offset immediately (no overscroll for zoom)
-      targetOffset.current = clampOffset(newOffset, newZoom, false);
+      targetOffset.current = clampOffset(newOffset, targetZoom.current, false);
     };
 
     el.addEventListener("wheel", onWheel, { passive: false });

@@ -20,6 +20,12 @@ export type AssetDef = {
   icon?: IconType; // React component for icons
   path?: string; // SVG file path for custom assets
   isCustom?: boolean; // flag to indicate if it's a custom SVG
+  // Optional visual bounds override: lets us tighten selection/anchors
+  // when the SVG has extra transparent padding.
+  selectionInset?: {
+    insetX?: number; // fraction of width to trim from each side (0–0.5)
+    insetY?: number; // fraction of height to trim from each side (0–0.5)
+  };
 };
 
 // Custom SVG assets from /public/assets/canvas
@@ -66,6 +72,7 @@ const CUSTOM_SVG_ASSETS: AssetDef[] = [
     label: "Normal Chair",
     path: "/assets/canvas/normal-chair.svg",
     isCustom: true,
+    selectionInset: { insetY: 0.2 }, // trim some vertical padding
   },
   {
     id: "one-door",
@@ -78,6 +85,7 @@ const CUSTOM_SVG_ASSETS: AssetDef[] = [
     label: "Padded Chair",
     path: "/assets/canvas/padded-chair.svg",
     isCustom: true,
+    selectionInset: { insetY: 0.18 },
   },
   {
     id: "rectangular-table",

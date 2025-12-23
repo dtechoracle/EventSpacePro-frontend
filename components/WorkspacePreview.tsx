@@ -79,12 +79,12 @@ export default function WorkspacePreview({
                 <svg
                     width="100%"
                     height="100%"
-                    style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
+                style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
                         display: 'block',
-                    }}
+                }}
                     viewBox={`0 0 ${width} ${height}`}
                     preserveAspectRatio="xMidYMid meet"
                 >
@@ -229,7 +229,7 @@ export default function WorkspacePreview({
                                 
                                 return (
                                     <line
-                                        key={shape.id}
+                        key={shape.id}
                                         transform={transform}
                                         x1={-shape.width / 2}
                                         y1={0}
@@ -238,6 +238,44 @@ export default function WorkspacePreview({
                                         stroke={stroke}
                                         strokeWidth={strokeWidth}
                                         strokeLinecap="round"
+                    />
+                                );
+                            }
+
+                            if (shape.type === 'polygon') {
+                                // Render polygon using stored points if present; fallback to regular polygon by sides
+                                let points: string | null = null;
+                                if (shape.points && shape.points.length >= 3) {
+                                    points = shape.points.map((p: any) => `${p.x},${p.y}`).join(' ');
+                                } else {
+                                    const sides = Math.max(
+                                        4,
+                                        Math.min(
+                                            12,
+                                            shape.polygonSides ||
+                                                (shape.points ? shape.points.length : 4)
+                                        )
+                                    );
+                                    const r = Math.min(shape.width, shape.height) / 2;
+                                    const pts: string[] = [];
+                                    for (let i = 0; i < sides; i++) {
+                                        const angle = ((Math.PI * 2) / sides) * i - Math.PI / 2;
+                                        const x = r * Math.cos(angle);
+                                        const y = r * Math.sin(angle);
+                                        pts.push(`${x},${y}`);
+                                    }
+                                    points = pts.join(' ');
+                                }
+
+                                return (
+                                    <polygon
+                                        key={shape.id}
+                                        transform={transform}
+                                        points={points || ''}
+                                        fill={fill}
+                                        stroke={stroke}
+                                        strokeWidth={strokeWidth}
+                                        strokeLinejoin="round"
                                     />
                                 );
                             }
@@ -253,12 +291,12 @@ export default function WorkspacePreview({
                               ? { ...asset, path, type: asset.type, width: asset.width || 100, height: asset.height || 100, metadata: asset.metadata }
                               : asset;
                             return (
-                              <AssetRenderer
-                                key={asset.id}
+                    <AssetRenderer
+                        key={asset.id}
                                 asset={assetWithPath as any}
-                                isSelected={false}
-                                isHovered={false}
-                              />
+                        isSelected={false}
+                        isHovered={false}
+                    />
                             );
                         })}
                     </g>

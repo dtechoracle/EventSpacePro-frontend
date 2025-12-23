@@ -60,7 +60,7 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
     const overshoot = 50;
 
     return (
-        <g className="dimension-group">
+        <g className="dimension-group" style={{ pointerEvents: 'all', cursor: 'pointer' }}>
             {/* Extension Lines */}
             <line
                 x1={startPoint.x}

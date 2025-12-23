@@ -233,7 +233,7 @@ export default function AiTrigger() {
     if (!plan) return;
     const createdAssetIds: string[] = [];
     const createdAssetsInBatch: AssetInstance[] = []; // Track assets created in this batch
-
+    
     // Get canvas center - use actual canvas center or default to (0, 0) for safety
     const getCanvasCenter = () => {
       if (canvas?.width && canvas?.height) {
@@ -243,16 +243,16 @@ export default function AiTrigger() {
       return { x: 0, y: 0 };
     };
     const canvasCenter = getCanvasCenter();
-
+    
     // Find empty space on canvas by checking existing asset bounding boxes
     // Keep assets away from canvas edges (at least 1000mm margin)
     const findEmptySpace = (requiredWidth: number, requiredHeight: number, margin = 100): { x: number; y: number } | null => {
       const edgeMargin = 1000; // Keep assets away from canvas edges
-
+      
       if (existingAssets.length === 0 && createdAssetsInBatch.length === 0) {
         // No existing assets, use canvas center (but ensure it's away from edges)
         if (canvas?.width && canvas?.height) {
-          const safeCenterX = Math.max(edgeMargin + requiredWidth / 2,
+          const safeCenterX = Math.max(edgeMargin + requiredWidth / 2, 
             Math.min(canvas.width - edgeMargin - requiredWidth / 2, canvas.width / 2));
           const safeCenterY = Math.max(edgeMargin + requiredHeight / 2,
             Math.min(canvas.height - edgeMargin - requiredHeight / 2, canvas.height / 2));
@@ -260,7 +260,7 @@ export default function AiTrigger() {
         }
         return canvasCenter;
       }
-
+      
       // Get bounding boxes of all existing assets + newly created assets in this batch
       const occupiedAreas: Array<{ minX: number; minY: number; maxX: number; maxY: number }> = [];
       [...existingAssets, ...createdAssetsInBatch].forEach(asset => {
@@ -288,48 +288,48 @@ export default function AiTrigger() {
           });
         }
       });
-
+      
       // Try to find empty space - start from top-left, scan grid-like
       const canvasWidth = canvas?.width || 10000;
       const canvasHeight = canvas?.height || 10000;
       const stepSize = 500; // mm - grid step for searching
       const halfW = requiredWidth / 2 + margin;
       const halfH = requiredHeight / 2 + margin;
-
+      
       // Start from top-left corner, but keep away from edges
       const startY = edgeMargin;
       const endY = canvasHeight - edgeMargin;
       const startX = edgeMargin;
       const endX = canvasWidth - edgeMargin;
-
+      
       for (let y = startY; y < endY; y += stepSize) {
         for (let x = startX; x < endX; x += stepSize) {
           const testX = x;
           const testY = y;
-
+          
           // Ensure position is away from edges
           if (testX - halfW < edgeMargin || testX + halfW > canvasWidth - edgeMargin ||
-            testY - halfH < edgeMargin || testY + halfH > canvasHeight - edgeMargin) {
+              testY - halfH < edgeMargin || testY + halfH > canvasHeight - edgeMargin) {
             continue;
           }
-
+          
           // Check if this position overlaps with any existing asset
           const overlaps = occupiedAreas.some(area => {
-            return !(testX + halfW < area.minX - margin ||
-              testX - halfW > area.maxX + margin ||
-              testY + halfH < area.minY - margin ||
-              testY - halfH > area.maxY + margin);
+            return !(testX + halfW < area.minX - margin || 
+                    testX - halfW > area.maxX + margin ||
+                    testY + halfH < area.minY - margin ||
+                    testY - halfH > area.maxY + margin);
           });
-
+          
           if (!overlaps) {
             return { x: testX, y: testY };
           }
         }
       }
-
+      
       // If no empty space found, place at safe center (away from edges)
       if (canvas?.width && canvas?.height) {
-        const safeCenterX = Math.max(edgeMargin + requiredWidth / 2,
+        const safeCenterX = Math.max(edgeMargin + requiredWidth / 2, 
           Math.min(canvas.width - edgeMargin - requiredWidth / 2, canvas.width / 2));
         const safeCenterY = Math.max(edgeMargin + requiredHeight / 2,
           Math.min(canvas.height - edgeMargin - requiredHeight / 2, canvas.height / 2));
@@ -337,18 +337,18 @@ export default function AiTrigger() {
       }
       return canvasCenter;
     };
-
+    
     // Derive a primary wall bounding box if available (first rectangular wall)
     let wallBounds: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
     if (Array.isArray(plan.walls) && plan.walls.length > 0) {
       const w = plan.walls[0];
       const width = Number(w.widthMm || 0);
       const height = Number(w.heightMm || 0);
-
+      
       // Find empty space for the wall
       let cx = Number(w.centerX);
       let cy = Number(w.centerY);
-
+      
       // If position not provided or invalid, find empty space
       if (!cx || !cy || !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
         const emptySpace = findEmptySpace(width, height, 200);
@@ -359,7 +359,7 @@ export default function AiTrigger() {
           // Use safe center away from edges
           const edgeMargin = 1000;
           if (canvas?.width && canvas?.height) {
-            cx = Math.max(edgeMargin + width / 2,
+            cx = Math.max(edgeMargin + width / 2, 
               Math.min(canvas.width - edgeMargin - width / 2, canvas.width / 2));
             cy = Math.max(edgeMargin + height / 2,
               Math.min(canvas.height - edgeMargin - height / 2, canvas.height / 2));
@@ -369,7 +369,7 @@ export default function AiTrigger() {
           }
         }
       }
-
+      
       const halfW = width / 2;
       const halfH = height / 2;
       wallBounds = { minX: cx - halfW, minY: cy - halfH, maxX: cx + halfW, maxY: cy + halfH };
@@ -380,7 +380,7 @@ export default function AiTrigger() {
       // If position is NaN, Infinity, or way too large (likely error), use safe center
       if (!isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
         if (canvas?.width && canvas?.height) {
-          const safeX = Math.max(edgeMargin + width / 2,
+          const safeX = Math.max(edgeMargin + width / 2, 
             Math.min(canvas.width - edgeMargin - width / 2, canvas.width / 2));
           const safeY = Math.max(edgeMargin + height / 2,
             Math.min(canvas.height - edgeMargin - height / 2, canvas.height / 2));
@@ -397,7 +397,7 @@ export default function AiTrigger() {
       }
       return { x, y };
     };
-
+    
     const clampInWall = (x: number, y: number, margin = 50, width = 0, height = 0) => {
       const valid = validatePosition(x, y, width, height);
       if (!wallBounds) return valid;
@@ -412,7 +412,7 @@ export default function AiTrigger() {
         const height = Number(w.heightMm || 0);
         let cx: number;
         let cy: number;
-
+        
         if (idx === 0 && wallBounds) {
           // First wall uses the calculated position from wallBounds
           cx = (wallBounds.minX + wallBounds.maxX) / 2;
@@ -421,8 +421,8 @@ export default function AiTrigger() {
           // For additional walls, find empty space
           let providedCx = Number(w.centerX);
           let providedCy = Number(w.centerY);
-          if (!providedCx || !providedCy || !isFinite(providedCx) || !isFinite(providedCy) ||
-            Math.abs(providedCx) > 100000 || Math.abs(providedCy) > 100000) {
+          if (!providedCx || !providedCy || !isFinite(providedCx) || !isFinite(providedCy) || 
+              Math.abs(providedCx) > 100000 || Math.abs(providedCy) > 100000) {
             const emptySpace = findEmptySpace(width, height, 200);
             if (emptySpace) {
               cx = emptySpace.x;
@@ -481,7 +481,7 @@ export default function AiTrigger() {
         // Validate and auto-calculate position if missing or invalid
         // Check if x/y are undefined/null or invalid (NaN, Infinity, or way too large)
         if (t.xMm === undefined || t.xMm === null || t.yMm === undefined || t.yMm === null ||
-          !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
+            !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
           if (wallBounds) {
             const cols = Math.ceil(Math.sqrt(plan.tables.length));
             const row = Math.floor(idx / cols);
@@ -519,7 +519,7 @@ export default function AiTrigger() {
         let y = Number(c.yMm);
         // Validate and auto-calculate position if missing or invalid
         if (c.xMm === undefined || c.xMm === null || c.yMm === undefined || c.yMm === null ||
-          !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
+            !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
           if (wallBounds) {
             const cols = Math.ceil(Math.sqrt(plan.chairs.length));
             const row = Math.floor(idx / cols);
@@ -556,7 +556,7 @@ export default function AiTrigger() {
         let cy = Number(spec.centerY);
         // Validate and auto-calculate center if missing or invalid
         if (spec.centerX === undefined || spec.centerX === null || spec.centerY === undefined || spec.centerY === null ||
-          !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
+            !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
           if (wallBounds) {
             const cols = Math.ceil(Math.sqrt(plan.chairsAround.length));
             const row = Math.floor(idx / cols);
@@ -573,12 +573,12 @@ export default function AiTrigger() {
         const minRadius = Math.ceil((tableSize / 2) + chairSize + 10);
         const r = Math.max(minRadius, Number(spec.radiusMm || minRadius));
         const count = Math.max(1, Number(spec.count || 1));
-
+        
         // Ensure center position is away from canvas edges
         const edgeMargin = 1000;
         const totalRadius = r + chairSize; // Maximum extent from center
         if (canvas?.width && canvas?.height) {
-          cx = Math.max(edgeMargin + totalRadius,
+          cx = Math.max(edgeMargin + totalRadius, 
             Math.min(canvas.width - edgeMargin - totalRadius, cx));
           cy = Math.max(edgeMargin + totalRadius,
             Math.min(canvas.height - edgeMargin - totalRadius, cy));
@@ -622,14 +622,14 @@ export default function AiTrigger() {
         }
       });
     }
-
+    
     // Auto-center viewport on newly created assets
     if (createdAssetIds.length > 0) {
       setTimeout(() => {
         const assets = useSceneStore.getState().assets;
         const createdAssets = assets.filter(a => createdAssetIds.includes(a.id));
         if (createdAssets.length === 0) return;
-
+        
         // Calculate bounding box of all created assets
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         createdAssets.forEach(asset => {
@@ -649,7 +649,7 @@ export default function AiTrigger() {
             maxY = Math.max(maxY, asset.y + h / 2);
           }
         });
-
+        
         if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY)) {
           // Select the first created asset to trigger auto-center in Canvas.tsx
           // The Canvas component will automatically center on the selected asset
@@ -1310,7 +1310,7 @@ export default function AiTrigger() {
       console.error(e);
       setMessages((m) => [...m, { role: 'assistant', content: 'Sorry, I could not process that request.' }]);
     } finally {
-      setInputValue("");
+    setInputValue("");
       setIsLoading(false);
     }
   };
@@ -1535,7 +1535,7 @@ export default function AiTrigger() {
                   )}
                 </div>
               </div>
-
+              
               <div className="w-full max-w-lg relative flex-shrink-0 mt-4">
                 {/* Left icon */}
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 bg-gray-200 p-2 rounded-full">
@@ -1580,4 +1580,3 @@ export default function AiTrigger() {
     </>
   );
 }
-
