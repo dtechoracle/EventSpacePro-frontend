@@ -72,6 +72,7 @@ export default function FreehandTool({ isActive }: FreehandToolProps) {
                 width: width || 1, // Prevent 0 dimensions
                 height: height || 1,
                 rotation: 0,
+                // Pure black, thick default stroke so freehand is clearly visible
                 stroke: '#000000',
                 strokeWidth: 2,
                 fill: 'transparent',

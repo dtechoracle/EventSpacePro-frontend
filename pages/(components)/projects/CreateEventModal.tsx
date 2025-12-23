@@ -74,6 +74,12 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
         } finally {
           setIsAnalyzing(false);
         }
+      } else if (eventType === "Create event with AI from scratch") {
+        // Navigate to editor with AI mode flag
+        router.push({
+          pathname: `/dashboard/editor/${slug}/${eventId}`,
+          query: { aiMode: 'true' }
+        });
       } else {
         // Normal event - go straight to editor
         router.push(`/dashboard/editor/${slug}/${eventId}`);
@@ -91,6 +97,9 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
   const handleNext = () => {
     if (eventType === "Preloaded venue") {
       setPhase(2); // Show image upload for preloaded venue
+    } else if (eventType === "Create event with AI from scratch") {
+      // Create event and navigate to editor with AI mode
+      mutation.mutate();
     } else {
       // Skip to creation for other event types
       mutation.mutate();
@@ -154,10 +163,11 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
                   className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
                 >
                   <option value="" className="text-gray-500">Event Type</option>
+                  <option value="Create event with AI from scratch">Create event with AI from scratch</option>
+                  <option value="Preloaded venue">Preloaded Venue</option>
                   <option value="Custom venue">Custom Venue</option>
                   <option value="Create marquee">Create Marquee</option>
                   <option value="Half store">Half Store</option>
-                  <option value="Preloaded venue">Preloaded Venue</option>
                 </select>
                 <button
                   onClick={handleNext}

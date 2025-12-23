@@ -9,9 +9,12 @@ export type Tool =
   | 'shape-ellipse'
   | 'shape-line'
   | 'shape-arrow'
+  | 'shape-polygon'
   | 'freehand'
   | 'asset'
   | 'dimension'
+  | 'label-arrow'
+  | 'text-annotation'
   | 'pan';
 
 export type EditorState = {

@@ -790,7 +790,7 @@ export function calculateWallBoundingBox(asset: AssetInstance): { width: number;
         });
         geometry = buildWallGeometry(segments, wallGap, asset.wallThickness ?? 75);
     } else if (asset.wallSegments && asset.wallSegments.length > 0) {
-        const relativeSegments = asset.wallSegments;
+    const relativeSegments = asset.wallSegments;
         geometry = buildWallGeometry(relativeSegments, wallGap, asset.wallThickness ?? 75);
     } else {
         return { width: 200, height: 200 };

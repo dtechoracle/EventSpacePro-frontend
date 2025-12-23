@@ -13,22 +13,54 @@ import CreateEventModal from "./CreateEventModal";
 import ImportModal from "./ImportMOdal";
 import { useState } from "react";
 
+interface TopBarProps {
+  mainText: string;
+  subText: string;
+  type: "event" | "project";
+  onEventClick?: () => void;
+  onProjectClick?: () => void;
+  onImportClick?: () => void;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+}
+
 const TopBar = ({
   mainText,
   subText,
   type,
-}: {
-  mainText: string;
-  subText: string;
-  type: "event" | "project";
-}) => {
+  onEventClick,
+  onProjectClick,
+  onImportClick,
+  searchValue,
+  onSearchChange,
+}: TopBarProps) => {
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showCreateEventModal, setShowCreateEventModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
-  const handleProjectClick = () => setShowCreateProjectModal(true);
-  const handleEventClick = () => setShowCreateEventModal(true);
-  const handleImportClick = () => setShowImportModal(true);
+  const handleProjectClick = () => {
+    if (onProjectClick) {
+      onProjectClick();
+    } else {
+      setShowCreateProjectModal(true);
+    }
+  };
+  
+  const handleEventClick = () => {
+    if (onEventClick) {
+      onEventClick();
+    } else {
+      setShowCreateEventModal(true);
+    }
+  };
+  
+  const handleImportClick = () => {
+    if (onImportClick) {
+      onImportClick();
+    } else {
+      setShowImportModal(true);
+    }
+  };
 
   return (
     <div>
@@ -56,6 +88,8 @@ const TopBar = ({
               <input
                 type="text"
                 placeholder="Search"
+                value={searchValue || ''}
+                onChange={(e) => onSearchChange?.(e.target.value)}
                 className="h-11 w-full rounded-md bg-[var(--surface)] pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
             </div>
@@ -75,7 +109,7 @@ const TopBar = ({
 
             {type === "project" ? (
               <button
-                className="flex w-full items-center justify-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 lg:w-auto"
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity lg:w-auto"
                 onClick={handleProjectClick}
               >
                 <RiAddLine />
@@ -83,7 +117,7 @@ const TopBar = ({
               </button>
             ) : (
               <button
-                className="flex w-full items-center justify-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 lg:w-auto"
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity lg:w-auto"
                 onClick={handleEventClick}
               >
                 <RiAddLine />
@@ -100,4 +134,3 @@ const TopBar = ({
 };
 
 export default TopBar;
-

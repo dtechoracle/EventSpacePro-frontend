@@ -359,6 +359,21 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
     // Show preview line and junction indicator
     return (
         <>
+            {/* Start marker for closing loop: show a green circle at first node while drawing */}
+            {isDrawing && currentWall && currentWall.nodes.length > 0 && (() => {
+                const first = currentWall.nodes[0];
+                return (
+                    <circle
+                        cx={first.x}
+                        cy={first.y}
+                        r={8 / zoom}
+                        fill="rgba(16,185,129,0.15)"
+                        stroke="#10b981"
+                        strokeWidth={2 / zoom}
+                    />
+                );
+            })()}
+
             {/* Guide lines - horizontal (red) and vertical (green) from start point */}
             {isDrawing && lastNode && previewPoint && (() => {
                 // Calculate reasonable guide line length (about 2x the wall length or 500mm, whichever is larger)

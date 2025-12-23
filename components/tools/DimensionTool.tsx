@@ -44,9 +44,12 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
 
     const handleClick = useCallback((e: MouseEvent) => {
         if (!isActive) return;
-        // Prevent Workspace2D from handling this click if possible, 
-        // but since we are on window, we might be late or early.
-        // Workspace2D handles clicks on the div.
+        
+        // Only handle clicks on the workspace SVG, not window-wide
+        const target = e.target as Element | null;
+        if (!target || !target.closest('svg[data-workspace-root="true"]')) {
+            return;
+        }
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
         const snapped = getSnappedPos(worldPos);
@@ -96,25 +99,74 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
                 }
             }
 
-            // Reset
+            // Reset and switch to select tool
             setStep(0);
             setStartPoint(null);
             setEndPoint(null);
             setCurrentMousePos(null);
+            useEditorStore.getState().setActiveTool('select');
         }
     }, [isActive, step, screenToWorld, getSnappedPos, startPoint, endPoint, addDimension, getNextZIndex]);
+
+    // Handle double-click to finish
+    const handleDoubleClick = useCallback((e: MouseEvent) => {
+        if (!isActive || step === 0) return;
+        const target = e.target as Element | null;
+        if (!target || !target.closest('svg[data-workspace-root="true"]')) {
+            return;
+        }
+
+        if (step === 2 && startPoint && endPoint) {
+            // Finalize dimension on double-click
+            const worldPos = screenToWorld(e.clientX, e.clientY);
+            const snapped = getSnappedPos(worldPos);
+            const dx = endPoint.x - startPoint.x;
+            const dy = endPoint.y - startPoint.y;
+            const length = Math.sqrt(dx * dx + dy * dy);
+
+            if (length > 0) {
+                const nx = dx / length;
+                const ny = dy / length;
+                const px = -ny;
+                const py = nx;
+                const mx = snapped.x - startPoint.x;
+                const my = snapped.y - startPoint.y;
+                const offset = mx * px + my * py;
+
+                const newDimension: Dimension = {
+                    id: crypto.randomUUID(),
+                    type: 'linear',
+                    startPoint,
+                    endPoint,
+                    offset,
+                    zIndex: getNextZIndex(),
+                };
+
+                addDimension(newDimension);
+            }
+
+            // Reset and switch to select tool
+            setStep(0);
+            setStartPoint(null);
+            setEndPoint(null);
+            setCurrentMousePos(null);
+            useEditorStore.getState().setActiveTool('select');
+        }
+    }, [isActive, step, startPoint, endPoint, screenToWorld, getSnappedPos, addDimension, getNextZIndex]);
 
     // Attach listeners
     useEffect(() => {
         if (isActive) {
             window.addEventListener('mousemove', handleMouseMove);
             window.addEventListener('click', handleClick);
+            window.addEventListener('dblclick', handleDoubleClick);
         }
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('click', handleClick);
+            window.removeEventListener('dblclick', handleDoubleClick);
         };
-    }, [isActive, handleMouseMove, handleClick]);
+    }, [isActive, handleMouseMove, handleClick, handleDoubleClick]);
 
     // Render preview
     if (!isActive || step === 0 || !startPoint || !currentMousePos) return null;

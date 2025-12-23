@@ -49,18 +49,15 @@ export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRen
                 </foreignObject>
             )}
 
-            {/* Fallback if no definition found, or just to show selection box */}
-            {/* We always render a transparent rect to ensure hit area, 
-                and show border if selected/hovered */}
+            {/* Transparent rect for hit-testing only - no visible outline */}
             <rect
                 x={-asset.width / 2}
                 y={-asset.height / 2}
                 width={asset.width}
                 height={asset.height}
                 fill="transparent" 
-                stroke={isSelected || isHovered ? strokeColor : "none"}
-                strokeWidth={2}
-                strokeDasharray={isSelected ? "5,5" : undefined}
+                stroke="none"
+                pointerEvents="all"
             />
             
             {!definition && (

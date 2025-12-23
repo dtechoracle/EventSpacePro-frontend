@@ -130,73 +130,57 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
     };
 
     const onWheel = (e: WheelEvent) => {
-      // Use ctrl/cmd as zoom modifier (same as original)
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
+      e.preventDefault();
 
+      // Heuristic: distinguish trackpad vs mouse wheel.
+      const isPixelMode = e.deltaMode === WheelEvent.DOM_DELTA_PIXEL;
+      const absDeltaY = Math.abs(e.deltaY);
+      const absDeltaX = Math.abs(e.deltaX);
+      const isTrackpadLike = isPixelMode && absDeltaY < 80 && absDeltaX < 80;
+
+      const shouldZoom =
+        // Pinch gesture: ctrl/meta + wheel
+        e.ctrlKey ||
+        e.metaKey ||
+        // External mouse wheel (non‑trackpad) should zoom vertically
+        (!isTrackpadLike && absDeltaY > absDeltaX && absDeltaY > 0);
+
+      if (shouldZoom) {
         const rect = el.getBoundingClientRect();
         const cursor = {
           x: e.clientX - rect.left,
           y: e.clientY - rect.top,
         };
-
-        // Convert cursor to scene coordinates before zoom
         const sceneX = (cursor.x - targetOffset.current.x) / targetZoom.current;
         const sceneY = (cursor.y - targetOffset.current.y) / targetZoom.current;
-
-        // Compute new zoom and clamp to dynamic minimum
+        // Flip so pinch-in (positive deltaY on most trackpads) zooms OUT, pinch-out zooms IN.
         const delta = -e.deltaY * ZOOM_SENSITIVITY;
         const desired = targetZoom.current + delta;
         const minZoom = computeMinZoom();
         const newZoom = Math.min(3, Math.max(minZoom, desired));
-
-        // Compute new offset so that scene point under cursor stays fixed
         const newOffset = {
           x: cursor.x - sceneX * newZoom,
           y: cursor.y - sceneY * newZoom,
         };
-
-        // Apply targets (smoothly animated in RAF loop)
         targetZoom.current = newZoom;
-        // clamp offset immediately (no overscroll for zoom)
         targetOffset.current = clampOffset(newOffset, newZoom, false);
+        return;
       }
+
+      // Two-finger scroll on trackpad: pan (both vertical and horizontal)
+      const panSpeed = 1;
+      const newOffset = {
+        x: targetOffset.current.x - e.deltaX * panSpeed,
+        y: targetOffset.current.y - e.deltaY * panSpeed,
+      };
+      targetOffset.current = clampOffset(newOffset, targetZoom.current, false);
     };
 
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
-  // Wheel-to-pan: when user scrolls without ctrl/meta, pan the workspace instead of scrolling the page
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const onWheelPan = (e: WheelEvent) => {
-      // if ctrl/meta -> zoom handler handles it
-      if (e.ctrlKey || e.metaKey) return;
-      // If the event target is an input or has scrollable children, let it scroll
-      const target = e.target as HTMLElement | null;
-      if (target) {
-        const tag = target.tagName?.toLowerCase();
-        if (tag === "input" || tag === "textarea" || target.isContentEditable) return;
-      }
-
-      e.preventDefault();
-
-      // deltaX/deltaY are in pixels; invert to move the scene in the expected direction
-      const dx = e.deltaX;
-      const dy = e.deltaY;
-
-      // Update the target offset (allow overscroll while scrolling)
-      const candidate = { x: targetOffset.current.x - dx, y: targetOffset.current.y - dy };
-      // Strictly clamp while panning with wheel so canvas cannot be moved outside workspace
-      targetOffset.current = clampOffset(candidate, targetZoom.current, false);
-    };
-
-    el.addEventListener("wheel", onWheelPan, { passive: false });
-    return () => el.removeEventListener("wheel", onWheelPan);
-  }, [canvas]);
+  // Wheel now only controls zoom; panning is via middle mouse drag or space+drag.
 
   // enforce minimum zoom on resize/initial mount so canvas never appears smaller than workspace
   useEffect(() => {

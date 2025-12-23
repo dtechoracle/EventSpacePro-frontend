@@ -257,12 +257,29 @@ export default function Canvas({
       return Math.min(3, Math.max(MIN_ZOOM_BASE, padded));
     };
     const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
+      e.preventDefault();
+
+      // Heuristic: distinguish trackpad vs mouse wheel.
+      // - Trackpad events are usually DOM_DELTA_PIXEL with small deltas.
+      // - Mouse wheels are often line-based / large deltas.
+      const isPixelMode = e.deltaMode === WheelEvent.DOM_DELTA_PIXEL;
+      const absDeltaY = Math.abs(e.deltaY);
+      const absDeltaX = Math.abs(e.deltaX);
+      const isTrackpadLike = isPixelMode && absDeltaY < 80 && absDeltaX < 80;
+
+      const shouldZoom =
+        // Pinch gesture: ctrl/meta + wheel
+        e.ctrlKey ||
+        e.metaKey ||
+        // External mouse wheel (non‑trackpad) should zoom vertically
+        (!isTrackpadLike && absDeltaY > absDeltaX && absDeltaY > 0);
+
+      if (shouldZoom) {
         const rect = el.getBoundingClientRect();
         const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
         const sceneX = (cursor.x - targetOffset.current.x) / targetZoom.current;
         const sceneY = (cursor.y - targetOffset.current.y) / targetZoom.current;
+        // Flip so pinch-in (positive deltaY on most trackpads) zooms OUT, pinch-out zooms IN.
         const delta = -e.deltaY * ZOOM_SENSITIVITY;
         const desired = targetZoom.current + delta;
         const minZoom = computeMinZoom();
@@ -273,27 +290,20 @@ export default function Canvas({
         };
         targetZoom.current = newZoom;
         targetOffset.current = clampOffset(newOffset, newZoom, false);
+        return;
       }
+
+      // Two-finger scroll on trackpad: pan (both vertical and horizontal)
+      const panSpeed = 1;
+      const newOffset = {
+        x: targetOffset.current.x - e.deltaX * panSpeed,
+        y: targetOffset.current.y - e.deltaY * panSpeed,
+      };
+      targetOffset.current = clampOffset(newOffset, targetZoom.current, false);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [effectiveWidthMm, effectiveHeightMm, mmToPx]);
-
-  // Wheel-to-pan when not zooming (prevent page scroll)
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const onWheelPan = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) return; // zoom handler handles this
-      e.preventDefault();
-      const dx = e.deltaX;
-      const dy = e.deltaY;
-      const candidate = { x: targetOffset.current.x - dx, y: targetOffset.current.y - dy };
-      targetOffset.current = clampOffset(candidate, targetZoom.current, false);
-    };
-    el.addEventListener("wheel", onWheelPan, { passive: false });
-    return () => el.removeEventListener("wheel", onWheelPan);
-  }, []);
 
   // Enforce minimum zoom on mount/resize and center scene
   useEffect(() => {

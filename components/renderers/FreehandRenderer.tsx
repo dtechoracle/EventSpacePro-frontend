@@ -23,6 +23,7 @@ export default function FreehandRenderer({ shape, isSelected, isHovered }: Freeh
             <path
                 d={pathData}
                 fill="none"
+                // Match pure black, thick defaults used when creating freehand shapes
                 stroke={shape.stroke || '#000000'}
                 strokeWidth={shape.strokeWidth || 2}
                 strokeLinecap="round"

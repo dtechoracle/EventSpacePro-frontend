@@ -277,7 +277,63 @@ export default function PlanPreview({
     const x = asset.x - w / 2;
     const y = asset.y - h / 2;
 
-    if (asset.type === 'circle' || asset.type === 'round-table') {
+    // Polygon shapes
+    if (asset.type === 'polygon') {
+      // Use stored points if present (relative to center)
+      let pointsStr: string | null = null;
+      const pts = (asset as any).points as Array<{ x: number; y: number }> | undefined;
+      if (pts && pts.length >= 3) {
+        pointsStr = pts.map(p => `${asset.x + p.x} ${asset.y + p.y}`).join(' ');
+      } else {
+        const sides = Math.max(
+          4,
+          Math.min(12, (asset as any).polygonSides || (pts ? pts.length : 4))
+        );
+        const r = Math.min(w, h) / 2;
+        const tmp: string[] = [];
+        for (let i = 0; i < sides; i++) {
+          const angle = ((Math.PI * 2) / sides) * i - Math.PI / 2;
+          const px = asset.x + r * Math.cos(angle);
+          const py = asset.y + r * Math.sin(angle);
+          tmp.push(`${px} ${py}`);
+        }
+        pointsStr = tmp.join(' ');
+      }
+
+      return [
+        <polygon
+          key={asset.id}
+          points={pointsStr || ''}
+          fill={(asset as any).backgroundColor || (asset as any).fillColor || "#e5e7eb"}
+          stroke={(asset as any).strokeColor || "#000000"}
+          strokeWidth={Math.max(0.5, (asset as any).strokeWidth || 1)}
+          transform={asset.rotation ? `rotate(${asset.rotation} ${asset.x} ${asset.y})` : undefined}
+          strokeLinejoin="round"
+        />
+      ];
+    }
+
+    // Lines / arrows with points
+    if ((asset.type === 'line' || asset.type === 'arrow') && (asset as any).points && Array.isArray((asset as any).points)) {
+      const pts = (asset as any).points as Array<{ x: number; y: number }>;
+      if (pts.length >= 2) {
+        const pointsStr = pts.map(p => `${asset.x + p.x} ${asset.y + p.y}`).join(' ');
+        return [
+          <polyline
+            key={asset.id}
+            points={pointsStr}
+            fill="none"
+            stroke={(asset as any).strokeColor || "#000000"}
+            strokeWidth={Math.max(0.5, (asset as any).strokeWidth || 1)}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            transform={asset.rotation ? `rotate(${asset.rotation} ${asset.x} ${asset.y})` : undefined}
+          />
+        ];
+      }
+    }
+
+    if (asset.type === 'circle' || asset.type === 'round-table' || asset.type === 'ellipse') {
       return [
         <ellipse
           key={asset.id}

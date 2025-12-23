@@ -10,9 +10,13 @@ interface ShapeRendererProps {
 }
 
 export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRendererProps) {
-    const strokeColor = shape.stroke || '#1f2937';
+    // Default pure black stroke so new shapes/lines pop clearly
+    const strokeColor = shape.stroke || '#000000';
     const fillColor = shape.fill || 'transparent';
-    const strokeWidth = shape.strokeWidth || 2;
+    // Ensure strokeWidth is always a valid number, defaulting to 4 if undefined/null/0
+    const strokeWidth = (shape.strokeWidth !== undefined && shape.strokeWidth !== null && shape.strokeWidth > 0) 
+        ? shape.strokeWidth 
+        : 2;
 
     const transform = `translate(${shape.x}, ${shape.y}) rotate(${shape.rotation})`;
 
@@ -52,7 +56,49 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
             );
         }
 
+        if (shape.type === 'polygon') {
+            // Use provided points or generate a regular polygon
+            let pts: { x: number; y: number }[] = [];
+            if (shape.points && shape.points.length >= 3) {
+                pts = shape.points;
+            } else {
+                const sides = Math.max(3, shape.polygonSides || 4);
+                const radius = Math.min(shape.width, shape.height) / 2;
+                for (let i = 0; i < sides; i++) {
+                    const angle = ((Math.PI * 2) / sides) * i - Math.PI / 2;
+                    pts.push({
+                        x: Math.cos(angle) * radius,
+                        y: Math.sin(angle) * radius,
+                    });
+                }
+            }
+            const pointsStr = pts.map(p => `${p.x},${p.y}`).join(' ');
+            return (
+                <polygon
+                    points={pointsStr}
+                    {...commonProps}
+                />
+            );
+        }
+
         if (shape.type === 'line') {
+            // If this line has explicit polyline points, render them so slanted / multi‑segment lines keep their shape.
+            if (shape.points && shape.points.length >= 2) {
+                const points = shape.points.map(p => `${p.x},${p.y}`).join(' ');
+                return (
+                    <polyline
+                        points={points}
+                        fill="none"
+                        stroke={commonProps.stroke}
+                        strokeWidth={commonProps.strokeWidth}
+                        opacity={commonProps.opacity}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    />
+                );
+            }
+
+            // Fallback: legacy straight line using width / rotation.
             return (
                 <line
                     x1={-shape.width / 2}
@@ -65,7 +111,57 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
         }
 
         if (shape.type === 'arrow') {
-            const arrowHeadSize = Math.min(shape.width / 4, 20);
+            const renderArrowHead = (from: {x:number;y:number}, to: {x:number;y:number}, stroke: string, strokeWidth: number, opacity: number) => {
+                const dx = to.x - from.x;
+                const dy = to.y - from.y;
+                const len = Math.sqrt(dx*dx + dy*dy) || 1;
+                const ux = dx / len;
+                const uy = dy / len;
+                // Larger, more prominent arrow head scaled by stroke width
+                const baseSize = strokeWidth || 1;
+                const size = Math.min(len / 2, baseSize * 3);
+                const backX = to.x - ux * size;
+                const backY = to.y - uy * size;
+                const perpX = -uy * (size / 2);
+                const perpY = ux * (size / 2);
+                const p1 = `${to.x},${to.y}`;
+                const p2 = `${backX + perpX},${backY + perpY}`;
+                const p3 = `${backX - perpX},${backY - perpY}`;
+                return (
+                    <polygon
+                        points={`${p1} ${p2} ${p3}`}
+                        fill={stroke}
+                        stroke={stroke}
+                        strokeWidth={strokeWidth}
+                        opacity={opacity}
+                    />
+                );
+            };
+
+            // If polyline points exist, render polyline plus arrow head at the end
+            if (shape.points && shape.points.length >= 2) {
+                const pts = shape.points;
+                const polyPoints = pts.map(p => `${p.x},${p.y}`).join(' ');
+                const last = pts[pts.length - 1];
+                const prev = pts[pts.length - 2];
+                return (
+                    <g>
+                        <polyline
+                            points={polyPoints}
+                            fill="none"
+                            stroke={commonProps.stroke}
+                            strokeWidth={commonProps.strokeWidth}
+                            opacity={commonProps.opacity}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        />
+                        {renderArrowHead(prev, last, commonProps.stroke as string, commonProps.strokeWidth as number, commonProps.opacity as number)}
+                    </g>
+                );
+            }
+
+            // Legacy straight arrow
+            const arrowHeadSize = Math.min(shape.width / 2, (strokeWidth as number) * 3);
             return (
                 <g>
                     <line

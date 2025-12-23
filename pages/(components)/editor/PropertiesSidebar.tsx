@@ -14,8 +14,8 @@ import { useUserStore } from "@/store/userStore";
 export default function PropertiesSidebar(): React.JSX.Element {
   const { selectedIds } = useEditorStore();
   const {
-    shapes, assets, walls,
-    updateShape, updateAsset, updateWall,
+    shapes, assets, walls, textAnnotations, labelArrows,
+    updateShape, updateAsset, updateWall, updateTextAnnotation, updateLabelArrow,
     isSaving, lastSaved, saveEvent, hasUnsavedChanges
   } = useProjectStore();
 
@@ -25,9 +25,11 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const selectedShape = selectedId ? shapes.find(s => s.id === selectedId) : null;
   const selectedAsset = selectedId ? assets.find(a => a.id === selectedId) : null;
   const selectedWall = selectedId ? walls.find(w => w.id === selectedId) : null;
+  const selectedTextAnnotation = selectedId ? textAnnotations.find(t => t.id === selectedId) : null;
+  const selectedLabelArrow = selectedId ? labelArrows.find(l => l.id === selectedId) : null;
 
-  const selectedItem = selectedShape || selectedAsset || selectedWall;
-  const itemType = selectedShape ? 'shape' : selectedAsset ? 'asset' : selectedWall ? 'wall' : null;
+  const selectedItem = selectedShape || selectedAsset || selectedWall || selectedTextAnnotation || selectedLabelArrow;
+  const itemType = selectedShape ? 'shape' : selectedAsset ? 'asset' : selectedWall ? 'wall' : selectedTextAnnotation ? 'text-annotation' : selectedLabelArrow ? 'label-arrow' : null;
 
   const showGrid = useSceneStore((s) => s.showGrid);
   const toggleGrid = useSceneStore((s) => s.toggleGrid);
@@ -89,11 +91,11 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
 
   const router = useRouter();
-  const { id } = router.query;
+  const { id, slug } = router.query;
 
   const handleSave = async () => {
-    if (id && typeof id === 'string') {
-      await saveEvent(id);
+    if (id && typeof id === 'string' && slug && typeof slug === 'string') {
+      await saveEvent(id, slug);
     }
   };
 
@@ -412,10 +414,184 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span className="text-gray-500">Stroke Width</span>
                       <input
                         type="number"
-                        value={(selectedItem as any).strokeWidth || 1}
-                        onChange={(e) => updateShape(selectedItem.id, { strokeWidth: Number(e.target.value) })}
+                        value={(selectedItem as any).strokeWidth !== undefined ? (selectedItem as any).strokeWidth : 2}
+                        onChange={(e) => {
+                          const value = Number(e.target.value);
+                          updateShape(selectedItem.id, { strokeWidth: value >= 0 ? value : 2 });
+                        }}
                         className="sidebar-input w-16 text-right"
                         min={0}
+                        step={0.5}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Text Annotation Properties */}
+                {itemType === 'text-annotation' && selectedTextAnnotation && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="text-xs font-semibold mb-2 text-gray-600">Text Properties</div>
+
+                    {/* Text Content */}
+                    <div className="mb-2">
+                      <label className="block text-xs text-gray-500 mb-1">Text</label>
+                      <textarea
+                        value={selectedTextAnnotation.text}
+                        onChange={(e) => updateTextAnnotation(selectedTextAnnotation.id, { text: e.target.value })}
+                        className="w-full text-sm border rounded px-2 py-1 bg-white resize-none"
+                        rows={3}
+                      />
+                    </div>
+
+                    {/* Font Size */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Font Size</span>
+                      <input
+                        type="number"
+                        value={selectedTextAnnotation.fontSize || 14}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateTextAnnotation(selectedTextAnnotation.id, { fontSize: Math.max(8, Math.min(72, val)) });
+                        }}
+                        className="sidebar-input w-16 text-right"
+                        min={8}
+                        max={72}
+                      />
+                    </div>
+
+                    {/* Font Family */}
+                    <div className="mb-2">
+                      <label className="block text-xs text-gray-500 mb-1">Font Family</label>
+                      <select
+                        value={selectedTextAnnotation.fontFamily || 'Arial'}
+                        onChange={(e) => updateTextAnnotation(selectedTextAnnotation.id, { fontFamily: e.target.value })}
+                        className="w-full text-xs border rounded px-2 py-1 bg-white"
+                      >
+                        <option value="Arial">Arial</option>
+                        <option value="Helvetica">Helvetica</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Courier New">Courier New</option>
+                        <option value="Verdana">Verdana</option>
+                        <option value="Georgia">Georgia</option>
+                        <option value="Palatino">Palatino</option>
+                        <option value="Garamond">Garamond</option>
+                        <option value="Comic Sans MS">Comic Sans MS</option>
+                        <option value="Impact">Impact</option>
+                      </select>
+                    </div>
+
+                    {/* Text Color */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Color</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={selectedTextAnnotation.color || '#000000'}
+                          onChange={(e) => updateTextAnnotation(selectedTextAnnotation.id, { color: e.target.value })}
+                          className="sidebar-input w-20 text-xs"
+                        />
+                        <input
+                          type="color"
+                          value={selectedTextAnnotation.color || '#000000'}
+                          onChange={(e) => updateTextAnnotation(selectedTextAnnotation.id, { color: e.target.value })}
+                          className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Position */}
+                    <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-500">X</span>
+                        <input
+                          type="number"
+                          value={roundForDisplay(selectedTextAnnotation.x)}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            updateTextAnnotation(selectedTextAnnotation.id, { x: val });
+                          }}
+                          className="sidebar-input w-16 text-right"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-500">Y</span>
+                        <input
+                          type="number"
+                          value={roundForDisplay(selectedTextAnnotation.y)}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            updateTextAnnotation(selectedTextAnnotation.id, { y: val });
+                          }}
+                          className="sidebar-input w-16 text-right"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Label Arrow Properties */}
+                {itemType === 'label-arrow' && selectedLabelArrow && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="text-xs font-semibold mb-2 text-gray-600">Label Arrow Properties</div>
+
+                    {/* Label Text */}
+                    <div className="mb-2">
+                      <label className="block text-xs text-gray-500 mb-1">Label</label>
+                      <input
+                        type="text"
+                        value={selectedLabelArrow.label}
+                        onChange={(e) => updateLabelArrow(selectedLabelArrow.id, { label: e.target.value })}
+                        className="w-full text-sm border rounded px-2 py-1 bg-white"
+                      />
+                    </div>
+
+                    {/* Font Size */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Font Size</span>
+                      <input
+                        type="number"
+                        value={selectedLabelArrow.fontSize || 14}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateLabelArrow(selectedLabelArrow.id, { fontSize: Math.max(8, Math.min(72, val)) });
+                        }}
+                        className="sidebar-input w-16 text-right"
+                        min={8}
+                        max={72}
+                      />
+                    </div>
+
+                    {/* Color */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Color</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={selectedLabelArrow.color || '#000000'}
+                          onChange={(e) => updateLabelArrow(selectedLabelArrow.id, { color: e.target.value })}
+                          className="sidebar-input w-20 text-xs"
+                        />
+                        <input
+                          type="color"
+                          value={selectedLabelArrow.color || '#000000'}
+                          onChange={(e) => updateLabelArrow(selectedLabelArrow.id, { color: e.target.value })}
+                          className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Stroke Width */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Stroke Width</span>
+                      <input
+                        type="number"
+                        value={selectedLabelArrow.strokeWidth || 2}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateLabelArrow(selectedLabelArrow.id, { strokeWidth: Math.max(1, val) });
+                        }}
+                        className="sidebar-input w-16 text-right"
+                        min={1}
                       />
                     </div>
                   </div>

@@ -87,14 +87,14 @@ export default function ProjectCard({ project }: ProjectCardProps) {
         </div>
       ) : (
         <>
-          {/* Background with placeholder circles */}
+      {/* Background with placeholder circles */}
           <div className='absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#E0EAFF] via-[#D4E4FF] to-[#C7D2FE]'>
             <div className='absolute -top-10 -left-10 w-40 h-40 bg-blue-200 rounded-full blur-3xl opacity-70' />
             <div className='absolute top-8 right-6 w-32 h-32 bg-sky-200 rounded-full blur-3xl opacity-60' />
             <div className='absolute bottom-8 left-1/3 w-32 h-32 bg-indigo-200 rounded-full blur-3xl opacity-60' />
-          </div>
-          {/* Frosted overlay */}
-          <div className='absolute inset-0 bg-white/40 backdrop-blur-lg'></div>
+      </div>
+      {/* Frosted overlay */}
+      <div className='absolute inset-0 bg-white/40 backdrop-blur-lg'></div>
         </>
       )}
 

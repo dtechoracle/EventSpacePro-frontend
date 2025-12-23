@@ -233,7 +233,7 @@ export default function AiTrigger() {
     if (!plan) return;
     const createdAssetIds: string[] = [];
     const createdAssetsInBatch: AssetInstance[] = []; // Track assets created in this batch
-
+    
     // Get canvas center - use actual canvas center or default to (0, 0) for safety
     const getCanvasCenter = () => {
       if (canvas?.width && canvas?.height) {
@@ -243,16 +243,16 @@ export default function AiTrigger() {
       return { x: 0, y: 0 };
     };
     const canvasCenter = getCanvasCenter();
-
+    
     // Find empty space on canvas by checking existing asset bounding boxes
     // Keep assets away from canvas edges (at least 1000mm margin)
     const findEmptySpace = (requiredWidth: number, requiredHeight: number, margin = 100): { x: number; y: number } | null => {
       const edgeMargin = 1000; // Keep assets away from canvas edges
-
+      
       if (existingAssets.length === 0 && createdAssetsInBatch.length === 0) {
         // No existing assets, use canvas center (but ensure it's away from edges)
         if (canvas?.width && canvas?.height) {
-          const safeCenterX = Math.max(edgeMargin + requiredWidth / 2,
+          const safeCenterX = Math.max(edgeMargin + requiredWidth / 2, 
             Math.min(canvas.width - edgeMargin - requiredWidth / 2, canvas.width / 2));
           const safeCenterY = Math.max(edgeMargin + requiredHeight / 2,
             Math.min(canvas.height - edgeMargin - requiredHeight / 2, canvas.height / 2));
@@ -260,7 +260,7 @@ export default function AiTrigger() {
         }
         return canvasCenter;
       }
-
+      
       // Get bounding boxes of all existing assets + newly created assets in this batch
       const occupiedAreas: Array<{ minX: number; minY: number; maxX: number; maxY: number }> = [];
       [...existingAssets, ...createdAssetsInBatch].forEach(asset => {
@@ -288,48 +288,48 @@ export default function AiTrigger() {
           });
         }
       });
-
+      
       // Try to find empty space - start from top-left, scan grid-like
       const canvasWidth = canvas?.width || 10000;
       const canvasHeight = canvas?.height || 10000;
       const stepSize = 500; // mm - grid step for searching
       const halfW = requiredWidth / 2 + margin;
       const halfH = requiredHeight / 2 + margin;
-
+      
       // Start from top-left corner, but keep away from edges
       const startY = edgeMargin;
       const endY = canvasHeight - edgeMargin;
       const startX = edgeMargin;
       const endX = canvasWidth - edgeMargin;
-
+      
       for (let y = startY; y < endY; y += stepSize) {
         for (let x = startX; x < endX; x += stepSize) {
           const testX = x;
           const testY = y;
-
+          
           // Ensure position is away from edges
           if (testX - halfW < edgeMargin || testX + halfW > canvasWidth - edgeMargin ||
-            testY - halfH < edgeMargin || testY + halfH > canvasHeight - edgeMargin) {
+              testY - halfH < edgeMargin || testY + halfH > canvasHeight - edgeMargin) {
             continue;
           }
-
+          
           // Check if this position overlaps with any existing asset
           const overlaps = occupiedAreas.some(area => {
-            return !(testX + halfW < area.minX - margin ||
-              testX - halfW > area.maxX + margin ||
-              testY + halfH < area.minY - margin ||
-              testY - halfH > area.maxY + margin);
+            return !(testX + halfW < area.minX - margin || 
+                    testX - halfW > area.maxX + margin ||
+                    testY + halfH < area.minY - margin ||
+                    testY - halfH > area.maxY + margin);
           });
-
+          
           if (!overlaps) {
             return { x: testX, y: testY };
           }
         }
       }
-
+      
       // If no empty space found, place at safe center (away from edges)
       if (canvas?.width && canvas?.height) {
-        const safeCenterX = Math.max(edgeMargin + requiredWidth / 2,
+        const safeCenterX = Math.max(edgeMargin + requiredWidth / 2, 
           Math.min(canvas.width - edgeMargin - requiredWidth / 2, canvas.width / 2));
         const safeCenterY = Math.max(edgeMargin + requiredHeight / 2,
           Math.min(canvas.height - edgeMargin - requiredHeight / 2, canvas.height / 2));
@@ -337,18 +337,18 @@ export default function AiTrigger() {
       }
       return canvasCenter;
     };
-
+    
     // Derive a primary wall bounding box if available (first rectangular wall)
     let wallBounds: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
     if (Array.isArray(plan.walls) && plan.walls.length > 0) {
       const w = plan.walls[0];
       const width = Number(w.widthMm || 0);
       const height = Number(w.heightMm || 0);
-
+      
       // Find empty space for the wall
       let cx = Number(w.centerX);
       let cy = Number(w.centerY);
-
+      
       // If position not provided or invalid, find empty space
       if (!cx || !cy || !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
         const emptySpace = findEmptySpace(width, height, 200);
@@ -359,7 +359,7 @@ export default function AiTrigger() {
           // Use safe center away from edges
           const edgeMargin = 1000;
           if (canvas?.width && canvas?.height) {
-            cx = Math.max(edgeMargin + width / 2,
+            cx = Math.max(edgeMargin + width / 2, 
               Math.min(canvas.width - edgeMargin - width / 2, canvas.width / 2));
             cy = Math.max(edgeMargin + height / 2,
               Math.min(canvas.height - edgeMargin - height / 2, canvas.height / 2));
@@ -369,7 +369,7 @@ export default function AiTrigger() {
           }
         }
       }
-
+      
       const halfW = width / 2;
       const halfH = height / 2;
       wallBounds = { minX: cx - halfW, minY: cy - halfH, maxX: cx + halfW, maxY: cy + halfH };
@@ -380,7 +380,7 @@ export default function AiTrigger() {
       // If position is NaN, Infinity, or way too large (likely error), use safe center
       if (!isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
         if (canvas?.width && canvas?.height) {
-          const safeX = Math.max(edgeMargin + width / 2,
+          const safeX = Math.max(edgeMargin + width / 2, 
             Math.min(canvas.width - edgeMargin - width / 2, canvas.width / 2));
           const safeY = Math.max(edgeMargin + height / 2,
             Math.min(canvas.height - edgeMargin - height / 2, canvas.height / 2));
@@ -397,7 +397,7 @@ export default function AiTrigger() {
       }
       return { x, y };
     };
-
+    
     const clampInWall = (x: number, y: number, margin = 50, width = 0, height = 0) => {
       const valid = validatePosition(x, y, width, height);
       if (!wallBounds) return valid;
@@ -412,7 +412,7 @@ export default function AiTrigger() {
         const height = Number(w.heightMm || 0);
         let cx: number;
         let cy: number;
-
+        
         if (idx === 0 && wallBounds) {
           // First wall uses the calculated position from wallBounds
           cx = (wallBounds.minX + wallBounds.maxX) / 2;
@@ -421,8 +421,8 @@ export default function AiTrigger() {
           // For additional walls, find empty space
           let providedCx = Number(w.centerX);
           let providedCy = Number(w.centerY);
-          if (!providedCx || !providedCy || !isFinite(providedCx) || !isFinite(providedCy) ||
-            Math.abs(providedCx) > 100000 || Math.abs(providedCy) > 100000) {
+          if (!providedCx || !providedCy || !isFinite(providedCx) || !isFinite(providedCy) || 
+              Math.abs(providedCx) > 100000 || Math.abs(providedCy) > 100000) {
             const emptySpace = findEmptySpace(width, height, 200);
             if (emptySpace) {
               cx = emptySpace.x;
@@ -481,7 +481,7 @@ export default function AiTrigger() {
         // Validate and auto-calculate position if missing or invalid
         // Check if x/y are undefined/null or invalid (NaN, Infinity, or way too large)
         if (t.xMm === undefined || t.xMm === null || t.yMm === undefined || t.yMm === null ||
-          !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
+            !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
           if (wallBounds) {
             const cols = Math.ceil(Math.sqrt(plan.tables.length));
             const row = Math.floor(idx / cols);
@@ -519,7 +519,7 @@ export default function AiTrigger() {
         let y = Number(c.yMm);
         // Validate and auto-calculate position if missing or invalid
         if (c.xMm === undefined || c.xMm === null || c.yMm === undefined || c.yMm === null ||
-          !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
+            !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
           if (wallBounds) {
             const cols = Math.ceil(Math.sqrt(plan.chairs.length));
             const row = Math.floor(idx / cols);
@@ -556,7 +556,7 @@ export default function AiTrigger() {
         let cy = Number(spec.centerY);
         // Validate and auto-calculate center if missing or invalid
         if (spec.centerX === undefined || spec.centerX === null || spec.centerY === undefined || spec.centerY === null ||
-          !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
+            !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
           if (wallBounds) {
             const cols = Math.ceil(Math.sqrt(plan.chairsAround.length));
             const row = Math.floor(idx / cols);
@@ -573,12 +573,12 @@ export default function AiTrigger() {
         const minRadius = Math.ceil((tableSize / 2) + chairSize + 10);
         const r = Math.max(minRadius, Number(spec.radiusMm || minRadius));
         const count = Math.max(1, Number(spec.count || 1));
-
+        
         // Ensure center position is away from canvas edges
         const edgeMargin = 1000;
         const totalRadius = r + chairSize; // Maximum extent from center
         if (canvas?.width && canvas?.height) {
-          cx = Math.max(edgeMargin + totalRadius,
+          cx = Math.max(edgeMargin + totalRadius, 
             Math.min(canvas.width - edgeMargin - totalRadius, cx));
           cy = Math.max(edgeMargin + totalRadius,
             Math.min(canvas.height - edgeMargin - totalRadius, cy));
@@ -622,14 +622,14 @@ export default function AiTrigger() {
         }
       });
     }
-
+    
     // Auto-center viewport on newly created assets
     if (createdAssetIds.length > 0) {
       setTimeout(() => {
         const assets = useSceneStore.getState().assets;
         const createdAssets = assets.filter(a => createdAssetIds.includes(a.id));
         if (createdAssets.length === 0) return;
-
+        
         // Calculate bounding box of all created assets
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         createdAssets.forEach(asset => {
@@ -649,7 +649,7 @@ export default function AiTrigger() {
             maxY = Math.max(maxY, asset.y + h / 2);
           }
         });
-
+        
         if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY)) {
           // Select the first created asset to trigger auto-center in Canvas.tsx
           // The Canvas component will automatically center on the selected asset
@@ -845,7 +845,19 @@ export default function AiTrigger() {
                     : (asset.rotation || 0) + delta,
               });
             } else if (data.action.type === 'update') {
-              updateAsset(asset.id, data.action.updates || {});
+              const rawUpdates = data.action.updates || {};
+              const updates: any = { ...rawUpdates };
+              // Normalize color props so they affect the actual fill/stroke used in the editor
+              if (rawUpdates.fillColor && !rawUpdates.fill) {
+                updates.fill = rawUpdates.fillColor;
+              }
+              if (rawUpdates.backgroundColor && !updates.fill && !rawUpdates.fill) {
+                updates.fill = rawUpdates.backgroundColor;
+              }
+              if (rawUpdates.strokeColor && !rawUpdates.stroke) {
+                updates.stroke = rawUpdates.strokeColor;
+              }
+              updateAsset(asset.id, updates);
             } else if (data.action.type === 'moveWithinGroup') {
               // Handle moving a child asset within a group
               const groupAsset = existingAssets.find(a => a.id === asset.id && a.isGroup);
@@ -855,13 +867,14 @@ export default function AiTrigger() {
               }
 
               // Try to find child asset by ID first, then by type/description/color
+              const groupAssets = groupAsset.groupAssets || [];
               let targetChildId = data.action.targetAssetId;
-              let childAsset = groupAsset.groupAssets.find(ca => ca.id === targetChildId);
+              let childAsset = groupAssets.find(ca => ca.id === targetChildId);
               
               console.log('🔍 Looking for child asset:', {
                 targetAssetId: targetChildId,
                 found: !!childAsset,
-                availableChildren: groupAsset.groupAssets.map(ca => ({ 
+                availableChildren: groupAssets.map(ca => ({ 
                   id: ca.id, 
                   type: ca.type, 
                   fillColor: ca.fillColor,
@@ -875,28 +888,53 @@ export default function AiTrigger() {
                 const promptLower = userPrompt.toLowerCase();
                 
                 // Try multiple matching strategies
-                const matchingStrategies = [
+                const matchingStrategies: Array<() => AssetInstance | undefined> = [
                   // Match by "blue circle" (both color and type)
-                  () => promptLower.includes('blue') && promptLower.includes('circle') && groupAsset.groupAssets.find(ca => 
-                    (ca.type === 'ellipse' || ca.type === 'circle') && 
-                    (ca.fillColor === '#3b82f6' || ca.fillColor === '#0000ff' || ca.fillColor === '#60a5fa')
-                  ),
+                  () => {
+                    if (promptLower.includes('blue') && promptLower.includes('circle')) {
+                      return groupAssets.find(ca => 
+                        (ca.type === 'ellipse' || ca.type === 'circle') && 
+                        (ca.fillColor === '#3b82f6' || ca.fillColor === '#0000ff' || ca.fillColor === '#60a5fa')
+                      );
+                    }
+                    return undefined;
+                  },
                   // Match by "circle" keyword
-                  () => promptLower.includes('circle') && groupAsset.groupAssets.find(ca => 
-                    ca.type === 'ellipse' || ca.type === 'circle'
-                  ),
+                  () => {
+                    if (promptLower.includes('circle')) {
+                      return groupAssets.find(ca => 
+                        ca.type === 'ellipse' || ca.type === 'circle'
+                      );
+                    }
+                    return undefined;
+                  },
                   // Match by "blue" color alone
-                  () => promptLower.includes('blue') && groupAsset.groupAssets.find(ca => 
-                    ca.fillColor === '#3b82f6' || ca.fillColor === '#0000ff' || ca.fillColor === '#60a5fa'
-                  ),
+                  () => {
+                    if (promptLower.includes('blue')) {
+                      return groupAssets.find(ca => 
+                        ca.fillColor === '#3b82f6' || ca.fillColor === '#0000ff' || ca.fillColor === '#60a5fa'
+                      );
+                    }
+                    return undefined;
+                  },
                   // Match by "rectangle"
-                  () => promptLower.includes('rectangle') && groupAsset.groupAssets.find(ca => 
-                    ca.type === 'rectangle'
-                  ),
+                  () => {
+                    if (promptLower.includes('rectangle')) {
+                      return groupAssets.find(ca => 
+                        ca.type === 'rectangle'
+                      );
+                    }
+                    return undefined;
+                  },
                   // Match by "wall"
-                  () => promptLower.includes('wall') && groupAsset.groupAssets.find(ca => 
-                    ca.type === 'wall-segments'
-                  ),
+                  () => {
+                    if (promptLower.includes('wall')) {
+                      return groupAssets.find(ca => 
+                        ca.type === 'wall-segments'
+                      );
+                    }
+                    return undefined;
+                  },
                 ];
                 
                 for (const strategy of matchingStrategies) {
@@ -913,7 +951,7 @@ export default function AiTrigger() {
                 console.error('❌ Child asset not found!', {
                   targetAssetId: targetChildId,
                   prompt: capturedPrompt,
-                  availableChildren: groupAsset.groupAssets.map(ca => ({ 
+                  availableChildren: groupAssets.map(ca => ({ 
                     id: ca.id, 
                     type: ca.type, 
                     fillColor: ca.fillColor 
@@ -921,7 +959,7 @@ export default function AiTrigger() {
                 });
                 setMessages((m) => [...m, { 
                   role: 'assistant', 
-                  content: `Could not find the item you mentioned. Available items in the group: ${groupAsset.groupAssets.map(ca => ca.type || 'unknown').join(', ')}` 
+                  content: `Could not find the item you mentioned. Available items in the group: ${groupAssets.map(ca => ca.type || 'unknown').join(', ')}` 
                 }]);
                 return;
               }
@@ -1000,7 +1038,7 @@ export default function AiTrigger() {
               }
 
               // Update the child asset's position within the group
-              const updatedGroupAssets = groupAsset.groupAssets.map(ca =>
+              const updatedGroupAssets = groupAssets.map(ca =>
                 ca.id === targetChildId
                   ? { ...ca, x: newX, y: newY }
                   : ca
@@ -1013,7 +1051,7 @@ export default function AiTrigger() {
                 newPosition: { x: newX, y: newY },
                 bounds,
                 updatedChildren: updatedGroupAssets.length,
-                allChildren: groupAsset.groupAssets.map(ca => ({ id: ca.id, type: ca.type, x: ca.x, y: ca.y }))
+                allChildren: groupAssets.map(ca => ({ id: ca.id, type: ca.type, x: ca.x, y: ca.y }))
               });
 
               // Update the group asset with new child positions
@@ -1101,7 +1139,18 @@ export default function AiTrigger() {
                       : (asset.rotation || 0) + delta,
                 });
               } else if (data.action.type === 'update') {
-                updateWorkspaceAsset(asset.id, data.action.updates || {});
+                const rawUpdates = data.action.updates || {};
+                const updates: any = { ...rawUpdates };
+                if (rawUpdates.fillColor && !rawUpdates.fill) {
+                  updates.fill = rawUpdates.fillColor;
+                }
+                if (rawUpdates.backgroundColor && !updates.fill && !rawUpdates.fill) {
+                  updates.fill = rawUpdates.backgroundColor;
+                }
+                if (rawUpdates.strokeColor && !rawUpdates.stroke) {
+                  updates.stroke = rawUpdates.strokeColor;
+                }
+                updateWorkspaceAsset(asset.id, updates);
               }
             } else if (source === "project-shape") {
               if (data.action.type === 'resize') {
@@ -1142,7 +1191,18 @@ export default function AiTrigger() {
                       : (asset.rotation || 0) + delta,
                 });
               } else if (data.action.type === 'update') {
-                updateWorkspaceShape(asset.id, data.action.updates || {});
+                const rawUpdates = data.action.updates || {};
+                const updates: any = { ...rawUpdates };
+                if (rawUpdates.fillColor && !rawUpdates.fill) {
+                  updates.fill = rawUpdates.fillColor;
+                }
+                if (rawUpdates.backgroundColor && !updates.fill && !rawUpdates.fill) {
+                  updates.fill = rawUpdates.backgroundColor;
+                }
+                if (rawUpdates.strokeColor && !rawUpdates.stroke) {
+                  updates.stroke = rawUpdates.strokeColor;
+                }
+                updateWorkspaceShape(asset.id, updates);
               }
             }
           };
@@ -1200,9 +1260,19 @@ export default function AiTrigger() {
           // If successful, we're done
           return;
         } catch (commandError: any) {
-          // If command handler fails or returns an error, check if it's a "not applicable" error
           console.log('Command handler result:', commandError);
-          // Continue to plan generation as fallback
+          const msg = (commandError && (commandError.message || String(commandError))) || "";
+          // Only fall back to plan generation for explicit routing errors
+          if (
+            !msg.includes('plan generation') &&
+            !msg.includes('not applicable') &&
+            !msg.includes('not recognized')
+          ) {
+            // Hard failure for command – we've already shown an error message in handleInteractiveCommand
+            // Do NOT fall back to plan (which is layout-only and can't manipulate colors)
+            return;
+          }
+          // Otherwise, continue to plan generation as fallback
         }
       }
 
@@ -1224,19 +1294,23 @@ export default function AiTrigger() {
         }),
       });
       const data = await res.json();
-      if (data?.followUp) {
+      if (data?.message) {
+        // General question/answer
+        setMessages((m) => [...m, { role: 'assistant', content: data.message }]);
+      } else if (data?.followUp) {
         setMessages((m) => [...m, { role: 'assistant', content: data.followUp }]);
       } else if (data?.plan) {
         applyPlan(data.plan);
         setMessages((m) => [...m, { role: 'assistant', content: 'Plan generated and applied to canvas.' }]);
       } else {
-        setMessages((m) => [...m, { role: 'assistant', content: 'I need more details. What are the wall dimensions?' }]);
+        // Fallback for errors or unexpected responses
+        setMessages((m) => [...m, { role: 'assistant', content: data?.error || 'I can help you with that. Could you provide more details?' }]);
       }
     } catch (e) {
       console.error(e);
       setMessages((m) => [...m, { role: 'assistant', content: 'Sorry, I could not process that request.' }]);
     } finally {
-      setInputValue("");
+    setInputValue("");
       setIsLoading(false);
     }
   };
@@ -1388,11 +1462,7 @@ export default function AiTrigger() {
                             })()}
                           </span>
                           <span className="mt-1 text-xs text-gray-500">
-                            Ask: {isGroup
-                              ? '"Move the circle to the top right corner", "Position the table in the center", etc.'
-                              : primary.type === "wall-segments"
-                              ? '"Make this wall thicker", "Move 1000mm right", or "Change thickness to 225mm".'
-                              : '"Resize to 500mm × 800mm", "Move 1000mm right", or "Center this item".'}
+                            Ask me to manipulate this element: "Resize this", "Move to center", "Change color", "Rotate 45 degrees", etc.
                           </span>
                           <button
                             type="button"
@@ -1422,13 +1492,27 @@ export default function AiTrigger() {
                 </div>
                 <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain rounded-lg p-4 space-y-3 min-h-0">
                   {messages.length === 0 ? (
-                    <div className="space-y-2">
-                      <p className="text-gray-500 text-sm font-semibold mb-3">Try these commands:</p>
-                      <div className="space-y-1 text-sm text-gray-600">
-                        <p>• "Draw a 10000mm by 6000mm rectangular wall and add 6 round tables"</p>
-                        <p>• Select a shape, then: "Resize to 500mm" or "Make it smaller"</p>
-                        <p>• Select an item, then: "Move to center" or "Rotate 45 degrees"</p>
-                      </div>
+                    <div className="space-y-2 flex flex-col items-center justify-center h-full">
+                      <p className="text-gray-700 text-lg font-semibold mb-2">Ask anything</p>
+                      <p className="text-gray-500 text-sm text-center max-w-md">
+                        Ask me anything about your workspace, or select an element and ask me to manipulate it.
+                      </p>
+                      {(() => {
+                        const selectedAssets = getCurrentSelectedAssets();
+                        if (selectedAssets.length > 0) {
+                          return (
+                            <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200 max-w-md">
+                              <p className="text-sm text-blue-800 font-medium mb-1">
+                                {selectedAssets.length} element{selectedAssets.length > 1 ? 's' : ''} selected
+                              </p>
+                              <p className="text-xs text-blue-600">
+                                Try: "Resize this", "Move to center", "Change color", or "Rotate 45 degrees"
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   ) : (
                     messages.map((m, i) => (
@@ -1451,7 +1535,7 @@ export default function AiTrigger() {
                   )}
                 </div>
               </div>
-
+              
               <div className="w-full max-w-lg relative flex-shrink-0 mt-4">
                 {/* Left icon */}
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 bg-gray-200 p-2 rounded-full">
@@ -1496,4 +1580,3 @@ export default function AiTrigger() {
     </>
   );
 }
-
