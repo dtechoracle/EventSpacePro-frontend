@@ -427,6 +427,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   </div>
                 )}
 
+                {/* Asset appearance controls intentionally removed:
+                    assets use their own SVG styling and only support position/size/rotation here. */}
+
                 {/* Text Annotation Properties */}
                 {itemType === 'text-annotation' && selectedTextAnnotation && (
                   <div className="mt-3 pt-3 border-t border-gray-100">
@@ -445,17 +448,17 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
                     {/* Font Size */}
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Font Size</span>
+                      <span className="text-gray-500">Font Size (px)</span>
                       <input
                         type="number"
-                        value={selectedTextAnnotation.fontSize || 14}
+                        value={selectedTextAnnotation.fontSize || 200}
                         onChange={(e) => {
                           const val = Number(e.target.value);
-                          updateTextAnnotation(selectedTextAnnotation.id, { fontSize: Math.max(8, Math.min(72, val)) });
+                          updateTextAnnotation(selectedTextAnnotation.id, { fontSize: Math.max(8, Math.min(1000, val)) });
                         }}
                         className="sidebar-input w-16 text-right"
                         min={8}
-                        max={72}
+                        max={1000}
                       />
                     </div>
 

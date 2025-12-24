@@ -155,23 +155,28 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
             const openings: Array<{ type: 'asset' | 'wall' | 'door-window'; startT: number; endT: number }> = [];
 
             // 1. Find asset openings (doors/windows)
-            const attachedAssets = assets.filter(asset =>
-                asset.attachedToWallId === wall.id &&
-                (asset.type === 'door' || asset.type === 'window')
-            );
+            // Instead of relying on attachedToWallId, detect any door/window asset that lies on this edge.
+            const doorWindowAssets = assets.filter(asset => {
+                const type = (asset.type || '').toLowerCase();
+                return type.includes('door') || type.includes('window');
+            });
 
-            attachedAssets.forEach(asset => {
+            doorWindowAssets.forEach(asset => {
                 const { distance, t } = pointToLineDistance(
                     { x: asset.x, y: asset.y },
                     nodeA,
                     nodeB
                 );
 
+                // Within threshold distance of this edge and not at the very ends
                 if (distance < 50 && t > 0.01 && t < 0.99) {
                     const edgeLength = Math.sqrt(
                         (nodeB.x - nodeA.x) ** 2 + (nodeB.y - nodeA.y) ** 2
                     );
-                    const halfWidth = asset.width / 2;
+
+                    // Use the projected width of the asset along the edge as the opening width
+                    const assetWidth = asset.width * (asset.scale || 1);
+                    const halfWidth = assetWidth / 2;
                     const widthT = halfWidth / edgeLength;
 
                     openings.push({
@@ -426,14 +431,43 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                     <g key={edge.id} onDoubleClick={(e) => handleEdgeDoubleClick(edge.id, e)}>
                         {/* Render each segment */}
                         {segments.map((segment, idx) => {
-                            // Interpolate junction points for segment
-                            const startJunction = interpolateJunction(junctionA, junctionB, segment.startT);
-                            const endJunction = interpolateJunction(junctionA, junctionB, segment.endT);
+                            // Calculate perpendicular points for cutouts to avoid slanted edges
+                            // caused by interpolating between mitered junctions
+                            const getPointsAtT = (t: number) => {
+                                // If at the very ends, use the mitered junctions to preserve corners
+                                if (t <= 0.001) return junctionA;
+                                if (t >= 0.999) return junctionB;
 
-                            const p1 = startJunction.left;
-                            const p2 = endJunction.left;
-                            const p3 = endJunction.right;
-                            const p4 = startJunction.right;
+                                // Otherwise calculate perpendicular points
+                                const dx = nodeB.x - nodeA.x;
+                                const dy = nodeB.y - nodeA.y;
+                                const len = Math.sqrt(dx * dx + dy * dy);
+
+                                // Point on center line
+                                const px = nodeA.x + dx * t;
+                                const py = nodeA.y + dy * t;
+
+                                // Unit normal vector (Left relative to A->B)
+                                // Matches utils/geometry.ts getPerpendicularVector: (-dy, dx)
+                                const nx = -dy / len;
+                                const ny = dx / len;
+
+                                // Wall thickness (half to each side)
+                                const halfThick = (edge.thickness || 150) / 2; // Default to 150 if undefined
+
+                                return {
+                                    left: { x: px + nx * halfThick, y: py + ny * halfThick },
+                                    right: { x: px - nx * halfThick, y: py - ny * halfThick }
+                                };
+                            };
+
+                            const startPoints = getPointsAtT(segment.startT);
+                            const endPoints = getPointsAtT(segment.endT);
+
+                            const p1 = startPoints.left;
+                            const p2 = endPoints.left;
+                            const p3 = endPoints.right;
+                            const p4 = startPoints.right;
 
                             // Determine if we should draw inner line based on junction sharing
                             // Don't draw inner line if segment touches a shared junction where we're not responsible
@@ -528,6 +562,88 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                                             vectorEffect="non-scaling-stroke"
                                         />
                                     )}
+                                </g>
+                            );
+                        })}
+
+                        {/* Draw end caps for door/window cutouts.
+                            Caps are always perpendicular to the wall direction, connecting the left and right
+                            wall edges at the cutout boundaries. For horizontal walls, caps are vertical (|).
+                            For vertical walls, caps are horizontal (—). For slanted walls, caps follow the
+                            perpendicular direction in the wall's local coordinate system. */}
+                        {openings.map((opening, openingIdx) => {
+                            if (opening.type !== 'door-window') return null;
+
+                            // Get the actual junction points at the start and end of the cutout
+                            const startJunction = interpolateJunction(junctionA, junctionB, opening.startT);
+                            const endJunction = interpolateJunction(junctionA, junctionB, opening.endT);
+
+                            // Copy so we can gently snap near‑horizontal / near‑vertical caps
+                            let sLeftX = startJunction.left.x;
+                            let sLeftY = startJunction.left.y;
+                            let sRightX = startJunction.right.x;
+                            let sRightY = startJunction.right.y;
+
+                            let eLeftX = endJunction.left.x;
+                            let eLeftY = endJunction.left.y;
+                            let eRightX = endJunction.right.x;
+                            let eRightY = endJunction.right.y;
+
+                            // Detect if the wall is visually horizontal or vertical (angle very small)
+                            const edgeDx = nodeB.x - nodeA.x;
+                            const edgeDy = nodeB.y - nodeA.y;
+                            const absDx = Math.abs(edgeDx);
+                            const absDy = Math.abs(edgeDy);
+
+                            // Tolerance: if the off‑axis component is less than 1% of the main component,
+                            // treat it as perfectly axis‑aligned for visual snapping.
+                            const isHorizontalLike = absDx > 0 && absDy / absDx < 0.01;
+                            const isVerticalLike = absDy > 0 && absDx / absDy < 0.01;
+
+                            if (isHorizontalLike) {
+                                // Horizontal wall → caps should be perfectly vertical: X constant
+                                const sMidX = (sLeftX + sRightX) / 2;
+                                sLeftX = sMidX;
+                                sRightX = sMidX;
+
+                                const eMidX = (eLeftX + eRightX) / 2;
+                                eLeftX = eMidX;
+                                eRightX = eMidX;
+                            } else if (isVerticalLike) {
+                                // Vertical wall → caps should be perfectly horizontal: Y constant
+                                const sMidY = (sLeftY + sRightY) / 2;
+                                sLeftY = sMidY;
+                                sRightY = sMidY;
+
+                                const eMidY = (eLeftY + eRightY) / 2;
+                                eLeftY = eMidY;
+                                eRightY = eMidY;
+                            }
+
+                            return (
+                                <g key={`cutout-cap-${openingIdx}`}>
+                                    {/* Cap at start of cutout */}
+                                    <line
+                                        x1={sLeftX}
+                                        y1={sLeftY}
+                                        x2={sRightX}
+                                        y2={sRightY}
+                                        stroke={isEdgeSelected ? '#2563eb' : isSelected ? '#3b82f6' : isHovered ? '#60a5fa' : '#1f2937'}
+                                        strokeWidth={isEdgeSelected ? lineStrokeWidth * 2 : lineStrokeWidth}
+                                        strokeLinecap="butt"
+                                        vectorEffect="non-scaling-stroke"
+                                    />
+                                    {/* Cap at end of cutout */}
+                                    <line
+                                        x1={eLeftX}
+                                        y1={eLeftY}
+                                        x2={eRightX}
+                                        y2={eRightY}
+                                        stroke={isEdgeSelected ? '#2563eb' : isSelected ? '#3b82f6' : isHovered ? '#60a5fa' : '#1f2937'}
+                                        strokeWidth={isEdgeSelected ? lineStrokeWidth * 2 : lineStrokeWidth}
+                                        strokeLinecap="butt"
+                                        vectorEffect="non-scaling-stroke"
+                                    />
                                 </g>
                             );
                         })}

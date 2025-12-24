@@ -118,7 +118,41 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             }
             : worldPos;
 
-        // Apply 90-degree snapping if we have a previous node
+        // FIRST PRIORITY: Check for loop closing (before other snapping)
+        // This must happen before 90-degree snapping to prevent interference
+        if (currentWall && currentWall.nodes.length > 2) {
+            const firstNode = currentWall.nodes[0];
+            const dist = Math.hypot(snapped.x - firstNode.x, snapped.y - firstNode.y);
+
+            // Use larger snap distance for closing loop (same as in handleMouseMove)
+            if (dist < SNAP_DISTANCE * 2) {
+                // Snap directly to first node to close the loop
+                snapped = firstNode;
+                
+                // Close the loop by adding edge from last to first
+                // Check if edge already exists
+                const edgeExists = currentWall.edges.some(e =>
+                    (e.nodeA === lastNodeId && e.nodeB === firstNode.id) ||
+                    (e.nodeA === firstNode.id && e.nodeB === lastNodeId)
+                );
+
+                if (!edgeExists) {
+                    const closeEdge: WallEdge = {
+                        id: `edge-${Date.now()}-close`,
+                        nodeA: lastNodeId!,
+                        nodeB: firstNode.id,
+                        thickness,
+                    };
+                    updateWall(currentWallId!, {
+                        edges: [...currentWall!.edges, closeEdge],
+                    });
+                }
+                finishWall(true);
+                return;
+            }
+        }
+
+        // Apply 90-degree snapping if we have a previous node (but not if closing loop)
         if (lastNode) {
             snapped = snapTo90Degrees(lastNode, snapped, 6);
         }
@@ -152,35 +186,6 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
 
         if (junction && !existingNodeId) {
             snapped = junction.point;
-        }
-
-        // Check for loop closing (only if we have a current wall with 3+ nodes)
-        if (currentWall && currentWall.nodes.length > 2 && !existingNodeId) {
-            const firstNode = currentWall.nodes[0];
-            const dist = Math.hypot(snapped.x - firstNode.x, snapped.y - firstNode.y);
-
-            if (dist < SNAP_DISTANCE) {
-                // Close the loop by adding edge from last to first
-                // Check if edge already exists
-                const edgeExists = currentWall.edges.some(e =>
-                    (e.nodeA === lastNodeId && e.nodeB === firstNode.id) ||
-                    (e.nodeA === firstNode.id && e.nodeB === lastNodeId)
-                );
-
-                if (!edgeExists) {
-                    const closeEdge: WallEdge = {
-                        id: `edge-${Date.now()}-close`,
-                        nodeA: lastNodeId!,
-                        nodeB: firstNode.id,
-                        thickness,
-                    };
-                    updateWall(currentWallId!, {
-                        edges: [...currentWall!.edges, closeEdge],
-                    });
-                }
-                finishWall(true);
-                return;
-            }
         }
 
         // Determine the node ID to use (new or existing)

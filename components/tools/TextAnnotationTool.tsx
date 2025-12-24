@@ -77,7 +77,7 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
         // Check if clicking on existing annotation (let selection handle it)
         for (let i = textAnnotations.length - 1; i >= 0; i--) {
             const annotation = textAnnotations[i];
-            const fontSize = annotation.fontSize || 14;
+            const fontSize = annotation.fontSize || 200;
             const hitRadius = Math.max(fontSize * 2, 30);
             const dist = Math.hypot(worldPos.x - annotation.x, worldPos.y - annotation.y);
             if (dist <= hitRadius) {
@@ -92,7 +92,7 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
             x: worldPos.x,
             y: worldPos.y,
             text: '',
-            fontSize: 14,
+            fontSize: 200,
             color: '#000000',
             fontFamily: 'Arial',
             rotation: 0,
@@ -156,15 +156,14 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
         
         if (e.key === 'Enter' || e.key === 'Escape') {
             e.preventDefault();
+            e.stopPropagation();
             if (e.key === 'Enter') {
                 finalizeCurrent();
+                return; // Exit immediately after finalizing
             } else if (e.key === 'Escape') {
                 // On escape, treat empty as delete, non-empty as commit
-                if (text.trim()) {
-                    finalizeCurrent();
-                } else {
-                    finalizeCurrent();
-                }
+                finalizeCurrent();
+                return; // Exit immediately after finalizing
             }
         } else if (e.key === 'Backspace' && text.length === 0) {
             e.preventDefault();
@@ -312,8 +311,8 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
                 }
             }}
             onBlur={() => {
-                // Finish editing when input loses focus
-                if (currentAnnotation) {
+                // Finish editing when input loses focus (but only if actively creating text)
+                if (currentAnnotation && isActive && !isEditingSelected) {
                     finalizeCurrent();
                 }
             }}

@@ -16,7 +16,7 @@ export default function TextAnnotationRenderer({ annotation, zoom }: TextAnnotat
             <text
                 x="0"
                 y="0"
-                fontSize={annotation.fontSize || 14}
+                fontSize={annotation.fontSize || 200}
                 fill={annotation.color || '#000000'}
                 fontFamily={annotation.fontFamily || 'Arial'}
                 dominantBaseline="middle"

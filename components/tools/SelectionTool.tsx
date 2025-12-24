@@ -664,7 +664,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                             scale = scaleY;
                         }
 
-                        const newFontSize = Math.max(8, Math.min(200, initialFontSize * scale));
+                        const newFontSize = Math.max(8, Math.min(1000, initialFontSize * scale));
 
                         updateTextAnnotation(textAnnotation.id, {
                             x: centerX,
@@ -723,7 +723,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                             scale = scaleY;
                         }
 
-                        const newFontSize = Math.max(8, Math.min(200, initialFontSize * scale));
+                        const newFontSize = Math.max(8, Math.min(1000, initialFontSize * scale));
 
                         // Convert local offset back to world space
                         const offsetWorldX = offsetLocalX * cosR - offsetLocalY * sinR;

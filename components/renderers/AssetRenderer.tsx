@@ -10,8 +10,7 @@ interface AssetRendererProps {
     isHovered: boolean;
 }
 
-export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRendererProps) {
-    const strokeColor = isSelected ? '#3b82f6' : isHovered ? '#60a5fa' : '#6b7280';
+export default function AssetRenderer({ asset }: AssetRendererProps) {
     const transform = `translate(${asset.x}, ${asset.y}) rotate(${asset.rotation}) scale(${asset.scale})`;
 
     // Find the definition for this asset type
@@ -19,7 +18,7 @@ export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRen
 
     return (
         <g transform={transform} style={{ cursor: 'pointer' }}>
-            {/* If we have a definition with a path (SVG URL), use an <image> */}
+            {/* Render the SVG image as-is */}
             {definition?.path && (
                 <image
                     href={definition.path}
@@ -27,35 +26,34 @@ export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRen
                     y={-asset.height / 2}
                     width={asset.width}
                     height={asset.height}
-                    // If you want dragging via the image itself to be easy, 
-                    // ensure pointer events are enabled. 
-                    // The parent <g> has cursor: pointer.
+                    style={{ outline: 'none' }}
                 />
             )}
 
-            {/* Transparent rect for hit-testing only - no visible outline */}
+            {/* Invisible rect for hit-testing only (no visual outline) */}
             <rect
                 x={-asset.width / 2}
                 y={-asset.height / 2}
                 width={asset.width}
                 height={asset.height}
-                fill="transparent" 
+                fill="transparent"
                 stroke="none"
                 pointerEvents="all"
             />
-            
+
+            {/* Fallback label when definition is missing */}
             {!definition && (
-                 <text
-                 x={0}
-                 y={0}
-                 textAnchor="middle"
-                 dominantBaseline="middle"
-                 fontSize={12}
-                 fill="#374151"
-                 pointerEvents="none"
-             >
-                 {asset.type}
-             </text>
+                <text
+                    x={0}
+                    y={0}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={12}
+                    fill="#374151"
+                    pointerEvents="none"
+                >
+                    {asset.type}
+                </text>
             )}
         </g>
     );
