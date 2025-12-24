@@ -33,22 +33,6 @@ export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRen
                 />
             )}
 
-            {/* If we have a definition with an icon (React Component), use foreignObject */}
-            {definition?.icon && !definition.path && (
-                <foreignObject
-                    x={-asset.width / 2}
-                    y={-asset.height / 2}
-                    width={asset.width}
-                    height={asset.height}
-                >
-                    <div className="w-full h-full flex items-center justify-center text-gray-500">
-                        {React.createElement(definition.icon, {
-                            size: Math.min(asset.width, asset.height) * 0.8, // scale icon relative to box
-                        } as any)}
-                    </div>
-                </foreignObject>
-            )}
-
             {/* Transparent rect for hit-testing only - no visible outline */}
             <rect
                 x={-asset.width / 2}
