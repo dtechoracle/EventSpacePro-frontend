@@ -152,10 +152,6 @@ function ElementsPane() {
                     className="w-full h-full object-contain"
                     style={{ maxWidth: '100%', maxHeight: '100%' }}
                   />
-                ) : assetDef?.icon ? (
-                  <div className="w-full h-full flex items-center justify-center text-gray-600">
-                    {React.createElement(assetDef.icon, { size: 18 } as any)}
-                  </div>
                 ) : (
                   <div className="text-[8px] text-gray-400 text-center px-1">
                     {item.asset.type}

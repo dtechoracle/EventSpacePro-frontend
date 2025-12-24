@@ -40,8 +40,6 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
     if (assetDef) {
       return {
         name: assetDef.label,
-        icon: assetDef.icon,
-        isCustom: assetDef.isCustom,
         path: assetDef.path,
       };
     }
@@ -59,7 +57,7 @@ export default function Toolbar({ onSave, hasUnsavedChanges }: ToolbarProps) {
   const renderAssetIcon = (asset: AssetInstance, size = 12) => {
     const displayInfo = getAssetDisplayInfo(asset);
 
-    if (displayInfo.isCustom && displayInfo.path) {
+    if (displayInfo.path) {
       return (
         <Image
           src={displayInfo.path}

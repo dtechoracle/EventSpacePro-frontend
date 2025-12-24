@@ -160,7 +160,7 @@ function AssetsGroup3D({ assets }: { assets: AssetInstance[] }) {
         }
         // Custom SVGs: extrude to thin 3D meshes
         const def = ASSET_LIBRARY.find(d => d.id === asset.type);
-        if (def && def.isCustom && def.path) {
+        if (def && def.path) {
           // Fallback to simple shape proxy for custom SVGs (viewer-only) to avoid loader issues
           return <Shape3D key={asset.id} asset={asset} />;
         }
