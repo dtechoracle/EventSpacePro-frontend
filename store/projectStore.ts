@@ -32,15 +32,15 @@ export type WallEdge = {
     thickness: number; // in mm
 };
 
-export type Wall = {
+export type Group = {
     id: string;
-    nodes: WallNode[];
-    edges: WallEdge[];
+    itemIds: string[];
     zIndex: number;
 };
 
 export type Shape = {
     id: string;
+    groupId?: string;
     type: 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand' | 'polygon';
     x: number;
     y: number;
@@ -53,10 +53,35 @@ export type Shape = {
     points?: { x: number; y: number }[]; // For freehand paths and polygons
     polygonSides?: number; // For regular polygons
     zIndex: number;
+    sourceAssetId?: string;
+
+    // Advanced fill options
+    fillType?: 'color' | 'gradient' | 'hatch' | 'image' | 'texture';
+    gradientType?: 'linear' | 'radial';
+    gradientColors?: string[]; // Array of color stops
+    gradientAngle?: number; // For linear gradients (0-360 degrees)
+    hatchPattern?: 'horizontal' | 'vertical' | 'diagonal-right' | 'diagonal-left' | 'cross' | 'diagonal-cross' | 'dots' | 'grid';
+    hatchSpacing?: number; // Spacing between hatch lines in pixels
+    hatchColor?: string; // Color of hatch pattern
+    fillImage?: string; // Base64 or URL for image fill
+    fillImageScale?: number; // Scale factor for image fill
+    fillTexture?: string; // ID of the texture pattern
+
+    // Arrow properties
+    // Arrow properties
+    arrowHeadType?: 'none' | 'triangle' | 'filled-triangle' | 'circle' | 'square' | 'diamond' | 'field' | 'broadhead' | 'bodkin' | 'blunt' | 'judo' | 'bullet' | 'target' | 'fish' | 'flu-flu' | 'forked';
+    arrowTailType?: 'none' | 'bar' | 'circle' | 'square' | 'diamond' | 'triangle' | 'filled-triangle' | 'standard-nock' | 'pin-nock' | 'over-nock' | 'self-nock' | 'flat-nock' | 'g-nock' | 'symmetrical-fletching' | 'offset-fletching' | 'helical-fletching' | 'flu-flu-fletching';
+    arrowHeadSize?: number; // Multiplier for head size (default 1)
+    arrowTailSize?: number; // Multiplier for tail size (default 1)
+
+    // Line style (for lines and arrows)
+    strokeDasharray?: string; // e.g., "5,5" for dashed, "2,2" for dotted, "10,5" for dash-dot, etc.
+    lineType?: 'solid' | 'dashed' | 'dotted' | 'double'; // High-level line type
 };
 
 export type Asset = {
     id: string;
+    groupId?: string;
     type: string; // e.g., 'chair', 'table', 'door', 'window'
     x: number;
     y: number;
@@ -67,6 +92,8 @@ export type Asset = {
     zIndex: number;
     attachedToWallId?: string; // For doors/windows attached to walls
     metadata?: Record<string, any>;
+    isExploded?: boolean;
+    childShapeIds?: string[];
 
     // Visual properties
     fillColor?: string;
@@ -80,12 +107,26 @@ export type Asset = {
     textColor?: string;
     fontFamily?: string;
 
+    // Group properties
+    isGroup?: boolean;
+    // childShapeIds already exists above
+
     // Line/Wall properties
     lineColor?: string;
     lineGap?: number;
     wallThickness?: number;
     wallGap?: number;
     backgroundColor?: string;
+};
+
+export type Wall = {
+    id: string;
+    groupId?: string;
+    nodes: WallNode[];
+    edges: WallEdge[];
+    fill?: string;
+    isClosed?: boolean; // For closed loops
+    zIndex: number;
 };
 
 export type Layer = {
@@ -113,6 +154,9 @@ export type Dimension = {
     value?: number; // Optional override, otherwise calculated
     targetId?: string; // ID of the object being measured (e.g., wall ID)
     zIndex: number;
+    strokeWidth?: number; // Line thickness (default 7.5)
+    color?: string; // Line and text color (default black)
+    fontSize?: number; // Text size (default 12)
 };
 
 export type Comment = {
@@ -127,6 +171,7 @@ export type Comment = {
 
 export type TextAnnotation = {
     id: string;
+    groupId?: string;
     x: number;
     y: number;
     text: string;
@@ -139,6 +184,7 @@ export type TextAnnotation = {
 
 export type LabelArrow = {
     id: string;
+    groupId?: string;
     startPoint: { x: number; y: number };
     endPoint: { x: number; y: number };
     label: string;
@@ -169,9 +215,19 @@ export type ProjectState = {
     textAnnotations: TextAnnotation[];
     labelArrows: LabelArrow[];
     layers: Layer[];
+    groups: Group[];
 
     // Active layer
     activeLayerId: string | null;
+
+    // Grouping Actions
+    groupSelection: (selectedIds: string[]) => string; // Returns new group ID
+    ungroupSelection: (selectedIds: string[]) => string[]; // Returns ungrouped item IDs
+
+    // Alignment & Distribution
+    alignSelection: (type: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom', ids: string[]) => void;
+    distributeSelection: (axis: 'horizontal' | 'vertical', spacing: number, ids: string[]) => void;
+    distributeRadial: (diameter: number, startAngle: number, endAngle: number, ids: string[]) => void;
 
     // History
     history: {
@@ -255,7 +311,7 @@ export type ProjectState = {
     clipboard: Array<{ type: 'shape' | 'wall' | 'asset'; data: any }>;
     copySelection: (selectedIds: string[]) => void;
     cutSelection: (selectedIds: string[]) => void;
-    pasteSelection: () => string[]; // Returns new IDs for selection
+    pasteSelection: (cursorPos?: { x: number; y: number }) => string[]; // Returns new IDs for selection
 
     // Methods - Dimensions
     dimensions: Dimension[];
@@ -278,6 +334,11 @@ export type ProjectState = {
     updateComment: (id: string, updates: Partial<Comment>) => void;
     removeComment: (id: string) => void;
     resolveComment: (id: string) => void;
+
+    // Methods - Groups
+    addGroup: (group: Group) => void;
+    updateGroup: (id: string, updates: Partial<Group>) => void;
+    removeGroup: (id: string) => void;
 
     // Methods - Wall Junctions
     splitWallEdge: (wallId: string, edgeId: string, point: { x: number; y: number }) => WallNode;
@@ -317,6 +378,7 @@ export const useProjectStore = create<ProjectState>()(
             wallSegments: [], // New wall engine segments
             shapes: [],
             assets: [],
+            groups: [],
             layers: [DEFAULT_LAYER],
             activeLayerId: DEFAULT_LAYER.id,
             history: {
@@ -423,14 +485,14 @@ export const useProjectStore = create<ProjectState>()(
                     const updatedWalls = state.walls.map((w) =>
                         w.id === wallId
                             ? {
-                                  ...w,
-                                  nodes: [...w.nodes, newNode],
-                                  edges: [
-                                      ...w.edges.filter((e) => e.id !== targetEdge.id),
-                                      newEdge1,
-                                      newEdge2,
-                                  ],
-                              }
+                                ...w,
+                                nodes: [...w.nodes, newNode],
+                                edges: [
+                                    ...w.edges.filter((e) => e.id !== targetEdge.id),
+                                    newEdge1,
+                                    newEdge2,
+                                ],
+                            }
                             : w
                     );
 
@@ -443,6 +505,219 @@ export const useProjectStore = create<ProjectState>()(
 
             setProjectId: (id: string | null) => {
                 set({ projectId: id });
+            },
+
+            groupSelection: (selectedIds: string[]) => {
+                get().saveToHistory();
+                const newGroupId = `group-${Date.now()}`;
+                const newGroup: Group = {
+                    id: newGroupId,
+                    itemIds: selectedIds,
+                    zIndex: get().getNextZIndex(),
+                };
+
+                const updates = { groupId: newGroupId };
+                const { shapes, assets, walls, textAnnotations, labelArrows } = get();
+
+                // Helper to update collection
+                const updateCollection = (collection: any[], ids: string[]) =>
+                    collection.map(item => ids.includes(item.id) ? { ...item, ...updates } : item);
+
+                set({
+                    groups: [...get().groups, newGroup],
+                    shapes: updateCollection(shapes, selectedIds),
+                    assets: updateCollection(assets, selectedIds),
+                    walls: updateCollection(walls, selectedIds),
+                    textAnnotations: updateCollection(textAnnotations, selectedIds),
+                    labelArrows: updateCollection(labelArrows, selectedIds),
+                    hasUnsavedChanges: true
+                });
+                return newGroupId;
+            },
+
+            ungroupSelection: (selectedIds: string[]) => {
+                get().saveToHistory();
+                const { groups, shapes, assets, walls, textAnnotations, labelArrows } = get();
+
+                const groupsToRemove = new Set<string>();
+
+                selectedIds.forEach(id => {
+                    // Check if id is a group
+                    const group = groups.find(g => g.id === id);
+                    if (group) {
+                        groupsToRemove.add(group.id);
+                    } else {
+                        // Check if id is an item in a group
+                        const shape = shapes.find(s => s.id === id);
+                        if (shape?.groupId) groupsToRemove.add(shape.groupId);
+
+                        const asset = assets.find(a => a.id === id);
+                        if (asset?.groupId) groupsToRemove.add(asset.groupId);
+
+                        const wall = walls.find(w => w.id === id);
+                        if (wall?.groupId) groupsToRemove.add(wall.groupId);
+
+                        const text = textAnnotations.find(t => t.id === id);
+                        if (text?.groupId) groupsToRemove.add(text.groupId);
+
+                        const arrow = labelArrows.find(l => l.id === id);
+                        if (arrow?.groupId) groupsToRemove.add(arrow.groupId);
+                    }
+                });
+
+                if (groupsToRemove.size === 0) return [];
+
+                // Remove groups
+                const newGroups = groups.filter(g => !groupsToRemove.has(g.id));
+
+                // Remove groupId from items
+                const removeGroupId = (item: any) => {
+                    if (item.groupId && groupsToRemove.has(item.groupId)) {
+                        const { groupId, ...rest } = item;
+                        return rest;
+                    }
+                    return item;
+                };
+
+                set({
+                    groups: newGroups,
+                    shapes: shapes.map(removeGroupId),
+                    assets: assets.map(removeGroupId),
+                    walls: walls.map(removeGroupId),
+                    textAnnotations: textAnnotations.map(removeGroupId),
+                    labelArrows: labelArrows.map(removeGroupId),
+                    hasUnsavedChanges: true
+                });
+
+                // Return all item IDs that were ungrouped
+                const ungroupedItemIds: string[] = [];
+                groupsToRemove.forEach(gId => {
+                    const group = groups.find(g => g.id === gId);
+                    if (group) ungroupedItemIds.push(...group.itemIds);
+                });
+
+                return ungroupedItemIds;
+            },
+
+            alignSelection: (type, ids) => {
+                get().saveToHistory();
+                const { shapes, assets, walls } = get();
+                const items = [
+                    ...shapes.filter(s => ids.includes(s.id)),
+                    ...assets.filter(a => ids.includes(a.id)),
+                    ...walls.filter(w => ids.includes(w.id)) // Walls might be tricky, treating as object
+                ];
+
+                if (items.length < 2) return;
+
+                // Calculate bounding box
+                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                items.forEach(item => {
+                    // Simple bounding box approximation
+                    // For walls, it's more complex, skipping for now or using node bounds
+                    const w = (item as any).width || 0;
+                    const h = (item as any).height || 0;
+                    const x = (item as any).x || (item as any).nodes?.[0].x || 0;
+                    const y = (item as any).y || (item as any).nodes?.[0].y || 0;
+
+                    minX = Math.min(minX, x - w / 2);
+                    maxX = Math.max(maxX, x + w / 2);
+                    minY = Math.min(minY, y - h / 2);
+                    maxY = Math.max(maxY, y + h / 2);
+                });
+
+                const centerX = (minX + maxX) / 2;
+                const centerY = (minY + maxY) / 2;
+
+                const updates: any = {};
+
+                items.forEach(item => {
+                    const w = (item as any).width || 0;
+                    const h = (item as any).height || 0;
+                    let newX = (item as any).x;
+                    let newY = (item as any).y;
+
+                    switch (type) {
+                        case 'left': newX = minX + w / 2; break;
+                        case 'center': newX = centerX; break;
+                        case 'right': newX = maxX - w / 2; break;
+                        case 'top': newY = minY + h / 2; break;
+                        case 'middle': newY = centerY; break;
+                        case 'bottom': newY = maxY - h / 2; break;
+                    }
+
+                    if ((item as any).type) { // Shape or Asset
+                        if (shapes.find(s => s.id === item.id)) get().updateShape(item.id, { x: newX, y: newY });
+                        if (assets.find(a => a.id === item.id)) get().updateAsset(item.id, { x: newX, y: newY });
+                    }
+                });
+            },
+
+            distributeSelection: (axis, spacing, ids) => {
+                get().saveToHistory();
+                const { shapes, assets } = get();
+                const items = [
+                    ...shapes.filter(s => ids.includes(s.id)),
+                    ...assets.filter(a => ids.includes(a.id))
+                ];
+
+                if (items.length < 2) return;
+
+                // Sort items
+                items.sort((a, b) => axis === 'horizontal' ? a.x - b.x : a.y - b.y);
+
+                let currentPos = axis === 'horizontal' ? (items[0].x - items[0].width / 2) : (items[0].y - items[0].height / 2);
+
+                items.forEach((item, index) => {
+                    if (index === 0) {
+                        currentPos += (axis === 'horizontal' ? item.width : item.height) + spacing;
+                        return;
+                    }
+
+                    const newPos = currentPos + (axis === 'horizontal' ? item.width / 2 : item.height / 2);
+
+                    if (shapes.find(s => s.id === item.id)) {
+                        get().updateShape(item.id, axis === 'horizontal' ? { x: newPos } : { y: newPos });
+                    } else {
+                        get().updateAsset(item.id, axis === 'horizontal' ? { x: newPos } : { y: newPos });
+                    }
+
+                    currentPos += (axis === 'horizontal' ? item.width : item.height) + spacing;
+                });
+            },
+
+            distributeRadial: (radius, startAngle, endAngle, ids) => {
+                get().saveToHistory();
+                const { shapes, assets } = get();
+                const items = [
+                    ...shapes.filter(s => ids.includes(s.id)),
+                    ...assets.filter(a => ids.includes(a.id))
+                ];
+
+                if (items.length === 0) return;
+
+                // Calculate center of selection
+                let sumX = 0, sumY = 0;
+                items.forEach(item => { sumX += item.x; sumY += item.y; });
+                const centerX = sumX / items.length;
+                const centerY = sumY / items.length;
+
+                // radius is passed directly
+                const totalAngle = endAngle - startAngle;
+                const stepAngle = items.length > 1 ? totalAngle / items.length : 0;
+
+                items.forEach((item, index) => {
+                    const angleRad = (startAngle + index * stepAngle) * (Math.PI / 180);
+                    const newX = centerX + radius * Math.cos(angleRad);
+                    const newY = centerY + radius * Math.sin(angleRad);
+                    const rotation = (startAngle + index * stepAngle) + 90; // Rotate item to face center? Optional.
+
+                    if (shapes.find(s => s.id === item.id)) {
+                        get().updateShape(item.id, { x: newX, y: newY, rotation });
+                    } else {
+                        get().updateAsset(item.id, { x: newX, y: newY, rotation });
+                    }
+                });
             },
 
             // Persistence Actions
@@ -519,7 +794,7 @@ export const useProjectStore = create<ProjectState>()(
                     let eventName = 'Untitled Event';
                     let eventType = 'custom venue';
                     let canvases: any[] = [];
-                    
+
                     try {
                         const currentEvent = await apiRequest(`/projects/${slug}/events/${eventId}`, 'GET', null, true);
                         const event = currentEvent.data || currentEvent;
@@ -529,13 +804,13 @@ export const useProjectStore = create<ProjectState>()(
                     } catch (e) {
                         console.warn('[projectStore] Could not fetch current event, using defaults');
                     }
-                    
+
                     const canvasData = { shapes, assets, walls, layers, canvas };
-                    
+
                     // CRITICAL: Save complete asset data, not just id/type/x/y
                     // Convert shapes, assets, and walls to canvasAssets format with ALL properties
                     const canvasAssets: any[] = [];
-                    
+
                     // Convert shapes to canvasAssets
                     shapes.forEach(shape => {
                         canvasAssets.push({
@@ -554,7 +829,7 @@ export const useProjectStore = create<ProjectState>()(
                             points: shape.points,
                         });
                     });
-                    
+
                     // Convert assets to canvasAssets
                     assets.forEach(asset => {
                         canvasAssets.push({
@@ -573,7 +848,7 @@ export const useProjectStore = create<ProjectState>()(
                             opacity: asset.opacity,
                         });
                     });
-                    
+
                     // Convert walls to canvasAssets (wall-polygon format)
                     walls.forEach(wall => {
                         // Convert wall nodes/edges to wallPolygon format
@@ -581,12 +856,12 @@ export const useProjectStore = create<ProjectState>()(
                             x: node.x - wall.nodes[0].x, // Relative to first node
                             y: node.y - wall.nodes[0].y,
                         }));
-                        
+
                         const centerline = wall.edges.length > 0 ? [
                             { x: 0, y: 0 },
                             { x: wall.nodes[wall.nodes.length - 1].x - wall.nodes[0].x, y: wall.nodes[wall.nodes.length - 1].y - wall.nodes[0].y }
                         ] : [];
-                        
+
                         canvasAssets.push({
                             id: wall.id,
                             type: 'wall-polygon',
@@ -804,10 +1079,26 @@ export const useProjectStore = create<ProjectState>()(
 
             removeShape: (id) => {
                 get().saveToHistory();
-                set((state) => ({
-                    shapes: state.shapes.filter((s) => s.id !== id),
-                    hasUnsavedChanges: true,
-                }));
+                set((state) => {
+                    const shape = state.shapes.find((s) => s.id === id);
+                    let updatedAssets = state.assets;
+                    if (shape?.sourceAssetId) {
+                        updatedAssets = state.assets.map((asset) => {
+                            if (asset.id !== shape.sourceAssetId) return asset;
+                            const remainingChildren = (asset.childShapeIds || []).filter((childId) => childId !== id);
+                            return {
+                                ...asset,
+                                childShapeIds: remainingChildren,
+                                isExploded: remainingChildren.length > 0 ? true : false,
+                            };
+                        });
+                    }
+                    return {
+                        shapes: state.shapes.filter((s) => s.id !== id),
+                        assets: updatedAssets,
+                        hasUnsavedChanges: true,
+                    };
+                });
             },
 
             getShape: (id) => {
@@ -835,12 +1126,42 @@ export const useProjectStore = create<ProjectState>()(
                 get().saveToHistory();
                 set((state) => ({
                     assets: state.assets.filter((a) => a.id !== id),
+                    shapes: state.shapes.filter((s) => s.sourceAssetId !== id),
                     hasUnsavedChanges: true,
                 }));
             },
 
             getAsset: (id) => {
                 return get().assets.find((a) => a.id === id);
+            },
+
+            // Group methods
+            addGroup: (group) => {
+                set((state) => {
+                    state.saveToHistory();
+                    return {
+                        groups: [...state.groups, group],
+                        hasUnsavedChanges: true
+                    };
+                });
+            },
+            updateGroup: (id, updates) => {
+                set((state) => {
+                    state.saveToHistory();
+                    return {
+                        groups: state.groups.map((g) => (g.id === id ? { ...g, ...updates } : g)),
+                        hasUnsavedChanges: true
+                    };
+                });
+            },
+            removeGroup: (id) => {
+                set((state) => {
+                    state.saveToHistory();
+                    return {
+                        groups: state.groups.filter((g) => g.id !== id),
+                        hasUnsavedChanges: true
+                    };
+                });
             },
 
             // Layer methods
@@ -1058,13 +1379,33 @@ export const useProjectStore = create<ProjectState>()(
                 set({ shapes: newShapes, walls: newWalls, assets: newAssets });
             },
 
-            pasteSelection: () => {
+            pasteSelection: (cursorPos?: { x: number; y: number }) => {
                 const { clipboard, shapes, walls, assets } = get();
                 if (clipboard.length === 0) return [];
 
                 get().saveToHistory();
                 const newIds: string[] = [];
-                const offset = 20;
+
+                // Calculate center of clipboard items
+                let centerX = 0;
+                let centerY = 0;
+                clipboard.forEach(item => {
+                    if (item.type === 'shape' || item.type === 'asset') {
+                        centerX += item.data.x;
+                        centerY += item.data.y;
+                    } else if (item.type === 'wall' && item.data.nodes.length > 0) {
+                        const avgX = item.data.nodes.reduce((sum: number, n: any) => sum + n.x, 0) / item.data.nodes.length;
+                        const avgY = item.data.nodes.reduce((sum: number, n: any) => sum + n.y, 0) / item.data.nodes.length;
+                        centerX += avgX;
+                        centerY += avgY;
+                    }
+                });
+                centerX /= clipboard.length;
+                centerY /= clipboard.length;
+
+                // If cursor position provided, paste at cursor; otherwise use offset
+                const offsetX = cursorPos ? cursorPos.x - centerX : 20;
+                const offsetY = cursorPos ? cursorPos.y - centerY : 20;
 
                 const newShapes = [...shapes];
                 const newWalls = [...walls];
@@ -1075,14 +1416,14 @@ export const useProjectStore = create<ProjectState>()(
                     newIds.push(newId);
 
                     if (item.type === 'shape') {
-                        const newShape = { ...item.data, id: newId, x: item.data.x + offset, y: item.data.y + offset };
+                        const newShape = { ...item.data, id: newId, x: item.data.x + offsetX, y: item.data.y + offsetY };
                         newShapes.push(newShape);
                     } else if (item.type === 'wall') {
-                        const newNodes = item.data.nodes.map((n: any) => ({ ...n, x: n.x + offset, y: n.y + offset }));
+                        const newNodes = item.data.nodes.map((n: any) => ({ ...n, x: n.x + offsetX, y: n.y + offsetY }));
                         const newWall = { ...item.data, id: newId, nodes: newNodes };
                         newWalls.push(newWall);
                     } else if (item.type === 'asset') {
-                        const newAsset = { ...item.data, id: newId, x: item.data.x + offset, y: item.data.y + offset };
+                        const newAsset = { ...item.data, id: newId, x: item.data.x + offsetX, y: item.data.y + offsetY };
                         newAssets.push(newAsset);
                     }
                 });

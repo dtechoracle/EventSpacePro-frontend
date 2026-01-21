@@ -248,3 +248,118 @@ export function getAnchorsForObject(
             return calculateAssetAnchors(obj.object as Asset);
     }
 }
+/**
+ * Snap a rectangle to other objects
+ */
+export function snapToObjects(
+    rect: { x: number; y: number; width: number; height: number; rotation?: number },
+    others: Array<{ id: string; x: number; y: number; width: number; height: number; rotation?: number; type?: string }>,
+    threshold: number = 5
+): { x: number; y: number; guides: Array<{ x1: number; y1: number; x2: number; y2: number; type: 'horizontal' | 'vertical' }> } {
+    let newX = rect.x;
+    let newY = rect.y;
+    const guides: Array<{ x1: number; y1: number; x2: number; y2: number; type: 'horizontal' | 'vertical' }> = [];
+
+    // Calculate edges of the moving object
+    // Assuming unrotated bounding box for simplicity for now, or center-based
+    const halfW = rect.width / 2;
+    const halfH = rect.height / 2;
+
+    // Points of interest on the moving object
+    const moving = {
+        left: rect.x - halfW,
+        centerX: rect.x,
+        right: rect.x + halfW,
+        top: rect.y - halfH,
+        centerY: rect.y,
+        bottom: rect.y + halfH
+    };
+
+    let snappedX = false;
+    let snappedY = false;
+
+    // Iterate through other objects
+    for (const other of others) {
+        const otherHalfW = other.width / 2;
+        const otherHalfH = other.height / 2;
+
+        const target = {
+            left: other.x - otherHalfW,
+            centerX: other.x,
+            right: other.x + otherHalfW,
+            top: other.y - otherHalfH,
+            centerY: other.y,
+            bottom: other.y + otherHalfH
+        };
+
+        // Horizontal Snapping (X-axis)
+        if (!snappedX) {
+            // Left to Left
+            if (Math.abs(moving.left - target.left) < threshold) {
+                newX = target.left + halfW;
+                guides.push({ x1: target.left, y1: Math.min(moving.top, target.top) - 20, x2: target.left, y2: Math.max(moving.bottom, target.bottom) + 20, type: 'vertical' });
+                snappedX = true;
+            }
+            // Left to Right
+            else if (Math.abs(moving.left - target.right) < threshold) {
+                newX = target.right + halfW;
+                guides.push({ x1: target.right, y1: Math.min(moving.top, target.top) - 20, x2: target.right, y2: Math.max(moving.bottom, target.bottom) + 20, type: 'vertical' });
+                snappedX = true;
+            }
+            // Right to Left
+            else if (Math.abs(moving.right - target.left) < threshold) {
+                newX = target.left - halfW;
+                guides.push({ x1: target.left, y1: Math.min(moving.top, target.top) - 20, x2: target.left, y2: Math.max(moving.bottom, target.bottom) + 20, type: 'vertical' });
+                snappedX = true;
+            }
+            // Right to Right
+            else if (Math.abs(moving.right - target.right) < threshold) {
+                newX = target.right - halfW;
+                guides.push({ x1: target.right, y1: Math.min(moving.top, target.top) - 20, x2: target.right, y2: Math.max(moving.bottom, target.bottom) + 20, type: 'vertical' });
+                snappedX = true;
+            }
+            // Center to Center
+            else if (Math.abs(moving.centerX - target.centerX) < threshold) {
+                newX = target.centerX;
+                guides.push({ x1: target.centerX, y1: Math.min(moving.top, target.top) - 20, x2: target.centerX, y2: Math.max(moving.bottom, target.bottom) + 20, type: 'vertical' });
+                snappedX = true;
+            }
+        }
+
+        // Vertical Snapping (Y-axis)
+        if (!snappedY) {
+            // Top to Top
+            if (Math.abs(moving.top - target.top) < threshold) {
+                newY = target.top + halfH;
+                guides.push({ x1: Math.min(moving.left, target.left) - 20, y1: target.top, x2: Math.max(moving.right, target.right) + 20, y2: target.top, type: 'horizontal' });
+                snappedY = true;
+            }
+            // Top to Bottom
+            else if (Math.abs(moving.top - target.bottom) < threshold) {
+                newY = target.bottom + halfH;
+                guides.push({ x1: Math.min(moving.left, target.left) - 20, y1: target.bottom, x2: Math.max(moving.right, target.right) + 20, y2: target.bottom, type: 'horizontal' });
+                snappedY = true;
+            }
+            // Bottom to Top
+            else if (Math.abs(moving.bottom - target.top) < threshold) {
+                newY = target.top - halfH;
+                guides.push({ x1: Math.min(moving.left, target.left) - 20, y1: target.top, x2: Math.max(moving.right, target.right) + 20, y2: target.top, type: 'horizontal' });
+                snappedY = true;
+            }
+            // Bottom to Bottom
+            else if (Math.abs(moving.bottom - target.bottom) < threshold) {
+                newY = target.bottom - halfH;
+                guides.push({ x1: Math.min(moving.left, target.left) - 20, y1: target.bottom, x2: Math.max(moving.right, target.right) + 20, y2: target.bottom, type: 'horizontal' });
+                snappedY = true;
+            }
+            // Center to Center
+            else if (Math.abs(moving.centerY - target.centerY) < threshold) {
+                newY = target.centerY;
+                guides.push({ x1: Math.min(moving.left, target.left) - 20, y1: target.centerY, x2: Math.max(moving.right, target.right) + 20, y2: target.centerY, type: 'horizontal' });
+                snappedY = true;
+            }
+        }
+    }
+
+    return { x: newX, y: newY, guides };
+}

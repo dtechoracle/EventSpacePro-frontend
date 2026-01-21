@@ -14,11 +14,11 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
 
     const [currentAnnotation, setCurrentAnnotation] = useState<TextAnnotation | null>(null);
     const [text, setText] = useState<string>('');
-    const inputRef = useRef<HTMLInputElement | null>(null);
+    const inputRef = useRef<HTMLTextAreaElement | null>(null);
     const [isEditingSelected, setIsEditingSelected] = useState(false);
 
     // Helper function to safely set selection range
-    const setCursorToEnd = useCallback((input: HTMLInputElement) => {
+    const setCursorToEnd = useCallback((input: HTMLTextAreaElement) => {
         try {
             if (input && typeof input.setSelectionRange === 'function') {
                 const length = input.value.length;
@@ -43,6 +43,7 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
         setCurrentAnnotation(null);
         setText('');
         setIsEditingSelected(false);
+        useEditorStore.getState().setEditingTextId(null); // Clear editing ID
         setActiveTool('select');
     }, [currentAnnotation, text, updateTextAnnotation, removeTextAnnotation, setActiveTool]);
 
@@ -54,26 +55,26 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
             finalizeCurrent();
             return;
         }
-        
+
         // Only handle clicks on the workspace SVG or its container, not window-wide
         const target = e.target as Element | null;
         const svgElement = target?.closest('svg[data-workspace-root="true"]');
         const containerElement = target?.closest('div[class*="relative"]'); // The canvas container
-        
+
         if (!svgElement && !containerElement) {
             return;
         }
-        
+
         // Don't create annotation if clicking on existing text
         if (target?.tagName === 'text' || target?.closest('text')) {
             // Let the selection tool handle clicking on existing text
             return;
         }
-        
+
         // Check if we're clicking on an existing text annotation
         const { textAnnotations } = useProjectStore.getState();
         const worldPos = screenToWorld(e.clientX, e.clientY);
-        
+
         // Check if clicking on existing annotation (let selection handle it)
         for (let i = textAnnotations.length - 1; i >= 0; i--) {
             const annotation = textAnnotations[i];
@@ -153,7 +154,7 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
             updateTextAnnotation(currentAnnotation.id, { text: newText });
             return;
         }
-        
+
         if (e.key === 'Enter' || e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
@@ -172,7 +173,7 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
         }
     }, [isActive, isEditingSelected, currentAnnotation, text, finalizeCurrent]);
 
-    const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         if (!currentAnnotation) return;
         const newText = e.target.value;
         setText(newText);
@@ -192,13 +193,17 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
                     setCurrentAnnotation(selectedText);
                     setText(selectedText.text);
                     setIsEditingSelected(true);
-                    
-                    // Focus input after a short delay to allow selection to complete
+
+                    // Focus textarea after a short delay to allow selection to complete
                     setTimeout(() => {
-                        if (inputRef.current && inputRef.current instanceof HTMLInputElement) {
+                        if (inputRef.current && (inputRef.current instanceof HTMLInputElement || inputRef.current instanceof HTMLTextAreaElement)) {
                             inputRef.current.focus();
                             // Set cursor to end
-                            setCursorToEnd(inputRef.current);
+                            if (inputRef.current instanceof HTMLInputElement) {
+                                setCursorToEnd(inputRef.current);
+                            } else if (inputRef.current instanceof HTMLTextAreaElement) {
+                                inputRef.current.setSelectionRange(inputRef.current.value.length, inputRef.current.value.length);
+                            }
                         }
                     }, 100);
                 }
@@ -209,12 +214,13 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
                     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
                         if (!isEditingSelected || !currentAnnotation || currentAnnotation.id !== selectedText.id) {
                             setIsEditingSelected(true);
-                            setCurrentAnnotation(selectedText);
                             setText(selectedText.text);
+                            setCurrentAnnotation(selectedText);
+                            useEditorStore.getState().setEditingTextId(selectedText.id); // Set editing ID
                         }
-                        // Ensure input is focused
+                        // Ensure textarea is focused
                         setTimeout(() => {
-                            if (inputRef.current && inputRef.current instanceof HTMLInputElement) {
+                            if (inputRef.current && (inputRef.current instanceof HTMLInputElement || inputRef.current instanceof HTMLTextAreaElement)) {
                                 inputRef.current.focus();
                             }
                         }, 10);
@@ -243,7 +249,7 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
             // Listen to clicks on the workspace SVG directly
             const svgElement = document.querySelector('svg[data-workspace-root="true"]');
             const containerElement = document.querySelector('div[class*="relative"][class*="overflow-hidden"]');
-            
+
             if (svgElement) {
                 svgElement.addEventListener('click', handleClick as any, true); // Use capture phase
             }
@@ -263,7 +269,7 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
         return () => {
             const svgElement = document.querySelector('svg[data-workspace-root="true"]');
             const containerElement = document.querySelector('div[class*="relative"][class*="overflow-hidden"]');
-            
+
             if (svgElement) {
                 svgElement.removeEventListener('click', handleClick as any, true);
                 (svgElement as HTMLElement).style.cursor = '';
@@ -287,45 +293,67 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
         }
     }, [isEditingSelected, currentAnnotation, handleKeyDown]);
 
-    // Ensure the invisible input is always focused while creating or editing text
+    // Ensure the textarea is always focused while creating or editing text
     useEffect(() => {
         if ((isActive && currentAnnotation) || (isEditingSelected && currentAnnotation)) {
             const el = inputRef.current;
-            if (el && el instanceof HTMLInputElement) {
+            if (el && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) {
                 el.focus();
             }
         }
     }, [isActive, currentAnnotation, isEditingSelected]);
 
-    // Invisible input to capture typing
+    // Visible textarea at cursor position
+    const { zoom, panX, panY, canvasOffset } = useEditorStore();
+    const showTextarea = (isActive && currentAnnotation !== null) || isEditingSelected;
+
     return (
-        <input
-            ref={inputRef}
-            type="text"
-            value={text}
-            onChange={handleInputChange}
-            onKeyDown={(e) => {
-                // Prevent default behavior for special keys
-                if (e.key === 'Enter' || e.key === 'Escape') {
-                    e.preventDefault();
-                }
-            }}
-            onBlur={() => {
-                // Finish editing when input loses focus (but only if actively creating text)
-                if (currentAnnotation && isActive && !isEditingSelected) {
-                    finalizeCurrent();
-                }
-            }}
-            style={{
-                position: 'fixed',
-                top: '-9999px',
-                left: '-9999px',
-                opacity: 0,
-                pointerEvents: (isActive || isEditingSelected) ? 'auto' : 'none',
-                zIndex: 9999,
-            }}
-            autoFocus={(isActive && currentAnnotation !== null) || isEditingSelected}
-        />
+        <>
+            <textarea
+                ref={inputRef as any}
+                value={text}
+                onChange={handleInputChange}
+                onKeyDown={(e) => {
+                    // Prevent default behavior for special keys
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        finalizeCurrent();
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        finalizeCurrent();
+                    }
+                }}
+                onBlur={() => {
+                    // Finish editing when textarea loses focus (but only if actively creating text)
+                    if (currentAnnotation && isActive && !isEditingSelected) {
+                        finalizeCurrent();
+                    }
+                }}
+                style={{
+                    position: 'fixed',
+                    top: currentAnnotation ? `${(currentAnnotation.y * zoom + panY + canvasOffset.top) - 10}px` : '-9999px',
+                    left: currentAnnotation ? `${(currentAnnotation.x * zoom + panX + canvasOffset.left)}px` : '-9999px',
+                    opacity: showTextarea ? 1 : 0,
+                    pointerEvents: showTextarea ? 'auto' : 'none',
+                    zIndex: 9999,
+                    background: 'rgba(255, 255, 255, 0.95)',
+                    border: '2px solid #3b82f6',
+                    borderRadius: '4px',
+                    outline: 'none',
+                    color: currentAnnotation?.color || '#000',
+                    fontSize: `${(currentAnnotation?.fontSize || 200) * zoom * 0.8}px`,
+                    fontFamily: currentAnnotation?.fontFamily || 'Arial',
+                    padding: '8px',
+                    margin: '0',
+                    minWidth: '200px',
+                    minHeight: '60px',
+                    resize: 'both',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                }}
+                autoFocus={showTextarea}
+                placeholder="Type your text here..."
+            />
+        </>
     );
 }
 

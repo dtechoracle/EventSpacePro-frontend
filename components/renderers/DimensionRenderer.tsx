@@ -7,7 +7,7 @@ interface DimensionRendererProps {
 }
 
 export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension, zoom }) => {
-    const { startPoint, endPoint, offset, value } = dimension;
+    const { startPoint, endPoint, offset, value, strokeWidth = 10, color = '#000000', fontSize = 18 } = dimension;
 
     // Calculate vector from start to end
     const dx = endPoint.x - startPoint.x;
@@ -59,6 +59,9 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
     // Extension line overshoot
     const overshoot = 50;
 
+    // Convert fontSize to world units (fontSize is in points, we scale it)
+    const worldFontSize = fontSize * 2; // Approximate conversion
+
     return (
         <g className="dimension-group" style={{ pointerEvents: 'all', cursor: 'pointer' }}>
             {/* Extension Lines */}
@@ -67,8 +70,8 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                 y1={startPoint.y}
                 x2={p1x + px * overshoot}
                 y2={p1y + py * overshoot}
-                stroke="#666"
-                strokeWidth={1}
+                stroke={color}
+                strokeWidth={strokeWidth * 0.5}
                 opacity={0.5}
             />
             <line
@@ -76,8 +79,8 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                 y1={endPoint.y}
                 x2={p2x + px * overshoot}
                 y2={p2y + py * overshoot}
-                stroke="#666"
-                strokeWidth={1}
+                stroke={color}
+                strokeWidth={strokeWidth * 0.5}
                 opacity={0.5}
             />
 
@@ -87,23 +90,23 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                 y1={p1y}
                 x2={p2x}
                 y2={p2y}
-                stroke="#000"
-                strokeWidth={1}
+                stroke={color}
+                strokeWidth={strokeWidth}
             />
 
             {/* Arrows / Ticks */}
             {/* Start Arrow */}
             <path
                 d={`M ${p1x} ${p1y} L ${p1x + nx * arrowSize + px * (arrowSize * 0.3)} ${p1y + ny * arrowSize + py * (arrowSize * 0.3)} M ${p1x} ${p1y} L ${p1x + nx * arrowSize - px * (arrowSize * 0.3)} ${p1y + ny * arrowSize - py * (arrowSize * 0.3)}`}
-                stroke="#000"
-                strokeWidth={1}
+                stroke={color}
+                strokeWidth={strokeWidth}
                 fill="none"
             />
             {/* End Arrow */}
             <path
                 d={`M ${p2x} ${p2y} L ${p2x - nx * arrowSize + px * (arrowSize * 0.3)} ${p2y - ny * arrowSize + py * (arrowSize * 0.3)} M ${p2x} ${p2y} L ${p2x - nx * arrowSize - px * (arrowSize * 0.3)} ${p2y - ny * arrowSize - py * (arrowSize * 0.3)}`}
-                stroke="#000"
-                strokeWidth={1}
+                stroke={color}
+                strokeWidth={strokeWidth}
                 fill="none"
             />
 
@@ -123,8 +126,8 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                     y="0"
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    fontSize="24"
-                    fill="#000"
+                    fontSize={worldFontSize}
+                    fill={color}
                     fontFamily="sans-serif"
                 >
                     {text}
@@ -133,3 +136,4 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
         </g>
     );
 };
+

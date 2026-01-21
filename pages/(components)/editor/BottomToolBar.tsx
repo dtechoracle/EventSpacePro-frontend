@@ -4,6 +4,8 @@ import { ChevronDown } from "lucide-react";
 import { useToolbarTools, ToolOption } from "@/hooks/useToolBarTools";
 import { useSceneStore, AssetInstance } from "@/store/sceneStore";
 import { useEditorStore } from "@/store/editorStore"; // NEW STORE
+import { useProjectStore } from "@/store/projectStore";
+import { toast } from "react-hot-toast";
 import { mergeAllWallIntersections } from "@/utils/mergeWalls";
 // import AssetsModal from "./AssetsModal";
 
@@ -41,8 +43,8 @@ function Tooltip({ children, content, position = "top" }: TooltipProps) {
                         {content}
                         <div
                             className={`absolute left-1/2 -translate-x-1/2 w-0 h-0 ${position === "top"
-                                    ? "top-full border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"
-                                    : "bottom-full border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-900"
+                                ? "top-full border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"
+                                : "bottom-full border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-900"
                                 }`}
                         />
                     </motion.div>
@@ -115,7 +117,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     const handleWallTypeSelection = (wallType: string) => {
         // Use the actual wall type ID directly (no mapping needed)
         const wallTypeId = wallType as "partition-75" | "partition-100" | "enclosure-150" | "enclosure-225";
-        
+
         // Set wall type first
         setWallType(wallTypeId);
         setShowWallTypeSubmenu(false);
@@ -140,6 +142,11 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 clearSelection();
                 setRectangularSelectionMode(true);
                 setActiveTool("rectangular-select");
+                break;
+            case "pan":
+                deactivateAllTools();
+                setEditorTool("pan");
+                setActiveTool("pan");
                 break;
 
             // Assets
@@ -194,43 +201,260 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 setShowWallTypeSubmenu(true);
                 setOpenIndex(null); // Close the main dropdown
                 break;
-            case "add-text":
-                // Add text at center of canvas
+            // Modify tools - work with ALL element types
+            case "trim":
+                deactivateAllTools();
+                setEditorTool("trim");
+                setActiveTool("trim");
+                toast("Trim Tool Active: Drag across shapes to cut", { icon: '✂️' });
+                break;
+
+            case "move":
+                // Move is handled by drag-and-drop, this could activate a move mode
+                toast("Use drag-and-drop to move elements", { icon: "ℹ️", duration: 2000 });
+                break;
+
+            case "copy":
+                // Copy all selected elements
                 {
-                    const canvas = useSceneStore.getState().canvas;
-                    if (canvas) {
-                        useSceneStore
-                            .getState()
-                            .addAsset("text", canvas.width / 2, canvas.height / 2);
+                    const selectedIds = useEditorStore.getState().selectedIds;
+                    if (selectedIds.length === 0) {
+                        toast.error("No elements selected to copy", { duration: 2000 });
+                        break;
+                    }
+
+                    const projectState = useProjectStore.getState();
+                    const offset = 20; // Offset for copied elements
+
+                    selectedIds.forEach(id => {
+                        // Copy shapes
+                        const shape = projectState.shapes.find(s => s.id === id);
+                        if (shape) {
+                            const newShape = { ...shape, id: `shape-${Date.now()}-${Math.random()}`, x: shape.x + offset, y: shape.y + offset };
+                            projectState.addShape(newShape);
+                            return;
+                        }
+
+                        // Copy assets
+                        const asset = projectState.assets.find(a => a.id === id);
+                        if (asset) {
+                            const newAsset = { ...asset, id: `asset-${Date.now()}-${Math.random()}`, x: asset.x + offset, y: asset.y + offset };
+                            projectState.addAsset(newAsset);
+                            return;
+                        }
+
+                        // Copy walls
+                        const wall = projectState.walls.find(w => w.id === id);
+                        if (wall) {
+                            const newWall = {
+                                ...wall,
+                                id: `wall-${Date.now()}-${Math.random()}`,
+                                nodes: wall.nodes.map(n => ({ ...n, id: `node-${Date.now()}-${Math.random()}`, x: n.x + offset, y: n.y + offset }))
+                            };
+                            projectState.addWall(newWall);
+                            return;
+                        }
+
+                        // Copy text annotations
+                        const text = projectState.textAnnotations.find(t => t.id === id);
+                        if (text) {
+                            const newText = { ...text, id: `text-${Date.now()}-${Math.random()}`, x: text.x + offset, y: text.y + offset };
+                            projectState.addTextAnnotation(newText);
+                            return;
+                        }
+
+                        // Copy dimensions
+                        const dim = projectState.dimensions.find(d => d.id === id);
+                        if (dim) {
+                            const newDim = {
+                                ...dim,
+                                id: `dim-${Date.now()}-${Math.random()}`,
+                                startPoint: { x: dim.startPoint.x + offset, y: dim.startPoint.y + offset },
+                                endPoint: { x: dim.endPoint.x + offset, y: dim.endPoint.y + offset }
+                            };
+                            projectState.addDimension(newDim);
+                            return;
+                        }
+
+                        // Copy label arrows
+                        const label = projectState.labelArrows.find(l => l.id === id);
+                        if (label) {
+                            const newLabel = {
+                                ...label,
+                                id: `label-${Date.now()}-${Math.random()}`,
+                                startPoint: { x: label.startPoint.x + offset, y: label.startPoint.y + offset },
+                                endPoint: { x: label.endPoint.x + offset, y: label.endPoint.y + offset }
+                            };
+                            projectState.addLabelArrow(newLabel);
+                            return;
+                        }
+                    });
+
+                    toast.success(`Copied ${selectedIds.length} element(s)`, { duration: 2000 });
+                }
+                break;
+
+            case "rotate":
+                // Rotate all selected elements by 90 degrees
+                {
+                    const selectedIds = useEditorStore.getState().selectedIds;
+                    if (selectedIds.length === 0) {
+                        toast.error("No elements selected to rotate", { duration: 2000 });
+                        break;
+                    }
+
+                    const projectState = useProjectStore.getState();
+
+                    selectedIds.forEach(id => {
+                        // Rotate shapes
+                        const shape = projectState.shapes.find(s => s.id === id);
+                        if (shape) {
+                            projectState.updateShape(id, { rotation: (shape.rotation + 90) % 360 });
+                            return;
+                        }
+
+                        // Rotate assets
+                        const asset = projectState.assets.find(a => a.id === id);
+                        if (asset) {
+                            projectState.updateAsset(id, { rotation: (asset.rotation + 90) % 360 });
+                            return;
+                        }
+                    });
+
+                    toast.success(`Rotated ${selectedIds.length} element(s) by 90°`, { duration: 2000 });
+                }
+                break;
+
+            case "group":
+                // Group all selected elements
+                {
+                    const selectedIds = useEditorStore.getState().selectedIds;
+                    if (selectedIds.length < 2) {
+                        toast.error("Select at least 2 elements to group", { duration: 2000 });
+                        break;
+                    }
+
+                    // For now, use the existing groupSelectedAssets function
+                    // In the future, this could be enhanced to group mixed element types
+                    groupSelectedAssets();
+                    toast.success(`Grouped ${selectedIds.length} elements`, { duration: 2000 });
+                }
+                break;
+
+            case "ungroup":
+                // Ungroup selected groups
+                {
+                    const selectedIds = useEditorStore.getState().selectedIds;
+                    const projectState = useProjectStore.getState();
+
+                    let ungrouped = 0;
+                    selectedIds.forEach(id => {
+                        const asset = projectState.assets.find((a: any) => a.id === id);
+                        if (asset?.isGroup) {
+                            ungroupAsset(id);
+                            ungrouped++;
+                        }
+                    });
+
+                    if (ungrouped > 0) {
+                        toast.success(`Ungrouped ${ungrouped} group(s)`, { duration: 2000 });
+                    } else {
+                        toast.error("No groups selected to ungroup", { duration: 2000 });
                     }
                 }
                 break;
 
-            // Modify tools
-            case "trim":
-                break;
-            case "move":
-                break;
-            case "copy":
-                break;
-            case "rotate":
-                break;
-            case "group":
-                groupSelectedAssets();
-                break;
-            case "ungroup":
-                if (
-                    selectedAssetId &&
-                    assets.find(
-                        (a: AssetInstance) => a.id === selectedAssetId
-                    )?.isGroup
-                ) {
-                    ungroupAsset(selectedAssetId);
+            case "align":
+                // Align selected elements - show submenu or align to center
+                {
+                    const selectedIds = useEditorStore.getState().selectedIds;
+                    if (selectedIds.length < 2) {
+                        toast.error("Select at least 2 elements to align", { duration: 2000 });
+                        break;
+                    }
+
+                    const projectState = useProjectStore.getState();
+                    const elements: any[] = [];
+
+                    // Collect all selected elements with their positions
+                    selectedIds.forEach(id => {
+                        const shape = projectState.shapes.find(s => s.id === id);
+                        if (shape) {
+                            elements.push({ id, type: 'shape', x: shape.x, y: shape.y });
+                            return;
+                        }
+
+                        const asset = projectState.assets.find(a => a.id === id);
+                        if (asset) {
+                            elements.push({ id, type: 'asset', x: asset.x, y: asset.y });
+                            return;
+                        }
+                    });
+
+                    if (elements.length < 2) {
+                        toast.error("Select at least 2 shapes or assets to align", { duration: 2000 });
+                        break;
+                    }
+
+                    // Align to center (average position)
+                    const avgX = elements.reduce((sum, el) => sum + el.x, 0) / elements.length;
+                    const avgY = elements.reduce((sum, el) => sum + el.y, 0) / elements.length;
+
+                    elements.forEach(el => {
+                        if (el.type === 'shape') {
+                            projectState.updateShape(el.id, { x: avgX, y: avgY });
+                        } else if (el.type === 'asset') {
+                            projectState.updateAsset(el.id, { x: avgX, y: avgY });
+                        }
+                    });
+
+                    toast.success(`Aligned ${elements.length} elements to center`, { duration: 2000 });
                 }
                 break;
-            case "align":
-                break;
+
             case "array":
+                // Create an array of selected elements
+                {
+                    const selectedIds = useEditorStore.getState().selectedIds;
+                    if (selectedIds.length === 0) {
+                        toast.error("No elements selected to array", { duration: 2000 });
+                        break;
+                    }
+
+                    const projectState = useProjectStore.getState();
+                    const rows = 2;
+                    const cols = 3;
+                    const spacing = 100; // 100mm spacing
+
+                    selectedIds.forEach(id => {
+                        const shape = projectState.shapes.find(s => s.id === id);
+                        const asset = projectState.assets.find(a => a.id === id);
+
+                        if (shape || asset) {
+                            const baseX = shape ? shape.x : asset!.x;
+                            const baseY = shape ? shape.y : asset!.y;
+
+                            for (let row = 0; row < rows; row++) {
+                                for (let col = 0; col < cols; col++) {
+                                    if (row === 0 && col === 0) continue; // Skip original
+
+                                    const newX = baseX + col * spacing;
+                                    const newY = baseY + row * spacing;
+
+                                    if (shape) {
+                                        const newShape = { ...shape, id: `shape-${Date.now()}-${Math.random()}-${row}-${col}`, x: newX, y: newY };
+                                        projectState.addShape(newShape);
+                                    } else if (asset) {
+                                        const newAsset = { ...asset, id: `asset-${Date.now()}-${Math.random()}-${row}-${col}`, x: newX, y: newY };
+                                        projectState.addAsset(newAsset);
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                    toast.success(`Created ${rows}x${cols} array`, { duration: 2000 });
+                }
                 break;
 
             // Annotation tools
@@ -275,6 +499,55 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
             case "export-project":
                 // Export is now handled automatically when assets are selected
                 // via the ExportPanel in the PropertiesSidebar
+                break;
+
+            // Import Project
+            case "import-project":
+                {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.json';
+                    input.onchange = (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0];
+                        if (!file) return;
+
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                            try {
+                                const data = JSON.parse(event.target?.result as string);
+                                const { shapes, assets, walls } = useProjectStore.getState();
+
+                                // Import shapes
+                                if (data.shapes && Array.isArray(data.shapes)) {
+                                    data.shapes.forEach((shape: any) => {
+                                        useProjectStore.getState().addShape(shape);
+                                    });
+                                }
+
+                                // Import assets
+                                if (data.assets && Array.isArray(data.assets)) {
+                                    data.assets.forEach((asset: any) => {
+                                        useProjectStore.getState().addAsset(asset);
+                                    });
+                                }
+
+                                // Import walls
+                                if (data.walls && Array.isArray(data.walls)) {
+                                    data.walls.forEach((wall: any) => {
+                                        useProjectStore.getState().addWall(wall);
+                                    });
+                                }
+
+                                toast.success('Project imported successfully!');
+                            } catch (error) {
+                                toast.error('Failed to import project. Invalid file format.');
+                                console.error('Import error:', error);
+                            }
+                        };
+                        reader.readAsText(file);
+                    };
+                    input.click();
+                }
                 break;
 
             default:
@@ -341,52 +614,50 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                         // Keep dropdown open while hovering over button or menu
                         onMouseLeave={() => setOpenIndex(null)}
                     >
-                        {/* Main Button with Tooltip */}
-                        <Tooltip content={tool.label} position="top">
-                            <div
-                                onMouseEnter={() => setOpenIndex(index)}
-                                className="flex items-center"
-                            >
-                                <motion.button
-                                    onClick={() => {
-                                        const primary = tool.options[0];
-                                        if (primary) {
-                                            const isCurrentlyActive = 
-                                                (primary.id === "draw-wall" && (isWallMode || wallDrawingMode)) ||
-                                                (primary.id === "draw-line" && isPenMode) ||
-                                                (primary.id === "rectangular-select" && activeTool === "rectangular-select") ||
-                                                (activeTool === primary.id);
-                                            
-                                            if (isCurrentlyActive) {
-                                                deactivateAllTools();
-                                                setEditorTool("select");
-                                                setActiveTool("pointer-select");
-                                            } else {
-                                                handleOptionClick(primary);
-                                            }
+                        {/* Main Button */}
+                        <div
+                            onMouseEnter={() => setOpenIndex(index)}
+                            className="flex items-center"
+                        >
+                            <motion.button
+                                onClick={() => {
+                                    const primary = tool.options[0];
+                                    if (primary) {
+                                        const isCurrentlyActive =
+                                            (primary.id === "draw-wall" && (isWallMode || wallDrawingMode)) ||
+                                            (primary.id === "draw-line" && isPenMode) ||
+                                            (primary.id === "rectangular-select" && activeTool === "rectangular-select") ||
+                                            (activeTool === primary.id);
+
+                                        if (isCurrentlyActive) {
+                                            deactivateAllTools();
+                                            setEditorTool("select");
+                                            setActiveTool("pointer-select");
+                                        } else {
+                                            handleOptionClick(primary);
                                         }
-                                        setOpenIndex(null);
-                                    }}
-                                    whileTap={{ scale: 0.95 }}
-                                    whileHover={{ scale: 1.03 }}
-                                    className={`w-8 h-8 border-2 flex items-center justify-center rounded-md ${(tool.options.some((opt) => opt.id === "draw-line") &&
-                                            isPenMode) ||
-                                            (tool.options.some((opt) => opt.id === "draw-wall") &&
-                                                (isWallMode || wallDrawingMode)) ||
-                                            (tool.options.some((opt) => opt.id === "rectangular-select") &&
-                                                activeTool === "rectangular-select") ||
-                                            (tool.options.some((opt) => ["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(opt.id) &&
-                                                activeTool === opt.id))
-                                            ? "border-blue-500 text-blue-500"
-                                            : "border-[var(--accent)] text-[var(--accent)]"
-                                        }`}
-                                    aria-expanded={openIndex === index}
-                                    aria-haspopup="menu"
-                                >
-                                    {tool.icon}
-                                </motion.button>
-                            </div>
-                        </Tooltip>
+                                    }
+                                    setOpenIndex(null);
+                                }}
+                                whileTap={{ scale: 0.95 }}
+                                whileHover={{ scale: 1.03 }}
+                                className={`w-8 h-8 border-2 flex items-center justify-center rounded-md ${(tool.options.some((opt) => opt.id === "draw-line") &&
+                                    isPenMode) ||
+                                    (tool.options.some((opt) => opt.id === "draw-wall") &&
+                                        (isWallMode || wallDrawingMode)) ||
+                                    (tool.options.some((opt) => opt.id === "rectangular-select") &&
+                                        activeTool === "rectangular-select") ||
+                                    (tool.options.some((opt) => ["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(opt.id) &&
+                                        activeTool === opt.id))
+                                    ? "border-blue-500 text-blue-500"
+                                    : "border-[var(--accent)] text-[var(--accent)]"
+                                    }`}
+                                aria-expanded={openIndex === index}
+                                aria-haspopup="menu"
+                            >
+                                {tool.icon}
+                            </motion.button>
+                        </div>
 
                         {/* Dropdown Menu */}
                         <AnimatePresence>
@@ -400,19 +671,22 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                                     onMouseEnter={() => setOpenIndex(index)}
                                     onMouseLeave={() => setOpenIndex(null)}
                                 >
+                                    <div className="px-2 py-1.5 text-xs font-bold text-gray-900 border-b border-gray-100 mb-1">
+                                        {tool.label}
+                                    </div>
                                     <ul className="space-y-0.5 text-xs text-gray-700">
                                         {tool.options.map((option) => (
                                             <li
                                                 key={option.id}
                                                 className={`px-2 py-1.5 rounded hover:bg-gray-100 cursor-pointer flex items-center justify-between ${(option.id === "draw-line" && isPenMode) ||
-                                                        (option.id === "draw-wall" &&
-                                                            (isWallMode || wallDrawingMode)) ||
-                                                        (option.id === "rectangular-select" &&
-                                                            activeTool === "rectangular-select") ||
-                                                        (["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(option.id) &&
-                                                            activeTool === option.id)
-                                                        ? "bg-blue-100 text-blue-800"
-                                                        : ""
+                                                    (option.id === "draw-wall" &&
+                                                        (isWallMode || wallDrawingMode)) ||
+                                                    (option.id === "rectangular-select" &&
+                                                        activeTool === "rectangular-select") ||
+                                                    (["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(option.id) &&
+                                                        activeTool === option.id)
+                                                    ? "bg-blue-100 text-blue-800"
+                                                    : ""
                                                     }`}
                                                 onClick={() => handleOptionClick(option)}
                                             >

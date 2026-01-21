@@ -44,7 +44,7 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
 
     const handleClick = useCallback((e: MouseEvent) => {
         if (!isActive) return;
-        
+
         // Only handle clicks on the workspace SVG, not window-wide
         const target = e.target as Element | null;
         if (!target || !target.closest('svg[data-workspace-root="true"]')) {
@@ -93,6 +93,9 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
                         endPoint,
                         offset,
                         zIndex: getNextZIndex(),
+                        strokeWidth: 10,
+                        color: '#000000',
+                        fontSize: 18,
                     };
 
                     addDimension(newDimension);
@@ -140,6 +143,9 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
                     endPoint,
                     offset,
                     zIndex: getNextZIndex(),
+                    strokeWidth: 10,
+                    color: '#000000',
+                    fontSize: 18,
                 };
 
                 addDimension(newDimension);

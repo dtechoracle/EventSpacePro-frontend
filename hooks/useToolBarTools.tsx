@@ -28,6 +28,7 @@ import {
   FaBullseye,
   FaTimes,
   FaFileExport,
+  FaUpload,
   FaExpand,
   FaMinus,
 } from "react-icons/fa";
@@ -54,7 +55,6 @@ export function useToolbarTools(): Tool[] {
       options: [
         { id: "draw-line", label: "Draw Line", icon: <FaPenNib size={14} /> },
         { id: "draw-wall", label: "Draw Wall ►", icon: <FaDrawPolygon size={14} /> },
-        { id: "add-text", label: "Add Text", icon: <FaComment size={14} /> },
       ],
     },
     // 2) Shapes
@@ -85,6 +85,7 @@ export function useToolbarTools(): Tool[] {
       options: [
         { id: "pointer-select", label: "Pointer", icon: <FaMousePointer size={14} /> },
         { id: "rectangular-select", label: "Rectangular Selector", icon: <FaExpand size={14} /> },
+        { id: "pan", label: "Pan", icon: <FaArrowsAlt size={14} /> },
       ],
     },
     // 5) Modify
@@ -96,10 +97,6 @@ export function useToolbarTools(): Tool[] {
         { id: "move", label: "Move", icon: <FaArrowsAlt size={14} /> },
         { id: "copy", label: "Copy", icon: <FaCopy size={14} /> },
         { id: "rotate", label: "Rotate", icon: <FaRedo size={14} /> },
-        { id: "group", label: "Group", icon: <FaLayerGroup size={14} /> },
-        { id: "ungroup", label: "Ungroup", icon: <FaUngroup size={14} /> },
-        { id: "align", label: "Align", icon: <FaAlignLeft size={14} /> },
-        { id: "array", label: "Array", icon: <FaTh size={14} /> },
       ],
     },
     // 6) Annotations (unchanged)
@@ -112,26 +109,15 @@ export function useToolbarTools(): Tool[] {
         { id: "text-annotation", label: "Text", icon: <FaFont size={14} /> },
       ],
     },
-    // 7) Snapping
+
+    // 8) File
     {
-      icon: <FaMagnet size={18} />,
-      label: "Snapping",
+      icon: <FaFileExport size={18} />,
+      label: "File",
       options: [
-        { id: "snap-toggle", label: "Toggle Snapping", icon: <FaToggleOn size={14} /> },
-        { id: "snap-to-anchor", label: "Snap to Anchor", icon: <FaBullseye size={14} /> },
-        { id: "snap-endpoint", label: "Snap to Endpoint", icon: <FaCrosshairs size={14} /> },
-        { id: "snap-midpoint", label: "Snap to Midpoint", icon: <FaBullseye size={14} /> },
-        { id: "snap-center", label: "Snap to Center", icon: <FaTimes size={14} /> },
-        { id: "snap-intersection", label: "Snap to Intersection", icon: <FaTimes size={14} /> },
-        { id: "snap-perpendicular", label: "Snap to Perpendicular", icon: <FaTimes size={14} /> },
-        { id: "snap-grid", label: "Snap to Grid", icon: <FaTimes size={14} /> },
+        { id: "export-project", label: "Export Project", icon: <FaFileExport size={14} /> },
+        { id: "import-project", label: "Import Project", icon: <FaUpload size={14} /> },
       ],
-    },
-    // 8) Export (unchanged)
-    {
-      icon: <FaDownload size={18} />,
-      label: "Export",
-      options: [{ id: "export-project", label: "Export Project", icon: <FaFileExport size={14} /> }],
     },
   ];
 }

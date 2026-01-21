@@ -21,6 +21,7 @@ import {
 } from "@/store/sceneStore";
 import WorkspacePreview from "@/components/WorkspacePreview";
 import { ASSET_LIBRARY } from "@/lib/assets";
+import toast from "react-hot-toast";
 
 // Extended EventData type with canvasData
 type EventData = BaseEventData & {
@@ -37,6 +38,21 @@ type EventData = BaseEventData & {
 function ElementsPane() {
   const { walls, shapes, assets, textAnnotations, dimensions, labelArrows } = useProjectStore();
   const { setSelectedIds, zoom, setPan } = useEditorStore();
+  const [expandedAssets, setExpandedAssets] = React.useState<Record<string, boolean>>({});
+
+  // Group shapes by exploded asset (sourceAssetId)
+  const assetChildrenMap: Record<string, typeof shapes> = {};
+  const independentShapes: typeof shapes = [];
+
+  shapes.forEach((s) => {
+    const sourceId = (s as any).sourceAssetId as string | undefined;
+    if (sourceId) {
+      if (!assetChildrenMap[sourceId]) assetChildrenMap[sourceId] = [];
+      assetChildrenMap[sourceId].push(s);
+    } else {
+      independentShapes.push(s);
+    }
+  });
 
   const items = [
     // Walls: compute a rough center from their nodes
@@ -50,8 +66,8 @@ function ElementsPane() {
       const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
       return { id: w.id, label: "Wall", type: "Wall" as const, x: centerX, y: centerY };
     }),
-    // Shapes already have x/y at their center
-    ...shapes.map((s) => ({
+    // Standalone shapes already have x/y at their center
+    ...independentShapes.map((s) => ({
       id: s.id,
       label: s.type,
       type: "Shape" as const,
@@ -59,7 +75,7 @@ function ElementsPane() {
       y: s.y,
       shape: s,
     })),
-    // Assets have x/y at their center
+    // Assets have x/y at their center; attach exploded child shapes if any
     ...assets.map((a) => ({
       id: a.id,
       label: (a.metadata as any)?.label || a.type || "Asset",
@@ -67,6 +83,7 @@ function ElementsPane() {
       x: a.x,
       y: a.y,
       asset: a,
+      childShapes: assetChildrenMap[a.id] || [],
     })),
     // Text annotations
     ...textAnnotations.map((t) => ({
@@ -97,8 +114,9 @@ function ElementsPane() {
     })),
   ];
 
-  const handleSelect = (item: { id: string; x: number; y: number }) => {
-    setSelectedIds([item.id]);
+  const handleSelect = (item: { id: string; x: number; y: number; childIds?: string[] }) => {
+    const idsToSelect = item.childIds && item.childIds.length > 0 ? item.childIds : [item.id];
+    setSelectedIds(idsToSelect);
 
     // Pan the workspace so that the selected element is roughly centered
     if (typeof window !== "undefined" && zoom > 0) {
@@ -123,7 +141,7 @@ function ElementsPane() {
       <div className="px-3 py-2 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide">
         Elements
       </div>
-      <div 
+      <div
         className="flex-1 overflow-y-auto"
         onWheel={(e) => {
           // Stop wheel events from propagating to canvas zoom handlers
@@ -132,218 +150,316 @@ function ElementsPane() {
       >
         {items.map((item) => {
           // Get asset definition for icon/path
-          const assetDef = item.type === "Asset" && item.asset 
+          const assetDef = item.type === "Asset" && item.asset
             ? ASSET_LIBRARY.find(a => a.id === item.asset.type)
             : null;
 
-          return (
-          <button
-            key={item.id}
-            onClick={() => handleSelect(item)}
-            className="w-full flex items-center gap-1 px-1.5 py-1.5 text-[11px] hover:bg-gray-100 border-b border-gray-100"
-          >
-            {/* Mini preview - approximate but shape-accurate */}
-            <div className="w-7 h-7 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
-              {item.type === "Asset" && item.asset && (
-                assetDef?.path ? (
-                  <img
-                    src={assetDef.path}
-                    alt={assetDef.label}
-                    className="w-full h-full object-contain"
-                    style={{ maxWidth: '100%', maxHeight: '100%' }}
-                  />
-                ) : (
-                  <div className="text-[8px] text-gray-400 text-center px-1">
-                    {item.asset.type}
-                  </div>
-                )
-              )}
-              {item.type === "Shape" && item.shape && (
-                <svg width={24} height={24} viewBox="0 0 24 24">
-                  {item.shape.type === "rectangle" && (
-                    <rect
-                      x={4}
-                      y={7}
-                      width={16}
-                      height={10}
-                      fill={item.shape.fill || "transparent"}
-                      stroke={item.shape.stroke || "#9CA3AF"}
-                      strokeWidth={2}
-                      rx={2}
-                      ry={2}
-                    />
-                  )}
-                  {item.shape.type === "ellipse" && (
-                    <ellipse
-                      cx={12}
-                      cy={12}
-                      rx={8}
-                      ry={9}
-                      fill={item.shape.fill || "transparent"}
-                      stroke={item.shape.stroke || "#9CA3AF"}
-                      strokeWidth={2}
-                    />
-                  )}
-                  {item.shape.type === "line" && (
-                    <line
-                      x1={4}
-                      y1={12}
-                      x2={20}
-                      y2={12}
-                      stroke={item.shape.stroke || "#9CA3AF"}
-                      strokeWidth={2.5}
-                      strokeLinecap="round"
-                    />
-                  )}
-                  {item.shape.type === "polygon" && (
-                    <polygon
-                      points={(() => {
-                        const sides =
-                          item.shape.polygonSides ||
-                          (item.shape.points ? item.shape.points.length : 4);
-                        const s = Math.max(4, Math.min(12, sides || 4));
-                        const cx = 12;
-                        const cy = 12;
-                        const r = 8;
-                        const pts: string[] = [];
-                        for (let i = 0; i < s; i++) {
-                          const angle = ((Math.PI * 2) / s) * i - Math.PI / 2;
-                          const x = cx + r * Math.cos(angle);
-                          const y = cy + r * Math.sin(angle);
-                          pts.push(`${x},${y}`);
-                        }
-                        return pts.join(" ");
-                      })()}
-                      fill={item.shape.fill || "transparent"}
-                      stroke={item.shape.stroke || "#9CA3AF"}
-                      strokeWidth={2}
-                      strokeLinejoin="round"
-                    />
-                  )}
-                </svg>
-              )}
-              {item.type === "Wall" && (
-                <svg width={24} height={24} viewBox="0 0 24 24">
-                  <line
-                    x1={4}
-                    y1={12}
-                    x2={20}
-                    y2={12}
-                    stroke="#9CA3AF"
-                    strokeWidth={3}
-                    strokeLinecap="round"
-                  />
-                </svg>
-              )}
-              {item.type === "Text" && item.text && (
-                <svg width={24} height={24} viewBox="0 0 24 24">
-                  <text
-                    x={12}
-                    y={14}
-                    textAnchor="middle"
-                    fontSize={12}
-                    fill="#111827"
-                    fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-                  >
-                    T
-                  </text>
-                </svg>
-              )}
-              {item.type === "Dimension" && item.dimension && (
-                <svg width={24} height={24} viewBox="0 0 24 24">
-                  {/* main dimension line */}
-                  <line
-                    x1={4}
-                    y1={12}
-                    x2={20}
-                    y2={12}
-                    stroke="#111827"
-                    strokeWidth={1.5}
-                    strokeLinecap="round"
-                  />
-                  {/* arrows */}
-                  <polyline
-                    points="6,10 4,12 6,14"
-                    fill="none"
-                    stroke="#111827"
-                    strokeWidth={1.2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <polyline
-                    points="18,10 20,12 18,14"
-                    fill="none"
-                    stroke="#111827"
-                    strokeWidth={1.2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  {/* text */}
-                  <text
-                    x={12}
-                    y={10}
-                    textAnchor="middle"
-                    fontSize={7}
-                    fill="#111827"
-                    fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-                  >
-                    dim
-                  </text>
-                </svg>
-              )}
-              {item.type === "Label" && item.labelArrow && (
-                <svg width={24} height={24} viewBox="0 0 24 24">
-                  {/* arrow line */}
-                  <line
-                    x1={6}
-                    y1={16}
-                    x2={18}
-                    y2={16}
-                    stroke="#111827"
-                    strokeWidth={1.5}
-                    strokeLinecap="round"
-                  />
-                  {/* arrow head */}
-                  <polyline
-                    points="16,14 18,16 16,18"
-                    fill="none"
-                    stroke="#111827"
-                    strokeWidth={1.5}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  {/* label text bubble */}
-                  <rect
-                    x={5}
-                    y={5}
-                    width={14}
-                    height={7}
-                    rx={2}
-                    ry={2}
-                    fill="#F3F4F6"
-                    stroke="#9CA3AF"
-                    strokeWidth={1}
-                  />
-                  <text
-                    x={12}
-                    y={10}
-                    textAnchor="middle"
-                    fontSize={6}
-                    fill="#111827"
-                    fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-                  >
-                    Aa
-                  </text>
-                </svg>
-              )}
-            </div>
+          const isAsset = item.type === "Asset";
+          const childShapes = (item as any).childShapes as any[] | undefined;
+          const hasChildren = isAsset && childShapes && childShapes.length > 0;
+          const isExpanded = isAsset && expandedAssets[item.id];
 
-            {/* Label and type */}
-            <div className="flex-1 min-w-0">
-              <div className="truncate text-gray-700 leading-tight">{item.label}</div>
-              <div className="text-[0.6rem] text-gray-400 mt-0.5">{item.type}</div>
+          return (
+            <div key={item.id}>
+              <button
+                onClick={() =>
+                  isAsset && hasChildren
+                    ? setExpandedAssets(prev => ({ ...prev, [item.id]: !prev[item.id] }))
+                    : handleSelect({
+                      id: item.id,
+                      x: item.x,
+                      y: item.y,
+                      childIds: hasChildren ? childShapes.map(s => s.id) : undefined,
+                    })
+                }
+                className="w-full flex items-center gap-1 px-1.5 py-1.5 text-[11px] hover:bg-gray-100 border-b border-gray-100"
+              >
+                {/* Mini preview - approximate but shape-accurate */}
+                <div className="w-7 h-7 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
+                  {item.type === "Asset" && item.asset && (
+                    assetDef?.path ? (
+                      <img
+                        src={assetDef.path}
+                        alt={assetDef.label}
+                        className="w-full h-full object-contain"
+                        style={{ maxWidth: '100%', maxHeight: '100%' }}
+                      />
+                    ) : (
+                      <div className="text-[8px] text-gray-400 text-center px-1">
+                        {item.asset.type}
+                      </div>
+                    )
+                  )}
+                  {item.type === "Shape" && item.shape && (
+                    <svg width={24} height={24} viewBox="0 0 24 24">
+                      {item.shape.type === "rectangle" && (
+                        <rect
+                          x={4}
+                          y={7}
+                          width={16}
+                          height={10}
+                          fill={item.shape.fill || "transparent"}
+                          stroke={item.shape.stroke || "#9CA3AF"}
+                          strokeWidth={2}
+                          rx={2}
+                          ry={2}
+                        />
+                      )}
+                      {item.shape.type === "ellipse" && (
+                        <ellipse
+                          cx={12}
+                          cy={12}
+                          rx={8}
+                          ry={9}
+                          fill={item.shape.fill || "transparent"}
+                          stroke={item.shape.stroke || "#9CA3AF"}
+                          strokeWidth={2}
+                        />
+                      )}
+                      {item.shape.type === "line" && (
+                        <line
+                          x1={4}
+                          y1={12}
+                          x2={20}
+                          y2={12}
+                          stroke={item.shape.stroke || "#9CA3AF"}
+                          strokeWidth={2.5}
+                          strokeLinecap="round"
+                        />
+                      )}
+                      {item.shape.type === "polygon" && (
+                        <polygon
+                          points={(() => {
+                            const sides =
+                              item.shape.polygonSides ||
+                              (item.shape.points ? item.shape.points.length : 4);
+                            const s = Math.max(4, Math.min(12, sides || 4));
+                            const cx = 12;
+                            const cy = 12;
+                            const r = 8;
+                            const pts: string[] = [];
+                            for (let i = 0; i < s; i++) {
+                              const angle = ((Math.PI * 2) / s) * i - Math.PI / 2;
+                              const x = cx + r * Math.cos(angle);
+                              const y = cy + r * Math.sin(angle);
+                              pts.push(`${x},${y}`);
+                            }
+                            return pts.join(" ");
+                          })()}
+                          fill={item.shape.fill || "transparent"}
+                          stroke={item.shape.stroke || "#9CA3AF"}
+                          strokeWidth={2}
+                          strokeLinejoin="round"
+                        />
+                      )}
+                    </svg>
+                  )}
+                  {item.type === "Wall" && (
+                    <svg width={24} height={24} viewBox="0 0 24 24">
+                      <line
+                        x1={4}
+                        y1={12}
+                        x2={20}
+                        y2={12}
+                        stroke="#9CA3AF"
+                        strokeWidth={3}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  )}
+                  {item.type === "Text" && item.text && (
+                    <svg width={24} height={24} viewBox="0 0 24 24">
+                      <text
+                        x={12}
+                        y={14}
+                        textAnchor="middle"
+                        fontSize={12}
+                        fill="#111827"
+                        fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                      >
+                        T
+                      </text>
+                    </svg>
+                  )}
+                  {item.type === "Dimension" && item.dimension && (
+                    <svg width={24} height={24} viewBox="0 0 24 24">
+                      {/* main dimension line */}
+                      <line
+                        x1={4}
+                        y1={12}
+                        x2={20}
+                        y2={12}
+                        stroke="#111827"
+                        strokeWidth={1.5}
+                        strokeLinecap="round"
+                      />
+                      {/* arrows */}
+                      <polyline
+                        points="6,10 4,12 6,14"
+                        fill="none"
+                        stroke="#111827"
+                        strokeWidth={1.2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <polyline
+                        points="18,10 20,12 18,14"
+                        fill="none"
+                        stroke="#111827"
+                        strokeWidth={1.2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      {/* text */}
+                      <text
+                        x={12}
+                        y={10}
+                        textAnchor="middle"
+                        fontSize={7}
+                        fill="#111827"
+                        fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                      >
+                        dim
+                      </text>
+                    </svg>
+                  )}
+                  {item.type === "Label" && item.labelArrow && (
+                    <svg width={24} height={24} viewBox="0 0 24 24">
+                      {/* arrow line */}
+                      <line
+                        x1={6}
+                        y1={16}
+                        x2={18}
+                        y2={16}
+                        stroke="#111827"
+                        strokeWidth={1.5}
+                        strokeLinecap="round"
+                      />
+                      {/* arrow head */}
+                      <polyline
+                        points="16,14 18,16 16,18"
+                        fill="none"
+                        stroke="#111827"
+                        strokeWidth={1.5}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      {/* label text bubble */}
+                      <rect
+                        x={5}
+                        y={5}
+                        width={14}
+                        height={7}
+                        rx={2}
+                        ry={2}
+                        fill="#F3F4F6"
+                        stroke="#9CA3AF"
+                        strokeWidth={1}
+                      />
+                      <text
+                        x={12}
+                        y={10}
+                        textAnchor="middle"
+                        fontSize={6}
+                        fill="#111827"
+                        fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                      >
+                        Aa
+                      </text>
+                    </svg>
+                  )}
+                </div>
+
+                {/* Label and type */}
+                <div className="flex-1 min-w-0">
+                  <div className="truncate text-gray-700 leading-tight">{item.label}</div>
+                  <div className="text-[0.6rem] text-gray-400 mt-0.5">
+                    {isAsset && hasChildren ? "Asset (exploded)" : item.type}
+                  </div>
+                </div>
+              </button>
+
+              {/* Child shapes for exploded assets */}
+              {isAsset && hasChildren && isExpanded && (
+                <div className="ml-6 border-l border-gray-200">
+                  {childShapes!.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => handleSelect({ id: s.id, x: s.x, y: s.y })}
+                      className="w-full flex items-center gap-1 px-1.5 py-1 text-[10px] hover:bg-gray-50 border-b border-gray-100"
+                    >
+                      <div className="w-5 h-5 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
+                        <svg width={18} height={18} viewBox="0 0 24 24">
+                          {s.type === "rectangle" && (
+                            <rect
+                              x={4}
+                              y={7}
+                              width={16}
+                              height={10}
+                              fill={s.fill || "transparent"}
+                              stroke={s.stroke || "#9CA3AF"}
+                              strokeWidth={2}
+                              rx={2}
+                              ry={2}
+                            />
+                          )}
+                          {s.type === "ellipse" && (
+                            <ellipse
+                              cx={12}
+                              cy={12}
+                              rx={8}
+                              ry={9}
+                              fill={s.fill || "transparent"}
+                              stroke={s.stroke || "#9CA3AF"}
+                              strokeWidth={2}
+                            />
+                          )}
+                          {s.type === "line" && (
+                            <line
+                              x1={4}
+                              y1={12}
+                              x2={20}
+                              y2={12}
+                              stroke={s.stroke || "#9CA3AF"}
+                              strokeWidth={2.5}
+                              strokeLinecap="round"
+                            />
+                          )}
+                          {s.type === "polygon" && (
+                            <polygon
+                              points={(() => {
+                                const sides =
+                                  s.polygonSides ||
+                                  (s.points ? s.points.length : 4);
+                                const cnt = Math.max(4, Math.min(12, sides || 4));
+                                const cx = 12;
+                                const cy = 12;
+                                const r = 8;
+                                const pts: string[] = [];
+                                for (let i = 0; i < cnt; i++) {
+                                  const angle = ((Math.PI * 2) / cnt) * i - Math.PI / 2;
+                                  const x = cx + r * Math.cos(angle);
+                                  const y = cy + r * Math.sin(angle);
+                                  pts.push(`${x},${y}`);
+                                }
+                                return pts.join(" ");
+                              })()}
+                              fill={s.fill || "transparent"}
+                              stroke={s.stroke || "#9CA3AF"}
+                              strokeWidth={2}
+                              strokeLinejoin="round"
+                            />
+                          )}
+                        </svg>
+                      </div>
+                      <div className="flex-1 text-left truncate">
+                        <div className="truncate">{s.type}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          </button>
           );
         })}
       </div>
@@ -373,7 +489,7 @@ export default function Editor() {
   const router = useRouter();
   const { slug, id, preview, aiMode } = router.query;
   const queryClient = useQueryClient();
-  
+
   // Open AI modal if aiMode is set
   useEffect(() => {
     if (aiMode === 'true' && typeof window !== 'undefined') {
@@ -403,7 +519,7 @@ export default function Editor() {
       setTimeout(tryOpenAI, 300);
     }
   }, [aiMode, router]);
-  
+
   // Wait for router to be ready before enabling queries
   const isRouterReady = router.isReady;
 
@@ -443,9 +559,9 @@ export default function Editor() {
       // apiRequest may return data directly or wrapped in response.data
       const data = (response.data || response) as EventData;
       const receivedId = data._id || (data as any).id;
-      console.log(`[Editor] Received event data from DATABASE:`, { 
-        requestedId: eventId, 
-        receivedId, 
+      console.log(`[Editor] Received event data from DATABASE:`, {
+        requestedId: eventId,
+        receivedId,
         name: data.name,
         hasCanvasData: !!data.canvasData,
         canvasDataWalls: data.canvasData?.walls?.length || 0,
@@ -491,25 +607,62 @@ export default function Editor() {
     },
   });
 
+  // Handle texture query param for outdoor events
+  useEffect(() => {
+    if (isRouterReady && router.query.texture) {
+      const textureId = router.query.texture as string;
+      const bgId = "background-texture";
+      const projectStore = useProjectStore.getState();
+
+      // Check if background already exists to avoid duplicates
+      if (!projectStore.shapes.find(s => s.id === bgId)) {
+        console.log(`[Editor] Applying background texture: ${textureId}`);
+        // Add background shape covering the large canvas
+        projectStore.addShape({
+          id: bgId,
+          type: "rectangle",
+          x: 5000, // Center of 10000x10000 canvas
+          y: 5000,
+          width: 10000,
+          height: 10000,
+          fill: `url(#${textureId})`,
+          stroke: "none",
+          strokeWidth: 0,
+          rotation: 0,
+          zIndex: -100, // Put it at the very bottom
+          points: [] // Required by Shape type
+        });
+
+        // Clear the query param so it doesn't re-apply
+        router.replace({
+          pathname: router.pathname,
+          query: { ...router.query, texture: undefined }
+        }, undefined, { shallow: true });
+
+        toast.success(`Applied ${textureId} environment`);
+      }
+    }
+  }, [isRouterReady, router.query.texture, router]);
+
   // Reset currentEventData when route changes to ensure new event loads
   useEffect(() => {
     if (isRouterReady && id && slug) {
       const eventId = id as string;
       const eventSlug = slug as string;
       console.log(`[Editor] Route changed to: ${eventSlug}/${eventId}, clearing ALL data`);
-      
+
       // Clear current event data
       setCurrentEventData(null);
-      
+
       // CRITICAL: Reset project store to clear localStorage data
       // This prevents loading old event data from localStorage
       const projectStore = useProjectStore.getState();
       projectStore.reset();
       projectStore.clearWorkspace();
-      
+
       // Clear the query cache for this specific event to force fresh fetch
       queryClient.removeQueries({ queryKey: ["event", eventSlug, eventId] });
-      
+
       // Invalidate and refetch the query to ensure fresh data from database
       queryClient.invalidateQueries({ queryKey: ["event", eventSlug, eventId] });
     }
@@ -522,52 +675,52 @@ export default function Editor() {
       console.log('[Editor] Skipping reload - we just saved');
       return;
     }
-    
+
     // Only load if we have new event data and it's actually different (by ID)
     // This prevents clearing workspace when React Query refetches the same event
     if (eventData && id) {
       const eventId = eventData._id || (eventData as any).id;
       const requestedId = id as string;
       const currentId = currentEventData?._id || (currentEventData as any)?.id;
-      
+
       // CRITICAL: Verify we're loading the correct event
       if (eventId !== requestedId) {
         console.error(`[Editor] MISMATCH! Requested event ${requestedId} but received ${eventId}`);
         return;
       }
-      
+
       // CRITICAL: Only load if it's a different event OR if we don't have current event data yet
       // Don't reload if it's the same event and we already have data (prevents clearing on refetch)
       // Also check if we just saved to prevent clearing newly drawn elements
       const shouldLoad = !currentEventData || currentId !== eventId;
-      
+
       if (shouldLoad && !justSavedRef.current) {
         console.log(`[Editor] Loading NEW event from DATABASE: ${eventId} (previous: ${currentId})`);
-      setCurrentEventData(eventData);
-        
+        setCurrentEventData(eventData);
+
         // Load event data into stores for Workspace2D
         const projectStore = useProjectStore.getState();
         const sceneStore = useSceneStore.getState();
-        
+
         // Always clear workspace when loading a different event to prevent localStorage pollution
         const isDifferentEvent = !currentId || currentId !== eventId;
-        
+
         if (isDifferentEvent) {
           console.log(`[Editor] Clearing workspace before loading event ${eventId}`);
           projectStore.reset();
           projectStore.clearWorkspace();
         }
-        
+
         // PRIORITY 1: Load from canvasData (preferred format from DATABASE)
         if (eventData.canvasData) {
           const { walls = [], shapes = [], assets = [] } = eventData.canvasData;
-          
+
           console.log(`[Editor] Loading canvasData from DATABASE:`, {
             walls: walls.length,
             shapes: shapes.length,
             assets: assets.length,
           });
-          
+
           // Always load from DATABASE when opening an event
           if (isDifferentEvent) {
             walls.forEach((wall: any) => {
@@ -582,209 +735,209 @@ export default function Editor() {
               console.log(`[Editor] Adding asset:`, asset.id, asset.type);
               projectStore.addAsset(asset);
             });
-            
+
             console.log(`[Editor] ✅ Loaded ${walls.length} walls, ${shapes.length} shapes, ${assets.length} assets from DATABASE`);
           }
         }
-      // PRIORITY 2: Fallback to canvasAssets (most events use this format)
-      else if (eventData.canvasAssets && Array.isArray(eventData.canvasAssets) && eventData.canvasAssets.length > 0) {
-        console.log(`[Editor] Loading from canvasAssets for event ${eventId} from DATABASE:`, {
-          canvasAssetsCount: eventData.canvasAssets.length,
-          assetTypes: eventData.canvasAssets.map((a: any) => a.type),
-        });
-        
-        // CRITICAL: Always clear and load from database when opening an event
-        // This ensures we show the actual database data, not localStorage
-        console.log(`[Editor] Clearing workspace and loading from DATABASE`);
-        projectStore.reset();
-        projectStore.clearWorkspace();
-        
-        // Load into sceneStore (new editor) - use the store's set method
-        useSceneStore.setState({ assets: eventData.canvasAssets });
-        
-        // Always load canvasAssets from database into workspace
-        console.log(`[Editor] Converting canvasAssets to workspace format:`, {
-          canvasAssetsCount: eventData.canvasAssets.length,
-        });
-        
-        let loadedCount = 0;
-        eventData.canvasAssets.forEach((asset: AssetInstance | any) => {
-          // Handle wall-polygon type (new format)
-          if (asset.type === 'wall-polygon' && asset.wallPolygon && Array.isArray(asset.wallPolygon)) {
-            // Convert wall-polygon to wall format with nodes and edges
-            const wallNodes = asset.wallPolygon.map((point: any, idx: number) => ({
-              id: `node-${asset.id}-${idx}`,
-              x: asset.x + (point.x || 0),
-              y: asset.y + (point.y || 0),
-            }));
+        // PRIORITY 2: Fallback to canvasAssets (most events use this format)
+        else if (eventData.canvasAssets && Array.isArray(eventData.canvasAssets) && eventData.canvasAssets.length > 0) {
+          console.log(`[Editor] Loading from canvasAssets for event ${eventId} from DATABASE:`, {
+            canvasAssetsCount: eventData.canvasAssets.length,
+            assetTypes: eventData.canvasAssets.map((a: any) => a.type),
+          });
 
-            // Create edges connecting consecutive nodes
-            const wallEdges = [];
-            for (let i = 0; i < wallNodes.length; i++) {
-              const nextIdx = (i + 1) % wallNodes.length;
-              wallEdges.push({
-                id: `edge-${asset.id}-${i}`,
-                nodeA: wallNodes[i].id,
-                nodeB: wallNodes[nextIdx].id,
-                thickness: asset.wallThickness || 75,
-              });
-            }
+          // CRITICAL: Always clear and load from database when opening an event
+          // This ensures we show the actual database data, not localStorage
+          console.log(`[Editor] Clearing workspace and loading from DATABASE`);
+          projectStore.reset();
+          projectStore.clearWorkspace();
 
-            if (wallNodes.length > 0 && wallEdges.length > 0) {
-              const existingWall = projectStore.walls.find(w => w.id === asset.id);
-              if (!existingWall) {
-                projectStore.addWall({
-                  id: asset.id,
-                  nodes: wallNodes,
-                  edges: wallEdges,
-                  zIndex: asset.zIndex || 0
+          // Load into sceneStore (new editor) - use the store's set method
+          useSceneStore.setState({ assets: eventData.canvasAssets });
+
+          // Always load canvasAssets from database into workspace
+          console.log(`[Editor] Converting canvasAssets to workspace format:`, {
+            canvasAssetsCount: eventData.canvasAssets.length,
+          });
+
+          let loadedCount = 0;
+          eventData.canvasAssets.forEach((asset: AssetInstance | any) => {
+            // Handle wall-polygon type (new format)
+            if (asset.type === 'wall-polygon' && asset.wallPolygon && Array.isArray(asset.wallPolygon)) {
+              // Convert wall-polygon to wall format with nodes and edges
+              const wallNodes = asset.wallPolygon.map((point: any, idx: number) => ({
+                id: `node-${asset.id}-${idx}`,
+                x: asset.x + (point.x || 0),
+                y: asset.y + (point.y || 0),
+              }));
+
+              // Create edges connecting consecutive nodes
+              const wallEdges = [];
+              for (let i = 0; i < wallNodes.length; i++) {
+                const nextIdx = (i + 1) % wallNodes.length;
+                wallEdges.push({
+                  id: `edge-${asset.id}-${i}`,
+                  nodeA: wallNodes[i].id,
+                  nodeB: wallNodes[nextIdx].id,
+                  thickness: asset.wallThickness || 75,
                 });
               }
+
+              if (wallNodes.length > 0 && wallEdges.length > 0) {
+                const existingWall = projectStore.walls.find(w => w.id === asset.id);
+                if (!existingWall) {
+                  projectStore.addWall({
+                    id: asset.id,
+                    nodes: wallNodes,
+                    edges: wallEdges,
+                    zIndex: asset.zIndex || 0
+                  });
+                }
+              }
             }
-          }
-          // Check if it's a wall-segments (legacy format)
-          else if (asset.type === 'wall-segments' && asset.wallNodes && asset.wallEdges) {
-            // Convert to Wall format
-            const wallNodes = asset.wallNodes.map((node: any, idx: number) => ({
-              id: `node-${asset.id}-${idx}`,
-              x: node.x,
-              y: node.y
-            }));
-            
-            const wallEdges = asset.wallEdges.map((edge: any, idx: number) => ({
-              id: `edge-${asset.id}-${idx}`,
-              nodeA: wallNodes[edge.a]?.id || '',
-              nodeB: wallNodes[edge.b]?.id || '',
-              thickness: asset.wallThickness || 75
-            }));
-            
-            if (wallNodes.length > 0 && wallEdges.length > 0) {
-              const existingWall = projectStore.walls.find(w => w.id === asset.id);
-              if (!existingWall) {
-                projectStore.addWall({
+            // Check if it's a wall-segments (legacy format)
+            else if (asset.type === 'wall-segments' && asset.wallNodes && asset.wallEdges) {
+              // Convert to Wall format
+              const wallNodes = asset.wallNodes.map((node: any, idx: number) => ({
+                id: `node-${asset.id}-${idx}`,
+                x: node.x,
+                y: node.y
+              }));
+
+              const wallEdges = asset.wallEdges.map((edge: any, idx: number) => ({
+                id: `edge-${asset.id}-${idx}`,
+                nodeA: wallNodes[edge.a]?.id || '',
+                nodeB: wallNodes[edge.b]?.id || '',
+                thickness: asset.wallThickness || 75
+              }));
+
+              if (wallNodes.length > 0 && wallEdges.length > 0) {
+                const existingWall = projectStore.walls.find(w => w.id === asset.id);
+                if (!existingWall) {
+                  projectStore.addWall({
+                    id: asset.id,
+                    nodes: wallNodes,
+                    edges: wallEdges,
+                    zIndex: asset.zIndex || 0
+                  });
+                  loadedCount++;
+                  console.log(`[Editor] ✅ Loaded wall-segments from DATABASE:`, asset.id);
+                }
+              }
+            }
+            // Handle line-segment type (convert to line shape)
+            else if (asset.type === 'line-segment' && asset.startPoint && asset.endPoint) {
+              // Convert line-segment to line shape format
+              const startX = asset.startPoint.x || asset.x;
+              const startY = asset.startPoint.y || asset.y;
+              const endX = asset.endPoint.x || (asset.x + asset.width);
+              const endY = asset.endPoint.y || (asset.y + asset.height);
+
+              const existingShape = projectStore.shapes.find(s => s.id === asset.id);
+              if (!existingShape) {
+                projectStore.addShape({
                   id: asset.id,
-                  nodes: wallNodes,
-                  edges: wallEdges,
+                  type: 'line',
+                  x: (startX + endX) / 2, // Center point
+                  y: (startY + endY) / 2, // Center point
+                  width: Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2)), // Length
+                  height: 2, // Line thickness
+                  rotation: asset.rotation || 0,
+                  fill: asset.backgroundColor || 'transparent',
+                  stroke: asset.strokeColor || '#3B82F6',
+                  strokeWidth: asset.strokeWidth || 2,
+                  points: [
+                    { x: startX - (startX + endX) / 2, y: startY - (startY + endY) / 2 },
+                    { x: endX - (startX + endX) / 2, y: endY - (startY + endY) / 2 },
+                  ],
                   zIndex: asset.zIndex || 0
                 });
                 loadedCount++;
-                console.log(`[Editor] ✅ Loaded wall-segments from DATABASE:`, asset.id);
+                console.log(`[Editor] ✅ Loaded line-segment from DATABASE:`, asset.id);
               }
             }
-          }
-          // Handle line-segment type (convert to line shape)
-          else if (asset.type === 'line-segment' && asset.startPoint && asset.endPoint) {
-            // Convert line-segment to line shape format
-            const startX = asset.startPoint.x || asset.x;
-            const startY = asset.startPoint.y || asset.y;
-            const endX = asset.endPoint.x || (asset.x + asset.width);
-            const endY = asset.endPoint.y || (asset.y + asset.height);
-            
-            const existingShape = projectStore.shapes.find(s => s.id === asset.id);
-            if (!existingShape) {
-              projectStore.addShape({
-                id: asset.id,
-                type: 'line',
-                x: (startX + endX) / 2, // Center point
-                y: (startY + endY) / 2, // Center point
-                width: Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2)), // Length
-                height: 2, // Line thickness
-                rotation: asset.rotation || 0,
-                fill: asset.backgroundColor || 'transparent',
-                stroke: asset.strokeColor || '#3B82F6',
-                strokeWidth: asset.strokeWidth || 2,
-                points: [
-                  { x: startX - (startX + endX) / 2, y: startY - (startY + endY) / 2 },
-                  { x: endX - (startX + endX) / 2, y: endY - (startY + endY) / 2 },
-                ],
-                zIndex: asset.zIndex || 0
-              });
-              loadedCount++;
-              console.log(`[Editor] ✅ Loaded line-segment from DATABASE:`, asset.id);
-            }
-          }
-          // Handle standard shape types (rectangle, ellipse, line, arrow, freehand)
-          else if (asset.type && ['rectangle', 'ellipse', 'line', 'arrow', 'freehand'].includes(asset.type)) {
-            // Convert to Shape format
-            const existingShape = projectStore.shapes.find(s => s.id === asset.id);
-            if (!existingShape) {
-              // Use reasonable defaults for missing dimensions
-              const defaultWidth = asset.width || 100;
-              const defaultHeight = asset.height || 100;
-              
-              projectStore.addShape({
-                id: asset.id,
-                type: asset.type as 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand',
-                x: asset.x || 0,
-                y: asset.y || 0,
-                width: defaultWidth,
-                height: defaultHeight,
-                rotation: asset.rotation || 0,
-                fill: asset.fillColor || asset.backgroundColor || "#3B82F6",
-                stroke: asset.strokeColor || "#1E40AF",
-                strokeWidth: asset.strokeWidth || 2,
-                points: asset.points,
-                zIndex: asset.zIndex || 0
-              });
-              
-              console.log(`[Editor] ✅ Loaded ${asset.type} shape from DATABASE:`, {
-                id: asset.id,
-                x: asset.x,
-                y: asset.y,
-                width: defaultWidth,
-                height: defaultHeight,
-              });
-              loadedCount++;
-            }
-          } else if (asset.type) {
-            // Convert to Asset format - load furniture/assets from database
-            const existingAsset = projectStore.assets.find(a => a.id === asset.id);
-            if (!existingAsset) {
-              // Use reasonable defaults based on asset type
-              // Chairs and tables typically need larger dimensions to be visible
-              let defaultWidth = asset.width || 100;
-              let defaultHeight = asset.height || 100;
-              
-              // Set better defaults for common asset types
-              if (asset.type.includes('chair')) {
-                defaultWidth = asset.width || 80;
-                defaultHeight = asset.height || 80;
-              } else if (asset.type.includes('table') || asset.type.includes('cocktail')) {
-                defaultWidth = asset.width || 200;
-                defaultHeight = asset.height || 200;
+            // Handle standard shape types (rectangle, ellipse, line, arrow, freehand)
+            else if (asset.type && ['rectangle', 'ellipse', 'line', 'arrow', 'freehand'].includes(asset.type)) {
+              // Convert to Shape format
+              const existingShape = projectStore.shapes.find(s => s.id === asset.id);
+              if (!existingShape) {
+                // Use reasonable defaults for missing dimensions
+                const defaultWidth = asset.width || 100;
+                const defaultHeight = asset.height || 100;
+
+                projectStore.addShape({
+                  id: asset.id,
+                  type: asset.type as 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand',
+                  x: asset.x || 0,
+                  y: asset.y || 0,
+                  width: defaultWidth,
+                  height: defaultHeight,
+                  rotation: asset.rotation || 0,
+                  fill: asset.fillColor || asset.backgroundColor || "#3B82F6",
+                  stroke: asset.strokeColor || "#1E40AF",
+                  strokeWidth: asset.strokeWidth || 2,
+                  points: asset.points,
+                  zIndex: asset.zIndex || 0
+                });
+
+                console.log(`[Editor] ✅ Loaded ${asset.type} shape from DATABASE:`, {
+                  id: asset.id,
+                  x: asset.x,
+                  y: asset.y,
+                  width: defaultWidth,
+                  height: defaultHeight,
+                });
+                loadedCount++;
               }
-              
-              projectStore.addAsset({
-                id: asset.id,
-                type: asset.type,
-                x: asset.x || 0,
-                y: asset.y || 0,
-                width: defaultWidth,
-                height: defaultHeight,
-                rotation: asset.rotation || 0,
-                scale: asset.scale || 1,
-                zIndex: asset.zIndex || 0,
-              });
-              
-              console.log(`[Editor] ✅ Loaded asset from DATABASE:`, {
-                id: asset.id,
-                type: asset.type,
-                x: asset.x,
-                y: asset.y,
-                width: defaultWidth,
-                height: defaultHeight,
-              });
-              loadedCount++;
+            } else if (asset.type) {
+              // Convert to Asset format - load furniture/assets from database
+              const existingAsset = projectStore.assets.find(a => a.id === asset.id);
+              if (!existingAsset) {
+                // Use reasonable defaults based on asset type
+                // Chairs and tables typically need larger dimensions to be visible
+                let defaultWidth = asset.width || 100;
+                let defaultHeight = asset.height || 100;
+
+                // Set better defaults for common asset types
+                if (asset.type.includes('chair')) {
+                  defaultWidth = asset.width || 80;
+                  defaultHeight = asset.height || 80;
+                } else if (asset.type.includes('table') || asset.type.includes('cocktail')) {
+                  defaultWidth = asset.width || 200;
+                  defaultHeight = asset.height || 200;
+                }
+
+                projectStore.addAsset({
+                  id: asset.id,
+                  type: asset.type,
+                  x: asset.x || 0,
+                  y: asset.y || 0,
+                  width: defaultWidth,
+                  height: defaultHeight,
+                  rotation: asset.rotation || 0,
+                  scale: asset.scale || 1,
+                  zIndex: asset.zIndex || 0,
+                });
+
+                console.log(`[Editor] ✅ Loaded asset from DATABASE:`, {
+                  id: asset.id,
+                  type: asset.type,
+                  x: asset.x,
+                  y: asset.y,
+                  width: defaultWidth,
+                  height: defaultHeight,
+                });
+                loadedCount++;
+              }
             }
-          }
-        });
-        
-        console.log(`[Editor] ✅ Loaded ${loadedCount} items from DATABASE into workspace`);
-        console.log(`[Editor] Workspace state after load:`, {
-          walls: projectStore.walls.length,
-          shapes: projectStore.shapes.length,
-          assets: projectStore.assets.length,
-        });
+          });
+
+          console.log(`[Editor] ✅ Loaded ${loadedCount} items from DATABASE into workspace`);
+          console.log(`[Editor] Workspace state after load:`, {
+            walls: projectStore.walls.length,
+            shapes: projectStore.shapes.length,
+            assets: projectStore.assets.length,
+          });
         }
       } else {
         console.log(`[Editor] Skipping load - same event and we have current data`);
@@ -877,7 +1030,7 @@ export default function Editor() {
         const padding = 100; // mm padding around content
         const viewportWidthMm = viewportWidth / 2; // Approximate conversion
         const viewportHeightMm = viewportHeight / 2;
-        
+
         const zoomX = (viewportWidthMm - padding * 2) / Math.max(contentWidth, 100);
         const zoomY = (viewportHeightMm - padding * 2) / Math.max(contentHeight, 100);
         const fitZoom = Math.min(zoomX, zoomY, 1.5); // Cap at 1.5x zoom max for preview
@@ -885,7 +1038,7 @@ export default function Editor() {
         // Set zoom
         const finalZoom = Math.max(0.3, Math.min(fitZoom, 1.5));
         setZoom(finalZoom);
-        
+
         // Center the content in viewport
         const screenCenterX = viewportWidth / 2;
         const screenCenterY = viewportHeight / 2;
@@ -905,31 +1058,31 @@ export default function Editor() {
   // Auto-save functionality - automatically save to database
   useEffect(() => {
     if (!currentEventData || !id || !slug) return;
-    
+
     const projectStore = useProjectStore.getState();
     const hasChanges = projectStore.hasUnsavedChanges;
-    
+
     if (!hasChanges) return;
 
     console.log('[Editor] Auto-save triggered - saving to DATABASE');
 
     const timeoutId = setTimeout(() => {
       const currentHasChanges = useProjectStore.getState().hasUnsavedChanges;
-      
+
       if (currentHasChanges && id && typeof id === 'string' && slug && typeof slug === 'string') {
         const store = useProjectStore.getState();
         const { walls, shapes, assets } = store;
-        
+
         console.log('[Editor] Auto-save: Saving to DATABASE:', {
           eventId: id,
           walls: walls.length,
           shapes: shapes.length,
           assets: assets.length,
         });
-        
+
         // Mark that we're saving to prevent reload
         justSavedRef.current = true;
-        
+
         // Save to database automatically
         store.saveEvent(id, slug)
           .then(() => {
@@ -953,12 +1106,12 @@ export default function Editor() {
   // Render content based on iframe/preview status
   const renderContent = () => {
     const isPreviewMode = preview === 'true' || isInIframe;
-    
+
     return (
       <div className={`${isPreviewMode ? 'h-full w-full' : 'h-screen'} flex overflow-hidden bg-gray-50`}>
         {/* Dashboard Sidebar - only show if not in preview mode */}
         {!isPreviewMode && <DashboardSidebar />}
-        
+
         <div className="flex-1 flex overflow-hidden">
           {/* Elements Pane - only show if not in preview mode */}
           {!isPreviewMode && (

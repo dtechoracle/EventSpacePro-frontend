@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useEditorStore } from '@/store/editorStore';
 import { useProjectStore, Shape } from '@/store/projectStore';
 import { snapTo90Degrees } from '@/lib/wallGeometry';
+import { findSnapPointInShapes, SnapPoint } from '@/utils/snapToDrawing';
 
 interface ShapeToolProps {
     isActive: boolean;
@@ -12,7 +13,7 @@ interface ShapeToolProps {
 }
 
 export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
-    const { screenToWorld, snapToGrid, gridSize, setSelectedIds, setActiveTool } = useEditorStore();
+    const { screenToWorld, snapToGrid, gridSize, setSelectedIds, setActiveTool, zoom } = useEditorStore();
     const { addShape, getNextZIndex, shapes } = useProjectStore();
 
     // Multi-segment state for lines/arrows
@@ -25,6 +26,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
     // Single-segment state for rectangles/ellipses
     const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
     const [endPoint, setEndPoint] = useState<{ x: number; y: number } | null>(null);
+    const [snapIndicator, setSnapIndicator] = useState<SnapPoint | null>(null);
 
     const isLineMode = shapeType === 'line' || shapeType === 'arrow';
     const isPolygon = shapeType === 'polygon';
@@ -107,25 +109,54 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!isActive) return;
         const worldPos = screenToWorld(e.clientX, e.clientY);
+        const { zoom, snapToObjects } = useEditorStore.getState();
+
         let snapped = snapToGrid
             ? { x: Math.round(worldPos.x / gridSize) * gridSize, y: Math.round(worldPos.y / gridSize) * gridSize }
             : worldPos;
 
+        // Enhanced snap-to-objects
+        let currentSnapPoint: SnapPoint | null = null;
+        if (snapToObjects) {
+            const { shapes, walls, assets } = useProjectStore.getState();
+            const allElements = [...shapes, ...walls, ...assets];
+            const snapResult = findSnapPointInShapes(worldPos, allElements, 20 / zoom);
+            if (snapResult) {
+                snapped = { x: snapResult.x, y: snapResult.y };
+                currentSnapPoint = snapResult;
+            }
+        }
+        setSnapIndicator(currentSnapPoint);
+
         if (isLineMode) {
             if (!isDrawing || !lastPoint) return;
-            // snap only to existing endpoints (no forced 90°)
-            for (const p of existingEndpoints) {
-                if (Math.hypot(snapped.x - p.x, snapped.y - p.y) < gridSize * 0.4) {
-                    snapped = p;
-                    break;
+
+            // If not already snapped to an object, check endpoints (legacy behavior, maybe redundant but safe)
+            if (!currentSnapPoint) {
+                const snapThreshold = 20 / zoom;
+                for (const p of existingEndpoints) {
+                    if (Math.hypot(snapped.x - p.x, snapped.y - p.y) < snapThreshold) {
+                        snapped = p;
+                        break;
+                    }
                 }
             }
+
+            // Also snap to the start of the current line (to close loop)
+            if (segments.length > 0) {
+                const start = segments[0].start;
+                const snapThreshold = 20 / zoom;
+                if (Math.hypot(snapped.x - start.x, snapped.y - start.y) < snapThreshold) {
+                    snapped = start;
+                }
+            }
+
             setPreviewPoint(snapped);
         } else {
             if (!isDrawing || !startPoint) return;
             setEndPoint(snapped);
         }
-    }, [isActive, isDrawing, isLineMode, lastPoint, existingEndpoints, screenToWorld, snapToGrid, gridSize]);
+    }, [isActive, isDrawing, isLineMode, lastPoint, existingEndpoints, screenToWorld, snapToGrid, gridSize, segments, shapes]);
 
     // Handle mouse up (rect/ellipse/polygon only)
     const handleMouseUp = useCallback(() => {
@@ -157,7 +188,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             fill: 'transparent',
             // Default black stroke for better visibility
             stroke: '#000000',
-            strokeWidth: 2,
+            strokeWidth: 5,
             zIndex: getNextZIndex(),
         };
 
@@ -223,9 +254,9 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 height: 2,
                 rotation,
                 fill: 'transparent',
-                // Black, very thick default stroke for single lines/arrows
+                // Black default stroke for single lines/arrows
                 stroke: '#000000',
-                strokeWidth: 2,
+                strokeWidth: 5,
                 zIndex: getNextZIndex(),
             };
 
@@ -237,6 +268,19 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             const pts: { x: number; y: number }[] = [];
             pts.push(segs[0].start);
             segs.forEach(seg => pts.push(seg.end));
+
+            // Check if closed loop (last point near first point)
+            const first = pts[0];
+            const last = pts[pts.length - 1];
+            const dist = Math.hypot(last.x - first.x, last.y - first.y);
+            const snapThreshold = 20 / useEditorStore.getState().zoom;
+            const isClosed = dist < snapThreshold;
+
+            let finalType = shapeType;
+            if (isClosed && shapeType === 'line') {
+                finalType = 'polygon';
+                pts.pop(); // Remove the closing point as polygon implies closure
+            }
 
             const xs = pts.map(p => p.x);
             const ys = pts.map(p => p.y);
@@ -253,16 +297,16 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
 
             const newShape: Shape = {
                 id: `shape-${Date.now()}`,
-                type: shapeType,
+                type: finalType as any,
                 x: centerX,
                 y: centerY,
                 width,
                 height,
                 rotation: 0,
-                fill: 'transparent',
-                // Black, very thick default stroke for multi‑segment lines/arrows
+                fill: 'transparent', // Ready for fill
+                // Black default stroke for multi‑segment lines/arrows
                 stroke: '#000000',
-                strokeWidth: 2,
+                strokeWidth: 5,
                 points: relativePoints,
                 zIndex: getNextZIndex(),
             };
@@ -300,11 +344,53 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             ? { x: Math.round(worldPos.x / gridSize) * gridSize, y: Math.round(worldPos.y / gridSize) * gridSize }
             : worldPos;
 
+        // If starting a new line and a line/arrow is selected, start from its endpoint
+        if (!isDrawing) {
+            const { selectedIds } = useEditorStore.getState();
+            if (selectedIds.length === 1) {
+                const selectedShape = shapes.find(s => s.id === selectedIds[0]);
+                if (selectedShape && (selectedShape.type === 'line' || selectedShape.type === 'arrow')) {
+                    let endpoint: { x: number; y: number } | null = null;
+
+                    if (selectedShape.points && selectedShape.points.length >= 2) {
+                        // Polyline - use the last point
+                        const last = selectedShape.points[selectedShape.points.length - 1];
+                        endpoint = { x: selectedShape.x + last.x, y: selectedShape.y + last.y };
+                    } else {
+                        // Legacy straight line - calculate endpoint from rotation
+                        const rot = (selectedShape.rotation || 0) * (Math.PI / 180);
+                        const halfLen = selectedShape.width / 2;
+                        endpoint = {
+                            x: selectedShape.x + halfLen * Math.cos(rot),
+                            y: selectedShape.y + halfLen * Math.sin(rot)
+                        };
+                    }
+
+                    if (endpoint) {
+                        // Check if click is near the endpoint
+                        const snapThreshold = 20 / useEditorStore.getState().zoom;
+                        if (Math.hypot(worldPos.x - endpoint.x, worldPos.y - endpoint.y) < snapThreshold * 2) {
+                            snapped = endpoint;
+                        }
+                    }
+                }
+            }
+        }
+
         // snap to existing endpoints only (no forced 90°)
+        const snapThreshold = 20 / useEditorStore.getState().zoom;
         for (const p of existingEndpoints) {
-            if (Math.hypot(snapped.x - p.x, snapped.y - p.y) < gridSize * 0.4) {
+            if (Math.hypot(snapped.x - p.x, snapped.y - p.y) < snapThreshold) {
                 snapped = p;
                 break;
+            }
+        }
+
+        // Also snap to the start of the current line (to close loop)
+        if (segments.length > 0) {
+            const start = segments[0].start;
+            if (Math.hypot(snapped.x - start.x, snapped.y - start.y) < snapThreshold) {
+                snapped = start;
             }
         }
 
@@ -330,7 +416,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 finishLine(nextSegments, snapped);
             }
         }
-    }, [isActive, isLineMode, lastPoint, segments.length, lastClickTime, screenToWorld, snapToGrid, gridSize, existingEndpoints, finishLine]);
+    }, [isActive, isLineMode, lastPoint, segments, lastClickTime, screenToWorld, snapToGrid, gridSize, existingEndpoints, finishLine]);
 
     // Attach event listeners
     useEffect(() => {
@@ -408,34 +494,208 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
     // Line/polyline preview
     if (isLineMode) {
         if (!isDrawing || !lastPoint || !previewPoint) return polygonModal;
+
+        // Check if snapping to start (closing loop)
+        const isSnappingToStart = segments.length > 0 &&
+            Math.hypot(previewPoint.x - segments[0].start.x, previewPoint.y - segments[0].start.y) < 1; // Exact match due to snap logic
+
+
         return (
             <>
-                <g className="shape-tool-overlay" style={{ pointerEvents: 'none' }}>
-                    {segments.map((seg, idx) => (
+                {/* Line/Polyline Preview */}
+                {isLineMode && segments.length > 0 && previewPoint && (
+                    <>
+                        {/* Guide lines - horizontal (red) and vertical (green) from last point */}
+                        {(() => {
+                            const lastSeg = segments[segments.length - 1];
+                            const lastPt = lastSeg.end;
+                            const dx = previewPoint.x - lastPt.x;
+                            const dy = previewPoint.y - lastPt.y;
+                            const wallLength = Math.sqrt(dx * dx + dy * dy);
+                            const guideLength = Math.max(wallLength * 2, 500);
+
+                            return (
+                                <>
+                                    {/* Horizontal guide (red) from last point */}
+                                    <line
+                                        x1={lastPt.x - guideLength}
+                                        y1={lastPt.y}
+                                        x2={lastPt.x + guideLength}
+                                        y2={lastPt.y}
+                                        stroke="#ef4444"
+                                        strokeWidth={1}
+                                        opacity={0.7}
+                                        strokeDasharray="4,4"
+                                        vectorEffect="non-scaling-stroke"
+                                    />
+                                    {/* Vertical guide (green) from last point */}
+                                    <line
+                                        x1={lastPt.x}
+                                        y1={lastPt.y - guideLength}
+                                        x2={lastPt.x}
+                                        y2={lastPt.y + guideLength}
+                                        stroke="#22c55e"
+                                        strokeWidth={1}
+                                        opacity={0.7}
+                                        strokeDasharray="4,4"
+                                        vectorEffect="non-scaling-stroke"
+                                    />
+                                    {/* Horizontal guide (red) from current point */}
+                                    <line
+                                        x1={previewPoint.x - guideLength}
+                                        y1={previewPoint.y}
+                                        x2={previewPoint.x + guideLength}
+                                        y2={previewPoint.y}
+                                        stroke="#ef4444"
+                                        strokeWidth={1}
+                                        opacity={0.7}
+                                        strokeDasharray="4,4"
+                                        vectorEffect="non-scaling-stroke"
+                                    />
+                                    {/* Vertical guide (green) from current point */}
+                                    <line
+                                        x1={previewPoint.x}
+                                        y1={previewPoint.y - guideLength}
+                                        x2={previewPoint.x}
+                                        y2={previewPoint.y + guideLength}
+                                        stroke="#22c55e"
+                                        strokeWidth={1}
+                                        opacity={0.7}
+                                        strokeDasharray="4,4"
+                                        vectorEffect="non-scaling-stroke"
+                                    />
+                                </>
+                            );
+                        })()}
+
+                        {/* Distance measurement */}
+                        {(() => {
+                            const lastSeg = segments[segments.length - 1];
+                            const lastPt = lastSeg.end;
+                            const dx = previewPoint.x - lastPt.x;
+                            const dy = previewPoint.y - lastPt.y;
+                            const length = Math.sqrt(dx * dx + dy * dy);
+                            if (length === 0) return null;
+
+                            const midX = (lastPt.x + previewPoint.x) / 2;
+                            const midY = (lastPt.y + previewPoint.y) / 2;
+                            const dimensionText = length >= 1000
+                                ? `${(length / 1000).toFixed(2)} m`
+                                : `${length.toFixed(0)} mm`;
+
+                            const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+                            const textAngle = angle < -90 || angle > 90 ? angle + 180 : angle;
+
+                            return (
+                                <g transform={`translate(${midX}, ${midY}) rotate(${textAngle})`}>
+                                    <rect
+                                        x={-dimensionText.length * 3 - 4}
+                                        y={-8}
+                                        width={dimensionText.length * 6 + 8}
+                                        height={16}
+                                        fill="white"
+                                        stroke="#3b82f6"
+                                        strokeWidth={1 / zoom}
+                                        rx={2 / zoom}
+                                        opacity={0.95}
+                                        vectorEffect="non-scaling-stroke"
+                                    />
+                                    <text
+                                        x={0}
+                                        y={4 / zoom}
+                                        fill="#1f2937"
+                                        fontSize={11 / zoom}
+                                        fontWeight="600"
+                                        textAnchor="middle"
+                                        dominantBaseline="middle"
+                                    >
+                                        {dimensionText}
+                                    </text>
+                                </g>
+                            );
+                        })()}
+
+                        {/* Preview line segments */}
+                        {segments.map((seg, i) => (
+                            <line
+                                key={i}
+                                x1={seg.start.x}
+                                y1={seg.start.y}
+                                x2={seg.end.x}
+                                y2={seg.end.y}
+                                stroke="#3b82f6"
+                                strokeWidth={5}
+                                opacity={0.6}
+                                vectorEffect="non-scaling-stroke"
+                            />
+                        ))}
                         <line
-                            key={idx}
-                            x1={seg.start.x}
-                            y1={seg.start.y}
-                            x2={seg.end.x}
-                            y2={seg.end.y}
+                            x1={segments[segments.length - 1].end.x}
+                            y1={segments[segments.length - 1].end.y}
+                            x2={previewPoint.x}
+                            y2={previewPoint.y}
                             stroke="#3b82f6"
-                            strokeWidth={2}
-                            opacity={0.7}
+                            strokeWidth={5}
+                            strokeDasharray="5,5"
+                            opacity={0.6}
                             vectorEffect="non-scaling-stroke"
                         />
-                    ))}
-                    <line
-                        x1={lastPoint.x}
-                        y1={lastPoint.y}
-                        x2={previewPoint.x}
-                        y2={previewPoint.y}
-                        stroke="#3b82f6"
-                        strokeWidth={2}
-                        strokeDasharray="5,5"
-                        opacity={0.7}
-                        vectorEffect="non-scaling-stroke"
-                    />
-                </g>
+
+                        {/* Snap circle at start point */}
+                        {segments.length > 0 && (
+                            <circle
+                                cx={segments[0].start.x}
+                                cy={segments[0].start.y}
+                                r={12}
+                                fill={isSnappingToStart ? "#22c55e" : "white"}
+                                stroke={isSnappingToStart ? "#ffffff" : "#3b82f6"}
+                                strokeWidth={3}
+                                style={{ opacity: isSnappingToStart ? 1 : 0.8 }}
+                            />
+                        )}
+                    </>
+                )}
+
+                {/* Snap Indicator */}
+                {snapIndicator && (
+                    <g pointerEvents="none">
+                        <circle
+                            cx={snapIndicator.x}
+                            cy={snapIndicator.y}
+                            r={8}
+                            fill="none"
+                            stroke="#f59e0b" // Amber-500
+                            strokeWidth={2}
+                        />
+                        {snapIndicator.type === 'midpoint' && (
+                            <path
+                                d={`M${snapIndicator.x - 4},${snapIndicator.y - 4} L${snapIndicator.x + 4},${snapIndicator.y + 4} M${snapIndicator.x + 4},${snapIndicator.y - 4} L${snapIndicator.x - 4},${snapIndicator.y + 4}`}
+                                stroke="#f59e0b"
+                                strokeWidth={1}
+                            />
+                        )}
+                        {snapIndicator.type === 'center' && (
+                            <circle
+                                cx={snapIndicator.x}
+                                cy={snapIndicator.y}
+                                r={2}
+                                fill="#f59e0b"
+                            />
+                        )}
+                        <text
+                            x={snapIndicator.x + 12}
+                            y={snapIndicator.y}
+                            fill="#f59e0b"
+                            fontSize={12}
+                            fontWeight="bold"
+                            dominantBaseline="middle"
+                            style={{ textShadow: '0px 0px 2px white' }}
+                        >
+                            {snapIndicator.type}
+                        </text>
+                    </g>
+                )}
+
                 {polygonModal}
             </>
         );
@@ -528,3 +788,5 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         </>
     );
 }
+
+

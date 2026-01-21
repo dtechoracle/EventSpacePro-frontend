@@ -75,13 +75,13 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                 // - In SVG, transforms apply right-to-left, so: scale → rotate → translate
                 // - Final size is: asset.width * asset.scale x asset.height * asset.scale
                 // - Center is at: (asset.x, asset.y)
-                
+
                 // Use actual rendered dimensions (width * scale, height * scale)
                 const width = asset.width * (asset.scale || 1);
                 const height = asset.height * (asset.scale || 1);
                 const halfW = width / 2;
                 const halfH = height / 2;
-                
+
                 // Calculate rotated corners around the center (asset.x, asset.y)
                 const rot = (asset.rotation || 0) * (Math.PI / 180);
                 const cosR = Math.cos(rot);
@@ -142,8 +142,8 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                 // Define corners relative to the visual center of the text box
                 const localCorners = [
                     { x: -halfW, y: -halfH }, // top‑left
-                    { x: halfW,  y: -halfH }, // top‑right
-                    { x: halfW,  y: halfH },  // bottom‑right
+                    { x: halfW, y: -halfH }, // top‑right
+                    { x: halfW, y: halfH },  // bottom‑right
                     { x: -halfW, y: halfH },  // bottom‑left
                 ];
 
@@ -173,6 +173,16 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                     width,
                     height,
                     rotation: asset.rotation || 0,
+                };
+            } else if (selectedItems.length === 1 && selectedItems[0].type === 'shape') {
+                // For single shape selection, use actual shape dimensions and rotation
+                const shape = selectedItems[0].object as Shape;
+                groupBounds = {
+                    x: shape.x,
+                    y: shape.y,
+                    width: shape.width,
+                    height: shape.height,
+                    rotation: shape.rotation || 0,
                 };
             } else {
                 // For multi-selection or other types, use axis-aligned bounding box
@@ -216,6 +226,16 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
         const dx = worldPos.x - initialState.startX;
         const dy = worldPos.y - initialState.startY;
 
+        // Detect a pure-shape group so we can scale the whole group uniformly
+        const shapeGroupInfo = (() => {
+            if (!initialState || initialState.items.length <= 1) return null;
+            const allShapes = initialState.items.every((it) => it.type === 'shape');
+            if (!allShapes) return null;
+            return {
+                groupBounds: initialState.groupBounds,
+            };
+        })();
+
         // Process each selected item
         initialState.items.forEach(item => {
             if (item.type === 'shape') {
@@ -226,9 +246,175 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                 let updates: Partial<Shape> = {};
 
                 // Special handling for single straight lines/arrows (no points array)
-                const isSingleStraightLine = 
+                const isSingleStraightLine =
                     (initialShape.type === 'line' || initialShape.type === 'arrow') &&
                     !initialShape.points;
+
+                if (shapeGroupInfo && dragHandle !== 'rotate') {
+                    // Multiple shapes: scale the whole group around the shared bounding box center,
+                    // but respect the dragged axis:
+                    // - dragging E/W changes width only
+                    // - dragging N/S changes height only
+                    // - dragging a corner changes both.
+                    const initialGroup = shapeGroupInfo.groupBounds;
+                    const rotation = initialGroup.rotation || 0;
+                    const rotRad = rotation * (Math.PI / 180);
+                    const cosR = Math.cos(rotRad);
+                    const sinR = Math.sin(rotRad);
+
+                    // Convert mouse delta to group's local coordinate system
+                    const localDx = dx * cosR + dy * sinR;
+                    const localDy = -dx * sinR + dy * cosR;
+
+                    let halfW = initialGroup.width / 2;
+                    let halfH = initialGroup.height / 2;
+                    let centerX = initialGroup.x;
+                    let centerY = initialGroup.y;
+
+                    // Determine which handles are being dragged
+                    const isEast = dragHandle.includes('e');
+                    const isWest = dragHandle.includes('w');
+                    const isNorth = dragHandle.includes('n');
+                    const isSouth = dragHandle.includes('s');
+                    const isCorner = (isEast || isWest) && (isNorth || isSouth);
+
+                    // When dragging edges, keep the opposite edge fixed and move the center by half the delta
+                    // Dragging east: left edge stays fixed, right edge moves, center moves right by dx/2
+                    if (isEast && !isCorner) {
+                        halfW = Math.max(5, halfW + localDx);
+                        centerX = initialGroup.x + (localDx / 2) * cosR;
+                        centerY = initialGroup.y + (localDx / 2) * sinR;
+                    }
+                    // Dragging west: right edge stays fixed, left edge moves, center moves left by dx/2
+                    if (isWest && !isCorner) {
+                        halfW = Math.max(5, halfW - localDx);
+                        centerX = initialGroup.x - (localDx / 2) * cosR;
+                        centerY = initialGroup.y - (localDx / 2) * sinR;
+                    }
+
+                    // Dragging south: top edge stays fixed, bottom edge moves, center moves down by dy/2
+                    if (isSouth && !isCorner) {
+                        halfH = Math.max(5, halfH + localDy);
+                        centerX = initialGroup.x - (localDy / 2) * sinR;
+                        centerY = initialGroup.y + (localDy / 2) * cosR;
+                    }
+                    // Dragging north: bottom edge stays fixed, top edge moves, center moves up by dy/2
+                    if (isNorth && !isCorner) {
+                        halfH = Math.max(5, halfH - localDy);
+                        centerX = initialGroup.x + (localDy / 2) * sinR;
+                        centerY = initialGroup.y - (localDy / 2) * cosR;
+                    }
+
+                    // Corner handles: scale both dimensions, keep opposite corner fixed
+                    if (isCorner) {
+                        if (isEast) {
+                            halfW = Math.max(5, halfW + localDx);
+                        }
+                        if (isWest) {
+                            halfW = Math.max(5, halfW - localDx);
+                        }
+                        if (isSouth) {
+                            halfH = Math.max(5, halfH + localDy);
+                        }
+                        if (isNorth) {
+                            halfH = Math.max(5, halfH - localDy);
+                        }
+                        // For corners, opposite corner stays fixed, so center moves by half the movement in local space
+                        // Then convert back to world space
+                        const centerLocalDx = (isEast ? localDx : -localDx) / 2;
+                        const centerLocalDy = (isSouth ? localDy : -localDy) / 2;
+                        // Convert local movement back to world space
+                        centerX = initialGroup.x + centerLocalDx * cosR - centerLocalDy * sinR;
+                        centerY = initialGroup.y + centerLocalDx * sinR + centerLocalDy * cosR;
+                    }
+
+                    const newGroupWidth = halfW * 2;
+                    const newGroupHeight = halfH * 2;
+
+                    // For edge handles, only scale the dimension being dragged
+                    let scaleX = newGroupWidth / initialGroup.width;
+                    let scaleY = newGroupHeight / initialGroup.height;
+
+                    if ((isEast || isWest) && !isCorner) {
+                        // E/W edge handles: only scale width, keep height unchanged
+                        scaleY = 1.0;
+                    }
+                    if ((isNorth || isSouth) && !isCorner) {
+                        // N/S edge handles: only scale height, keep width unchanged
+                        scaleX = 1.0;
+                    }
+                    // For corners, both scales are already calculated correctly above
+
+                    // Scale this shape relative to the group's center
+                    // First, get relative position in group's local space
+                    const relX = initialShape.x - initialGroup.x;
+                    const relY = initialShape.y - initialGroup.y;
+                    const relLocalX = relX * cosR + relY * sinR;
+                    const relLocalY = -relX * sinR + relY * cosR;
+
+                    // Scale in local space
+                    const newRelLocalX = relLocalX * scaleX;
+                    const newRelLocalY = relLocalY * scaleY;
+
+                    // Convert back to world space
+                    const newRelX = newRelLocalX * cosR - newRelLocalY * sinR;
+                    const newRelY = newRelLocalX * sinR + newRelLocalY * cosR;
+
+                    const newCenterX = centerX + newRelX;
+                    const newCenterY = centerY + newRelY;
+
+                    const newWidth = Math.max(1, initialShape.width * scaleX);
+                    const newHeight = Math.max(1, initialShape.height * scaleY);
+
+                    const groupUpdates: Partial<Shape> = {
+                        x: newCenterX,
+                        y: newCenterY,
+                        width: newWidth,
+                        height: newHeight,
+                    };
+
+                    // If this shape has points (paths / polygons), scale them as well
+                    if (initialShape.points && initialShape.points.length > 0) {
+                        groupUpdates.points = initialShape.points.map((p) => ({
+                            x: p.x * scaleX,
+                            y: p.y * scaleY,
+                        }));
+                    }
+
+                    updateShape(shape.id, groupUpdates);
+                    return;
+                }
+
+                // Handle rotation for groups
+                if (shapeGroupInfo && dragHandle === 'rotate') {
+                    const initialGroup = shapeGroupInfo.groupBounds;
+                    const centerX = initialGroup.x;
+                    const centerY = initialGroup.y;
+                    const angle = Math.atan2(worldPos.y - centerY, worldPos.x - centerX);
+                    const initialAngle = Math.atan2(initialState.startY - centerY, initialState.startX - centerX);
+                    const rotationDelta = angle - initialAngle;
+                    const newRotation = (initialGroup.rotation || 0) + (rotationDelta * 180 / Math.PI);
+
+                    // Rotate each shape around the group center
+                    initialState.items.forEach(item => {
+                        if (item.type === 'shape') {
+                            const shape = item.object as Shape;
+                            const relX = shape.x - centerX;
+                            const relY = shape.y - centerY;
+                            const cosR = Math.cos(rotationDelta);
+                            const sinR = Math.sin(rotationDelta);
+                            const newX = centerX + relX * cosR - relY * sinR;
+                            const newY = centerY + relX * sinR + relY * cosR;
+                            const shapeRotation = (shape.rotation || 0) + (rotationDelta * 180 / Math.PI);
+                            updateShape(shape.id, {
+                                x: newX,
+                                y: newY,
+                                rotation: shapeRotation,
+                            });
+                        }
+                    });
+                    return;
+                }
 
                 if (isSingleStraightLine && (dragHandle === 'w' || dragHandle === 'e')) {
                     // For single straight lines, only move the dragged endpoint
@@ -473,88 +659,63 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                     const deg = angle * (180 / Math.PI) + 90;
                     updates = { rotation: deg };
                 } else {
-                    // Uniform scaling for assets - maintain aspect ratio
+                    // Non-uniform scaling for assets (allow independent width/height)
                     const rotation = initialAsset.rotation || 0;
                     const rot = rotation * (Math.PI / 180);
                     const cosR = Math.cos(rot);
                     const sinR = Math.sin(rot);
 
-                    // Convert mouse delta to asset's local space (accounting for rotation)
+                    // Convert mouse delta to asset's local space
                     const localDx = dx * cosR + dy * sinR;
                     const localDy = -dx * sinR + dy * cosR;
 
-                    // Calculate initial dimensions (accounting for scale)
+                    // Calculate initial dimensions
                     const initialWidth = initialAsset.width * (initialAsset.scale || 1);
                     const initialHeight = initialAsset.height * (initialAsset.scale || 1);
-                    const aspectRatio = initialWidth / initialHeight;
 
-                    // Determine which handle is being dragged and calculate uniform scale
-                    let scaleFactor = 1;
-                    let offsetX = 0;
-                    let offsetY = 0;
+                    let halfW = initialWidth / 2;
+                    let halfH = initialHeight / 2;
+                    let offsetLocalX = 0;
+                    let offsetLocalY = 0;
 
+                    // Horizontal handles
                     if (dragHandle.includes('e')) {
-                        // East handle: scale based on X movement
-                        scaleFactor = 1 + (localDx / (initialWidth / 2));
-                        offsetX = localDx / 2;
-                    } else if (dragHandle.includes('w')) {
-                        // West handle: scale based on X movement
-                        scaleFactor = 1 - (localDx / (initialWidth / 2));
-                        offsetX = localDx / 2;
-                    } else if (dragHandle.includes('s')) {
-                        // South handle: scale based on Y movement
-                        scaleFactor = 1 + (localDy / (initialHeight / 2));
-                        offsetY = localDy / 2;
-                    } else if (dragHandle.includes('n')) {
-                        // North handle: scale based on Y movement
-                        scaleFactor = 1 - (localDy / (initialHeight / 2));
-                        offsetY = localDy / 2;
-                    } else if (dragHandle.includes('se')) {
-                        // Southeast corner: use average of X and Y
-                        const scaleX = 1 + (localDx / (initialWidth / 2));
-                        const scaleY = 1 + (localDy / (initialHeight / 2));
-                        scaleFactor = (scaleX + scaleY) / 2;
-                        offsetX = localDx / 2;
-                        offsetY = localDy / 2;
-                    } else if (dragHandle.includes('sw')) {
-                        // Southwest corner
-                        const scaleX = 1 - (localDx / (initialWidth / 2));
-                        const scaleY = 1 + (localDy / (initialHeight / 2));
-                        scaleFactor = (scaleX + scaleY) / 2;
-                        offsetX = localDx / 2;
-                        offsetY = localDy / 2;
-                    } else if (dragHandle.includes('ne')) {
-                        // Northeast corner
-                        const scaleX = 1 + (localDx / (initialWidth / 2));
-                        const scaleY = 1 - (localDy / (initialHeight / 2));
-                        scaleFactor = (scaleX + scaleY) / 2;
-                        offsetX = localDx / 2;
-                        offsetY = localDy / 2;
-                    } else if (dragHandle.includes('nw')) {
-                        // Northwest corner
-                        const scaleX = 1 - (localDx / (initialWidth / 2));
-                        const scaleY = 1 - (localDy / (initialHeight / 2));
-                        scaleFactor = (scaleX + scaleY) / 2;
-                        offsetX = localDx / 2;
-                        offsetY = localDy / 2;
+                        halfW = Math.max(5, halfW + localDx / 2); // Add half delta to half width
+                        offsetLocalX = localDx / 2;
+                    }
+                    if (dragHandle.includes('w')) {
+                        halfW = Math.max(5, halfW - localDx / 2);
+                        offsetLocalX = localDx / 2;
                     }
 
-                    // Ensure minimum size
-                    scaleFactor = Math.max(0.1, scaleFactor);
+                    // Vertical handles
+                    if (dragHandle.includes('s')) {
+                        halfH = Math.max(5, halfH + localDy / 2);
+                        offsetLocalY = localDy / 2;
+                    }
+                    if (dragHandle.includes('n')) {
+                        halfH = Math.max(5, halfH - localDy / 2);
+                        offsetLocalY = localDy / 2;
+                    }
 
-                    // Calculate new dimensions maintaining aspect ratio
-                    const newWidth = initialAsset.width * scaleFactor;
-                    const newHeight = initialAsset.height * scaleFactor;
+                    // Corner handles (already covered by combining above checks)
+
+                    const newWidth = halfW * 2;
+                    const newHeight = halfH * 2;
 
                     // Convert local offset back to world space
-                    const worldOffsetX = offsetX * cosR - offsetY * sinR;
-                    const worldOffsetY = offsetX * sinR + offsetY * cosR;
+                    const offsetWorldX = offsetLocalX * cosR - offsetLocalY * sinR;
+                    const offsetWorldY = offsetLocalX * sinR + offsetLocalY * cosR;
+
+                    const newCenterX = initialAsset.x + offsetWorldX;
+                    const newCenterY = initialAsset.y + offsetWorldY;
 
                     updates = {
-                        x: initialAsset.x + worldOffsetX,
-                        y: initialAsset.y + worldOffsetY,
+                        x: newCenterX,
+                        y: newCenterY,
                         width: newWidth,
                         height: newHeight,
+                        scale: 1, // Reset scale to 1 as we are baking it into width/height
                     };
                 }
 
@@ -814,17 +975,17 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
         const dimension = selectedItems[0].object as Dimension;
         const start = dimension.startPoint;
         const end = dimension.endPoint;
-        
+
         // Calculate the dimension line direction
         const dx = end.x - start.x;
         const dy = end.y - start.y;
         const length = Math.sqrt(dx * dx + dy * dy);
         const angle = Math.atan2(dy, dx);
-        
+
         const startScreen = worldToScreenPoint(start.x, start.y);
         const endScreen = worldToScreenPoint(end.x, end.y);
         const centerScreen = worldToScreenPoint((start.x + end.x) / 2, (start.y + end.y) / 2);
-        
+
         // Rotation handle offset perpendicular to the line
         const perpX = -Math.sin(angle) * (rotateHandleDistancePx / zoom);
         const perpY = Math.cos(angle) * (rotateHandleDistancePx / zoom);
@@ -1011,6 +1172,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 vectorEffect="non-scaling-stroke"
                                 className="cursor-nwse-resize"
                                 onMouseDown={(e) => handleMouseDown(e, 'nw')}
+                                transform={`rotate(${rotation} ${pos.x} ${pos.y})`}
                             />
                         );
                     })()}
@@ -1028,6 +1190,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 vectorEffect="non-scaling-stroke"
                                 className="cursor-nesw-resize"
                                 onMouseDown={(e) => handleMouseDown(e, 'ne')}
+                                transform={`rotate(${rotation} ${pos.x} ${pos.y})`}
                             />
                         );
                     })()}
@@ -1045,6 +1208,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 vectorEffect="non-scaling-stroke"
                                 className="cursor-nwse-resize"
                                 onMouseDown={(e) => handleMouseDown(e, 'se')}
+                                transform={`rotate(${rotation} ${pos.x} ${pos.y})`}
                             />
                         );
                     })()}
@@ -1062,6 +1226,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 vectorEffect="non-scaling-stroke"
                                 className="cursor-nesw-resize"
                                 onMouseDown={(e) => handleMouseDown(e, 'sw')}
+                                transform={`rotate(${rotation} ${pos.x} ${pos.y})`}
                             />
                         );
                     })()}
@@ -1081,6 +1246,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 vectorEffect="non-scaling-stroke"
                                 className="cursor-ns-resize"
                                 onMouseDown={(e) => handleMouseDown(e, 'n')}
+                                transform={`rotate(${rotation} ${pos.x} ${pos.y})`}
                             />
                         );
                     })()}
@@ -1098,6 +1264,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 vectorEffect="non-scaling-stroke"
                                 className="cursor-ew-resize"
                                 onMouseDown={(e) => handleMouseDown(e, 'e')}
+                                transform={`rotate(${rotation} ${pos.x} ${pos.y})`}
                             />
                         );
                     })()}
@@ -1115,6 +1282,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 vectorEffect="non-scaling-stroke"
                                 className="cursor-ns-resize"
                                 onMouseDown={(e) => handleMouseDown(e, 's')}
+                                transform={`rotate(${rotation} ${pos.x} ${pos.y})`}
                             />
                         );
                     })()}
@@ -1132,6 +1300,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 vectorEffect="non-scaling-stroke"
                                 className="cursor-ew-resize"
                                 onMouseDown={(e) => handleMouseDown(e, 'w')}
+                                transform={`rotate(${rotation} ${pos.x} ${pos.y})`}
                             />
                         );
                     })()}

@@ -87,7 +87,7 @@ const Dashboard = () => {
   useEffect(() => {
     // Fetch user on mount and check periodically
     fetchUser();
-    
+
     // Set up interval to check user status every 30 seconds
     const interval = setInterval(() => {
       fetchUser();
@@ -112,7 +112,7 @@ const Dashboard = () => {
     queryKey: ["all-events", data?.data?.map(p => p.slug)],
     queryFn: async () => {
       if (!data?.data) return [];
-      
+
       console.log('[Dashboard] Fetching ALL events from DATABASE for projects:', data.data.map(p => p.slug));
 
       // Fetch events for each project
@@ -121,9 +121,9 @@ const Dashboard = () => {
           console.log(`[Dashboard] Fetching events from DATABASE for project: ${project.slug}`);
           const res = await apiRequest(`/projects/${project.slug}/events`, "GET", null, true);
           const events = res.data || [];
-          
+
           console.log(`[Dashboard] ✅ Fetched ${events.length} events from DATABASE for project ${project.slug}`);
-          
+
           // CRITICAL: Fetch full event data for each event to get canvasData
           const fullEventPromises = events.map(async (event: any) => {
             try {
@@ -150,9 +150,9 @@ const Dashboard = () => {
               return { ...event, canvasData: null, canvasAssets: [] };
             }
           });
-          
+
           const fullEvents = await Promise.all(fullEventPromises);
-          
+
           return {
             projectSlug: project.slug,
             projectName: project.name,
@@ -212,7 +212,7 @@ const Dashboard = () => {
   const filteredEvents = useMemo(() => {
     if (!searchQuery) return allEvents;
     const query = searchQuery.toLowerCase();
-    return allEvents.filter(event => 
+    return allEvents.filter(event =>
       event.name?.toLowerCase().includes(query) ||
       event.projectName?.toLowerCase().includes(query)
     );
@@ -243,22 +243,22 @@ const Dashboard = () => {
     const walls = (event.canvasData?.walls as any[]) || [];
     const rawShapes = (event.canvasData?.shapes as any[]) || [];
     const rawAssets = (event.canvasData?.assets as any[]) || [];
-    
+
     // Normalize shapes to ensure fill property is set - match ShapeRenderer logic
     // Preserve ALL properties including width, height, x, y, etc.
     const shapes = rawShapes.map((s: any) => {
       // Use fill if it exists and is not empty/transparent, otherwise use backgroundColor, otherwise transparent
-      const fill = (s.fill && s.fill !== 'transparent' && s.fill !== '') 
-        ? s.fill 
+      const fill = (s.fill && s.fill !== 'transparent' && s.fill !== '')
+        ? s.fill
         : (s.backgroundColor && s.backgroundColor !== 'transparent' && s.backgroundColor !== '')
-        ? s.backgroundColor
-        : 'transparent';
+          ? s.backgroundColor
+          : 'transparent';
       return {
         ...s, // Preserve all original properties (width, height, x, y, rotation, stroke, strokeWidth, etc.)
         fill: fill, // Override fill with normalized value
       };
     });
-    
+
     // Debug log to verify dimensions are preserved
     if (shapes.length > 0) {
       console.log(`[Dashboard] Normalized shapes with dimensions:`, shapes.map((s: any) => ({
@@ -271,7 +271,7 @@ const Dashboard = () => {
         fill: s.fill,
       })));
     }
-    
+
     // Normalize assets to ensure fillColor property is set
     const assets = rawAssets.map((a: any) => ({
       ...a,
@@ -285,19 +285,19 @@ const Dashboard = () => {
         walls: walls.length,
         shapes: shapes.length,
         assets: assets.length,
-        sampleShape: shapes[0] ? { 
-          id: shapes[0].id, 
+        sampleShape: shapes[0] ? {
+          id: shapes[0].id,
           type: shapes[0].type,
-          width: shapes[0].width, 
+          width: shapes[0].width,
           height: shapes[0].height,
           x: shapes[0].x,
           y: shapes[0].y,
-          fill: shapes[0].fill, 
+          fill: shapes[0].fill,
         } : null,
       });
       return { walls, shapes, assets };
     }
-    
+
     // PRIORITY 2: Fallback to canvasAssets (most events use this format)
     console.log(`[Dashboard] canvasData empty, using canvasAssets for preview:`, {
       eventId: event._id,
@@ -376,7 +376,7 @@ const Dashboard = () => {
           const startY = asset.startPoint.y || asset.y;
           const endX = asset.endPoint.x || (asset.x + asset.width);
           const endY = asset.endPoint.y || (asset.y + asset.height);
-          
+
           fallbackShapes.push({
             id: asset.id,
             type: "line",
@@ -403,7 +403,7 @@ const Dashboard = () => {
           // Use reasonable defaults for missing dimensions
           const defaultWidth = asset.width || 100;
           const defaultHeight = asset.height || 100;
-          
+
           fallbackShapes.push({
             id: asset.id,
             type: asset.type,
@@ -418,7 +418,7 @@ const Dashboard = () => {
             points: asset.points,
             zIndex: asset.zIndex || 0,
           });
-          
+
           console.log(`[Dashboard] Converted ${asset.type} shape for preview:`, {
             id: asset.id,
             x: asset.x,
@@ -432,7 +432,7 @@ const Dashboard = () => {
           // Use reasonable defaults based on asset type for preview
           let defaultWidth = asset.width || 100;
           let defaultHeight = asset.height || 100;
-          
+
           if (asset.type.includes('chair')) {
             defaultWidth = asset.width || 80;
             defaultHeight = asset.height || 80;
@@ -440,7 +440,7 @@ const Dashboard = () => {
             defaultWidth = asset.width || 200;
             defaultHeight = asset.height || 200;
           }
-          
+
           fallbackAssets.push({
             id: asset.id,
             type: asset.type, // Preserve the original type so ASSET_LIBRARY lookup works
@@ -456,7 +456,7 @@ const Dashboard = () => {
             opacity: asset.opacity,
             zIndex: asset.zIndex || 0,
           });
-          
+
           // Debug: Log asset type to help identify mismatches
           if (asset.type) {
             console.log(`[Dashboard] Building preview asset:`, {
@@ -465,7 +465,7 @@ const Dashboard = () => {
               hasDefinition: !!ASSET_LIBRARY.find(a => a.id === asset.type),
             });
           }
-          
+
           console.log(`[Dashboard] Converted ${asset.type} asset for preview:`, {
             id: asset.id,
             x: asset.x,
@@ -528,12 +528,6 @@ const Dashboard = () => {
                 <option>Name Z-A</option>
               </select>
               <button
-                onClick={() => router.push("/dashboard/projects")}
-                className="px-5 py-2.5 text-sm font-medium border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors bg-white/80"
-              >
-                Import
-              </button>
-              <button
                 onClick={() => setShowCreateEventModal(true)}
                 className="px-5 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-xl hover:opacity-90 flex items-center gap-2 shadow-md transition-opacity"
               >
@@ -549,7 +543,7 @@ const Dashboard = () => {
           {showCreateEventModal && (
             <CreateEventModal onClose={() => setShowCreateEventModal(false)} />
           )}
-          
+
           {/* Events Section */}
           <div className="mb-10">
             <div className="flex items-center justify-between mb-6">
@@ -580,7 +574,7 @@ const Dashboard = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredEvents.map((event) => {
                   const { walls, shapes, assets } = buildPreviewData(event);
-                  
+
                   // Debug logging - always log to track preview data
                   console.log(`[Dashboard] Event ${event._id} preview data from DATABASE:`, {
                     eventName: event.name,

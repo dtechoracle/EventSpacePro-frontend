@@ -534,7 +534,7 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                                     {/* Wall Fill with rounded corners */}
                                     <path
                                         d={fillPath}
-                                        fill={isEdgeSelected ? '#dbeafe' : isSelected ? '#e0f2fe' : isHovered ? '#f0f9ff' : '#ffffff'}
+                                        fill={isEdgeSelected ? '#dbeafe' : isSelected ? '#e0f2fe' : isHovered ? '#f0f9ff' : (wall.fill || '#ffffff')}
                                         stroke="none"
                                     />
 

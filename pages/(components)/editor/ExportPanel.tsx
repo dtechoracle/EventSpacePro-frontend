@@ -1,13 +1,82 @@
 "use client";
 
 import React, { useState, useRef, useMemo } from "react";
-import { Download, Plus, X, Minus } from "lucide-react";
+import { Download, Upload, Plus, X, Minus } from "lucide-react";
 import { useSceneStore, AssetInstance } from "@/store/sceneStore";
 import { useProjectStore } from "@/store/projectStore";
 import { useEditorStore } from "@/store/editorStore";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import PlanPreview from "../dashboard/PlanPreview";
+import toast from "react-hot-toast";
+import { ASSET_LIBRARY } from "@/lib/assets";
+
+const svgCache: Record<string, string> = {};
+
+const loadSvgAssets = async (assets: AssetInstance[]) => {
+  const loadedImages = new Map<string, HTMLImageElement>();
+
+  await Promise.all(assets.map(async (asset) => {
+    // Skip shapes/walls/freehand
+    const isShape = asset.type === 'circle' || asset.type === 'rect' || asset.type === 'ellipse' || asset.type === 'line' || asset.type === 'polyline';
+    const isWall = asset.type === 'wall-segments';
+    const isFreehand = asset.type === 'freehand';
+
+    if (isShape || isWall || isFreehand) return;
+
+    // Find definition
+    const definition = ASSET_LIBRARY.find(item => item.id === asset.type || item.name === asset.type);
+    if (!definition) return;
+
+    try {
+      let svg = svgCache[definition.path];
+      if (!svg) {
+        const res = await fetch(definition.path);
+        svg = await res.text();
+        svgCache[definition.path] = svg;
+      }
+
+      // Apply styles (Fill/Stroke/Color) - Matching AssetRenderer Logic
+      if (asset.fillColor) {
+        svg = svg.replace(/fill="([^"]*)"/gi, (match, value) => value === 'none' ? match : `fill="${asset.fillColor}"`);
+        svg = svg.replace(/fill='([^']*)'/gi, (match, value) => value === 'none' ? match : `fill='${asset.fillColor}'`);
+      }
+      if (asset.strokeColor) {
+        svg = svg.replace(/stroke="([^"]*)"/gi, (match, value) => value === 'none' ? match : `stroke="${asset.strokeColor}"`);
+        svg = svg.replace(/stroke='([^']*)'/gi, (match, value) => value === 'none' ? match : `stroke='${asset.strokeColor}'`);
+      }
+      if (asset.strokeWidth) {
+        svg = svg.replace(/stroke-width="([^"]*)"/gi, `stroke-width="${asset.strokeWidth}"`);
+        svg = svg.replace(/stroke-width='([^']*)'/gi, `stroke-width='${asset.strokeWidth}'`);
+      }
+
+      // Inject root style (fallback & currentColor)
+      let style = "overflow: visible;";
+      if (asset.fillColor) style += ` fill: ${asset.fillColor};`;
+      if (asset.strokeColor) style += ` stroke: ${asset.strokeColor}; color: ${asset.strokeColor};`;
+
+      svg = svg.replace(/<svg([^>]*)>/, (match, attrs) => {
+        let newAttrs = attrs.replace(/\s(width|height|x|y|id)="[^"]*"/gi, '');
+        return `<svg${newAttrs} style="${style}" preserveAspectRatio="none">`;
+      });
+
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.src = url;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+      loadedImages.set(asset.id, img);
+    } catch (err) {
+      console.error("Failed to load SVG for export", asset.type, err);
+    }
+  }));
+
+  return loadedImages;
+};
+
 
 type PaperSize = "A1" | "A2" | "A3" | "A4" | "A5";
 type ExportFormat = "pdf" | "png" | "jpeg";
@@ -146,10 +215,10 @@ export default function ExportPanel() {
       if (asset.type === 'wall-segments' && asset.wallNodes) {
         asset.wallNodes.forEach(node => {
           if (isFinite(node.x) && isFinite(node.y)) {
-          minX = Math.min(minX, node.x);
-          minY = Math.min(minY, node.y);
-          maxX = Math.max(maxX, node.x);
-          maxY = Math.max(maxY, node.y);
+            minX = Math.min(minX, node.x);
+            minY = Math.min(minY, node.y);
+            maxX = Math.max(maxX, node.x);
+            maxY = Math.max(maxY, node.y);
           }
         });
       } else if (asset.wallSegments) {
@@ -183,10 +252,10 @@ export default function ExportPanel() {
         const w = (asset.width || 0) * (asset.scale || 1);
         const h = (asset.height || 0) * (asset.scale || 1);
         if (isFinite(asset.x) && isFinite(asset.y)) {
-        minX = Math.min(minX, asset.x - w / 2);
-        minY = Math.min(minY, asset.y - h / 2);
-        maxX = Math.max(maxX, asset.x + w / 2);
-        maxY = Math.max(maxY, asset.y + h / 2);
+          minX = Math.min(minX, asset.x - w / 2);
+          minY = Math.min(minY, asset.y - h / 2);
+          maxX = Math.max(maxX, asset.x + w / 2);
+          maxY = Math.max(maxY, asset.y + h / 2);
         }
       }
     });
@@ -231,6 +300,9 @@ export default function ExportPanel() {
 
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+    // Pre-load SVGs
+    const loadedImages = await loadSvgAssets(assetsToExport);
 
     console.log("exportAllAssetsDirectly: Starting to render assets", {
       assetCount: assetsToExport.length,
@@ -278,13 +350,13 @@ export default function ExportPanel() {
             const p4y = (a.y - ny - minY + padding) * MM_TO_PX;
 
             ctx.fillStyle = '#e5e7eb';
-          ctx.beginPath();
+            ctx.beginPath();
             ctx.moveTo(p1x, p1y);
             ctx.lineTo(p2x, p2y);
             ctx.lineTo(p3x, p3y);
             ctx.lineTo(p4x, p4y);
             ctx.closePath();
-          ctx.fill();
+            ctx.fill();
 
             ctx.strokeStyle = asset.lineColor || "#000000";
             ctx.lineWidth = 2 * MM_TO_PX;
@@ -292,18 +364,18 @@ export default function ExportPanel() {
             ctx.beginPath();
             ctx.moveTo(p1x, p1y);
             ctx.lineTo(p2x, p2y);
-          ctx.stroke();
-          ctx.beginPath();
+            ctx.stroke();
+            ctx.beginPath();
             ctx.moveTo(p3x, p3y);
             ctx.lineTo(p4x, p4y);
-          ctx.stroke();
+            ctx.stroke();
           });
         } else if (asset.wallSegments) {
           ctx.strokeStyle = asset.lineColor || "#000000";
           ctx.lineWidth = (asset.wallThickness || 2) * MM_TO_PX;
           ctx.lineCap = 'round';
           asset.wallSegments.forEach(seg => {
-          ctx.beginPath();
+            ctx.beginPath();
             ctx.moveTo((seg.start.x + asset.x - minX + padding) * MM_TO_PX, (seg.start.y + asset.y - minY + padding) * MM_TO_PX);
             ctx.lineTo((seg.end.x + asset.x - minX + padding) * MM_TO_PX, (seg.end.y + asset.y - minY + padding) * MM_TO_PX);
             ctx.stroke();
@@ -332,12 +404,19 @@ export default function ExportPanel() {
         const h = (asset.height || 0) * (asset.scale || 1);
         const x = (asset.x - minX + padding) * MM_TO_PX;
         const y = (asset.y - minY + padding) * MM_TO_PX;
+
         ctx.save();
         ctx.translate(x, y);
         if (asset.rotation) {
           ctx.rotate((asset.rotation * Math.PI) / 180);
         }
-        if (asset.type === 'circle') {
+
+        const img = loadedImages.get(asset.id);
+
+        if (img) {
+          // Render SVG Asset
+          ctx.drawImage(img, -w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
+        } else if (asset.type === 'circle') {
           const fillColor = asset.backgroundColor || asset.fillColor || "#e5e7eb";
           const strokeColor = asset.strokeColor || "#000000";
           const strokeWidth = (asset.strokeWidth || 2) * MM_TO_PX;
@@ -511,6 +590,9 @@ export default function ExportPanel() {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
 
+      // Pre-load SVGs
+      const loadedImages = await loadSvgAssets(selectedAssets);
+
       // Render selected assets
       selectedAssets.forEach(asset => {
         if (asset.type === 'wall-segments') {
@@ -543,13 +625,13 @@ export default function ExportPanel() {
 
               // Draw filled wall (lighter for double-line look)
               ctx.fillStyle = '#e5e7eb';
-            ctx.beginPath();
+              ctx.beginPath();
               ctx.moveTo(p1x, p1y);
               ctx.lineTo(p2x, p2y);
               ctx.lineTo(p3x, p3y);
               ctx.lineTo(p4x, p4y);
               ctx.closePath();
-            ctx.fill();
+              ctx.fill();
 
               // Draw outlines (Explicit double lines)
               ctx.strokeStyle = asset.lineColor || "#000000";
@@ -560,13 +642,13 @@ export default function ExportPanel() {
               ctx.beginPath();
               ctx.moveTo(p1x, p1y);
               ctx.lineTo(p2x, p2y);
-            ctx.stroke();
+              ctx.stroke();
 
               // Line 2
-            ctx.beginPath();
+              ctx.beginPath();
               ctx.moveTo(p3x, p3y);
               ctx.lineTo(p4x, p4y);
-            ctx.stroke();
+              ctx.stroke();
             });
           } else if (asset.wallSegments) {
             // Legacy wall segments support
@@ -574,7 +656,7 @@ export default function ExportPanel() {
             ctx.lineWidth = (asset.wallThickness || 2) * MM_TO_PX;
             ctx.lineCap = 'round';
             asset.wallSegments.forEach(seg => {
-            ctx.beginPath();
+              ctx.beginPath();
               ctx.moveTo((seg.start.x + asset.x - minX + padding) * MM_TO_PX, (seg.start.y + asset.y - minY + padding) * MM_TO_PX);
               ctx.lineTo((seg.end.x + asset.x - minX + padding) * MM_TO_PX, (seg.end.y + asset.y - minY + padding) * MM_TO_PX);
               ctx.stroke();
@@ -612,7 +694,12 @@ export default function ExportPanel() {
             ctx.rotate((asset.rotation * Math.PI) / 180);
           }
 
-          if (asset.type === 'circle') {
+          const img = loadedImages.get(asset.id);
+
+          if (img) {
+            // Render SVG Asset
+            ctx.drawImage(img, -w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
+          } else if (asset.type === 'circle') {
             ctx.fillStyle = asset.backgroundColor || asset.fillColor || "#e5e7eb";
             ctx.strokeStyle = asset.strokeColor || "#000000";
             ctx.lineWidth = (asset.strokeWidth || 1) * MM_TO_PX;
@@ -632,6 +719,7 @@ export default function ExportPanel() {
           }
           ctx.restore();
         }
+
       });
 
       // Scale to paper size and save
@@ -799,11 +887,11 @@ export default function ExportPanel() {
     try {
       if (option.format === "pdf") {
         try {
-        const pdf = new jsPDF({
-          orientation: paperSizeInfo.width > paperSizeInfo.height ? "landscape" : "portrait",
-          unit: "mm",
-          format: option.paperSize.toLowerCase(),
-        });
+          const pdf = new jsPDF({
+            orientation: paperSizeInfo.width > paperSizeInfo.height ? "landscape" : "portrait",
+            unit: "mm",
+            format: option.paperSize.toLowerCase(),
+          });
 
           // Validate canvas before converting to data URL
           if (canvas.width <= 0 || canvas.height <= 0) {
@@ -816,7 +904,7 @@ export default function ExportPanel() {
           }
 
           pdf.addImage(imgData, "PNG", 0, 0, paperSizeInfo.width, paperSizeInfo.height, undefined, "FAST");
-        pdf.save(fileName);
+          pdf.save(fileName);
         } catch (pdfError) {
           console.error("PDF export error:", pdfError);
           throw new Error(`Failed to create PDF: ${pdfError instanceof Error ? pdfError.message : 'Unknown error'}`);
@@ -832,30 +920,30 @@ export default function ExportPanel() {
         return new Promise<void>((resolve, reject) => {
           try {
             canvas.toBlob(
-          (blob) => {
+              (blob) => {
                 try {
                   if (!blob) {
                     reject(new Error("Failed to create image blob"));
                     return;
                   }
 
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = fileName;
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = fileName;
                   document.body.appendChild(a);
-              a.click();
+                  a.click();
                   document.body.removeChild(a);
-              URL.revokeObjectURL(url);
+                  URL.revokeObjectURL(url);
                   resolve();
                 } catch (downloadError) {
                   console.error("Download error:", downloadError);
                   reject(new Error(`Failed to download file: ${downloadError instanceof Error ? downloadError.message : 'Unknown error'}`));
-            }
-          },
-          mimeType,
-          option.format === "jpeg" ? 0.95 : 1.0
-        );
+                }
+              },
+              mimeType,
+              option.format === "jpeg" ? 0.95 : 1.0
+            );
           } catch (blobError) {
             console.error("toBlob error:", blobError);
             reject(new Error(`Failed to convert canvas to blob: ${blobError instanceof Error ? blobError.message : 'Unknown error'}`));
@@ -1170,10 +1258,56 @@ export default function ExportPanel() {
     }
   };
 
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const data = JSON.parse(event.target?.result as string);
+          const { shapes, assets, walls } = useProjectStore.getState();
+
+          // Import shapes
+          if (data.shapes && Array.isArray(data.shapes)) {
+            data.shapes.forEach((shape: any) => {
+              useProjectStore.getState().addShape(shape);
+            });
+          }
+
+          // Import assets
+          if (data.assets && Array.isArray(data.assets)) {
+            data.assets.forEach((asset: any) => {
+              useProjectStore.getState().addAsset(asset);
+            });
+          }
+
+          // Import walls
+          if (data.walls && Array.isArray(data.walls)) {
+            data.walls.forEach((wall: any) => {
+              useProjectStore.getState().addWall(wall);
+            });
+          }
+
+          toast.success('Project imported successfully!');
+        } catch (error) {
+          toast.error('Failed to import project. Invalid file format.');
+          console.error('Import error:', error);
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
   return (
     <div className="border-t border-gray-200 pt-4 mt-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-900">Export</h3>
+        <h3 className="text-sm font-semibold text-gray-900">Export / Import</h3>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="p-1 hover:bg-gray-100 rounded transition-colors"
@@ -1286,6 +1420,15 @@ export default function ExportPanel() {
             >
               <Plus className="w-3 h-3" />
               Add Export Option
+            </button>
+
+            {/* Import Button */}
+            <button
+              onClick={handleImport}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition-colors mt-2"
+            >
+              <Upload className="w-3 h-3" />
+              Import Project
             </button>
           </div>
         </>

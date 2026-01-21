@@ -1,5 +1,7 @@
-import React from "react";
+﻿import React, { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
+import { InlineSvg } from "@/components/tools/InlineSvg";
+import { FiBox } from "react-icons/fi";
 import { AssetInstance } from "@/store/sceneStore";
 import { ASSET_LIBRARY } from "@/lib/assets";
 import AssetHandlesRenderer from "./AssetHandlesRenderer";
@@ -7,6 +9,7 @@ import WallRendering from "./WallRendering";
 
 type AssetRendererProps = {
   asset: AssetInstance;
+  updateAsset?: (id: string, updates: Partial<AssetInstance>) => void;
   isSelected: boolean;
   isMultiSelected: boolean;
   isCopied: boolean;
@@ -31,6 +34,7 @@ type AssetRendererProps = {
 
 export default function AssetRenderer({
   asset,
+  updateAsset,
   isSelected,
   isMultiSelected,
   isCopied,
@@ -599,10 +603,8 @@ export default function AssetRenderer({
     );
   }
 
-  if (!def) return null;
-
   // Handle custom SVG assets
-  if (def.path) {
+  if (def?.path) {
     return (
       <div className="relative" onContextMenu={(e) => onAssetContextMenu(e, asset.id)}>
         {/* Background layer */}
@@ -636,11 +638,12 @@ export default function AssetRenderer({
             transition: isCopied ? "box-shadow 0.3s ease" : undefined,
           }}
         >
-          <Image
+          <InlineSvg
+            key={`${asset.id}-${def.path}`}
             src={def.path}
-            alt={def.label}
-            fill
-            style={{ objectFit: "contain" }}
+            fill={asset.fillColor}
+            stroke={asset.strokeColor}
+            strokeWidth={asset.strokeWidth}
           />
         </div>
 
@@ -676,6 +679,8 @@ export default function AssetRenderer({
     );
   }
 
+  const FallbackIcon = FiBox;
+
   return (
     <div className="relative" onContextMenu={(e) => onAssetContextMenu(e, asset.id)}>
       {/* Background layer */}
@@ -694,37 +699,39 @@ export default function AssetRenderer({
         />
       )}
 
-      {/* Main shape */}
-{/* <div */}
-{/*   onMouseDown={(e) => onAssetMouseDown(e, asset.id)} */}
-{/*   style={{ */}
-{/*     position: "absolute", */}
-{/*     left: leftPx, */}
-{/*     top: topPx, */}
-{/*     width: (asset.width ?? 50) * asset.scale, */}
-{/*     height: (asset.height ?? 50) * asset.scale, */}
-{/*     backgroundColor: */}
-{/*       asset.backgroundColor && asset.backgroundColor !== "transparent" */}
-{/*         ? asset.backgroundColor */}
-{/*         : asset.fillColor ?? "transparent", */}
-{/*     border: `${asset.strokeWidth ?? 2}px solid ${asset.strokeColor ?? "#000000"}`, */}
-{/*     borderRadius: asset.type === "circle" ? "50%" : "0%", */}
-{/*     transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`, */}
-{/*     cursor: "move", */}
-{/*     zIndex: asset.zIndex || 0, */}
-{/*     boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined, */}
-{/*     transition: isCopied ? "box-shadow 0.3s ease" : undefined, */}
-{/*   }} */}
-{/* > */}
-{/**/}
-{/*         <Icon */}
-{/*           size={Math.min( */}
-{/*             (asset.width ?? 24) * asset.scale, */}
-{/*             (asset.height ?? 24) * asset.scale */}
-{/*           )} */}
-{/*         /> */}
-{/*       </div> */}
-
+      {/* Main shape fallback */}
+      <div
+        onMouseDown={(e) => onAssetMouseDown(e, asset.id)}
+        style={{
+          position: "absolute",
+          left: leftPx,
+          top: topPx,
+          width: (asset.width ?? 50) * asset.scale,
+          height: (asset.height ?? 50) * asset.scale,
+          backgroundColor:
+            asset.backgroundColor && asset.backgroundColor !== "transparent"
+              ? asset.backgroundColor
+              : asset.fillColor ?? "transparent",
+          border: `${asset.strokeWidth ?? 2}px solid ${asset.strokeColor ?? "#000000"
+            }`,
+          borderRadius: asset.type === "circle" ? "50%" : "0%",
+          transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+          cursor: "move",
+          zIndex: asset.zIndex || 0,
+          boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
+          transition: isCopied ? "box-shadow 0.3s ease" : undefined,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <FallbackIcon
+          size={Math.min(
+            (asset.width ?? 24) * asset.scale,
+            (asset.height ?? 24) * asset.scale
+          )}
+        />
+      </div>
 
       {/* Handles */}
       {(isSelected || isMultiSelected) && (

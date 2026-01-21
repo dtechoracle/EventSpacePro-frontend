@@ -28,7 +28,6 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
   const [activeCategory, setActiveCategory] =
     useState<AssetCategory>("Funiture")
   const [searchTerm, setSearchTerm] = useState("")
-  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     setPosition({ x: window.innerWidth / 2 - 220, y: 90 })
@@ -48,21 +47,43 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
     [activeCategory]
   )
 
-  const previewAssets = useMemo(
-    () => [...ASSET_LIBRARY].sort(() => 0.5 - Math.random()).slice(0, 8),
-    []
-  )
-
   const renderAsset = (asset: AssetDef) => (
     <motion.button
       key={asset.id}
       draggable
-      onDragStartCapture={(e: React.DragEvent<HTMLButtonElement>) =>
-        e.dataTransfer.setData("assetType", asset.id)
-      }
+      onDragStartCapture={(e: React.DragEvent<HTMLButtonElement>) => {
+        e.dataTransfer.setData("assetType", asset.id);
+
+        // Parse dimensions from name (e.g., "Table 120x60", "1300mm X 650mm", "6ft x 3ft")
+        const dimMatch = asset.label.match(/(\d+(?:\.\d+)?)\s*(mm|cm|m|ft)?\s*[xX]\s*(\d+(?:\.\d+)?)\s*(mm|cm|m|ft)?/i);
+        if (dimMatch) {
+          const val1 = parseFloat(dimMatch[1]);
+          const unit1 = dimMatch[2]?.toLowerCase() || 'mm';
+          const val2 = parseFloat(dimMatch[3]);
+          const unit2 = dimMatch[4]?.toLowerCase() || unit1 || 'mm'; // Inherit unit1 if unit2 missing, else mm
+
+          const toMm = (val: number, unit: string) => {
+            switch (unit) {
+              case 'm': return val * 1000;
+              case 'cm': return val * 10;
+              case 'ft': return val * 304.8;
+              default: return val; // mm
+            }
+          };
+
+          const width = Math.round(toMm(val1, unit1));
+          const height = Math.round(toMm(val2, unit2));
+
+          // Only use if dimensions are reasonable (> 10mm) to avoid tiny accidental matches
+          if (width > 10 && height > 10) {
+            e.dataTransfer.setData("assetWidth", width.toString());
+            e.dataTransfer.setData("assetHeight", height.toString());
+          }
+        }
+      }}
       whileHover={{ scale: 1.08 }}
       whileTap={{ scale: 0.95 }}
-      className="w-[4.5rem] h-[4.5rem] rounded-2xl bg-[#00000005] hover:bg-[#0933BB12] p-2 flex flex-col items-center justify-center"
+      className="w-[4.5rem] h-[4.5rem] rounded-xl bg-[#00000005] hover:bg-[#0933BB12] p-2 flex flex-col items-center justify-center"
     >
       <Image src={asset.path} alt={asset.label} width={26} height={26} />
       <span className="text-[0.6rem] mt-1 text-center leading-tight">
@@ -79,7 +100,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
       drag
       dragMomentum={false}
       style={{ left: position.x, top: position.y }}
-      className="fixed w-[28rem] h-[33rem] bg-white rounded-[2rem] p-5 shadow-2xl z-[9999] flex flex-col"
+      className="fixed w-[28rem] h-[33rem] bg-white rounded-lg p-5 shadow-2xl z-[9999] flex flex-col" // Removed rounded-[2rem], changed to rounded-lg
       initial={{ opacity: 0, scale: 0.92 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.92 }}
@@ -111,22 +132,6 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
             >
               {searchResults.map(renderAsset)}
             </motion.div>
-          ) : !showAll ? (
-            <motion.div
-              key="preview"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="grid grid-cols-4 gap-4"
-            >
-              {previewAssets.map(renderAsset)}
-              <button
-                onClick={() => setShowAll(true)}
-                className="col-span-4 mt-2 bg-[var(--accent)] text-white rounded-lg py-1"
-              >
-                Browse All
-              </button>
-            </motion.div>
           ) : (
             <motion.div
               key="library"
@@ -141,18 +146,17 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`px-3 py-1 rounded text-xs whitespace-nowrap ${
-                      activeCategory === cat
-                        ? "bg-[var(--accent)] text-white"
-                        : "bg-gray-200"
-                    }`}
+                    className={`px-3 py-1 rounded text-xs whitespace-nowrap ${activeCategory === cat
+                      ? "bg-[var(--accent)] text-white"
+                      : "bg-gray-200"
+                      }`}
                   >
                     {formatLabel(cat)}
                   </button>
                 ))}
               </div>
 
-              {/* Assets */}
+              {/* Assets - Show all for category immediately */}
               <motion.div
                 layout
                 className="grid grid-cols-5 gap-3 overflow-y-auto flex-1 min-h-0 pr-1"

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useCallback } from "react";
 import { useSceneStore, AssetInstance } from "@/store/sceneStore";
+import { useEditorStore } from "@/store/editorStore";
 import { snapTo90Degrees } from "@/lib/wallGeometry";
+import { snapToObjects } from "@/utils/snapAnchors";
 
 interface UseCanvasMouseHandlersProps {
   workspaceZoom: number;
@@ -193,7 +195,7 @@ export function useCanvasMouseHandlers({
       // Handle wall drawing mode mouse down - use EXACT original approach
       if (isWallMode) {
         const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-        
+
         // Check if mouse is within canvas bounds
         if (
           canvas &&
@@ -204,7 +206,7 @@ export function useCanvasMouseHandlers({
         ) {
           // Apply grid snapping if enabled
           const snappedPoint = snapToGrid(x, y);
-          
+
           // Use the EXACT original wall drawing approach that was working
           if (!currentWallStart) {
             // Start new wall drawing
@@ -295,7 +297,7 @@ export function useCanvasMouseHandlers({
             // Generic uniform scale for other assets
             const currentDistance = Math.sqrt(
               Math.pow(mouseX - assetCenterX, 2) +
-                Math.pow(mouseY - assetCenterY, 2)
+              Math.pow(mouseY - assetCenterY, 2)
             );
             const scaleRatio = currentDistance / initialDistance.current;
             const newScale = Math.max(
@@ -491,15 +493,60 @@ export function useCanvasMouseHandlers({
         const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
         const newX = x + draggingOffset.current.x;
         const newY = y + draggingOffset.current.y;
-        const snapped = snapToGrid(newX, newY);
+
         const asset = assets.find(a => a.id === draggingAssetRef.current);
-        if (asset && asset.type === 'wall-segments' && asset.wallNodes && asset.wallNodes.length) {
-          const dx = snapped.x - asset.x;
-          const dy = snapped.y - asset.y;
-          const movedNodes = asset.wallNodes.map(n => ({ x: n.x + dx, y: n.y + dy }));
-          updateAsset(draggingAssetRef.current, { x: snapped.x, y: snapped.y, wallNodes: movedNodes } as any);
-        } else {
-          updateAsset(draggingAssetRef.current, { x: snapped.x, y: snapped.y });
+        if (asset) {
+          const snapToObjectsEnabled = useEditorStore.getState().snapToObjects;
+
+          // Prepare rect for snapping
+          const rect = {
+            x: newX,
+            y: newY,
+            width: (asset.width || 0) * (asset.scale || 1),
+            height: (asset.height || 0) * (asset.scale || 1),
+            rotation: asset.rotation
+          };
+
+          let snappedX = newX;
+          let snappedY = newY;
+          let guides: any[] = [];
+
+          if (snapToObjectsEnabled) {
+            // Get other assets for snapping target
+            const others = assets.filter(a => a.id !== asset.id).map(a => ({
+              id: a.id,
+              x: a.x,
+              y: a.y,
+              width: (a.width || 0) * (a.scale || 1),
+              height: (a.height || 0) * (a.scale || 1),
+              rotation: a.rotation,
+              type: a.type
+            }));
+
+            // Perform snap
+            const result = snapToObjects(rect, others);
+            snappedX = result.x;
+            snappedY = result.y;
+            guides = result.guides;
+          } else {
+            // Fallback to grid snap if object snap is disabled
+            const gridSnapped = snapToGrid(newX, newY);
+            snappedX = gridSnapped.x;
+            snappedY = gridSnapped.y;
+          }
+
+          // Update guides in store
+          useSceneStore.getState().setSnapGuides(guides);
+
+          // Apply snapped position
+          if (asset.type === 'wall-segments' && asset.wallNodes && asset.wallNodes.length) {
+            const dx = snappedX - asset.x;
+            const dy = snappedY - asset.y;
+            const movedNodes = asset.wallNodes.map(n => ({ x: n.x + dx, y: n.y + dy }));
+            updateAsset(draggingAssetRef.current, { x: snappedX, y: snappedY, wallNodes: movedNodes } as any);
+          } else {
+            updateAsset(draggingAssetRef.current, { x: snappedX, y: snappedY });
+          }
         }
         return;
       }
@@ -567,7 +614,7 @@ export function useCanvasMouseHandlers({
           // Calculate length for the line
           const length = Math.sqrt(
             Math.pow(endPoint.x - startPoint.x, 2) +
-              Math.pow(endPoint.y - startPoint.y, 2)
+            Math.pow(endPoint.y - startPoint.y, 2)
           );
 
           // Determine if the line is more horizontal or vertical
@@ -598,7 +645,7 @@ export function useCanvasMouseHandlers({
           } else {
             // Create single line asset for pen mode (line type with LineHandlesRenderer)
             const id = `line-${Date.now()}`;
-            
+
             // Calculate rotation angle from start to end
             const angle = Math.atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x) * (180 / Math.PI);
 
@@ -670,6 +717,7 @@ export function useCanvasMouseHandlers({
       }
 
       // Reset all interaction states
+      useSceneStore.getState().setSnapGuides([]);
       draggingAssetRef.current = null;
       isMovingCanvas.current = false;
       isScalingAsset.current = false;

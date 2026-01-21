@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { PAPER_SIZES, PaperSize } from "@/lib/paperSizes";
 import { calculateShapeAnchors, calculateAssetAnchors, AnchorType } from "@/utils/snapAnchors";
+import { ASSET_LIBRARY } from "@/lib/assets";
 
 export type AssetInstance = {
   id: string;
@@ -92,7 +93,7 @@ type SceneState = {
   selectedGridSizeIndex: number; // Index of currently selected grid size
 
   // Wall type and size options
-      wallType: 'partition-75' | 'partition-100' | 'enclosure-150' | 'enclosure-225' | 'thin' | 'standard' | 'thick' | 'extra-thick'; // Current wall type
+  wallType: 'partition-75' | 'partition-100' | 'enclosure-150' | 'enclosure-225' | 'thin' | 'standard' | 'thick' | 'extra-thick'; // Current wall type
   wallTool?: 'wall' | 'cross';
   availableWallTypes: Array<{
     id: 'partition-75' | 'partition-100' | 'enclosure-150' | 'enclosure-225' | 'thin' | 'standard' | 'thick' | 'extra-thick';
@@ -156,6 +157,10 @@ type SceneState = {
   snapSourceAssetId: string | null;
   snapSourceAnchor: string | null;
 
+  // Snap Guides
+  snapGuides: Array<{ x1: number; y1: number; x2: number; y2: number; type: 'horizontal' | 'vertical' }>;
+  setSnapGuides: (guides: Array<{ x1: number; y1: number; x2: number; y2: number; type: 'horizontal' | 'vertical' }>) => void;
+
   // Multi-select state
   selectedAssetIds: string[];
   isRectangularSelecting: boolean;
@@ -184,7 +189,7 @@ type SceneState = {
   // Methods
   setCanvas: (size: PaperSize) => void;
   setCanvasDimensions: (width: number, height: number) => void; // allow arbitrary canvas when not a known PaperSize
-  addAsset: (type: string, x: number, y: number) => void;
+  addAsset: (type: string, x: number, y: number, width?: number, height?: number) => void;
   addAssetObject: (assetObj: AssetInstance) => void;
   updateAsset: (id: string, updates: Partial<AssetInstance>) => void;
   removeAsset: (id: string) => void;
@@ -276,14 +281,14 @@ type SceneState = {
   startRectangularSelectionDrag: (startX: number, startY: number) => void;
   updateRectangularSelectionDrag: (endX: number, endY: number) => void;
   finishRectangularSelectionDrag: () => void;
-  
+
   // Export selection methods
   startExportSelection: (x: number, y: number) => void;
   updateExportSelection: (x: number, y: number) => void;
   finishExportSelection: () => void;
   exportSelectionStart: { x: number; y: number } | null;
   exportSelectionEnd: { x: number; y: number } | null;
-  
+
   setCreateGroupFromSelection: (enabled: boolean) => void;
   createGroupFromSelectedAssets: () => void;
   groupSelectedAssets: () => void;
@@ -346,6 +351,11 @@ export const useSceneStore = create<SceneState>()(
       historyIndex: 0,
       lastDuplicatedAsset: null,
       duplicationPattern: null,
+
+      // Snap Guides
+      snapGuides: [],
+      setSnapGuides: (guides) => set({ snapGuides: guides }),
+
       // 3D overlay default state
       is3DOverlayOpen: false,
       snapToAnchorMode: false,
@@ -360,7 +370,7 @@ export const useSceneStore = create<SceneState>()(
       rectangularSelectionEnd: null,
       selectionBox: null,
       createGroupFromSelection: false,
-      
+
       // Export selection state
       isExportSelectionMode: false,
       exportSelectionBox: null,
@@ -385,7 +395,7 @@ export const useSceneStore = create<SceneState>()(
         } as any);
       },
 
-      addAsset: (type, x, y) => {
+      addAsset: (type, x, y, width?, height?) => {
         const state = get();
         // Prevent any non-wall asset creation while wall drawing is active (avoids ghost assets)
         if (state.wallDrawingMode && type !== "wall-segments") return;
@@ -398,6 +408,29 @@ export const useSceneStore = create<SceneState>()(
 
         // Use universal bg-gray-100 background for all assets
         const defaultBackgroundColor = "#f3f4f6"; // bg-gray-100
+
+        // Look up asset definition for dimensions
+        // Look up asset definition for dimensions
+        const assetDef = ASSET_LIBRARY.find(a => a.id === type);
+        console.log(`[sceneStore] addAsset: type=${type}`, {
+          found: !!assetDef,
+          libWidth: assetDef?.width,
+          libHeight: assetDef?.height,
+          passedWidth: width,
+          passedHeight: height
+        });
+
+        // Priority: Passed args > Library definition > undefined
+        // User requested to remove default resizing entirely.
+        const finalWidth = width || assetDef?.width;
+        const finalHeight = height || assetDef?.height;
+
+        console.log(`[sceneStore] addAsset resolved:`, {
+          type,
+          passed: { width, height },
+          lib: { w: assetDef?.width, h: assetDef?.height },
+          final: { finalWidth, finalHeight }
+        });
 
         // Default properties for shapes
         const shapeDefaults: Partial<AssetInstance> =
@@ -413,7 +446,7 @@ export const useSceneStore = create<SceneState>()(
                     ? { wallThickness: get().getCurrentWallThickness(), wallGap: 8, lineColor: "#000000", backgroundColor: defaultBackgroundColor }
                     : type === "text"
                       ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: defaultBackgroundColor }
-                      : { width: 24, height: 24, backgroundColor: defaultBackgroundColor }; // Default for icons
+                      : { width: finalWidth, height: finalHeight, backgroundColor: defaultBackgroundColor }; // Use library dimensions or default
 
         set({
           assets: [
@@ -460,13 +493,13 @@ export const useSceneStore = create<SceneState>()(
           if (a.id === id) {
             // If updating groupAssets directly, merge them properly
             if (updates.groupAssets !== undefined && a.isGroup) {
-              const updatedAsset = { 
-                ...a, 
-                groupAssets: updates.groupAssets 
+              const updatedAsset = {
+                ...a,
+                groupAssets: updates.groupAssets
               };
               return updatedAsset;
             }
-            
+
             const updatedAsset = { ...a, ...updates };
 
             // If this is a group and we're updating scale/width/height/rotation, update all child assets
@@ -1646,7 +1679,7 @@ export const useSceneStore = create<SceneState>()(
             const nextZIndex = -100; // Walls should render behind other assets
 
             const currentThickness = get().getCurrentWallThickness();
-            
+
             const wallAsset: AssetInstance = {
               id: `wall-segments-${Date.now()}`,
               type: "wall-segments",
@@ -2523,7 +2556,7 @@ export const useSceneStore = create<SceneState>()(
           const maxX = Math.max(state.exportSelectionStart.x, state.exportSelectionEnd.x);
           const minY = Math.min(state.exportSelectionStart.y, state.exportSelectionEnd.y);
           const maxY = Math.max(state.exportSelectionStart.y, state.exportSelectionEnd.y);
-          
+
           set({
             exportSelectionBox: {
               startX: minX,

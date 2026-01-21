@@ -15,6 +15,7 @@ export type Tool =
   | 'dimension'
   | 'label-arrow'
   | 'text-annotation'
+  | 'trim'
   | 'pan';
 
 export type EditorState = {
@@ -38,11 +39,16 @@ export type EditorState = {
   showGrid: boolean;
   gridSize: number;
   snapToGrid: boolean;
+  snapToObjects: boolean;
 
   // Interaction state
   isDragging: boolean;
   isDrawing: boolean;
   isPanning: boolean;
+
+  // Text editing state
+  editingTextId: string | null;
+  setEditingTextId: (id: string | null) => void;
 
   // Methods
   setZoom: (zoom: number) => void;
@@ -76,6 +82,7 @@ export type EditorState = {
   toggleGrid: () => void;
   setGridSize: (size: number) => void;
   toggleSnapToGrid: () => void;
+  toggleSnapToObjects: () => void;
 
   setDragging: (dragging: boolean) => void;
   setDrawing: (drawing: boolean) => void;
@@ -105,10 +112,15 @@ export const useEditorStore = create<EditorState>()(
       showGrid: true,
       gridSize: 1000, // Default 1m grid
       snapToGrid: false,
+      snapToObjects: true,
 
       isDragging: false,
       isDrawing: false,
       isPanning: false,
+
+      // Text editing state
+      editingTextId: null,
+      setEditingTextId: (id) => set({ editingTextId: id }),
 
       // Zoom methods
       // Zoom methods - "Infinity" zoom (very wide range)
@@ -187,6 +199,8 @@ export const useEditorStore = create<EditorState>()(
       setGridSize: (size) => set({ gridSize: size }),
 
       toggleSnapToGrid: () => set((state) => ({ snapToGrid: !state.snapToGrid })),
+
+      toggleSnapToObjects: () => set((state) => ({ snapToObjects: !state.snapToObjects })),
 
       // Interaction state methods
       setDragging: (dragging) => set({ isDragging: dragging }),
