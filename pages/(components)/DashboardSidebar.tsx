@@ -59,10 +59,10 @@ export default function DashboardSidebar() {
   const handleLogout = () => {
     // Clear auth cookie (this is what middleware checks)
     Cookies.remove("authToken");
-    
+
     // Clear user state from Zustand store
     clearUser();
-    
+
     // Clear any persisted user storage
     try {
       if (typeof window !== "undefined") {
@@ -72,7 +72,7 @@ export default function DashboardSidebar() {
     } catch {
       // ignore storage errors
     }
-    
+
     // Redirect to login page
     router.push("/auth/login");
   };
@@ -93,7 +93,7 @@ export default function DashboardSidebar() {
       {/* Profile Section */}
       <div className="p-4 border-b border-gray-200/50">
         <div className="flex items-center gap-3">
-          <div 
+          <div
             className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold shadow-md flex-shrink-0"
             style={{ backgroundColor: avatarColor }}
           >
@@ -117,7 +117,10 @@ export default function DashboardSidebar() {
               e.preventDefault();
               router.push("/dashboard");
             }}
-            className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm font-semibold text-blue-600 bg-blue-50 rounded-lg border border-blue-100`}
+            className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm rounded-lg transition-colors ${router.pathname === "/dashboard"
+              ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
+              : "text-gray-600 hover:bg-gray-50"
+              }`}
             title={isCollapsed ? "My Events" : undefined}
           >
             <BsFolder className="w-4 h-4 flex-shrink-0" />
@@ -125,7 +128,14 @@ export default function DashboardSidebar() {
           </a>
           <a
             href="#"
-            className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg transition-colors`}
+            onClick={(e) => {
+              e.preventDefault();
+              router.push("/dashboard/favorites");
+            }}
+            className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm rounded-lg transition-colors ${router.pathname === "/dashboard/favorites"
+              ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
+              : "text-gray-600 hover:bg-gray-50"
+              }`}
             title={isCollapsed ? "Favorites" : undefined}
           >
             <BsHeart className="w-4 h-4 flex-shrink-0" />
@@ -133,7 +143,14 @@ export default function DashboardSidebar() {
           </a>
           <a
             href="#"
-            className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg transition-colors`}
+            onClick={(e) => {
+              e.preventDefault();
+              router.push("/dashboard/templates");
+            }}
+            className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors ${router.pathname === "/dashboard/templates"
+                ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
+                : "text-gray-600"
+              }`}
             title={isCollapsed ? "Templates" : undefined}
           >
             <BsCalendar className="w-4 h-4 flex-shrink-0" />
@@ -141,7 +158,14 @@ export default function DashboardSidebar() {
           </a>
           <a
             href="#"
-            className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg transition-colors`}
+            onClick={(e) => {
+              e.preventDefault();
+              router.push("/dashboard/ai");
+            }}
+            className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors ${router.pathname === "/dashboard/ai"
+                ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
+                : "text-gray-600"
+              }`}
             title={isCollapsed ? "AI Assistant" : undefined}
           >
             <BsStars className="w-4 h-4 flex-shrink-0" />
@@ -149,7 +173,14 @@ export default function DashboardSidebar() {
           </a>
           <a
             href="#"
-            className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg transition-colors`}
+            onClick={(e) => {
+              e.preventDefault();
+              router.push("/dashboard/trash");
+            }}
+            className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors ${router.pathname === "/dashboard/trash"
+                ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
+                : "text-gray-600"
+              }`}
             title={isCollapsed ? "Trash" : undefined}
           >
             <BsTrash className="w-4 h-4 flex-shrink-0" />

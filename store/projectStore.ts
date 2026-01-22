@@ -601,11 +601,19 @@ export const useProjectStore = create<ProjectState>()(
 
             alignSelection: (type, ids) => {
                 get().saveToHistory();
-                const { shapes, assets, walls } = get();
+                const { shapes, assets, walls, groups } = get();
+
+                // Handle group unpacking
+                let targetIds = ids;
+                if (ids.length === 1) {
+                    const group = groups.find(g => g.id === ids[0]);
+                    if (group) targetIds = group.itemIds;
+                }
+
                 const items = [
-                    ...shapes.filter(s => ids.includes(s.id)),
-                    ...assets.filter(a => ids.includes(a.id)),
-                    ...walls.filter(w => ids.includes(w.id)) // Walls might be tricky, treating as object
+                    ...shapes.filter(s => targetIds.includes(s.id)),
+                    ...assets.filter(a => targetIds.includes(a.id)),
+                    ...walls.filter(w => targetIds.includes(w.id)) // Walls might be tricky, treating as object
                 ];
 
                 if (items.length < 2) return;
@@ -655,10 +663,18 @@ export const useProjectStore = create<ProjectState>()(
 
             distributeSelection: (axis, spacing, ids) => {
                 get().saveToHistory();
-                const { shapes, assets } = get();
+                const { shapes, assets, groups } = get();
+
+                // Handle group unpacking
+                let targetIds = ids;
+                if (ids.length === 1) {
+                    const group = groups.find(g => g.id === ids[0]);
+                    if (group) targetIds = group.itemIds;
+                }
+
                 const items = [
-                    ...shapes.filter(s => ids.includes(s.id)),
-                    ...assets.filter(a => ids.includes(a.id))
+                    ...shapes.filter(s => targetIds.includes(s.id)),
+                    ...assets.filter(a => targetIds.includes(a.id))
                 ];
 
                 if (items.length < 2) return;
@@ -688,10 +704,18 @@ export const useProjectStore = create<ProjectState>()(
 
             distributeRadial: (radius, startAngle, endAngle, ids) => {
                 get().saveToHistory();
-                const { shapes, assets } = get();
+                const { shapes, assets, groups } = get();
+
+                // Handle group unpacking
+                let targetIds = ids;
+                if (ids.length === 1) {
+                    const group = groups.find(g => g.id === ids[0]);
+                    if (group) targetIds = group.itemIds;
+                }
+
                 const items = [
-                    ...shapes.filter(s => ids.includes(s.id)),
-                    ...assets.filter(a => ids.includes(a.id))
+                    ...shapes.filter(s => targetIds.includes(s.id)),
+                    ...assets.filter(a => targetIds.includes(a.id))
                 ];
 
                 if (items.length === 0) return;

@@ -45,6 +45,9 @@ function ElementsPane() {
   const independentShapes: typeof shapes = [];
 
   shapes.forEach((s) => {
+    // Hidden shapes
+    if (s.id === 'background-texture') return;
+
     const sourceId = (s as any).sourceAssetId as string | undefined;
     if (sourceId) {
       if (!assetChildrenMap[sourceId]) assetChildrenMap[sourceId] = [];
@@ -609,40 +612,76 @@ export default function Editor() {
 
   // Handle texture query param for outdoor events
   useEffect(() => {
-    if (isRouterReady && router.query.texture) {
-      const textureId = router.query.texture as string;
+    // Only run if we have the router ready, a texture param, and fully loaded AND SYNCED event data
+    if (isRouterReady && router.query.texture && currentEventData) {
+      // Ensure the synced event matches the current route ID
+      const routeId = router.query.id as string;
+      const currentId = currentEventData._id || (currentEventData as any).id;
+
+      if (currentId !== routeId) {
+        console.log('[Editor] Waiting for event data sync...', { routeId, currentId });
+        return;
+      }
+
+      const textureParam = router.query.texture;
+      const textureId = Array.isArray(textureParam) ? textureParam[0] : textureParam;
+
+      if (!textureId) return;
+
       const bgId = "background-texture";
       const projectStore = useProjectStore.getState();
 
-      // Check if background already exists to avoid duplicates
-      if (!projectStore.shapes.find(s => s.id === bgId)) {
-        console.log(`[Editor] Applying background texture: ${textureId}`);
-        // Add background shape covering the large canvas
+      // Check if background already exists
+      const existingBg = projectStore.shapes.find(s => s.id === bgId);
+
+      // Get dimensions from currentEventData
+      const canvas = currentEventData.canvasData?.canvas || currentEventData.canvases?.[0];
+      const width = canvas?.width || 10000;
+      const height = canvas?.height || 10000;
+
+      console.log(`[Editor] Applying texture ${textureId} to event ${currentId} with dims ${width}x${height}`);
+
+      if (existingBg) {
+        console.log(`[Editor] Updating existing background texture to: ${textureId}`);
+        projectStore.updateShape(bgId, {
+          width: width,
+          height: height,
+          x: width / 2,
+          y: height / 2,
+          fill: `url(#${textureId})`,
+          fillType: 'texture',
+          fillTexture: textureId
+        });
+        toast.success(`Updated environment to ${textureId}`);
+      } else {
+        console.log(`[Editor] Applying new background texture: ${textureId}`);
         projectStore.addShape({
           id: bgId,
           type: "rectangle",
-          x: 5000, // Center of 10000x10000 canvas
-          y: 5000,
-          width: 10000,
-          height: 10000,
+          x: width / 2,
+          y: height / 2,
+          width: width,
+          height: height,
           fill: `url(#${textureId})`,
+          fillType: 'texture',
+          fillTexture: textureId,
           stroke: "none",
           strokeWidth: 0,
           rotation: 0,
-          zIndex: -100, // Put it at the very bottom
-          points: [] // Required by Shape type
+          zIndex: -100,
+          points: []
         });
-
-        // Clear the query param so it doesn't re-apply
-        router.replace({
-          pathname: router.pathname,
-          query: { ...router.query, texture: undefined }
-        }, undefined, { shallow: true });
-
         toast.success(`Applied ${textureId} environment`);
+
+        // Log the shapes after addition to verify
+        const newStore = useProjectStore.getState();
+        console.log('[Editor] Shapes after addition:', newStore.shapes.map(s => s.id));
+
+
       }
     }
-  }, [isRouterReady, router.query.texture, router]);
+  }, [isRouterReady, router.query, router, currentEventData]);
+
 
   // Reset currentEventData when route changes to ensure new event loads
   useEffect(() => {

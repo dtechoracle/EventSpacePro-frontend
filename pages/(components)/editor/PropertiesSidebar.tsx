@@ -192,8 +192,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
               <span className="font-medium w-full">{userName || "Not logged in"}</span>
             </div>
 
-            {/* Alignment & Distribution - Only when multiple items selected */}
-            {selectedIds.length > 1 && (
+            {/* Alignment & Distribution - Only when multiple items selected OR single group selected */}
+            {(selectedIds.length > 1 || (selectedIds.length === 1 && useProjectStore.getState().groups.find(g => g.id === selectedIds[0]))) && (
               <div className="border-t border-gray-100 pt-3 mt-2">
                 <div className="text-xs font-semibold mb-2 text-gray-600">Alignment</div>
                 <div className="flex gap-1 mb-3 justify-between">

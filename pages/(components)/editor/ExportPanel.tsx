@@ -131,7 +131,7 @@ export default function ExportPanel() {
     ...shapes.map(s => ({
       ...s,
       // Map shape types to preview-compatible types
-      type: s.type === 'ellipse' ? 'circle' : s.type,
+      type: s.type === 'ellipse' ? 'circle' : s.type === 'rectangle' ? 'rect' : s.type,
       backgroundColor: s.fill || '#e5e7eb',
       strokeColor: s.stroke || '#000000',
       strokeWidth: s.strokeWidth || 2,

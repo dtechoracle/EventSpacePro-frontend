@@ -1799,7 +1799,7 @@ export default function Workspace2D({
       const selectedIds = useEditorStore.getState().selectedIds;
       if (selectedIds.length === 0) {
         toast.error("No items selected to duplicate");
-        return;
+        return [];
       }
 
       const store = useProjectStore.getState();
@@ -1914,16 +1914,18 @@ export default function Workspace2D({
       } else {
         toast.error("Failed to duplicate items");
       }
+      return newSelectedIds;
     } catch (error) {
       console.error("[Duplicate] ERROR:", error);
       toast.error(`Duplication failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return [];
     }
   }, []);
 
-  const distributeSelection = (mode: 'horizontal' | 'vertical' | 'circular', spacing?: number, diameter?: number) => {
-    const selectedIds = useEditorStore.getState().selectedIds;
-    if (mode === 'circular' && selectedIds.length < 3) return;
-    if ((mode === 'horizontal' || mode === 'vertical') && selectedIds.length < 3) return;
+  const distributeSelection = (mode: 'horizontal' | 'vertical' | 'circular', spacing?: number, diameter?: number, overrideIds?: string[]) => {
+    const selectedIds = overrideIds || useEditorStore.getState().selectedIds;
+    if (mode === 'circular' && selectedIds.length < 2) return;
+    if ((mode === 'horizontal' || mode === 'vertical') && selectedIds.length < 2) return;
 
     // Get fresh values from store
     const store = useProjectStore.getState();
@@ -2939,32 +2941,38 @@ export default function Workspace2D({
         <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>
           {showGrid && <GridRenderer gridSize={sceneGridSize} viewportSize={viewportSize} zoom={zoom} panX={panX} panY={panY} unitSystem={unitSystem} />}
 
-          {/* Sort drawable items by zIndex so bring-to-front / send-to-back works visually */}
+          {/* Unified Rendering sorted by Z-Index */}
           {(() => {
-            const byZ = <T extends { zIndex?: number }>(items: T[]): T[] =>
-              [...items].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
-            const sortedWalls = byZ(walls);
-            const sortedShapes = byZ(shapes);
-            const sortedAssets = byZ(assets);
-            const sortedDimensions = byZ(dimensions);
-            const sortedLabelArrows = byZ(labelArrows);
-            const sortedTextAnnotations = byZ(textAnnotations);
+            // Helper to get zIndex safely
+            const getZ = (item: any) => (typeof item.zIndex === 'number' ? item.zIndex : 0);
+
+            // Combine all renderable items into one list
+            const allRenderables = [
+              ...walls.map(w => ({ ...w, _renderType: 'wall' as const })),
+              ...shapes.map(s => ({ ...s, _renderType: 'shape' as const })),
+              ...assets.map(a => ({ ...a, _renderType: 'asset' as const })),
+              ...dimensions.map(d => ({ ...d, _renderType: 'dimension' as const })),
+              ...labelArrows.map(l => ({ ...l, _renderType: 'labelArrow' as const })),
+              ...textAnnotations.map(t => ({ ...t, _renderType: 'textAnnotation' as const })),
+            ].sort((a, b) => getZ(a) - getZ(b));
 
             return (
               <>
-                <g id="walls-layer">
-                  {sortedWalls.map((wall) => (
-                    <WallRenderer
-                      key={wall.id}
-                      wall={wall}
-                      isSelected={selectedIds.includes(wall.id)}
-                      isHovered={hoveredId === wall.id}
-                    />
-                  ))}
-                </g>
-
-                <g id="shapes-layer">
-                  {sortedShapes.map((shape) => {
+                {allRenderables.map((item) => {
+                  if (item._renderType === 'wall') {
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    const { _renderType, ...wall } = item as any;
+                    return (
+                      <WallRenderer
+                        key={wall.id}
+                        wall={wall}
+                        isSelected={selectedIds.includes(wall.id)}
+                        isHovered={hoveredId === wall.id}
+                      />
+                    );
+                  } else if (item._renderType === 'shape') {
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    const { _renderType, ...shape } = item as any;
                     if (shape.type === 'freehand') {
                       return (
                         <FreehandRenderer
@@ -2983,49 +2991,53 @@ export default function Workspace2D({
                         isHovered={hoveredId === shape.id}
                       />
                     );
-                  })}
-                </g>
+                  } else if (item._renderType === 'asset') {
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    const { _renderType, ...asset } = item as any;
+                    return (
+                      <AssetRenderer
+                        key={asset.id}
+                        asset={asset}
+                        isSelected={selectedIds.includes(asset.id)}
+                        isHovered={hoveredId === asset.id}
+                      />
+                    );
+                  } else if (item._renderType === 'dimension') {
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    const { _renderType, ...dim } = item as any;
+                    return (
+                      <DimensionRenderer
+                        key={dim.id}
+                        dimension={dim}
+                        zoom={zoom}
+                      />
+                    );
+                  } else if (item._renderType === 'labelArrow') {
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    const { _renderType, ...arrow } = item as any;
+                    return (
+                      <LabelArrowRenderer
+                        key={arrow.id}
+                        arrow={arrow}
+                        zoom={zoom}
+                      />
+                    );
+                  } else if (item._renderType === 'textAnnotation') {
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    const { _renderType, ...annotation } = item as any;
+                    // Do not render if editing
+                    if (annotation.id === useEditorStore.getState().editingTextId) return null;
 
-                <g id="assets-layer">
-                  {sortedAssets.map((asset) => (
-                    <AssetRenderer
-                      key={asset.id}
-                      asset={asset}
-                      isSelected={selectedIds.includes(asset.id)}
-                      isHovered={hoveredId === asset.id}
-                    />
-                  ))}
-                </g>
-
-                <g id="dimensions-layer" style={{ pointerEvents: 'all' }}>
-                  {sortedDimensions.map((dim) => (
-                    <DimensionRenderer
-                      key={dim.id}
-                      dimension={dim}
-                      zoom={zoom}
-                    />
-                  ))}
-                </g>
-
-                <g id="label-arrows-layer">
-                  {sortedLabelArrows.map((arrow) => (
-                    <LabelArrowRenderer
-                      key={arrow.id}
-                      arrow={arrow}
-                      zoom={zoom}
-                    />
-                  ))}
-                </g>
-
-                <g id="text-annotations-layer">
-                  {textAnnotations.filter(t => t.id !== useEditorStore.getState().editingTextId).map((annotation) => (
-                    <TextAnnotationRenderer
-                      key={annotation.id}
-                      annotation={annotation}
-                      zoom={zoom}
-                    />
-                  ))}
-                </g>
+                    return (
+                      <TextAnnotationRenderer
+                        key={annotation.id}
+                        annotation={annotation}
+                        zoom={zoom}
+                      />
+                    );
+                  }
+                  return null;
+                })}
               </>
             );
           })()}
@@ -3141,30 +3153,34 @@ export default function Workspace2D({
       <TextAnnotationTool isActive={activeTool === 'text-annotation'} />
 
       {/* Comments Layer */}
-      {comments.map((comment) => (
-        <CommentRenderer
-          key={comment.id}
-          comment={comment}
-          zoom={zoom}
-          panX={panX}
-          panY={panY}
-          isActive={activeCommentId === comment.id}
-          onActivate={setActiveCommentId}
-          onDeactivate={() => setActiveCommentId(null)}
-          onUpdate={updateComment}
-          onResolve={resolveComment}
-          onDelete={removeComment}
-        />
-      ))}
+      {
+        comments.map((comment) => (
+          <CommentRenderer
+            key={comment.id}
+            comment={comment}
+            zoom={zoom}
+            panX={panX}
+            panY={panY}
+            isActive={activeCommentId === comment.id}
+            onActivate={setActiveCommentId}
+            onDeactivate={() => setActiveCommentId(null)}
+            onUpdate={updateComment}
+            onResolve={resolveComment}
+            onDelete={removeComment}
+          />
+        ))
+      }
 
-      {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onClose={closeContextMenu}
-          actions={getContextMenuActions()}
-        />
-      )}
+      {
+        contextMenu && (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onClose={closeContextMenu}
+            actions={getContextMenuActions()}
+          />
+        )
+      }
 
       {/* Duplicate/Distribute Modal */}
       <DuplicateDistributeModal
@@ -3174,15 +3190,17 @@ export default function Workspace2D({
         onConfirm={(data) => {
           if (duplicateDistributeModal.mode === 'duplicate') {
             // Duplicate & distribute
-            duplicateSelection(data.count || 1);
+            const newIds = duplicateSelection(data.count || 1);
 
-            setTimeout(() => {
+            if (newIds && newIds.length > 0) {
+              // Distribute immediately using the new IDs
               distributeSelection(
                 data.type || 'horizontal',
                 data.spacing,
-                data.diameter
+                data.diameter,
+                newIds
               );
-            }, 100);
+            }
           } else {
             distributeSelection(
               data.type || 'horizontal',
@@ -3193,6 +3211,8 @@ export default function Workspace2D({
           setDuplicateDistributeModal({ isOpen: false, mode: 'duplicate' });
         }}
       />
-    </div>
+
+
+    </div >
   );
 }

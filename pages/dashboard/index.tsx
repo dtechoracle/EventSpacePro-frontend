@@ -11,6 +11,7 @@ import WorkspacePreview from "@/components/WorkspacePreview";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
 import { ASSET_LIBRARY } from "@/lib/assets";
+import EventCard from "@/pages/(components)/dashboard/EventCard";
 
 interface EventData {
   _id: string;
@@ -28,6 +29,8 @@ interface EventData {
   projectSlug?: string;
   createdAt: string;
   updatedAt: string;
+  favourites?: string[]; // Array of user IDs
+  favorites?: string[]; // Support US spelling
 }
 
 interface ProjectData {
@@ -48,41 +51,6 @@ const Dashboard = () => {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateEventModal, setShowCreateEventModal] = useState(false);
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
-
-  // Load favorites from localStorage on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedFavorites = localStorage.getItem('event-favorites');
-      if (savedFavorites) {
-        try {
-          setFavorites(new Set(JSON.parse(savedFavorites)));
-        } catch (e) {
-          console.error('Failed to load favorites:', e);
-        }
-      }
-    }
-  }, []);
-
-  // Save favorites to localStorage whenever it changes
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('event-favorites', JSON.stringify(Array.from(favorites)));
-    }
-  }, [favorites]);
-
-  const toggleFavorite = (eventId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent card click
-    setFavorites(prev => {
-      const newFavorites = new Set(prev);
-      if (newFavorites.has(eventId)) {
-        newFavorites.delete(eventId);
-      } else {
-        newFavorites.add(eventId);
-      }
-      return newFavorites;
-    });
-  };
 
   useEffect(() => {
     // Fetch user on mount and check periodically
@@ -590,55 +558,16 @@ const Dashboard = () => {
                     canvasAssetsCount: event.canvasAssets?.length || 0,
                   });
 
-                  const isFavorite = favorites.has(event._id);
+
 
                   return (
-                    <div key={event._id} className="flex flex-col">
-                      {/* Card with Preview Only */}
-                      <div
-                        onClick={() => {
-                          console.log(`[Dashboard] Navigating to event: ${event.projectSlug}/${event._id}`);
-                          router.push(`/dashboard/editor/${event.projectSlug}/${event._id}`);
-                        }}
-                        className="bg-white rounded-lg border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-colors group relative"
-                      >
-                        {/* Star Icon - Top Right Corner */}
-                        <button
-                          onClick={(e) => toggleFavorite(event._id, e)}
-                          className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-white/90 backdrop-blur-sm shadow-md hover:bg-white transition-colors"
-                          aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
-                        >
-                          {isFavorite ? (
-                            <BsStarFill className="w-4 h-4 text-yellow-500" />
-                          ) : (
-                            <BsStar className="w-4 h-4 text-gray-400 hover:text-yellow-500 transition-colors" />
-                          )}
-                        </button>
-
-                        {/* Workspace Preview - Wider than tall */}
-                        <div className="bg-white w-full relative overflow-hidden" style={{ aspectRatio: '2.5/1', height: '160px' }}>
-                          <WorkspacePreview
-                            walls={walls}
-                            shapes={shapes}
-                            assets={assets}
-                            width={400}
-                            height={160}
-                            backgroundColor="#ffffff"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Event Info - Outside the card, below */}
-                      <div className="mt-2">
-                        <h3 className="font-semibold text-sm mb-1 truncate text-gray-800 hover:text-blue-600 transition-colors cursor-pointer" onClick={() => router.push(`/dashboard/editor/${event.projectSlug}/${event._id}`)}>
-                          {event.name || "Unnamed Event"}
-                        </h3>
-                        <p className="text-xs text-gray-500 flex items-center gap-1.5">
-                          <BsClock className="w-3 h-3" />
-                          {getTimeAgo(event.updatedAt || event.createdAt)}
-                        </p>
-                      </div>
-                    </div>
+                    <EventCard
+                      key={event._id}
+                      event={event}
+                      user={user}
+                      previewData={{ walls, shapes, assets }}
+                    // Refresh query on toggle could be nice, but internal state handles UI
+                    />
                   );
                 })}
               </div>
@@ -694,8 +623,8 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 };
 

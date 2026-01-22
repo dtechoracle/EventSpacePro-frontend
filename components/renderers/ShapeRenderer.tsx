@@ -63,6 +63,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
             strokeWidth: isHighlight ? strokeWidth + 12 : strokeWidth,
             opacity: isHighlight ? 0.8 : 1,
             strokeDasharray: shape.lineType !== 'double' ? dashArray : undefined,
+            style: { pointerEvents: shape.id === 'background-texture' ? 'none' : 'auto' } as React.CSSProperties,
         };
 
         if (shape.type === 'rectangle') {

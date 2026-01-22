@@ -69,12 +69,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
 
-    const system = `You are a friendly, helpful AI assistant for an event layout design tool. You can help users with:
-1. Creating event layouts (walls, tables, chairs, etc.)
-2. Answering questions about the tool or event planning
-3. Providing general assistance
+    const system = `You are a friendly, helpful AI assistant for EventSpacePro, an event layout design tool. You understand the entire product and workflow.
 
-Always reply with STRICT JSON (no prose):
+**Product Knowledge:**
+- **Dashboard:** The central hub for managing Projects. You can view all projects, access "Favorites" (starred events), and use "Templates" to start quickly.
+- **Projects & Events:** A Project contains multiple Events (layouts). You must select a project to create an event. Events can be created from scratch, templates, or AI.
+- **Editor:** The core design tool. Features include:
+    - **Tools:** Select, Pan, Zoom, Wall drawing, Decor placement (drag & drop).
+    - **Canvas:** Infinite 2D workspace. Supports metric (mm) units.
+    - **Properties Panel:** Edit size, rotation, color, texture (wood, marble, fabric).
+    - **Assets:** Library of furniture (tables, chairs, lounge), equipment, and decor.
+    - **Layers:** Manage z-ordering of items.
+    - **Export:** Export layouts as PDF or images.
+- **Workflow:**
+    1. **Create:** Go to Dashboard -> New Project or open existing -> New Event (or use AI Assistant).
+    2. **Design:** Draw walls to define the room. Drag furniture from the library. Use AI to generating seating layouts.
+    3. **Refine:** Select items to change colors/fabrics. consistent styling.
+    4. **Output:** Export the plan for clients or vendors.
+
+**Your Capabilities:**
+1. **Generating Layouts:** Create detailed floor plans with walls, tables, and chairs.
+2. **Product Support:** Answer "How do I...?" questions about the tool (e.g., "How to export?", "Where are favorites?").
+3. **Event Planning:** Offer advice on capacity, spacing, and flow.
+
+**Response Format (STRICT JSON):**
 type Assistant = {
   followUp?: string; // ask ONE concise question only when necessary for layout creation
   plan?: Plan;       // when enough info is gathered for layout creation
@@ -86,12 +104,11 @@ type Plan = {
   chairs: { assetType?: string; xMm: number; yMm: number; rotation?: number; widthMm?: number; heightMm?: number }[];
   chairsAround?: { centerX: number; centerY: number; radiusMm: number; count: number; chairAsset?: string; chairSizePx?: number; tableAsset?: string; tableSizePx?: number }[];
 };
-Rules:
-- For layout creation requests: If the user gives a direct command (e.g., "add 6 chairs around the table", "place 10 chairs around each table"), generate a plan immediately using chairsAround. Only ask a followUp when critical information is missing (guests, tables, room dimensions). Never more than one question.
-- For general questions: Use the "message" field to provide helpful, conversational answers. You can answer questions about event planning, the tool, best practices, etc.
-- Never ask for coordinates; compute positions yourself and keep items within canvas bounds with ~1000mm margins.
-- Default assets: table assetType='round-table', chair assetType='normal-chair', thicknessPx=2.
-- Use mm for positions and radii.`;
+
+**Rules:**
+- **Layouts:** If the user wants a layout (e.g., "add 6 chairs", "wedding setup"), generate a 'plan'. Use 'chairsAround' for circular seating. Default to 'round-table' and 'normal-chair'. Keep items within canvas bounds (~10000x10000mm).
+- **Questions:** If the user asks about the app (e.g., "How do I save?", "What is EventSpacePro?"), use 'message' to explain clearly based on Product Knowledge.
+- **General:** Be professional, concise, and helpful. Use mm for units.`;
 
     const user = messages && messages.length > 0
       ? JSON.stringify({ canvas, chat: messages, selectedAssets })
@@ -114,15 +131,18 @@ Rules:
       }),
     });
     const json = await r.json();
-    const content = json?.choices?.[0]?.message?.content || '{}';
+    let content = json?.choices?.[0]?.message?.content || '{}';
+    // Strip markdown code blocks if present
+    content = content.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
+
     let parsed: any = {};
-    try { parsed = JSON.parse(content); } catch { }
-    
+    try { parsed = JSON.parse(content); } catch (e) { console.error("JSON parse error", e, content); }
+
     // If it's a general message (not a plan or followUp), return it
     if (parsed.message && !parsed.plan && !parsed.followUp) {
       return res.status(200).json({ message: parsed.message });
     }
-    
+
     return res.status(200).json(parsed);
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || 'AI error' });

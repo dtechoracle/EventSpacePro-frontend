@@ -13,8 +13,15 @@ interface ApiError {
   errors?: { path: string; message: string; code: string }[];
 }
 
-export default function CreateEventModal({ onClose }: { onClose: () => void }) {
+export default function CreateEventModal({ onClose, initialTemplateData }: { onClose: () => void, initialTemplateData?: any }) {
   const [step, setStep] = useState<'initial' | 'venue-selection' | 'outdoor-selection' | 'event-details' | 'upload-image'>('initial');
+
+  useEffect(() => {
+    if (initialTemplateData) {
+      setStep('event-details');
+    }
+  }, [initialTemplateData]);
+
   const [creationType, setCreationType] = useState<'manual' | 'ai'>('manual');
   const [venueType, setVenueType] = useState<'preloaded' | 'custom' | 'marquee' | 'outdoor'>('custom');
   const [outdoorType, setOutdoorType] = useState<'beach' | 'field' | null>(null);
@@ -43,7 +50,7 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
     } else {
       const projectsList = Array.isArray(projects) ? projects : (projects as any)?.data || [];
       if (projectsList && projectsList.length > 0 && !selectedProjectId) {
-        setSelectedProjectId(projectsList[0]._id);
+        setSelectedProjectId(projectsList[0].slug);
       }
     }
   }, [slug, projects, selectedProjectId]);
@@ -86,6 +93,18 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
     },
     onSuccess: async (response) => {
       const eventId = response.data._id;
+
+      // Handle Template Data Injection
+      if (initialTemplateData) {
+        try {
+          await apiRequest(`/projects/${selectedProjectId}/events/${eventId}`, "PUT", {
+            canvasData: initialTemplateData
+          }, true);
+        } catch (e) {
+          console.error("Failed to apply template data", e);
+          toast.error("Created event but failed to apply template");
+        }
+      }
 
       // If AI mode, navigate with aiMode flag
       if (creationType === 'ai') {
@@ -419,7 +438,7 @@ export default function CreateEventModal({ onClose }: { onClose: () => void }) {
                     >
                       <option value="" disabled>Select a project</option>
                       {(Array.isArray(projects) ? projects : (projects as any)?.data || []).map((p: any) => (
-                        <option key={p._id} value={p._id}>{p.name}</option>
+                        <option key={p._id} value={p.slug}>{p.name}</option>
                       ))}
                     </select>
                   </div>
