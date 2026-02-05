@@ -432,6 +432,35 @@ export default function AssetRenderer({
 
   // Handle wall-segments assets (stroke-only; overlay handles blending/dots)
   if (asset.type === "wall-segments") {
+    // Calculate bounding box for selection and hit area
+    let w = asset.width || 100;
+    let h = asset.height || 100;
+
+    // Auto-calculate bounds if nodes exist
+    if (asset.wallNodes && asset.wallNodes.length > 0) {
+      const xs = asset.wallNodes.map(n => n.x);
+      const ys = asset.wallNodes.map(n => n.y);
+      const rx = Math.max(...xs) - Math.min(...xs);
+      const ry = Math.max(...ys) - Math.min(...ys);
+      if (rx > 0) w = rx * asset.scale;
+      if (ry > 0) h = ry * asset.scale;
+    } else if (asset.wallSegments && asset.wallSegments.length > 0) {
+      // simplified bounds for segments
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      asset.wallSegments.forEach(s => {
+        minX = Math.min(minX, s.start.x, s.end.x);
+        maxX = Math.max(maxX, s.start.x, s.end.x);
+        minY = Math.min(minY, s.start.y, s.end.y);
+        maxY = Math.max(maxY, s.start.y, s.end.y);
+      });
+      const thickness = (asset.wallThickness || 100) * asset.scale;
+      if (maxX > minX) w = Math.max((maxX - minX) * asset.scale, thickness);
+      else w = thickness;
+
+      if (maxY > minY) h = Math.max((maxY - minY) * asset.scale, thickness);
+      else h = thickness;
+    }
+
     return (
       <div className="relative" onContextMenu={(e) => onAssetContextMenu(e, asset.id)}>
         {/* Background layer */}
@@ -441,8 +470,8 @@ export default function AssetRenderer({
               position: "absolute",
               left: leftPx,
               top: topPx,
-              width: 200,
-              height: 200,
+              width: w,
+              height: h,
               backgroundColor: asset.backgroundColor,
               transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
               zIndex: (asset.zIndex || 0) - 1,
@@ -457,14 +486,29 @@ export default function AssetRenderer({
             position: "absolute",
             left: leftPx,
             top: topPx,
+            width: w,
+            height: h,
             transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
             cursor: "move",
             zIndex: asset.zIndex || 0,
             boxShadow: isCopied ? "0 0 10px rgba(34, 197, 94, 0.8)" : undefined,
             transition: isCopied ? "box-shadow 0.3s ease" : undefined,
+            // Show selection border if selected
+            outline: isSelected ? "2px solid #3B82F6" : "none",
+            outlineOffset: "4px"
           }}
         >
           <WallRendering asset={asset} leftPx={0} topPx={0} totalRotation={0} />
+
+          {/* Resize Handles (Simplified for now - just corner markers to indicate selection) */}
+          {isSelected && (
+            <>
+              <div style={{ position: 'absolute', left: -4, top: -4, width: 8, height: 8, background: '#3B82F6', cursor: 'nwse-resize' }} />
+              <div style={{ position: 'absolute', right: -4, top: -4, width: 8, height: 8, background: '#3B82F6', cursor: 'nesw-resize' }} />
+              <div style={{ position: 'absolute', left: -4, bottom: -4, width: 8, height: 8, background: '#3B82F6', cursor: 'nesw-resize' }} />
+              <div style={{ position: 'absolute', right: -4, bottom: -4, width: 8, height: 8, background: '#3B82F6', cursor: 'nwse-resize' }} />
+            </>
+          )}
         </div>
 
         {/* Multi-select indicator */}
@@ -474,8 +518,8 @@ export default function AssetRenderer({
               position: "absolute",
               left: leftPx,
               top: topPx,
-              width: (asset.width ?? 50) * asset.scale,
-              height: (asset.height ?? 50) * asset.scale,
+              width: w,
+              height: h,
               border: "2px dashed #3B82F6",
               borderRadius: "0px",
               transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,

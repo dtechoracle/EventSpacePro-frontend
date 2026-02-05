@@ -100,7 +100,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
       drag
       dragMomentum={false}
       style={{ left: position.x, top: position.y }}
-      className="fixed w-[28rem] h-[33rem] bg-white rounded-lg p-5 shadow-2xl z-[9999] flex flex-col" // Removed rounded-[2rem], changed to rounded-lg
+      className="fixed w-[28rem] h-[33rem] bg-white text-gray-900 rounded-lg p-5 shadow-2xl z-[9999] flex flex-col" // Removed rounded-[2rem], changed to rounded-lg
       initial={{ opacity: 0, scale: 0.92 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.92 }}

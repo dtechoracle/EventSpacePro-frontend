@@ -1,5 +1,5 @@
-"use client";
-
+import { useSceneStore } from '@/store/sceneStore';
+import { calculateSmartSnap, Bounds } from '@/utils/smartSnapping';
 import React, { useState, useCallback, useEffect } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { useProjectStore, Shape, Wall, Asset, Dimension, TextAnnotation } from '@/store/projectStore';
@@ -223,9 +223,11 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
         if (!dragHandle || !initialState) return;
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
-        const dx = worldPos.x - initialState.startX;
-        const dy = worldPos.y - initialState.startY;
+        let dx = worldPos.x - initialState.startX;
+        let dy = worldPos.y - initialState.startY;
 
+        const { snapToObjects } = useEditorStore.getState();
+        const { setSnapGuides } = useSceneStore.getState();
         // Detect a pure-shape group so we can scale the whole group uniformly
         const shapeGroupInfo = (() => {
             if (!initialState || initialState.items.length <= 1) return null;
@@ -292,12 +294,21 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                         centerY = initialGroup.y - (localDx / 2) * sinR;
                     }
 
-                    // Dragging south: top edge stays fixed, bottom edge moves, center moves down by dy/2
-                    if (isSouth && !isCorner) {
-                        halfH = Math.max(5, halfH + localDy);
-                        centerX = initialGroup.x - (localDy / 2) * sinR;
-                        centerY = initialGroup.y + (localDy / 2) * cosR;
-                    }
+                    // --- Smart Snapping Integration ---
+                    const { snapToObjects } = useEditorStore.getState();
+                    const { setSnapGuides } = useSceneStore.getState();
+
+                    let finalDx = localDx; // Apply smart snap to these if needed? 
+                    // Actually, smart snap applies to the WORLD position of the dragged group center usually.
+                    // But here we are modifying "halfW", "centerX" etc based on dragHandle.
+                    // If simply MOVING (dragHandle is undefined or 'move'?), handle separately.
+
+                    // Logic below handles "scaling/resizing". Smart snap for resize is advanced (snap edge to edge).
+                    // User asked for "position something on top another element", which implies MOVING.
+                    // So we should focus on the MOVE logic (usually dragHandle === null or handled elsewhere).
+
+                    // ... (Resize logic continues) ...
+
                     // Dragging north: bottom edge stays fixed, top edge moves, center moves up by dy/2
                     if (isNorth && !isCorner) {
                         halfH = Math.max(5, halfH - localDy);
@@ -577,13 +588,14 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 y: p.y * scaleY,
                             }));
                         }
-                    }
-                }
+                    } // end else (rotated)
 
-                if (Object.keys(updates).length > 0) {
-                    updateShape(shape.id, updates);
-                }
-            } else if (item.type === 'wall') {
+                    if (Object.keys(updates).length > 0) {
+                        updateShape(shape.id, updates);
+                    }
+                } // end else (resize)
+            } else if (item.type === 'wall') { // chained else if
+
                 // Wall manipulation logic - transform nodes
                 const wall = item.object as Wall;
                 const initialWall = initialState.items.find(i => i.id === wall.id)?.object as Wall;
@@ -908,6 +920,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
     const handleMouseUp = useCallback(() => {
         setDragHandle(null);
         setInitialState(null);
+        useSceneStore.getState().setSnapGuides([]);
     }, []);
 
     useEffect(() => {

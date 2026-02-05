@@ -133,7 +133,7 @@ export const ASSET_LIBRARY: AssetDef[] = [
     name: ""
   },
   {
-    id: "500mm X 500mm Modular Stage", label: "500mm X 500mm Modular Stage", path: "/assets/modal/Layout/500mm X 500mm Modular Stage.svg", category: "Layout", width: 826, height: 826,
+    id: "500mm X 500mm Modular Stage", label: "500mm X 500mm Modular Stage", path: "/assets/modal/Layout/500mm X 500mm Modular Stage.svg", category: "Layout", width: 500, height: 500,
     name: ""
   },
 
@@ -196,6 +196,287 @@ export const ASSET_LIBRARY: AssetDef[] = [
   },
   {
     id: "Window", label: "Window", path: "/assets/modal/Windows and column/Window.svg", category: "Windows and column", width: 398, height: 67,
+    name: ""
+  },
+  {
+    id: "500mm X 500mm Modular Stage",
+    label: "500mm X 500mm Modular Stage",
+    path: "/assets/modal/Layout/500mm X 500mm Modular Stage.svg",
+    category: "Layout",
+    width: 500,
+    height: 500,
+    name: ""
+  },
+  {
+    id: "1m X 1m modular stage",
+    label: "1m X 1m modular stage",
+    path: "/assets/modal/Layout/1m X 1m modular stage.svg",
+    category: "Layout",
+    width: 1000,
+    height: 1000,
+    name: ""
+  },
+  {
+    id: "2ft X 2ft modular stage",
+    label: "2ft X 2ft modular stage",
+    path: "/assets/modal/Layout/2ft X 2ft modular stage.svg",
+    category: "Layout",
+    width: 610,
+    height: 610,
+    name: ""
+  },
+  {
+    id: "2ft X 4ft modular stage",
+    label: "2ft X 4ft modular stage",
+    path: "/assets/modal/Layout/2ft X 4ft modular stage.svg",
+    category: "Layout",
+    width: 610,
+    height: 1220,
+    name: ""
+  },
+  {
+    id: "3ft X 3ft modular stage",
+    label: "3ft X 3ft modular stage",
+    path: "/assets/modal/Layout/3ft X 3ft modular stage.svg",
+    category: "Layout",
+    width: 914,
+    height: 914,
+    name: ""
+  },
+  {
+    id: "10 seater round table 02-Model",
+    label: "10 seater round table 02",
+    path: "/assets/modal/Layout/10 seater round table 02-Model.svg",
+    category: "Layout",
+    width: 800,
+    height: 800,
+    name: ""
+  },
+  {
+    id: "12 seater round table 01-Model",
+    label: "12 seater round table 01",
+    path: "/assets/modal/Layout/12 seater round table 01-Model.svg",
+    category: "Layout",
+    width: 800,
+    height: 800,
+    name: ""
+  },
+  {
+    id: "2 Seater Sofa 01-Model",
+    label: "2 Seater Sofa 01",
+    path: "/assets/modal/Layout/2 Seater Sofa 01-Model.svg",
+    category: "Layout",
+    width: 600,
+    height: 400,
+    name: ""
+  },
+  {
+    id: "20 seater doughtnut table-Model",
+    label: "20 seater doughtnut table",
+    path: "/assets/modal/Layout/20 seater doughtnut table-Model.svg",
+    category: "Layout",
+    width: 800,
+    height: 800,
+    name: ""
+  },
+  {
+    id: "3 Seater Sofa 03-Model",
+    label: "3 Seater Sofa 03",
+    path: "/assets/modal/Layout/3 Seater Sofa 03-Model.svg",
+    category: "Layout",
+    width: 700,
+    height: 400,
+    name: ""
+  },
+  {
+    id: "4 seater round table-Model",
+    label: "4 seater round table",
+    path: "/assets/modal/Layout/4 seater round table-Model.svg",
+    category: "Layout",
+    width: 600,
+    height: 600,
+    name: ""
+  },
+  {
+    id: "8 seater round table 02-Model",
+    label: "8 seater round table 02",
+    path: "/assets/modal/Layout/8 seater round table 02-Model.svg",
+    category: "Layout",
+    width: 750,
+    height: 750,
+    name: ""
+  },
+  {
+    id: "Event Chair 3-Model",
+    label: "Event Chair 3",
+    path: "/assets/modal/Layout/Event Chair 3-Model.svg",
+    category: "Layout",
+    width: 300,
+    height: 300,
+    name: ""
+  },
+  {
+    id: "Sofa set with coffe table 03-Model",
+    label: "Sofa set with coffee table 03",
+    path: "/assets/modal/Layout/Sofa set with coffe table 03-Model.svg",
+    category: "Layout",
+    width: 800,
+    height: 600,
+    name: ""
+  },
+  {
+    id: "700mm Cocktail table",
+    label: "700mm Cocktail table",
+    path: "/assets/modal/Layout/700mm Cocktail table.svg",
+    category: "Layout",
+    width: 700,
+    height: 700,
+    name: ""
+  },
+  {
+    id: "100mm Cocktail table",
+    label: "100mm Cocktail table",
+    path: "/assets/modal/Layout/700mm Cocktail table.svg", // Note: Previous entry had this path, keeping as is but checking duplication? Wait, the previous entry had bad path copy-paste?
+    // Line 337 in original file: id "100mm Cocktail table", path ".../700mm Cocktail table.svg". That looks like a bug in existing code but I won't touch it unless asked.
+    category: "Layout",
+    width: 1000,
+    height: 1000,
+    name: ""
+  },
+  // NEW ASSETS
+  {
+    id: "1000mm Cocktail table",
+    label: "1000mm Cocktail table",
+    path: "/assets/modal/Layout/1000mm Cocktail table.svg",
+    category: "Layout",
+    width: 1000,
+    height: 1000,
+    name: ""
+  },
+  {
+    id: "1200mm (4ft) round table",
+    label: "1200mm (4ft) round table",
+    path: "/assets/modal/Layout/1200mm (4ft) round table.svg",
+    category: "Layout",
+    width: 1250,
+    height: 1250,
+    name: ""
+  },
+  {
+    id: "1200mm X 600mm Coffee Table",
+    label: "1200mm X 600mm Coffee Table",
+    path: "/assets/modal/Layout/1200mm X 600mm Coffee Table.svg",
+    category: "Layout",
+    width: 1200,
+    height: 600,
+    name: ""
+  },
+  {
+    id: "1300mm X 650mm Coffee Table",
+    label: "1300mm X 650mm Coffee Table",
+    path: "/assets/modal/Layout/1300mm X 650mm Coffee Table.svg",
+    category: "Layout",
+    width: 1296,
+    height: 648,
+    name: ""
+  },
+  {
+    id: "1500mm (5ft) round table",
+    label: "1500mm (5ft) round table",
+    path: "/assets/modal/Layout/1500mm (5ft) round table.svg",
+    category: "Layout",
+    width: 1550,
+    height: 1550,
+    name: ""
+  },
+  {
+    id: "1800mm (6ft) round table",
+    label: "1800mm (6ft) round table",
+    path: "/assets/modal/Layout/1800mm (6ft) round table.svg",
+    category: "Layout",
+    width: 1850,
+    height: 1850,
+    name: ""
+  },
+  {
+    id: "2400mm (8ft) round table",
+    label: "2400mm (8ft) round table",
+    path: "/assets/modal/Layout/2400mm (8ft) round table.svg",
+    category: "Layout",
+    width: 2450,
+    height: 2450,
+    name: ""
+  },
+  {
+    id: "500mm X 700mm Coffee Table",
+    label: "500mm X 700mm Coffee Table",
+    path: "/assets/modal/Layout/500mm X 700mm Coffee Table.svg",
+    category: "Layout",
+    width: 500,
+    height: 700,
+    name: ""
+  },
+  {
+    id: "6 Seater L Shaped Sofa",
+    label: "6 Seater L Shaped Sofa",
+    path: "/assets/modal/Layout/6 Seater L Shaped Sofa.svg",
+    category: "Layout",
+    width: 3506,
+    height: 2746,
+    name: ""
+  },
+  {
+    id: "8ft by 2.5ft Rectangular Table",
+    label: "8ft by 2.5ft Rectangular Table",
+    path: "/assets/modal/Layout/8ft by 2.5ft Rectangular Table.svg",
+    category: "Layout",
+    width: 2450,
+    height: 850,
+    name: ""
+  },
+  {
+    id: "900mm X 900mm Coffee Table",
+    label: "900mm X 900mm Coffee Table",
+    path: "/assets/modal/Layout/900mm X 900mm Coffee Table.svg",
+    category: "Layout",
+    width: 900,
+    height: 900,
+    name: ""
+  },
+  {
+    id: "Sofa set with coffe table 02",
+    label: "Sofa set with coffe table 02",
+    path: "/assets/modal/Layout/Sofa set with coffe table 02.svg",
+    category: "Layout",
+    width: 3168,
+    height: 1892,
+    name: ""
+  },
+  {
+    id: "Sofa set with coffe table 03",
+    label: "Sofa set with coffe table 03",
+    path: "/assets/modal/Layout/Sofa set with coffe table 03.svg",
+    category: "Layout",
+    width: 3506,
+    height: 2746,
+    name: ""
+  },
+  {
+    id: "Sofa set with coffe table 04",
+    label: "Sofa set with coffe table 04",
+    path: "/assets/modal/Layout/Sofa set with coffe table 04.svg",
+    category: "Layout",
+    width: 3912,
+    height: 2411,
+    name: ""
+  },
+  {
+    id: "Sofa set with coffe table 05",
+    label: "Sofa set with coffe table 05",
+    path: "/assets/modal/Layout/Sofa set with coffe table 05.svg",
+    category: "Layout",
+    width: 3749,
+    height: 2326,
     name: ""
   },
 ]

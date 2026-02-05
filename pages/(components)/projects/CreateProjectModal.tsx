@@ -89,7 +89,7 @@ export default function CreateProjectModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 30 }}
           transition={{ type: "spring", stiffness: 200, damping: 20 }}
-          className="bg-[#FDFDFF] w-[35rem] min-h-[18.6rem] rounded-[2.25rem] p-[2.625rem] flex flex-col gap-6 relative"
+          className="bg-[#FDFDFF] text-[#272235] w-[35rem] min-h-[18.6rem] rounded-[2.25rem] p-[2.625rem] flex flex-col gap-6 relative"
           onClick={(e) => e.stopPropagation()}
         >
           <AnimatePresence mode="wait">
@@ -146,11 +146,10 @@ export default function CreateProjectModal({
                 />
                 <button
                   onClick={handleSubmit}
-                  className={`w-full h-14 rounded-2xl text-base font-medium ${
-                    email
+                  className={`w-full h-14 rounded-2xl text-base font-medium ${email
                       ? "bg-[var(--accent)] text-white"
                       : "bg-[#0000000A] text-gray-500"
-                  }`}
+                    }`}
                 >
                   {email ? "Add" : "Skip for now"}
                 </button>

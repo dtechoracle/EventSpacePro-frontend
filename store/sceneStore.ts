@@ -52,6 +52,9 @@ export type AssetInstance = {
   isGroup?: boolean; // indicates if this asset is a group
   groupAssets?: AssetInstance[]; // assets contained within this group
   groupExpanded?: boolean; // whether the group is expanded in the UI
+
+  // UI State properties
+  showDimensions?: boolean; // toggle dimension display for walls/shapes
 };
 
 export type CanvasData = {
@@ -83,10 +86,11 @@ type SceneState = {
   isInitialized: boolean;
   hasUnsavedChanges: boolean;
   showGrid: boolean;
+  snapToGridEnabled: boolean;
   unitSystem: 'metric' | 'imperial'; // metric = mm/m, imperial = feet display
   showDebugOutlines?: boolean;
   gridSize: number; // Grid size in mm
-  snapToGridEnabled: boolean; // Whether to snap to grid
+
 
   // Grid size options
   availableGridSizes: number[]; // Available grid sizes in mm
@@ -313,6 +317,7 @@ export const useSceneStore = create<SceneState>()(
       // Available sizes in meters: 0.1m, 0.5m, 1m, 2m, 5m
       gridSize: 1000, // Default 1m grid
       snapToGridEnabled: false,
+
       availableGridSizes: [100, 500, 1000, 2000, 5000],
       selectedGridSizeIndex: 2, // index of 1000mm (1m)
       wallType: 'partition-75',
@@ -435,7 +440,7 @@ export const useSceneStore = create<SceneState>()(
         // Default properties for shapes
         const shapeDefaults: Partial<AssetInstance> =
           type === "square" || type === "circle"
-            ? { width: 50, height: 50, backgroundColor: defaultBackgroundColor }
+            ? { width: 50, height: 50, strokeWidth: 2, backgroundColor: defaultBackgroundColor }
             : type === "line"
               ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#000000", backgroundColor: defaultBackgroundColor }
               : type === "double-line"
@@ -446,7 +451,7 @@ export const useSceneStore = create<SceneState>()(
                     ? { wallThickness: get().getCurrentWallThickness(), wallGap: 8, lineColor: "#000000", backgroundColor: defaultBackgroundColor }
                     : type === "text"
                       ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: defaultBackgroundColor }
-                      : { width: finalWidth, height: finalHeight, backgroundColor: defaultBackgroundColor }; // Use library dimensions or default
+                      : { width: finalWidth, height: finalHeight, strokeWidth: 2, backgroundColor: defaultBackgroundColor }; // Use library dimensions or default, ensuring strokeWidth is 2
 
         set({
           assets: [

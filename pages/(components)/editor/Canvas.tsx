@@ -7,6 +7,7 @@ import { PAPER_SIZES } from "@/lib/paperSizes";
 import GridOverlay from "./GridOverlay";
 import UnifiedWallRendering from "./UnifiedWallRendering";
 import DrawingPath from "./DrawingPath";
+import DimensionOverlay from "./DimensionOverlay";
 import AssetRenderer from "./AssetRenderer";
 import GroupRenderer from "./GroupRenderer";
 import CanvasControls from "./CanvasControls";
@@ -54,6 +55,7 @@ export default function Canvas({
   const isPanning = useRef(false);
   const lastPanPos = useRef({ x: 0, y: 0 });
   const [canvasPos, setCanvasPos] = useState<{ x: number; y: number }>({ x: 200, y: 150 });
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; assetId: string } | null>(null);
   // Use store data for rendering (synced from props)
   const canvas = useSceneStore((s) => s.canvas);
   const assets = useSceneStore((s) => s.assets);
@@ -97,6 +99,9 @@ export default function Canvas({
   const finishWallDrawing = useSceneStore((s) => s.finishWallDrawing);
   const setWallDrawingMode = useSceneStore((s) => s.setWallDrawingMode);
   const createCrossAt = useSceneStore((s) => s.createCrossAt);
+
+  // Derived state for ANY drawing interaction (fixes issue where store.isDrawing might be false for shapes)
+  const isDrawingActive = isPenMode || isWallMode || wallDrawingMode || shapeMode;
   const snapToAnchorMode = useSceneStore((s) => s.snapToAnchorMode);
   const snapTargetAssetId = useSceneStore((s) => s.snapTargetAssetId);
   const snapTargetAnchor = useSceneStore((s) => s.snapTargetAnchor);
@@ -131,7 +136,9 @@ export default function Canvas({
     (s) => s.finishRectangularSelectionDrag
   );
 
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; assetId: string } | null>(null);
+  // Visual Snap Guides State (Global from Store now)
+  const snapGuides = useSceneStore((s) => s.snapGuides);
+  const setSnapGuides = useSceneStore((s) => s.setSnapGuides);
 
   // Sync props data to store when props change (only once per data change)
   const hasSyncedRef = useRef(false);
@@ -186,32 +193,26 @@ export default function Canvas({
   const scenePxHNoZoom = SCENE_H_MM * mmToPx;
 
   // Create coordinate transformation function
+  // Create coordinate transformation function
   const clientToCanvasMM = useCallback(
     (clientX: number, clientY: number) => {
-      if (!canvasRef.current || !effectiveWidthMm || !effectiveHeightMm)
-        return { x: 0, y: 0 };
+      // Use canvasRef (inner transformed element) to get exact visual bounds.
+      // This automatically accounts for offset, zoom, and any parent transforms.
+      if (!canvasRef.current) return { x: 0, y: 0 };
+
       const rect = canvasRef.current.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const dx = clientX - cx;
-      const dy = clientY - cy;
-      const theta = (-rotation * Math.PI) / 180;
-      const ux = dx * Math.cos(theta) - dy * Math.sin(theta);
-      const uy = dx * Math.sin(theta) + dy * Math.cos(theta);
-      const halfWscreen = (canvasPxW * workspaceZoom) / 2;
-      const halfHscreen = (canvasPxH * workspaceZoom) / 2;
-      const xMm = (ux + halfWscreen) / (mmToPx * workspaceZoom);
-      const yMm = (uy + halfHscreen) / (mmToPx * workspaceZoom);
+
+      // rect.left/top is the visual position of the scene's (0,0) point.
+      // clientX - rect.left is the distance in VISUAL pixels from the left edge.
+      // We divide by (mmToPx * workspaceZoom) to get back to Scene MM.
+      const xMm = (clientX - rect.left) / (mmToPx * workspaceZoom);
+      const yMm = (clientY - rect.top) / (mmToPx * workspaceZoom);
+
       return { x: xMm, y: yMm };
     },
     [
-      effectiveWidthMm,
-      effectiveHeightMm,
-      canvasPxW,
-      canvasPxH,
       workspaceZoom,
       mmToPx,
-      rotation,
     ]
   );
 
@@ -563,7 +564,10 @@ export default function Canvas({
     >
       <div
         className="relative w-full h-full"
-        style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`, transformOrigin: "top left" }}
+        style={{
+          transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+          transformOrigin: "0 0" // Explicit 0 0 to be absolute certain
+        }}
       >
         {/* Virtual Scene */}
         <div
@@ -571,7 +575,7 @@ export default function Canvas({
           style={{ width: scenePxWNoZoom, height: scenePxHNoZoom }}
         >
           {/* Grid Overlay covering the entire scene so no whitespace shows */}
-          <div style={{ pointerEvents: 'none' }}>
+          <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 1 }}>
             <GridOverlay
               showGrid={showGrid}
               canvasPxW={scenePxWNoZoom}
@@ -580,16 +584,40 @@ export default function Canvas({
               gridSize={gridSize}
             />
           </div>
+
+          {/* (Moved to bottom for Z-index safety) */}
+
           {/* Unified wall rendering (boolean union of all wall polygons incl. preview) */}
-          <UnifiedWallRendering mmToPx={mmToPx} />
+          <div className={isDrawingActive ? "pointer-events-none" : ""}>
+            <UnifiedWallRendering mmToPx={mmToPx} />
+          </div>
+
+          {/* Drawing Path (Shapes, Pen) */}
+          <div className="pointer-events-none" style={{ zIndex: 50 }}>
+            <DrawingPath
+              isDrawing={isDrawing}
+              tempPath={tempPath}
+              wallDrawingMode={wallDrawingMode}
+              currentWallSegments={currentWallSegments}
+              currentWallStart={currentWallStart}
+              currentWallTempEnd={currentWallTempEnd}
+              assets={assets}
+              canvasPxW={scenePxWNoZoom}
+              canvasPxH={scenePxHNoZoom}
+              mmToPx={mmToPx}
+              lastMousePosition={lastMousePosition.current}
+              clientToCanvasMM={clientToCanvasMM}
+              isRectangularSelectionMode={isRectangularSelectionMode}
+              rectangularSelectionStart={rectangularSelectionStart}
+              rectangularSelectionEnd={rectangularSelectionEnd}
+            />
+          </div>
+
           {/* Single Canvas (the scene itself) */}
           <div
             ref={canvasRef}
             data-canvas-container="true"
-            className={`relative ${isPenMode ||
-              isWallMode ||
-              wallDrawingMode ||
-              shapeMode ||
+            className={`relative ${isDrawingActive ||
               isRectangularSelectionMode
               ? "cursor-crosshair"
               : ""
@@ -597,11 +625,97 @@ export default function Canvas({
             style={{
               width: scenePxWNoZoom,
               height: scenePxHNoZoom,
-              cursor: isRectangularSelectionMode ? "crosshair" : (isWallMode || wallDrawingMode || shapeMode) ? "crosshair" : undefined,
+              cursor: isRectangularSelectionMode ? "crosshair" : isDrawingActive ? "crosshair !important" : undefined,
             }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
             onMouseMove={(e) => {
+              // DEBUG: Log coordinates and state
+              let { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+              // console.log('MouseMove:', { isDrawingActive, shapeMode, x, y });
+
+              // --- SNAP TO OBJECT LOGIC (AXIS ALIGNED) ---
+              if (isDrawingActive) {
+                // Calculate threshold based on screen pixels for consistent "magnetic" feel
+                // INCREASED THRESHOLD FOR DEBUGGING
+                const SNAP_THRESHOLD = 50 / workspaceZoom;
+
+                let snapX: number | null = null;
+                let snapY: number | null = null;
+                let minXDist = SNAP_THRESHOLD;
+                let minYDist = SNAP_THRESHOLD;
+
+                // Check against all assets
+                assets.forEach(asset => {
+                  // Allow snapping to groups and other assets
+                  // if (asset.type === 'group') return;
+
+                  // Get dimensions robustly
+                  // For shapes (rectangle/ellipse), width/height are authoritative
+
+                  let w = 50;
+                  let h = 50;
+
+                  // Use explicit width/height if available, otherwise default
+                  if (typeof asset.width === 'number' && asset.width > 0) {
+                    w = asset.width * (asset.scale ?? 1);
+                  }
+                  if (typeof asset.height === 'number' && asset.height > 0) {
+                    h = asset.height * (asset.scale ?? 1);
+                  }
+
+                  const halfW = w / 2;
+                  const halfH = h / 2;
+
+                  // X-Axis Candidates: Center, Left, Right
+                  const xCandidates = [asset.x, asset.x - halfW, asset.x + halfW];
+
+                  xCandidates.forEach(targetX => {
+                    const dx = Math.abs(targetX - x);
+                    if (dx < minXDist) {
+                      minXDist = dx;
+                      snapX = targetX;
+                    }
+                  });
+
+                  // Y-Axis Candidates: Center, Top, Bottom
+                  const yCandidates = [asset.y, asset.y - halfH, asset.y + halfH];
+
+                  yCandidates.forEach(targetY => {
+                    const dy = Math.abs(targetY - y);
+                    if (dy < minYDist) {
+                      minYDist = dy;
+                      snapY = targetY;
+                    }
+                  });
+                });
+
+                // Apply Snap
+                if (snapX !== null) x = snapX;
+                if (snapY !== null) y = snapY;
+
+                if (snapX !== null || snapY !== null) {
+                  const newGuides = [];
+                  if (snapX !== null) {
+                    newGuides.push({
+                      x1: snapX, y1: 0, x2: snapX, y2: scenePxHNoZoom / mmToPx, type: 'vertical'
+                    } as any);
+                  }
+                  if (snapY !== null) {
+                    newGuides.push({
+                      x1: 0, y1: snapY, x2: scenePxWNoZoom / mmToPx, y2: snapY, type: 'horizontal'
+                    } as any);
+                  }
+                  setSnapGuides(newGuides);
+                  // console.log('Snap Guides Set:', newGuides);
+                } else {
+                  setSnapGuides([]);
+                }
+              }
+              // ----------------------------
+              // const rect = canvasRef.current?.getBoundingClientRect();
+              // console.log(`Mouse: ${e.clientX.toFixed(0)},${e.clientY.toFixed(0)} | RectL: ${rect?.left.toFixed(0)} | Zoom: ${workspaceZoom.toFixed(3)} | Canvas: ${x.toFixed(1)},${y.toFixed(1)}`);
+
               // Only process rectangular selection if not in drawing modes
               // Drawing modes take absolute priority - rectangular selection should never activate during drawing
               if (
@@ -618,7 +732,6 @@ export default function Canvas({
               }
               // Update wall preview while drawing
               if ((wallDrawingMode || isWallMode) && currentWallStart) {
-                let { x, y } = clientToCanvasMM(e.clientX, e.clientY);
                 // Snap preview to the very first start point to allow clean closure
                 if (currentWallSegments && currentWallSegments.length > 0) {
                   const first = currentWallSegments[0].start;
@@ -630,18 +743,96 @@ export default function Canvas({
                 updateWallTempEnd({ x, y });
               } else if ((wallDrawingMode || isWallMode) && !currentWallStart) {
                 // If wall mode is active but no segment started yet, update temp end on first point
-                const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
                 // This ensures preview shows even before first click
+                // Use SNAPPED x,y
               }
               // Update shape preview while drawing
               if (shapeMode && shapeStart) {
-                const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-                let end = { x, y };
+                // --- SNAP TO OBJECT LOGIC FOR DRAWING ---
+                let snappedX = x;
+                let snappedY = y;
+                const SNAP_THRESHOLD = 5;
+                const newGuides: any[] = [];
+                let snapX: number | null = null;
+                let snapY: number | null = null;
+
+                // Find potential horizontal/vertical snaps against other assets
+                if (assets.length > 0) {
+                  // Candidates: edges and centers of all other assets
+                  const candidatesX: number[] = [];
+                  const candidatesY: number[] = [];
+
+                  // Add canvas center
+                  candidatesX.push(scenePxWNoZoom / mmToPx / 2);
+                  candidatesY.push(scenePxHNoZoom / mmToPx / 2);
+
+                  assets.forEach(a => {
+                    const xx = a.x; // Center X (mm)
+                    const yy = a.y; // Center Y (mm)
+
+                    // Simple logic: Snap to center of assets
+                    candidatesX.push(xx);
+                    candidatesY.push(yy);
+
+                    // Add edges if simple shape
+                    const halfW = ((a.width || 0) * (a.scale || 1)) / 2;
+                    const halfH = ((a.height || 0) * (a.scale || 1)) / 2;
+                    candidatesX.push(xx - halfW, xx + halfW);
+                    candidatesY.push(yy - halfH, yy + halfH);
+                  });
+
+                  // Find closest X
+                  let bestDistX = Infinity;
+                  candidatesX.forEach(cx => {
+                    const dist = Math.abs(x - cx);
+                    if (dist < SNAP_THRESHOLD && dist < bestDistX) {
+                      bestDistX = dist;
+                      snapX = cx;
+                    }
+                  });
+
+                  // Find closest Y
+                  let bestDistY = Infinity;
+                  candidatesY.forEach(cy => {
+                    const dist = Math.abs(y - cy);
+                    if (dist < SNAP_THRESHOLD && dist < bestDistY) {
+                      bestDistY = dist;
+                      snapY = cy;
+                    }
+                  });
+
+                  // Apply snap
+                  if (snapX !== null) snappedX = snapX;
+                  if (snapY !== null) snappedY = snapY;
+
+                  // Create guides
+                  if (snapX !== null) {
+                    newGuides.push({
+                      x1: snapX, y1: 0, x2: snapX, y2: scenePxHNoZoom / mmToPx, type: 'vertical'
+                    });
+                  }
+                  if (snapY !== null) {
+                    newGuides.push({
+                      x1: 0, y1: snapY, x2: scenePxWNoZoom / mmToPx, y2: snapY, type: 'horizontal'
+                    });
+                  }
+
+                  if (newGuides.length > 0) {
+                    setSnapGuides(newGuides);
+                  } else {
+                    setSnapGuides([]);
+                  }
+                } else {
+                  setSnapGuides([]);
+                }
+
+                // Use the snapped coordinates
+                let end = { x: snappedX, y: snappedY };
 
                 // Apply Shift key constraint for perfect squares/circles
                 if (e.shiftKey && (shapeMode === "rectangle" || shapeMode === "ellipse")) {
-                  const dx = x - shapeStart.x;
-                  const dy = y - shapeStart.y;
+                  const dx = end.x - shapeStart.x;
+                  const dy = end.y - shapeStart.y;
                   const size = Math.max(Math.abs(dx), Math.abs(dy));
                   end = {
                     x: shapeStart.x + Math.sign(dx || 1) * size,
@@ -683,11 +874,22 @@ export default function Canvas({
               }
               // Finish shape drawing on mouse up
               if (shapeMode && shapeStart) {
+                setSnapGuides([]); // Clear guides
                 finishShape();
               }
             }}
             onMouseDown={(e) => {
               if (e.button !== 0) return;
+
+              // --- PRIORITY DRAWING MODE CHECK ---
+              // If we are in a drawing mode, we capture the click immediately,
+              // ignoring whether we clicked on an asset or not.
+              // We stop propagation so asset handlers don't fire.
+              if (isPenMode || isWallMode || wallDrawingMode || shapeMode) {
+                e.stopPropagation();
+                // Continue to logic below...
+              }
+              // -----------------------------------
 
               // In snap-to-anchor mode, handle ALL clicks (on canvas, assets, or anywhere)
               // The asset handlers will let clicks through in snap mode
@@ -695,13 +897,18 @@ export default function Canvas({
                 // Always handle snap mode clicks, regardless of target
                 // This ensures clicks on assets are processed
               } else if (e.target !== canvasRef.current &&
-                !(canvasRef.current && canvasRef.current.contains(e.target as Node))) {
+                !(canvasRef.current && canvasRef.current.contains(e.target as Node)) &&
+                !isPenMode && !isWallMode && !wallDrawingMode && !shapeMode) {
+                // ^ Added check: Only bail out if NOT in drawing mode
                 // Not in snap mode and click is not on canvas - let asset handlers deal with it
                 return;
               }
 
               if (e.target === canvasRef.current || snapToAnchorMode ||
-                (canvasRef.current && canvasRef.current.contains(e.target as Node))) {
+                (canvasRef.current && canvasRef.current.contains(e.target as Node)) ||
+                isPenMode || isWallMode || wallDrawingMode || shapeMode) {
+                // ^ Added drawing modes to condition to ensure entry
+
                 // Drawing modes take absolute priority - check them FIRST
                 // If in any drawing mode, rectangular selection should NEVER activate
                 if (isPenMode) {
@@ -1067,7 +1274,7 @@ export default function Canvas({
             )}
 
             {/* Selection Box */}
-            <div style={{ pointerEvents: 'none' }}>
+            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 10 }}>
               <SelectionBox mmToPx={mmToPx} />
             </div>
 
@@ -1141,72 +1348,114 @@ export default function Canvas({
                 // Use GroupRenderer for group assets, AssetRenderer for regular assets
                 if (asset.isGroup) {
                   return (
-                    <GroupRenderer
+                    <div
                       key={asset.id}
-                      group={asset}
-                      isSelected={isSelected}
-                      isMultiSelected={isMultiSelected}
-                      leftPx={leftPx}
-                      topPx={topPx}
-                      mmToPx={mmToPx}
-                      onAssetClick={(id) => selectAsset(id)}
-                      onAssetDoubleClick={(id) => {
-                        if (id) {
-                          const asset = assets.find((a: AssetInstance) => a.id === id);
-                          if (asset?.isGroup) {
-                            updateAsset(id, { groupExpanded: !asset.groupExpanded });
+                      style={{ pointerEvents: isDrawingActive ? 'none' : 'auto' }}
+                    >
+                      <GroupRenderer
+                        group={asset}
+                        isSelected={isSelected}
+                        isMultiSelected={isMultiSelected}
+                        leftPx={leftPx}
+                        topPx={topPx}
+                        mmToPx={mmToPx}
+                        onAssetClick={(id) => selectAsset(id)}
+                        onAssetDoubleClick={(id) => {
+                          if (id) {
+                            const asset = assets.find((a) => a.id === id);
+                            if (asset?.isGroup) {
+                              updateAsset(id, { groupExpanded: !asset.groupExpanded });
+                            }
                           }
+                        }}
+                        onAssetMouseDown={assetHandlers.onAssetMouseDown}
+                        onAssetMouseMove={() => { }}
+                        onAssetMouseUp={() => { }}
+                        onAssetMouseLeave={() => { }}
+                        onAssetMouseEnter={() => { }}
+                        onAssetMouseOver={() => { }}
+                        onAssetMouseOut={() => { }}
+                        onAssetContextMenu={handleAssetContextMenu}
+                        onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
+                        onRotationHandleMouseDown={
+                          assetHandlers.onRotationHandleMouseDown
                         }
-                      }}
-                      onAssetMouseDown={assetHandlers.onAssetMouseDown}
-                      onAssetMouseMove={() => { }}
-                      onAssetMouseUp={() => { }}
-                      onAssetMouseLeave={() => { }}
-                      onAssetMouseEnter={() => { }}
-                      onAssetMouseOver={() => { }}
-                      onAssetMouseOut={() => { }}
-                      onAssetContextMenu={handleAssetContextMenu}
-                      onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
-                      onRotationHandleMouseDown={
-                        assetHandlers.onRotationHandleMouseDown
-                      }
-                      selectedAssetId={selectedAssetId}
-                      selectedAssetIds={selectedAssetIds}
-                    />
+                        selectedAssetId={selectedAssetId}
+                        selectedAssetIds={selectedAssetIds}
+                      />
+                    </div>
                   );
                 }
 
                 return (
-                  <AssetRenderer
+                  <div
                     key={asset.id}
-                    asset={asset}
-                    updateAsset={updateAsset} // Pass updateAsset here
-                    isSelected={isSelected}
-                    isMultiSelected={isMultiSelected}
-                    isCopied={isCopied}
-                    leftPx={leftPx}
-                    topPx={topPx}
-                    totalRotation={totalRotation}
-                    editingTextId={assetHandlers.editingTextId}
-                    editingText={assetHandlers.editingText}
-                    onAssetMouseDown={assetHandlers.onAssetMouseDown}
-                    onTextDoubleClick={assetHandlers.onTextDoubleClick}
-                    onTextEditKeyDown={assetHandlers.onTextEditKeyDown}
-                    onTextEditBlur={assetHandlers.onTextEditBlur}
-                    onTextEditChange={assetHandlers.setEditingText}
-                    onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
-                    onRotationHandleMouseDown={
-                      assetHandlers.onRotationHandleMouseDown
-                    }
-                    onAssetContextMenu={handleAssetContextMenu}
-                  />
+                    style={{ pointerEvents: isDrawingActive ? 'none' : 'auto' }}
+                  >
+                    <AssetRenderer
+                      asset={asset}
+                      updateAsset={updateAsset} // Pass updateAsset here
+                      isSelected={isSelected}
+                      isMultiSelected={isMultiSelected}
+                      isCopied={isCopied}
+                      leftPx={leftPx}
+                      topPx={topPx}
+                      totalRotation={totalRotation}
+                      editingTextId={assetHandlers.editingTextId}
+                      editingText={assetHandlers.editingText}
+                      onAssetMouseDown={assetHandlers.onAssetMouseDown}
+                      onTextDoubleClick={assetHandlers.onTextDoubleClick}
+                      onTextEditKeyDown={assetHandlers.onTextEditKeyDown}
+                      onTextEditBlur={assetHandlers.onTextEditBlur}
+                      onTextEditChange={assetHandlers.setEditingText}
+                      onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
+                      onRotationHandleMouseDown={
+                        assetHandlers.onRotationHandleMouseDown
+                      }
+                      onAssetContextMenu={handleAssetContextMenu}
+                    />
+                  </div>
                 );
               })}
+
+            {/* Dimensions Overlay - renders on top of everything */}
+            <DimensionOverlay mmToPx={mmToPx} />
+
+            {/* Smart Snap Guides Logic (Rendering LAST to ensure visibility over all assets/transforms) */}
+            {snapGuides && snapGuides.map((guide, i) => {
+              // Refactored to use standard DIVs instead of giant SVGs to avoid browser rendering limits on large canvas
+              const isVertical = guide.type === 'vertical';
+              const x1 = guide.x1 * mmToPx;
+              const y1 = guide.y1 * mmToPx;
+              const x2 = guide.x2 * mmToPx;
+              const y2 = guide.y2 * mmToPx;
+
+              const style: React.CSSProperties = {
+                position: 'absolute',
+                pointerEvents: 'none',
+                zIndex: 99999,
+                backgroundColor: isVertical ? '#ff0000' : '#00ff00',
+              };
+
+              if (isVertical) {
+                style.left = x1;
+                style.top = y1;
+                style.width = Math.max(1, 2 / workspaceZoom); // Minimum 1px visible
+                style.height = y2 - y1;
+              } else {
+                style.left = x1;
+                style.top = y1;
+                style.width = x2 - x1;
+                style.height = Math.max(1, 2 / workspaceZoom); // Minimum 1px visible
+              }
+
+              return <div key={i} style={style} />;
+            })}
           </div>
         </div>
-      </div>
-      {/* 3D Overlay */}
-      <ThreeDOverlay />
-    </div>
+        {/* 3D Overlay */}
+        <ThreeDOverlay />
+      </div >
+    </div >
   );
 }

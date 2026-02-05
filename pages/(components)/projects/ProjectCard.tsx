@@ -1,13 +1,16 @@
 "use client";
 
 import { useRouter } from "next/router";
-import { BsThreeDotsVertical } from "react-icons/bs";
+import { BsThreeDotsVertical, BsFolder } from "react-icons/bs";
 import { AssetInstance } from "@/store/sceneStore";
+import WorkspacePreview from "@/components/WorkspacePreview";
 
 interface EventData {
   _id: string;
   name: string;
   canvasAssets: AssetInstance[];
+  // Include canvasData type if we want to pass it to preview
+  canvasData?: any;
   createdAt: string;
   updatedAt: string;
   __v: number;
@@ -56,64 +59,56 @@ export default function ProjectCard({ project }: ProjectCardProps) {
     return `${Math.floor(diffInDays / 30)} months ago`;
   };
 
-  // Get total collaborators (users + pending invites)
-  // const totalCollaborators = project.users.length + project.invites.length;
-
-  // Get the last event worked on (most recently updated)
+  // Get the last event worked on (most recently updated) for preview
   const lastEvent = project?.events && project.events.length > 0
-    ? [...project.events].sort((a, b) => 
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      )[0]
+    ? [...project.events].sort((a, b) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    )[0]
     : null;
 
   return (
     <div
-      className='relative w-full min-h-[220px] rounded-3xl overflow-hidden shadow-lg cursor-pointer transition hover:-translate-y-1 hover:shadow-xl'
-      onClick={() =>
-        router.push(`/dashboard/projects/${project?.slug || ""}/events`)
-      }
+      onClick={() => router.push(`/dashboard/projects/${project?.slug || ""}/events`)}
+      className="bg-white rounded-lg border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-colors group relative flex flex-col"
     >
-      {/* Background: Show event preview if available, otherwise show gradient */}
-      {lastEvent && lastEvent._id ? (
-        <div className='absolute inset-0'>
-          <iframe
-            src={`/dashboard/editor/${project.slug}/${lastEvent._id}?preview=true`}
-            className="w-full h-full border-0"
-            style={{ pointerEvents: 'none' }}
-            title={`Preview of ${project.name}`}
-          />
-          {/* Frosted overlay for better text readability */}
-          <div className='absolute inset-0 bg-white/30 backdrop-blur-sm pointer-events-none'></div>
-        </div>
-      ) : (
-        <>
-      {/* Background with placeholder circles */}
-          <div className='absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#E0EAFF] via-[#D4E4FF] to-[#C7D2FE]'>
-            <div className='absolute -top-10 -left-10 w-40 h-40 bg-blue-200 rounded-full blur-3xl opacity-70' />
-            <div className='absolute top-8 right-6 w-32 h-32 bg-sky-200 rounded-full blur-3xl opacity-60' />
-            <div className='absolute bottom-8 left-1/3 w-32 h-32 bg-indigo-200 rounded-full blur-3xl opacity-60' />
-      </div>
-      {/* Frosted overlay */}
-      <div className='absolute inset-0 bg-white/40 backdrop-blur-lg'></div>
-        </>
-      )}
+      {/* Three dots - Top Right */}
+      <button
+        className='absolute top-2 right-2 z-10 p-1.5 rounded-full bg-white/90 backdrop-blur-sm shadow-md hover:bg-white text-gray-400 hover:text-gray-700 transition-colors'
+        onClick={(e) => {
+          e.stopPropagation();
+          // TODO: Open context menu
+        }}
+      >
+        <BsThreeDotsVertical className='text-sm' />
+      </button>
 
-      {/* Content */}
-      <div className='absolute bottom-0 left-0 flex w-full items-end justify-between p-4'>
-        <div>
-          <h3 className='truncate text-lg font-semibold text-black'>
-            {project?.name || "Unnamed Project"}
-          </h3>
-          <p className='text-sm text-gray-600'>
-            Updated {getTimeAgo(project?.updatedAt || new Date().toISOString())}
-          </p>
-        </div>
-        <button
-          className='rounded-full p-2 hover:bg-black/10'
-          onClick={(e) => e.stopPropagation()}
-        >
-          <BsThreeDotsVertical className='text-xl text-gray-700' />
-        </button>
+      {/* Preview Area - Matches EventCard Aspect Ratio */}
+      <div className="bg-gray-50 w-full relative overflow-hidden flex items-center justify-center" style={{ aspectRatio: '2.5/1', height: '160px' }}>
+        {lastEvent ? (
+          // If we have an event, try to show its workspace preview (requires previewData props which we might not have fully normalized here without helpers, or simplified)
+          // For now, simpler to use a folder icon or if we have canvasData, render WorkspacePreview.
+          // ProjectData typically doesn't include full CanvasData for all events unless we fetched it.
+          // Given the previous architecture, we might just use a placeholder styling OR if we have keys.
+          <div className="w-full h-full bg-blue-50/50 flex flex-col items-center justify-center text-blue-300">
+            <BsFolder className="text-4xl mb-2" />
+            <span className="text-xs font-medium">{project.events.length} Events</span>
+          </div>
+        ) : (
+          <div className="w-full h-full bg-gray-50 flex flex-col items-center justify-center text-gray-300">
+            <BsFolder className="text-4xl mb-2" />
+            <span className="text-xs font-medium">Empty</span>
+          </div>
+        )}
+      </div>
+
+      {/* Footer Info */}
+      <div className="p-4 mt-auto">
+        <h3 className="font-semibold text-sm mb-1 truncate text-gray-800 group-hover:text-blue-600 transition-colors">
+          {project?.name || "Unnamed Project"}
+        </h3>
+        <p className="text-xs text-gray-500">
+          Updated {getTimeAgo(project?.updatedAt || new Date().toISOString())}
+        </p>
       </div>
     </div>
   );

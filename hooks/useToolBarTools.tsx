@@ -72,10 +72,10 @@ export function useToolbarTools(): Tool[] {
     },
     // 3) Assets
     {
-      icon: <FaBox size={18} />,
+      icon: <FaLayerGroup size={18} />,
       label: "Assets",
       options: [
-        { id: "open-assets", label: "Assets", icon: <FaBox size={14} /> },
+        { id: "open-assets", label: "Assets", icon: <FaLayerGroup size={14} /> },
       ],
     },
     // 4) Selection

@@ -1,24 +1,13 @@
 import React from 'react';
 import { useSceneStore } from '@/store/sceneStore';
 
-export default function SnapGuidesRenderer() {
+export default function SnapGuidesRenderer({ zoom = 1 }: { zoom?: number }) {
     const snapGuides = useSceneStore(s => s.snapGuides);
 
     if (!snapGuides || snapGuides.length === 0) return null;
 
     return (
-        <svg
-            style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                pointerEvents: 'none',
-                zIndex: 9999, // High z-index to be on top
-                overflow: 'visible'
-            }}
-        >
+        <g pointerEvents="none">
             {snapGuides.map((guide, index) => (
                 <line
                     key={index}
@@ -26,11 +15,12 @@ export default function SnapGuidesRenderer() {
                     y1={guide.y1}
                     x2={guide.x2}
                     y2={guide.y2}
-                    stroke="#ef4444" // Red color for guides
-                    strokeWidth="1"
-                    strokeDasharray="4 2"
+                    stroke={guide.type === 'horizontal' ? '#22c55e' : '#ef4444'} // Horizontal = Green, Vertical = Red
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                    vectorEffect="non-scaling-stroke"
                 />
             ))}
-        </svg>
+        </g>
     );
 }

@@ -60,12 +60,13 @@ export type Shape = {
     gradientType?: 'linear' | 'radial';
     gradientColors?: string[]; // Array of color stops
     gradientAngle?: number; // For linear gradients (0-360 degrees)
-    hatchPattern?: 'horizontal' | 'vertical' | 'diagonal-right' | 'diagonal-left' | 'cross' | 'diagonal-cross' | 'dots' | 'grid';
+    hatchPattern?: 'horizontal' | 'vertical' | 'diagonal-right' | 'diagonal-left' | 'cross' | 'diagonal-cross' | 'dots' | 'brick';
     hatchSpacing?: number; // Spacing between hatch lines in pixels
     hatchColor?: string; // Color of hatch pattern
     fillImage?: string; // Base64 or URL for image fill
     fillImageScale?: number; // Scale factor for image fill
     fillTexture?: string; // ID of the texture pattern
+    fillTextureScale?: number; // Scale for texture pattern
 
     // Arrow properties
     // Arrow properties
@@ -125,6 +126,9 @@ export type Wall = {
     nodes: WallNode[];
     edges: WallEdge[];
     fill?: string;
+    fillType?: 'color' | 'texture';
+    fillTexture?: string;
+    fillTextureScale?: number;
     isClosed?: boolean; // For closed loops
     zIndex: number;
 };
@@ -1130,14 +1134,18 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             // Asset methods
-            addAsset: (asset) => {
+            addAsset: (asset: Asset) => {
                 get().saveToHistory();
+                // Apply default strokeWidth of 2 if not already set
+                const assetWithDefaults = {
+                    ...asset,
+                    strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : 2
+                };
                 set((state) => ({
-                    assets: [...state.assets, asset],
+                    assets: [...state.assets, assetWithDefaults],
                     hasUnsavedChanges: true,
                 }));
             },
-
             updateAsset: (id, updates, skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({

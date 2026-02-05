@@ -97,7 +97,121 @@ export const convertPlanToCanvasData = (plan: any, canvasWidth = 10000, canvasHe
         return { x, y };
     };
 
-    // 2. Tables
+    // 2. Assets - new comprehensive asset placement by name
+    if (Array.isArray(plan.assets)) {
+        plan.assets.forEach((assetSpec: any, idx: number) => {
+            const assetType = assetSpec.assetType || assetSpec.assetName;
+            const width = Number(assetSpec.widthMm || assetSpec.width || 500);
+            const height = Number(assetSpec.heightMm || assetSpec.height || 500);
+            let x = Number(assetSpec.xMm || assetSpec.x);
+            let y = Number(assetSpec.yMm || assetSpec.y);
+
+            // Auto-layout if missing or invalid
+            if (!isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
+                const emptySpace = findEmptySpace(width, height);
+                x = emptySpace.x;
+                y = emptySpace.y;
+            }
+
+            const pos = clampInWall(x, y);
+            addAsset({
+                id: `asset-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+                type: assetType,
+                x: pos.x,
+                y: pos.y,
+                scale: 1,
+                rotation: Number(assetSpec.rotation || 0),
+                zIndex: 1,
+                width,
+                height,
+                fillColor: assetSpec.fillColor,
+                strokeColor: assetSpec.strokeColor,
+                backgroundColor: assetSpec.fillColor || 'transparent',
+            });
+        });
+    }
+
+    // 3. Shapes - rectangles, circles, lines
+    if (Array.isArray(plan.shapes)) {
+        plan.shapes.forEach((shape: any, idx: number) => {
+            let x = Number(shape.x);
+            let y = Number(shape.y);
+            const width = Number(shape.width || 100);
+            const height = Number(shape.height || 100);
+
+            if (!isFinite(x) || !isFinite(y)) {
+                const emptySpace = findEmptySpace(width, height);
+                x = emptySpace.x;
+                y = emptySpace.y;
+            }
+
+            const pos = clampInWall(x, y);
+            addAsset({
+                id: `shape-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+                type: shape.type === 'circle' ? 'ellipse' : shape.type,
+                x: pos.x,
+                y: pos.y,
+                scale: 1,
+                rotation: 0,
+                zIndex: 1,
+                width,
+                height,
+                fillColor: shape.fillColor || '#3b82f6',
+                strokeColor: shape.strokeColor || '#000000',
+                strokeWidth: shape.strokeWidth || 2,
+                backgroundColor: shape.fillColor || 'transparent',
+            });
+        });
+    }
+
+    // 4. Annotations - text labels, arrows, dimensions
+    if (Array.isArray(plan.annotations)) {
+        plan.annotations.forEach((annotation: any, idx: number) => {
+            const x = Number(annotation.x || canvasCenter.x);
+            const y = Number(annotation.y || canvasCenter.y);
+            const pos = clampInWall(x, y);
+
+            if (annotation.type === 'text' || annotation.type === 'label') {
+                addAsset({
+                    id: `text-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+                    type: 'text',
+                    x: pos.x,
+                    y: pos.y,
+                    scale: 1,
+                    rotation: 0,
+                    zIndex: 10,
+                    width: 200,
+                    height: 50,
+                    text: annotation.text || 'Label',
+                    fontSize: annotation.fontSize || 16,
+                    textColor: '#000000',
+                    fontFamily: 'Arial',
+                    backgroundColor: 'transparent',
+                });
+            }
+
+            // For arrows, add as line shapes
+            if (annotation.type === 'arrow' && annotation.targetX && annotation.targetY) {
+                addAsset({
+                    id: `arrow-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+                    type: 'line',
+                    x: (pos.x + annotation.targetX) / 2,
+                    y: (pos.y + annotation.targetY) / 2,
+                    scale: 1,
+                    rotation: Math.atan2(annotation.targetY - pos.y, annotation.targetX - pos.x) * 180 / Math.PI,
+                    zIndex: 10,
+                    width: Math.hypot(annotation.targetX - pos.x, annotation.targetY - pos.y),
+                    height: 2,
+                    strokeColor: '#000000',
+                    strokeWidth: 2,
+                    backgroundColor: 'transparent',
+                });
+            }
+        });
+    }
+
+    // 5. Tables (legacy support)
+
     if (Array.isArray(plan.tables)) {
         const cols = Math.ceil(Math.sqrt(plan.tables.length));
 
@@ -139,7 +253,7 @@ export const convertPlanToCanvasData = (plan: any, canvasWidth = 10000, canvasHe
         });
     }
 
-    // 3. Chairs
+    // 6. Chairs (legacy support)
     if (Array.isArray(plan.chairs)) {
         plan.chairs.forEach((c: any, idx: number) => {
             let x = Number(c.xMm);
@@ -163,7 +277,7 @@ export const convertPlanToCanvasData = (plan: any, canvasWidth = 10000, canvasHe
         });
     }
 
-    // 4. Chairs Around (Circular arrangement)
+    // 7. Chairs Around (Circular arrangement)
     if (Array.isArray(plan.chairsAround)) {
         plan.chairsAround.forEach((spec: any, idx: number) => {
             let cx = Number(spec.centerX);

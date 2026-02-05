@@ -12,7 +12,7 @@ interface ToolbarProps {
 export default function Toolbar({ className = '' }: ToolbarProps) {
     const { activeTool, setActiveTool, showGrid, toggleGrid, snapToGrid, toggleSnapToGrid, zoomIn, zoomOut, resetZoom } = useEditorStore();
     const { undo, redo, history } = useProjectStore();
-    const { setRectangularSelectionMode } = useSceneStore();
+    const { setRectangularSelectionMode, toggleSnapToGrid: toggleSceneSnap } = useSceneStore();
 
     const tools: { id: Tool; label: string; icon: string }[] = [
         { id: 'select', label: 'Select', icon: '⬚' },

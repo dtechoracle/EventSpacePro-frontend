@@ -531,12 +531,27 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
 
                             return (
                                 <g key={`segment-${idx}`}>
-                                    {/* Wall Fill with rounded corners */}
+                                    {/* Wall Fill */}
                                     <path
                                         d={fillPath}
-                                        fill={isEdgeSelected ? '#dbeafe' : isSelected ? '#e0f2fe' : isHovered ? '#f0f9ff' : (wall.fill || '#ffffff')}
+                                        fill={
+                                            wall.fillType === 'texture' && wall.fillTexture
+                                                ? `url(#${wall.fillTexture}-scale-${wall.fillTextureScale || 1})`
+                                                : (wall.fill || '#ffffff')
+                                        }
                                         stroke="none"
                                     />
+
+                                    {/* Selection/Hover Overlay */}
+                                    {(isSelected || isHovered || isEdgeSelected) && (
+                                        <path
+                                            d={fillPath}
+                                            fill={isEdgeSelected ? '#3b82f6' : '#3b82f6'}
+                                            fillOpacity={isEdgeSelected ? 0.3 : (isSelected ? 0.2 : 0.1)}
+                                            stroke="none"
+                                            style={{ pointerEvents: 'none' }}
+                                        />
+                                    )}
 
                                     {/* Outer edge (left side) with rounded corners - always draw */}
                                     <path

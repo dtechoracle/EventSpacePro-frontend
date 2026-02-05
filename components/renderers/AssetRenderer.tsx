@@ -7,8 +7,8 @@ import { ASSET_LIBRARY } from '@/lib/assets';
 
 // Helper to extract dimensions from SVG string
 function getSvgSize(svgText: string) {
-    const widthMatch = svgText.match(/width=["']([\d.]+)["']/);
-    const heightMatch = svgText.match(/height=["']([\d.]+)["']/);
+    const widthMatch = svgText.match(/width=["']([\d.]+)[a-z%]*["']/i);
+    const heightMatch = svgText.match(/height=["']([\d.]+)[a-z%]*["']/i);
     const viewBoxMatch = svgText.match(/viewBox=["']([\d\s.-]+)["']/);
 
     let width = widthMatch ? parseFloat(widthMatch[1]) : null;
@@ -91,17 +91,42 @@ export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRen
     const processedSvg = React.useMemo(() => {
         if (!svgContent) return null;
         let svg = svgContent;
+
+        // 1. Strip XML declaration and comments
+        svg = svg.replace(/<\?xml.*?\?>/gi, '');
+        svg = svg.replace(/<!--[\s\S]*?-->/g, '');
+
+        // 2. Strip hardcoded styles from ALL inner elements (and original root)
+        // We do this BEFORE injecting our new root styles so we don't accidentally strip our own injections.
+        svg = svg.replace(/style="([^"]*)"/gi, (match, styleContent) => {
+            let newStyle = styleContent;
+
+            // Only strip specific properties if the asset has an override for them
+            if (asset.fillColor) {
+                newStyle = newStyle.replace(/fill\s*:[^;"]+;?/gi, '');
+            }
+            if (asset.strokeColor) {
+                newStyle = newStyle.replace(/stroke\s*:[^;"]+;?/gi, '');
+                newStyle = newStyle.replace(/color\s*:[^;"]+;?/gi, '');
+            }
+            if (asset.strokeWidth) {
+                newStyle = newStyle.replace(/stroke-width\s*:[^;"]+;?/gi, '');
+            }
+
+            return `style="${newStyle}"`;
+        });
+
+        // 3. Inject attributes into the root svg tag
         const uniqueId = `asset-svg-${asset.id}`;
-
-        // Inject width, height, x, y, id and preserveAspectRatio into the root svg tag
-        // We remove existing width/height/x/y to avoid conflicts
         svg = svg.replace(/<svg([^>]*)>/, (match, attrs) => {
-            let newAttrs = attrs.replace(/\s(width|height|x|y|id)="[^"]*"/gi, '');
+            // Remove existing attributes we intend to override/control
+            // Note: We remove 'style' here, so whatever happened to the original root style in Step 2 is now discarded.
+            let newAttrs = attrs.replace(/\s(width|height|x|y|id|style)=["'][^"']*["']/gi, '');
 
-            // Build attributes string
+            // Build new, clean style string
             let style = "overflow: visible;";
             if (asset.fillColor) style += ` fill: ${asset.fillColor};`;
-            if (asset.strokeColor) style += ` stroke: ${asset.strokeColor}; color: ${asset.strokeColor};`; // Set color for currentColor
+            if (asset.strokeColor) style += ` stroke: ${asset.strokeColor}; color: ${asset.strokeColor};`;
             if (asset.strokeWidth) style += ` stroke-width: ${asset.strokeWidth};`;
 
             let injectedAttrs = ` id="${uniqueId}" style="${style}"`;
@@ -109,18 +134,17 @@ export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRen
             // Only inject width/height if they are defined
             if (asset.width && asset.height) {
                 injectedAttrs += ` width="${asset.width}" height="${asset.height}" x="${-asset.width / 2}" y="${-asset.height / 2}" preserveAspectRatio="none"`;
-            } else {
-                // If dimensions are missing, we don't inject width/height/x/y
-                // The SVG will render at its intrinsic size.
             }
 
             return `<svg${newAttrs}${injectedAttrs}>`;
         });
 
-        // Force fully override attributes to ensure colors are applied
+        // 4. Force attribute overrides (for legacy non-style attributes)
         if (asset.fillColor) {
-            svg = svg.replace(/fill="([^"]*)"/gi, (match, value) => value === 'none' ? match : `fill="${asset.fillColor}"`);
-            svg = svg.replace(/fill='([^']*)'/gi, (match, value) => value === 'none' ? match : `fill='${asset.fillColor}'`);
+            // Updated logic: Always apply user-selected fill color, even if original was 'none' or 'white'
+            // This ensures assets that are outlines by default can be filled by the user.
+            svg = svg.replace(/fill="([^"]*)"/gi, `fill="${asset.fillColor}"`);
+            svg = svg.replace(/fill='([^']*)'/gi, `fill='${asset.fillColor}'`);
         }
         if (asset.strokeColor) {
             svg = svg.replace(/stroke="([^"]*)"/gi, (match, value) => value === 'none' ? match : `stroke="${asset.strokeColor}"`);

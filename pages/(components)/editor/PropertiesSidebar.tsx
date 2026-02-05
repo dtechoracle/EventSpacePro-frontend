@@ -34,7 +34,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const selectedDimension = selectedId ? dimensions.find(d => d.id === selectedId) : null;
 
   const selectedItem = selectedShape || selectedAsset || selectedWall || selectedTextAnnotation || selectedLabelArrow || selectedDimension;
-  const itemType = selectedShape ? 'shape' : selectedAsset ? 'asset' : selectedWall ? 'wall' : selectedTextAnnotation ? 'text-annotation' : selectedLabelArrow ? 'label-arrow' : selectedDimension ? 'dimension' : null;
+  const itemType = selectedShape ? 'shape' : selectedWall ? 'wall' : (selectedAsset?.type === 'wall-segments') ? 'wall' : selectedAsset ? 'asset' : selectedTextAnnotation ? 'text-annotation' : selectedLabelArrow ? 'label-arrow' : selectedDimension ? 'dimension' : null;
 
   // Multi-selection logic
   const isMultiSelection = selectedIds.length > 1;
@@ -61,6 +61,15 @@ export default function PropertiesSidebar(): React.JSX.Element {
     toggleSnapToGrid();
     editorStore.toggleSnapToGrid();
   };
+
+  const syncToScene = (id: string, updates: any) => {
+    const assetUpdates: any = { ...updates };
+    if (updates.fill) assetUpdates.fillColor = updates.fill;
+    if (updates.edges && updates.edges[0]?.thickness) assetUpdates.wallThickness = updates.edges[0].thickness;
+    if (updates.nodes) assetUpdates.wallNodes = updates.nodes;
+    updateSceneAsset(id, assetUpdates);
+  };
+
 
   const handleSetGridSize = (index: number) => {
     setSelectedGridSizeIndex(index);
@@ -123,7 +132,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const roundForDisplay = (num: number) => Math.round(num * 100) / 100;
 
   return (
-    <aside className="h-screen flex flex-col p-3 pb-24 overflow-y-auto text-sm">
+    <aside className="h-screen flex flex-col p-3 pb-24 overflow-y-auto text-sm bg-white text-gray-900">
       {showShareModal && (
         <ShareModal onClose={() => setShowShareModal(false)} />
       )}
@@ -178,7 +187,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
         {showModel && (
           <div className="space-y-3 pl-5 text-xs">
             <div className="flex justify-between items-center">
-              <span>Name</span>
+              <span className="text-black">Full Name</span>
               <input
                 type="text"
                 value={modelName}
@@ -348,52 +357,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
               </div>
             )}
 
-            {/* Snap to Drawing */}
-            {showGrid && (
-              <div className="flex justify-between items-center py-2">
-                <span>Snap to Drawing</span>
-                <div className="inline-flex rounded-lg bg-[#0000000D] p-1">
-                  <button
-                    onClick={() => {
-                      // Enable snap to drawing
-                      useEditorStore.setState({ snapToGrid: true });
-                      toast.success("Snap to Drawing enabled", {
-                        duration: 1500,
-                        style: {
-                          fontSize: '12px',
-                          padding: '8px 12px',
-                        },
-                      });
-                    }}
-                    className={`px-4 py-1 text-xs rounded-md transition-all ${snapToGridEnabled
-                      ? "bg-white text-gray-900 shadow-sm font-medium"
-                      : "text-gray-600 hover:text-gray-900"
-                      }`}
-                  >
-                    On
-                  </button>
-                  <button
-                    onClick={() => {
-                      // Disable snap to drawing
-                      useEditorStore.setState({ snapToGrid: false });
-                      // toast.info("Snap to Drawing disabled", {
-                      //   duration: 1500,
-                      //   style: {
-                      //     fontSize: '12px',
-                      //     padding: '8px 12px',
-                      //   },
-                      // });
-                    }}
-                    className={`px-4 py-1 text-xs rounded-md transition-all ${!snapToGridEnabled
-                      ? "bg-white text-gray-900 shadow-sm font-medium"
-                      : "text-gray-600 hover:text-gray-900"
-                      }`}
-                  >
-                    Off
-                  </button>
-                </div>
-              </div>
-            )}
+
 
             {/* MULTI SELECTION PROPERTIES */}
             {isMultiSelection && allSelectedAreShapes && (
@@ -803,32 +767,54 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     {/* Hatch Fill */}
                     {(selectedItem as any).fillType === 'hatch' && (
                       <div className="space-y-2 mb-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-500 text-xs">Pattern</span>
-                          <select
-                            value={(selectedItem as any).hatchPattern || 'horizontal'}
-                            onChange={(e) => updateShape(selectedItem.id, { hatchPattern: e.target.value as any })}
-                            className="text-xs border rounded px-2 py-1 bg-white"
-                          >
-                            <option value="horizontal">Horizontal</option>
-                            <option value="vertical">Vertical</option>
-                            <option value="diagonal-right">Diagonal /</option>
-                            <option value="diagonal-left">Diagonal \</option>
-                            <option value="cross">Cross +</option>
-                            <option value="diagonal-cross">Diagonal X</option>
-                            <option value="dots">Dots</option>
-                            <option value="grid">Grid</option>
-                          </select>
+                        <span className="text-gray-500 text-xs mb-1 block">Pattern</span>
+
+                        <div className="grid grid-cols-4 gap-1 mb-2">
+                          {[
+                            { id: 'horizontal', label: 'Horizontal' },
+                            { id: 'vertical', label: 'Vertical' },
+                            { id: 'diagonal-right', label: 'Diag /' },
+                            { id: 'diagonal-left', label: 'Diag \\' },
+                            { id: 'cross', label: 'Cross +' },
+                            { id: 'diagonal-cross', label: 'Diag X' },
+                            { id: 'diagonal-cross', label: 'Diag X' },
+                            { id: 'dots', label: 'Dots' },
+                            { id: 'brick', label: 'Brick' },
+                          ].map((pattern) => (
+                            <button
+                              key={pattern.id}
+                              onClick={() => updateShape(selectedItem.id, { hatchPattern: pattern.id as any })}
+                              className={`h-8 border rounded flex items-center justify-center relative ${(selectedItem as any).hatchPattern === pattern.id ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-200 hover:border-gray-300'
+                                } bg-white`}
+                              title={pattern.label}
+                            >
+                              <svg width="100%" height="100%" viewBox="0 0 20 20">
+                                <pattern id={`preview-${pattern.id}`} patternUnits="userSpaceOnUse" width="10" height="10">
+                                  <rect width="10" height="10" fill="white" />
+                                  {pattern.id === 'horizontal' && <line x1="0" y1="5" x2="10" y2="5" stroke="#000" strokeWidth="1" />}
+                                  {pattern.id === 'vertical' && <line x1="5" y1="0" x2="5" y2="10" stroke="#000" strokeWidth="1" />}
+                                  {pattern.id === 'diagonal-right' && <path d="M-2,2 l4,-4 M0,10 l10,-10 M8,12 l4,-4" stroke="#000" strokeWidth="1" />}
+                                  {pattern.id === 'diagonal-left' && <path d="M-2,8 l4,4 M0,0 l10,10 M8,-2 l4,4" stroke="#000" strokeWidth="1" />}
+                                  {pattern.id === 'cross' && <path d="M0,5 h10 M5,0 v10" stroke="#000" strokeWidth="1" />}
+                                  {pattern.id === 'diagonal-cross' && <path d="M-2,2 l4,-4 M0,10 l10,-10 M8,12 l4,-4 M-2,8 l4,4 M0,0 l10,10 M8,-2 l4,4" stroke="#000" strokeWidth="1" />}
+                                  {pattern.id === 'dots' && <circle cx="5" cy="5" r="1" fill="#000" />}
+                                  {pattern.id === 'dots' && <circle cx="5" cy="5" r="1" fill="#000" />}
+                                  {pattern.id === 'brick' && <path d="M0,5 h10 M5,0 v5 M0,5 v5 M10,5 v5" stroke="#000" strokeWidth="1" />}
+                                </pattern>
+                                <rect width="100%" height="100%" fill={`url(#preview-${pattern.id})`} />
+                              </svg>
+                            </button>
+                          ))}
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-gray-500 text-xs">Spacing</span>
                           <input
                             type="number"
-                            value={(selectedItem as any).hatchSpacing || 5}
+                            value={(selectedItem as any).hatchSpacing || 50}
                             onChange={(e) => updateShape(selectedItem.id, { hatchSpacing: Number(e.target.value) })}
                             className="sidebar-input w-12 text-right text-xs"
                             min={1}
-                            max={20}
+                            max={200}
                           />
                         </div>
                         <div className="flex justify-between items-center">
@@ -846,7 +832,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     {/* Texture Fill */}
                     {(selectedItem as any).fillType === 'texture' && (
                       <div className="space-y-2 mb-2">
-                        <div className="grid grid-cols-4 gap-1">
+                        <div className="grid grid-cols-2 gap-2">
                           {texturePatterns.map((pattern) => (
                             <button
                               key={pattern.id}
@@ -1213,143 +1199,352 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 )}
 
                 {/* Wall Properties */}
-                {itemType === 'wall' && selectedWall && (
+                {(itemType === 'wall' || (itemType === 'asset' && (selectedAsset as any)?.type === 'wall-segments')) && (selectedWall || selectedAsset) && (
                   <div className="mt-3 pt-3 border-t border-gray-100">
                     <div className="text-xs font-semibold mb-2 text-gray-600">Wall Properties</div>
 
-                    {/* Wall Fill Color */}
+                    {/* Wall Fill Type */}
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Fill Color</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={selectedWall.fill || '#ffffff'}
-                          onChange={(e) => updateWall(selectedWall.id, { fill: e.target.value })}
-                          className="sidebar-input w-20 text-xs"
-                        />
-                        <input
-                          type="color"
-                          value={selectedWall.fill || '#ffffff'}
-                          onChange={(e) => updateWall(selectedWall.id, { fill: e.target.value })}
-                          className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
-                        />
-                      </div>
+                      <span className="text-gray-500 text-xs">Fill Type</span>
+                      <select
+                        value={(selectedItem as any).fillType || 'color'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (itemType === 'wall') {
+                            updateWall(selectedItem.id, { fillType: val as any });
+                            syncToScene(selectedItem.id, { fillType: val });
+                          }
+                          else {
+                            updateAsset(selectedItem.id, { fillType: val } as any);
+                            updateSceneAsset(selectedItem.id, { fillType: val } as any);
+                          }
+                        }}
+                        className="text-xs border rounded px-2 py-1 bg-white"
+                      >
+                        <option value="color">Color</option>
+                        <option value="texture">Texture</option>
+                      </select>
                     </div>
+
+                    {/* Wall Fill Color */}
+                    {(!(selectedItem as any).fillType || (selectedItem as any).fillType === 'color') && (
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-gray-500">Fill Color</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={(itemType === 'wall' ? (selectedItem as any).fill : (selectedItem as any).fillColor) || '#ffffff'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (itemType === 'wall') {
+                                updateWall(selectedItem.id, { fill: val });
+                                syncToScene(selectedItem.id, { fill: val });
+                              }
+                              else {
+                                updateAsset(selectedItem.id, { fillColor: val });
+                                updateSceneAsset(selectedItem.id, { fillColor: val });
+                              }
+                            }}
+                            className="sidebar-input w-20 text-xs"
+                          />
+                          <input
+                            type="color"
+                            value={(itemType === 'wall' && !(selectedItem as any).wallSegments ? (selectedItem as any).fill : (selectedItem as any).fillColor) || '#ffffff'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (itemType === 'wall' && !(selectedItem as any).wallSegments) {
+                                updateWall(selectedItem.id, { fill: val });
+                                syncToScene(selectedItem.id, { fill: val });
+                              }
+                              else {
+                                updateAsset(selectedItem.id, { fillColor: val });
+                                updateSceneAsset(selectedItem.id, { fillColor: val });
+                              }
+                            }}
+                            className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Wall Texture Fill */}
+                    {(selectedItem as any).fillType === 'texture' && (
+                      <div className="space-y-2 mb-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          {texturePatterns.map((pattern) => (
+                            <button
+                              key={pattern.id}
+                              className={`h-24 border rounded overflow-hidden relative transition-all duration-200 hover:scale-150 hover:z-50 hover:shadow-xl hover:ring-2 hover:ring-white ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500 z-10' : 'border-gray-300 z-0'
+                                }`}
+                              onClick={() => {
+                                const val = pattern.id;
+                                if (itemType === 'wall' && !(selectedItem as any).wallSegments) {
+                                  updateWall(selectedItem.id, { fillTexture: val });
+                                  syncToScene(selectedItem.id, { fillTexture: val });
+                                }
+                                else {
+                                  updateAsset(selectedItem.id, { fillTexture: val } as any);
+                                  updateSceneAsset(selectedItem.id, { fillTexture: val } as any);
+                                }
+                              }}
+                              title={pattern.name}
+                            >
+                              <svg width="100%" height="100%">
+                                <defs dangerouslySetInnerHTML={{ __html: pattern.svg }} />
+                                <rect width="100%" height="100%" fill={`url(#${pattern.id})`} />
+                              </svg>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Scale</span>
+                          <input
+                            type="number"
+                            value={(selectedItem as any).fillTextureScale || 1}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (itemType === 'wall') {
+                                updateWall(selectedItem.id, { fillTextureScale: val });
+                                syncToScene(selectedItem.id, { fillTextureScale: val });
+                              }
+                              else {
+                                updateAsset(selectedItem.id, { fillTextureScale: val } as any);
+                                updateSceneAsset(selectedItem.id, { fillTextureScale: val } as any);
+                              }
+                            }}
+                            className="sidebar-input w-12 text-right text-xs"
+                            min={0.1}
+                            max={10}
+                            step={0.1}
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     {/* Wall Thickness */}
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-gray-500">Thickness</span>
                       <input
                         type="number"
-                        value={selectedWall.edges[0]?.thickness || 75}
+                        value={(itemType === 'wall' && !(selectedItem as any).wallSegments ? (selectedItem as any).edges?.[0]?.thickness : (selectedItem as any).wallThickness) || 75}
                         onChange={(e) => {
                           const val = Number(e.target.value);
-                          const updatedEdges = selectedWall.edges.map(edge => ({
-                            ...edge,
-                            thickness: Math.max(1, val)
-                          }));
-                          updateWall(selectedWall.id, { edges: updatedEdges });
+                          const safeVal = Math.max(1, val);
+                          if (itemType === 'wall' && (selectedItem as any).edges && !(selectedItem as any).wallSegments) {
+                            const updatedEdges = (selectedItem as any).edges.map((edge: any) => ({
+                              ...edge,
+                              thickness: safeVal
+                            }));
+                            updateWall(selectedItem.id, { edges: updatedEdges });
+                            syncToScene(selectedItem.id, { edges: updatedEdges });
+                          } else {
+                            updateAsset(selectedItem.id, { wallThickness: safeVal } as any);
+                            updateSceneAsset(selectedItem.id, { wallThickness: safeVal } as any);
+                          }
                         }}
                         className="sidebar-input w-16 text-right"
                         min={1}
                       />
                     </div>
 
-                    {/* Move Distance X */}
+                    {/* Wall Length & Height */}
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Move X</span>
+                      <span className="text-gray-500">Length</span>
                       <div className="flex items-center gap-1">
                         <input
                           type="number"
-                          placeholder="0"
-                          className="sidebar-input w-16 text-right"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              const val = Number((e.target as HTMLInputElement).value);
-                              if (!isNaN(val) && val !== 0) {
-                                const updatedNodes = selectedWall.nodes.map(node => ({
+                          value={(() => {
+                            if (itemType === 'wall' && (selectedItem as any).nodes) {
+                              const xs = (selectedItem as any).nodes.map((n: any) => n.x);
+                              if (xs.length) return Math.round(Math.max(...xs) - Math.min(...xs)) || 0;
+                            }
+                            if ((itemType === 'wall' || itemType === 'asset') && (selectedItem as any).wallSegments) {
+                              let len = 0;
+                              (selectedItem as any).wallSegments.forEach((s: any) => {
+                                len += Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y);
+                              });
+                              return Math.round(len);
+                            }
+                            if (itemType === 'asset' && (selectedItem as any).wallNodes) {
+                              const xs = (selectedItem as any).wallNodes.map((n: any) => n.x);
+                              if (xs.length) return Math.round(Math.max(...xs) - Math.min(...xs)) || 0;
+                            }
+                            return 0;
+                          })()}
+                          onChange={(e) => {
+                            const newLen = Number(e.target.value);
+                            if (newLen <= 0) return;
+
+                            // 1. Native Walls (nodes)
+                            if (itemType === 'wall' && (selectedItem as any).nodes) {
+                              const xs = (selectedItem as any).nodes.map((n: any) => n.x);
+                              const minX = Math.min(...xs);
+                              const maxX = Math.max(...xs);
+                              const currentLen = maxX - minX;
+                              if (currentLen === 0) return;
+                              const centerX = (minX + maxX) / 2;
+                              const scale = newLen / currentLen;
+                              const updatedNodes = (selectedItem as any).nodes.map((node: any) => ({
+                                ...node,
+                                x: centerX + (node.x - centerX) * scale
+                              }));
+                              updateWall(selectedItem.id, { nodes: updatedNodes });
+                              syncToScene(selectedItem.id, { nodes: updatedNodes });
+                            }
+
+                            // 2. Asset Walls (AI generated wallNodes)
+                            else if (itemType === 'asset' && (selectedItem as any).wallNodes) {
+                              const xs = (selectedItem as any).wallNodes.map((n: any) => n.x);
+                              const minX = Math.min(...xs);
+                              const maxX = Math.max(...xs);
+                              const currentLen = maxX - minX;
+                              if (currentLen > 0) {
+                                const centerX = (minX + maxX) / 2;
+                                const scale = newLen / currentLen;
+                                const updatedNodes = (selectedItem as any).wallNodes.map((node: any) => ({
                                   ...node,
-                                  x: node.x + val
+                                  x: centerX + (node.x - centerX) * scale
                                 }));
-                                updateWall(selectedWall.id, { nodes: updatedNodes });
-                                (e.target as HTMLInputElement).value = '';
+                                updateAsset(selectedItem.id, { wallNodes: updatedNodes } as any);
+                                updateSceneAsset(selectedItem.id, { wallNodes: updatedNodes } as any);
                               }
                             }
-                          }}
-                        />
-                        <span className="text-xs text-gray-400">mm</span>
-                      </div>
-                    </div>
 
-                    {/* Move Distance Y */}
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Move Y</span>
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          placeholder="0"
-                          className="sidebar-input w-16 text-right"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              const val = Number((e.target as HTMLInputElement).value);
-                              if (!isNaN(val) && val !== 0) {
-                                const updatedNodes = selectedWall.nodes.map(node => ({
-                                  ...node,
-                                  y: node.y + val
-                                }));
-                                updateWall(selectedWall.id, { nodes: updatedNodes });
-                                (e.target as HTMLInputElement).value = '';
-                              }
-                            }
-                          }}
-                        />
-                        <span className="text-xs text-gray-400">mm</span>
-                      </div>
-                    </div>
+                            // 3. Manual Wall Segments (Perimeter Scale)
+                            // This can apply to itemType='wall' (aliased) or 'asset'
+                            if ((selectedItem as any).wallSegments) {
+                              const segments = (selectedItem as any).wallSegments;
+                              let currentLen = 0;
+                              segments.forEach((s: any) => {
+                                currentLen += Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y);
+                              });
 
-                    {/* Rotate Angle */}
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Rotate</span>
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          placeholder="0"
-                          className="sidebar-input w-16 text-right"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              const val = Number((e.target as HTMLInputElement).value);
-                              if (!isNaN(val) && val !== 0) {
-                                // Calculate wall center
-                                const xs = selectedWall.nodes.map(n => n.x);
-                                const ys = selectedWall.nodes.map(n => n.y);
-                                const centerX = xs.reduce((a, b) => a + b, 0) / xs.length;
-                                const centerY = ys.reduce((a, b) => a + b, 0) / ys.length;
-
-                                // Rotate nodes around center
-                                const angleRad = (val * Math.PI) / 180;
-                                const cos = Math.cos(angleRad);
-                                const sin = Math.sin(angleRad);
-
-                                const updatedNodes = selectedWall.nodes.map(node => {
-                                  const dx = node.x - centerX;
-                                  const dy = node.y - centerY;
-                                  return {
-                                    ...node,
-                                    x: centerX + dx * cos - dy * sin,
-                                    y: centerY + dx * sin + dy * cos
-                                  };
+                              if (currentLen > 0) {
+                                const scale = newLen / currentLen;
+                                // Find center of all segments
+                                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                                segments.forEach((s: any) => {
+                                  minX = Math.min(minX, s.start.x, s.end.x);
+                                  maxX = Math.max(maxX, s.start.x, s.end.x);
+                                  minY = Math.min(minY, s.start.y, s.end.y);
+                                  maxY = Math.max(maxY, s.start.y, s.end.y);
                                 });
-                                updateWall(selectedWall.id, { nodes: updatedNodes });
-                                (e.target as HTMLInputElement).value = '';
+                                const cx = (minX + maxX) / 2;
+                                const cy = (minY + maxY) / 2;
+
+                                const updatedSegments = segments.map((s: any) => ({
+                                  ...s,
+                                  start: {
+                                    x: cx + (s.start.x - cx) * scale,
+                                    y: cy + (s.start.y - cy) * scale
+                                  },
+                                  end: {
+                                    x: cx + (s.end.x - cx) * scale,
+                                    y: cy + (s.end.y - cy) * scale
+                                  }
+                                }));
+
+                                updateAsset(selectedItem.id, { wallSegments: updatedSegments } as any);
+                                updateSceneAsset(selectedItem.id, { wallSegments: updatedSegments } as any);
                               }
                             }
                           }}
+                          className="sidebar-input w-16 text-right"
                         />
-                        <span className="text-xs text-gray-400">°</span>
+                        <span className="text-xs text-gray-400">mm</span>
                       </div>
+                    </div>
+
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Height</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={(() => {
+                            if ((selectedItem as any).wallSegments) {
+                              const s = (selectedItem as any).wallSegments;
+                              let minY = Infinity, maxY = -Infinity;
+                              s.forEach((seg: any) => {
+                                minY = Math.min(minY, seg.start.y, seg.end.y);
+                                maxY = Math.max(maxY, seg.start.y, seg.end.y);
+                              });
+                              if (minY !== Infinity && maxY !== -Infinity) return Math.round(maxY - minY);
+                            }
+                            return (selectedItem as any).height || 3000;
+                          })()}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            if (val <= 0) return;
+
+                            // Handle manual wall segments (Scale Y)
+                            if ((selectedItem as any).wallSegments) {
+                              const segments = (selectedItem as any).wallSegments;
+                              let minY = Infinity, maxY = -Infinity;
+                              segments.forEach((s: any) => {
+                                minY = Math.min(minY, s.start.y, s.end.y);
+                                maxY = Math.max(maxY, s.start.y, s.end.y);
+                              });
+                              const currentH = maxY - minY;
+                              if (currentH > 0) {
+                                const scale = val / currentH;
+                                const cy = (minY + maxY) / 2;
+                                const updatedSegments = segments.map((s: any) => ({
+                                  ...s,
+                                  start: {
+                                    ...s.start,
+                                    y: cy + (s.start.y - cy) * scale
+                                  },
+                                  end: {
+                                    ...s.end,
+                                    y: cy + (s.end.y - cy) * scale
+                                  }
+                                }));
+                                updateAsset(selectedItem.id, { wallSegments: updatedSegments } as any);
+                                updateSceneAsset(selectedItem.id, { wallSegments: updatedSegments } as any);
+                                return;
+                              }
+                            }
+
+                            if (itemType === 'wall' && !(selectedItem as any).wallSegments) {
+                              updateWall(selectedItem.id, { height: val } as any);
+                              syncToScene(selectedItem.id, { height: val });
+                            }
+                            else {
+                              updateAsset(selectedItem.id, { height: val });
+                              updateSceneAsset(selectedItem.id, { height: val });
+                            }
+                          }}
+                          className="sidebar-input w-16 text-right"
+                        />
+                        <span className="text-xs text-gray-400">mm</span>
+                      </div>
+                    </div>
+
+                    {/* Show Dimensions Toggle */}
+                    <div className="flex justify-between items-center mb-2 pt-2 border-t border-gray-100">
+                      <span className="text-gray-500">Show Dimensions</span>
+                      <button
+                        onClick={() => {
+                          const cur = !!(selectedItem as any).showDimensions;
+                          const next = !cur;
+                          if (itemType === 'wall' && !(selectedItem as any).wallSegments) {
+                            updateWall(selectedItem.id, { showDimensions: next } as any);
+                            syncToScene(selectedItem.id, { showDimensions: next });
+                          }
+                          else {
+                            updateAsset(selectedItem.id, { showDimensions: next } as any);
+                            updateSceneAsset(selectedItem.id, { showDimensions: next } as any);
+                          }
+                        }}
+                        className={`w-10 h-5 rounded-full flex items-center transition-colors px-1 ${(selectedItem as any).showDimensions ? "bg-blue-600 justify-end" : "bg-gray-300 justify-start"
+                          }`}
+                      >
+                        <div className="w-3 h-3 bg-white rounded-full shadow-sm" />
+                      </button>
                     </div>
                   </div>
                 )}
+
 
                 {/* Dimension Properties */}
                 {itemType === 'dimension' && selectedDimension && (

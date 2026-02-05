@@ -254,7 +254,7 @@ export function getAnchorsForObject(
 export function snapToObjects(
     rect: { x: number; y: number; width: number; height: number; rotation?: number },
     others: Array<{ id: string; x: number; y: number; width: number; height: number; rotation?: number; type?: string }>,
-    threshold: number = 5
+    threshold: number = 15
 ): { x: number; y: number; guides: Array<{ x1: number; y1: number; x2: number; y2: number; type: 'horizontal' | 'vertical' }> } {
     let newX = rect.x;
     let newY = rect.y;

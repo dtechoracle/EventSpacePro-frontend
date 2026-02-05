@@ -46,44 +46,36 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth }: InlineSvgProps) =>
             if (!svg.hasAttribute("width")) svg.setAttribute("width", "100%");
             if (!svg.hasAttribute("height")) svg.setAttribute("height", "100%");
 
-            // "Scorched Earth" Policy: Recursively strip ALL paint attributes from EVERY element
+            // "Scorched Earth" Policy: ALWAYS strip ALL paint attributes from EVERY element
+            // This allows dynamic styling to work even when props are undefined
             const allElements = doc.querySelectorAll('*');
             allElements.forEach(el => {
-                // 1. Remove direct attributes ONLY if we have an override
-                if (fill !== undefined) el.removeAttribute("fill");
-                if (stroke !== undefined) el.removeAttribute("stroke");
-                if (strokeWidth !== undefined) el.removeAttribute("stroke-width");
+                // Always remove hardcoded attributes to allow dynamic styling
+                el.removeAttribute("fill");
+                el.removeAttribute("stroke");
+                el.removeAttribute("stroke-width");
 
-                // 2. Clean 'style' attribute of any paint properties
+                // Clean 'style' attribute of any paint properties
                 const style = el.getAttribute("style");
                 if (style) {
-                    let cleanedStyle = style;
+                    let cleanedStyle = style
+                        .replace(/fill\s*:[^;]+;?/gi, "")
+                        .replace(/stroke\s*:[^;]+;?/gi, "")
+                        .replace(/stroke-width\s*:[^;]+;?/gi, "");
 
-                    if (fill !== undefined) {
-                        cleanedStyle = cleanedStyle.replace(/fill\s*:[^;]+;?/gi, "");
-                    }
-                    if (stroke !== undefined) {
-                        cleanedStyle = cleanedStyle.replace(/stroke\s*:[^;]+;?/gi, "");
-                    }
-                    if (strokeWidth !== undefined) {
-                        cleanedStyle = cleanedStyle.replace(/stroke-width\s*:[^;]+;?/gi, "");
-                    }
-
-                    if (cleanedStyle !== style) {
-                        if (cleanedStyle.trim()) {
-                            el.setAttribute("style", cleanedStyle);
-                        } else {
-                            el.removeAttribute("style");
-                        }
+                    if (cleanedStyle.trim()) {
+                        el.setAttribute("style", cleanedStyle);
+                    } else {
+                        el.removeAttribute("style");
                     }
                 }
             });
 
-            // 3. Apply dynamic values to the ROOT SVG element ONLY (cascading style)
-            // This ensures the external props control the entire SVG
-            if (fill !== undefined) svg.setAttribute("fill", fill);
-            if (stroke !== undefined) svg.setAttribute("stroke", stroke);
-            if (strokeWidth !== undefined) svg.setAttribute("stroke-width", String(strokeWidth));
+            // Apply dynamic values to the ROOT SVG element ONLY (cascading style)
+            // Use defaults if props are undefined to ensure visibility
+            svg.setAttribute("fill", fill ?? "#000000");
+            svg.setAttribute("stroke", stroke ?? "none");
+            svg.setAttribute("stroke-width", String(strokeWidth ?? 0));
 
             return new XMLSerializer().serializeToString(doc);
         } catch (e) {

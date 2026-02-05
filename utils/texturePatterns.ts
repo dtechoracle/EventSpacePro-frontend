@@ -31,14 +31,6 @@ export const texturePatterns = [
     </pattern>`
   },
   {
-    id: 'diagonal-lines',
-    name: 'Diagonal Lines',
-    svg: `<pattern id="diagonal-lines" patternUnits="userSpaceOnUse" width="50" height="50">
-      <rect width="50" height="50" fill="#ffffff"/>
-      <path d="M0,50 L50,0" stroke="#333333" stroke-width="5"/>
-    </pattern>`
-  },
-  {
     id: 'grid',
     name: 'Grid',
     svg: `<pattern id="grid" patternUnits="userSpaceOnUse" width="100" height="100">
@@ -47,11 +39,11 @@ export const texturePatterns = [
     </pattern>`
   },
   {
-    id: 'crosshatch',
-    name: 'Crosshatch',
-    svg: `<pattern id="crosshatch" patternUnits="userSpaceOnUse" width="50" height="50">
-      <rect width="50" height="50" fill="#ffffff"/>
-      <path d="M0,0 L50,50 M50,0 L0,50" stroke="#666666" stroke-width="2.5"/>
+    id: 'hatching',
+    name: 'Hatching',
+    svg: `<pattern id="hatching" patternUnits="userSpaceOnUse" width="200" height="200">
+      <rect width="200" height="200" fill="#ffffff"/>
+      <path d="M0,200 L200,0" stroke="#333333" stroke-width="5"/>
     </pattern>`
   },
   {
@@ -69,30 +61,46 @@ export const texturePatterns = [
     name: 'Grass',
     svg: `<pattern id="grass" patternUnits="userSpaceOnUse" width="200" height="200">
       <rect width="200" height="200" fill="#228B22"/>
-      <path d="M25,200 L25,150 L35,125 L25,100" stroke="#1a6b1a" stroke-width="5" fill="none"/>
-      <path d="M75,200 L75,140 L85,115 L75,90" stroke="#1a6b1a" stroke-width="5" fill="none"/>
-      <path d="M125,200 L125,160 L135,135 L125,110" stroke="#1a6b1a" stroke-width="5" fill="none"/>
-      <path d="M175,200 L175,150 L185,125 L175,100" stroke="#1a6b1a" stroke-width="5" fill="none"/>
+      <path d="M25,200 L15,140 L35,110 L25,80" stroke="#155515" stroke-width="12" fill="none" stroke-linecap="round"/>
+      <path d="M75,200 L85,130 L65,100 L75,70" stroke="#1a6b1a" stroke-width="10" fill="none" stroke-linecap="round"/>
+      <path d="M125,200 L115,150 L135,120 L125,90" stroke="#155515" stroke-width="12" fill="none" stroke-linecap="round"/>
+      <path d="M175,200 L185,140 L165,110 L175,80" stroke="#1a6b1a" stroke-width="10" fill="none" stroke-linecap="round"/>
+      
+      <!-- Added extra blades for density -->
+      <path d="M50,200 L50,160" stroke="#104010" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <path d="M100,200 L100,150" stroke="#104010" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <path d="M150,200 L150,160" stroke="#104010" stroke-width="8" fill="none" stroke-linecap="round"/>
     </pattern>`
-  }
-  ,
+  },
   {
     id: 'sand',
     name: 'Sand',
     svg: `<pattern id="sand" patternUnits="userSpaceOnUse" width="200" height="200">
       <rect width="200" height="200" fill="#F4A460"/>
-      <circle cx="20" cy="20" r="2" fill="#D2691E" opacity="0.5"/>
-      <circle cx="50" cy="80" r="3" fill="#D2691E" opacity="0.4"/>
-      <circle cx="120" cy="40" r="2" fill="#D2691E" opacity="0.5"/>
-      <circle cx="160" cy="150" r="3" fill="#D2691E" opacity="0.4"/>
-      <circle cx="80" cy="180" r="2" fill="#D2691E" opacity="0.5"/>
-      <path d="M0,50 Q50,40 100,50 T200,50" stroke="#D2691E" stroke-width="2" fill="none" opacity="0.2"/>
-      <path d="M0,150 Q50,140 100,150 T200,150" stroke="#D2691E" stroke-width="2" fill="none" opacity="0.2"/>
+      <!-- INCREASED OPACITY AND SIZE for visibility -->
+      <circle cx="20" cy="20" r="16" fill="#8B4513" opacity="1.0"/>
+      <circle cx="50" cy="80" r="20" fill="#8B4513" opacity="0.9"/>
+      <circle cx="120" cy="40" r="14" fill="#8B4513" opacity="1.0"/>
+      <circle cx="160" cy="150" r="18" fill="#8B4513" opacity="0.9"/>
+      <circle cx="80" cy="180" r="16" fill="#8B4513" opacity="1.0"/>
+      
+      <!-- Extra density -- MORE PARTICLES -->
+      <circle cx="180" cy="20" r="14" fill="#8B4513" opacity="0.9"/>
+      <circle cx="30" cy="140" r="16" fill="#8B4513" opacity="1.0"/>
+      <circle cx="130" cy="100" r="14" fill="#8B4513" opacity="0.9"/>
+      <circle cx="90" cy="50" r="12" fill="#8B4513" opacity="1.0"/>
+      <circle cx="150" cy="180" r="12" fill="#8B4513" opacity="0.9"/>
+      <circle cx="10" cy="190" r="15" fill="#8B4513" opacity="0.9"/>
+      <circle cx="190" cy="120" r="13" fill="#8B4513" opacity="0.95"/>
+
+      <!-- Bolder darker dunes -->
+      <path d="M0,50 Q50,30 100,50 T200,50" stroke="#8B4513" stroke-width="12" fill="none" opacity="0.6"/>
+      <path d="M0,150 Q50,130 100,150 T200,150" stroke="#8B4513" stroke-width="12" fill="none" opacity="0.6"/>
     </pattern>`
   }
 ];
 
-export type TextureId = 'wood-grain' | 'brick' | 'dots' | 'diagonal-lines' | 'grid' | 'crosshatch' | 'marble' | 'grass' | 'sand';
+export type TextureId = 'wood-grain' | 'brick' | 'dots' | 'grid' | 'hatching' | 'marble' | 'grass' | 'sand';
 
 export function getTextureFill(textureId: TextureId): string {
   return `url(#${textureId})`;

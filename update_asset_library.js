@@ -7,17 +7,32 @@ const LIBRARY_FILE = path.join(__dirname, 'lib/assets.tsx');
 function getSvgDimensions(filePath) {
     try {
         const content = fs.readFileSync(filePath, 'utf8');
-        const widthMatch = content.match(/<svg[^>]*width=["'](\d+(\.\d+)?)["']/);
-        const heightMatch = content.match(/<svg[^>]*height=["'](\d+(\.\d+)?)["']/);
+        // Updated regex to capture units (mm, cm, px, pt, etc.)
+        const widthMatch = content.match(/<svg[^>]*width=["'](\d+(?:\.\d+)?)(mm|cm|px|pt|in)?["']/);
+        const heightMatch = content.match(/<svg[^>]*height=["'](\d+(?:\.\d+)?)(mm|cm|px|pt|in)?["']/);
         const viewBoxMatch = content.match(/<svg[^>]*viewBox=["']([\d\s.-]+)["']/);
 
-        let width = widthMatch ? parseFloat(widthMatch[1]) : null;
-        let height = heightMatch ? parseFloat(heightMatch[1]) : null;
+        // Helper to convert to mm
+        const toMm = (value, unit) => {
+            const val = parseFloat(value);
+            switch (unit) {
+                case 'mm': return val;
+                case 'cm': return val * 10;
+                case 'in': return val * 25.4;
+                case 'pt': return val * 0.352778;
+                case 'px':
+                default: return val; // Treat unitless/px as mm (1:1 for our use case)
+            }
+        };
 
+        let width = widthMatch ? toMm(widthMatch[1], widthMatch[2] || 'px') : null;
+        let height = heightMatch ? toMm(heightMatch[1], heightMatch[2] || 'px') : null;
+
+        // Fallback to viewBox if width/height not found
         if ((!width || !height) && viewBoxMatch) {
             const parts = viewBoxMatch[1].split(/\s+/).map(parseFloat);
             if (parts.length === 4) {
-                width = width || parts[2];
+                width = width || parts[2]; // viewBox is unitless, treat as mm
                 height = height || parts[3];
             }
         }

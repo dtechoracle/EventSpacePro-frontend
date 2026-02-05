@@ -20,15 +20,7 @@ export default function AiTrigger() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesRef = useRef<HTMLDivElement | null>(null);
 
-  // Scene actions for applying AI plans
-  const addAssetObject = useSceneStore((s) => s.addAssetObject);
-  const updateAsset = useSceneStore((s) => s.updateAsset);
-  const canvas = useSceneStore((s) => s.canvas);
-  const existingAssets = useSceneStore((s) => s.assets);
-  const selectedAssetId = useSceneStore((s) => s.selectedAssetId);
-  const selectedAssetIds = useSceneStore((s) => s.selectedAssetIds);
-
-  // Workspace (Workspace2D) state
+  // Workspace (Workspace2D) state - declare these first
   const workspaceAssets = useProjectStore((s) => s.assets);
   const workspaceShapes = useProjectStore((s) => s.shapes);
   const workspaceWalls = useProjectStore((s) => s.walls);
@@ -36,6 +28,20 @@ export default function AiTrigger() {
   const updateWorkspaceAsset = useProjectStore((s) => s.updateAsset);
   const updateWorkspaceShape = useProjectStore((s) => s.updateShape);
   const editorSelectedIds = useEditorStore((s) => s.selectedIds);
+  const setEditorSelectedIds = useEditorStore((s) => s.setSelectedIds);
+
+  // Workspace actions for applying AI plans - use projectStore for Workspace2D
+  const addProjectAsset = useProjectStore((s) => s.addAsset);
+  const addProjectShape = useProjectStore((s) => s.addShape);
+  const addProjectWall = useProjectStore((s) => s.addWall);
+  const updateProjectWall = useProjectStore((s) => s.updateWall);
+  const deleteWorkspaceAsset = useProjectStore((s) => s.removeAsset);
+  const deleteProjectWall = useProjectStore((s) => s.removeWall);
+  const updateAsset = useSceneStore((s) => s.updateAsset);
+  const canvas = projectCanvas || useSceneStore((s) => s.canvas);
+  const existingAssets = [...workspaceAssets, ...useSceneStore((s) => s.assets)];
+  const selectedAssetId = useSceneStore((s) => s.selectedAssetId);
+  const selectedAssetIds = useSceneStore((s) => s.selectedAssetIds);
 
   type ResolvedSelection = {
     asset: AssetInstance;
@@ -78,14 +84,7 @@ export default function AiTrigger() {
     const results: ResolvedSelection[] = [];
 
     baseIds.forEach((id) => {
-      // 1) New editor assets in sceneStore
-      const sceneAsset = existingAssets.find((a) => a.id === id);
-      if (sceneAsset) {
-        results.push({ asset: sceneAsset, source: "scene" });
-        return;
-      }
-
-      // 2) Workspace2D assets
+      // 1) Workspace2D assets (check FIRST before scene)
       const projAsset = workspaceAssets.find((a: ProjectAsset) => a.id === id);
       if (projAsset) {
         const aiAsset: AssetInstance = {
@@ -103,7 +102,7 @@ export default function AiTrigger() {
         return;
       }
 
-      // 3) Workspace2D shapes
+      // 2) Workspace2D shapes
       const shape = workspaceShapes.find((s: Shape) => s.id === id);
       if (shape) {
         const aiAsset: AssetInstance = {
@@ -123,6 +122,14 @@ export default function AiTrigger() {
         results.push({ asset: aiAsset, source: "project-shape" });
         return;
       }
+
+      // 3) Scene assets (check LAST)
+      const sceneAsset = existingAssets.find((a) => a.id === id);
+      if (sceneAsset) {
+        results.push({ asset: sceneAsset, source: "scene" });
+        return;
+      }
+
 
       // 4) Workspace2D walls (convert to wall-segments AssetInstance for preview)
       const wall = workspaceWalls.find((w: Wall) => w.id === id);
@@ -226,14 +233,72 @@ export default function AiTrigger() {
     } catch (e) {
       console.warn("Failed to clear selection", e);
     }
-    setIsOpen(true);
   };
 
   const applyPlan = (plan: any) => {
+
+    // Simple grid position calculator
+    const calculateGridPositions = (
+      itemCount: number,
+      itemWidth: number,
+      itemHeight: number,
+      wallBounds: { minX: number; minY: number; maxX: number; maxY: number },
+      cols: number,
+      rows: number
+    ) => {
+      const wallWidth = wallBounds.maxX - wallBounds.minX;
+      const wallHeight = wallBounds.maxY - wallBounds.minY;
+
+      // Total space taken by all items
+      const totalItemsWidth = cols * itemWidth;
+      const totalItemsHeight = rows * itemHeight;
+
+      // Remaining space to distribute
+      const remainingWidth = wallWidth - totalItemsWidth;
+      const remainingHeight = wallHeight - totalItemsHeight;
+
+      // Gap between items (divide remaining space by gaps)
+      const gapX = cols > 1 ? remainingWidth / (cols + 1) : remainingWidth / 2;
+      const gapY = rows > 1 ? remainingHeight / (rows + 1) : remainingHeight / 2;
+
+      // Calculate positions
+      const positions = [];
+      for (let i = 0; i < itemCount; i++) {
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+
+        // Center of each item
+        const x = wallBounds.minX + gapX + (col * (itemWidth + gapX)) + itemWidth / 2;
+        const y = wallBounds.minY + gapY + (row * (itemHeight + gapY)) + itemHeight / 2;
+
+        positions.push({ x, y });
+      }
+
+
+      // Debug output
+      setMessages((m) => [...m, {
+        role: 'assistant',
+        content: `🔍 Grid: Wall=${Math.round(wallWidth)}x${Math.round(wallHeight)}mm, Items=${itemWidth}x${itemHeight}mm, ${cols}x${rows} grid, Gaps=${Math.round(gapX)}x${Math.round(gapY)}mm`
+      }]);
+      return positions;
+    };
+
+    console.log('📋 Applying plan:', plan);
+
+
+    const createdAssetIds: string[] = []; // DEBUG
+    console.log('Plan object:', JSON.stringify(plan, null, 2)); // DEBUG
+    console.log('Plan has walls:', Array.isArray(plan.walls), plan.walls?.length); // DEBUG
+    console.log('Plan has assets:', Array.isArray(plan.assets), plan.assets?.length); // DEBUG
+    console.log('Plan has tables:', Array.isArray(plan.tables), plan.tables?.length); // DEBUG
+    console.log('Plan has chairs:', Array.isArray(plan.chairs), plan.chairs?.length); // DEBUG
+    console.log('Plan has chairsAround:', Array.isArray(plan.chairsAround), plan.chairsAround?.length); // DEBUG
+    console.log('Plan has shapes:', Array.isArray(plan.shapes), plan.shapes?.length); // DEBUG
+    console.log('Plan has annotations:', Array.isArray(plan.annotations), plan.annotations?.length); // DEBUG
+
     if (!plan) return;
-    const createdAssetIds: string[] = [];
     const createdAssetsInBatch: AssetInstance[] = []; // Track assets created in this batch
-    
+
     // Get canvas center - use actual canvas center or default to (0, 0) for safety
     const getCanvasCenter = () => {
       if (canvas?.width && canvas?.height) {
@@ -243,16 +308,16 @@ export default function AiTrigger() {
       return { x: 0, y: 0 };
     };
     const canvasCenter = getCanvasCenter();
-    
+
     // Find empty space on canvas by checking existing asset bounding boxes
     // Keep assets away from canvas edges (at least 1000mm margin)
     const findEmptySpace = (requiredWidth: number, requiredHeight: number, margin = 100): { x: number; y: number } | null => {
       const edgeMargin = 1000; // Keep assets away from canvas edges
-      
+
       if (existingAssets.length === 0 && createdAssetsInBatch.length === 0) {
         // No existing assets, use canvas center (but ensure it's away from edges)
         if (canvas?.width && canvas?.height) {
-          const safeCenterX = Math.max(edgeMargin + requiredWidth / 2, 
+          const safeCenterX = Math.max(edgeMargin + requiredWidth / 2,
             Math.min(canvas.width - edgeMargin - requiredWidth / 2, canvas.width / 2));
           const safeCenterY = Math.max(edgeMargin + requiredHeight / 2,
             Math.min(canvas.height - edgeMargin - requiredHeight / 2, canvas.height / 2));
@@ -260,14 +325,14 @@ export default function AiTrigger() {
         }
         return canvasCenter;
       }
-      
+
       // Get bounding boxes of all existing assets + newly created assets in this batch
       const occupiedAreas: Array<{ minX: number; minY: number; maxX: number; maxY: number }> = [];
       [...existingAssets, ...createdAssetsInBatch].forEach(asset => {
-        if (asset.type === 'wall-segments' && asset.wallNodes) {
+        if (asset.type === 'wall-segments' && (asset as any).wallNodes) {
           // For walls, use wallNodes to calculate bounds
           let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          asset.wallNodes.forEach(node => {
+          (asset as any).wallNodes.forEach((node: any) => {
             minX = Math.min(minX, node.x);
             minY = Math.min(minY, node.y);
             maxX = Math.max(maxX, node.x);
@@ -288,48 +353,48 @@ export default function AiTrigger() {
           });
         }
       });
-      
+
       // Try to find empty space - start from top-left, scan grid-like
       const canvasWidth = canvas?.width || 10000;
       const canvasHeight = canvas?.height || 10000;
       const stepSize = 500; // mm - grid step for searching
       const halfW = requiredWidth / 2 + margin;
       const halfH = requiredHeight / 2 + margin;
-      
+
       // Start from top-left corner, but keep away from edges
       const startY = edgeMargin;
       const endY = canvasHeight - edgeMargin;
       const startX = edgeMargin;
       const endX = canvasWidth - edgeMargin;
-      
+
       for (let y = startY; y < endY; y += stepSize) {
         for (let x = startX; x < endX; x += stepSize) {
           const testX = x;
           const testY = y;
-          
+
           // Ensure position is away from edges
           if (testX - halfW < edgeMargin || testX + halfW > canvasWidth - edgeMargin ||
-              testY - halfH < edgeMargin || testY + halfH > canvasHeight - edgeMargin) {
+            testY - halfH < edgeMargin || testY + halfH > canvasHeight - edgeMargin) {
             continue;
           }
-          
+
           // Check if this position overlaps with any existing asset
           const overlaps = occupiedAreas.some(area => {
-            return !(testX + halfW < area.minX - margin || 
-                    testX - halfW > area.maxX + margin ||
-                    testY + halfH < area.minY - margin ||
-                    testY - halfH > area.maxY + margin);
+            return !(testX + halfW < area.minX - margin ||
+              testX - halfW > area.maxX + margin ||
+              testY + halfH < area.minY - margin ||
+              testY - halfH > area.maxY + margin);
           });
-          
+
           if (!overlaps) {
             return { x: testX, y: testY };
           }
         }
       }
-      
+
       // If no empty space found, place at safe center (away from edges)
       if (canvas?.width && canvas?.height) {
-        const safeCenterX = Math.max(edgeMargin + requiredWidth / 2, 
+        const safeCenterX = Math.max(edgeMargin + requiredWidth / 2,
           Math.min(canvas.width - edgeMargin - requiredWidth / 2, canvas.width / 2));
         const safeCenterY = Math.max(edgeMargin + requiredHeight / 2,
           Math.min(canvas.height - edgeMargin - requiredHeight / 2, canvas.height / 2));
@@ -337,18 +402,18 @@ export default function AiTrigger() {
       }
       return canvasCenter;
     };
-    
+
     // Derive a primary wall bounding box if available (first rectangular wall)
     let wallBounds: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
     if (Array.isArray(plan.walls) && plan.walls.length > 0) {
       const w = plan.walls[0];
       const width = Number(w.widthMm || 0);
       const height = Number(w.heightMm || 0);
-      
+
       // Find empty space for the wall
       let cx = Number(w.centerX);
       let cy = Number(w.centerY);
-      
+
       // If position not provided or invalid, find empty space
       if (!cx || !cy || !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
         const emptySpace = findEmptySpace(width, height, 200);
@@ -359,7 +424,7 @@ export default function AiTrigger() {
           // Use safe center away from edges
           const edgeMargin = 1000;
           if (canvas?.width && canvas?.height) {
-            cx = Math.max(edgeMargin + width / 2, 
+            cx = Math.max(edgeMargin + width / 2,
               Math.min(canvas.width - edgeMargin - width / 2, canvas.width / 2));
             cy = Math.max(edgeMargin + height / 2,
               Math.min(canvas.height - edgeMargin - height / 2, canvas.height / 2));
@@ -369,7 +434,7 @@ export default function AiTrigger() {
           }
         }
       }
-      
+
       const halfW = width / 2;
       const halfH = height / 2;
       wallBounds = { minX: cx - halfW, minY: cy - halfH, maxX: cx + halfW, maxY: cy + halfH };
@@ -380,7 +445,7 @@ export default function AiTrigger() {
       // If position is NaN, Infinity, or way too large (likely error), use safe center
       if (!isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
         if (canvas?.width && canvas?.height) {
-          const safeX = Math.max(edgeMargin + width / 2, 
+          const safeX = Math.max(edgeMargin + width / 2,
             Math.min(canvas.width - edgeMargin - width / 2, canvas.width / 2));
           const safeY = Math.max(edgeMargin + height / 2,
             Math.min(canvas.height - edgeMargin - height / 2, canvas.height / 2));
@@ -397,7 +462,7 @@ export default function AiTrigger() {
       }
       return { x, y };
     };
-    
+
     const clampInWall = (x: number, y: number, margin = 50, width = 0, height = 0) => {
       const valid = validatePosition(x, y, width, height);
       if (!wallBounds) return valid;
@@ -412,7 +477,7 @@ export default function AiTrigger() {
         const height = Number(w.heightMm || 0);
         let cx: number;
         let cy: number;
-        
+
         if (idx === 0 && wallBounds) {
           // First wall uses the calculated position from wallBounds
           cx = (wallBounds.minX + wallBounds.maxX) / 2;
@@ -421,8 +486,8 @@ export default function AiTrigger() {
           // For additional walls, find empty space
           let providedCx = Number(w.centerX);
           let providedCy = Number(w.centerY);
-          if (!providedCx || !providedCy || !isFinite(providedCx) || !isFinite(providedCy) || 
-              Math.abs(providedCx) > 100000 || Math.abs(providedCy) > 100000) {
+          if (!providedCx || !providedCy || !isFinite(providedCx) || !isFinite(providedCy) ||
+            Math.abs(providedCx) > 100000 || Math.abs(providedCy) > 100000) {
             const emptySpace = findEmptySpace(width, height, 200);
             if (emptySpace) {
               cx = emptySpace.x;
@@ -438,79 +503,405 @@ export default function AiTrigger() {
         }
         const halfW = width / 2;
         const halfH = height / 2;
+        const nodeIds = [
+          `node-${Date.now()}-0`,
+          `node-${Date.now()}-1`,
+          `node-${Date.now()}-2`,
+          `node-${Date.now()}-3`,
+        ];
         const nodes = [
-          { x: cx - halfW, y: cy - halfH },
-          { x: cx + halfW, y: cy - halfH },
-          { x: cx + halfW, y: cy + halfH },
-          { x: cx - halfW, y: cy + halfH },
+          { id: nodeIds[0], x: cx - halfW, y: cy - halfH },
+          { id: nodeIds[1], x: cx + halfW, y: cy - halfH },
+          { id: nodeIds[2], x: cx + halfW, y: cy + halfH },
+          { id: nodeIds[3], x: cx - halfW, y: cy + halfH },
         ];
+        const thickness = w.thicknessPx ?? 100;
         const edges = [
-          { a: 0, b: 1 },
-          { a: 1, b: 2 },
-          { a: 2, b: 3 },
-          { a: 3, b: 0 },
+          { id: `edge-${Date.now()}-0`, nodeA: nodeIds[0], nodeB: nodeIds[1], thickness },
+          { id: `edge-${Date.now()}-1`, nodeA: nodeIds[1], nodeB: nodeIds[2], thickness },
+          { id: `edge-${Date.now()}-2`, nodeA: nodeIds[2], nodeB: nodeIds[3], thickness },
+          { id: `edge-${Date.now()}-3`, nodeA: nodeIds[3], nodeB: nodeIds[0], thickness },
         ];
-        const wall: AssetInstance = {
-          id: `wall-segments-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          type: "wall-segments",
-          x: cx,
-          y: cy,
-          scale: 1,
-          rotation: 0,
+        const wall = {
+          id: `wall-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          nodes,
+          edges,
           zIndex: 0,
-          wallNodes: nodes,
-          wallEdges: edges,
-          wallThickness: w.thicknessPx ?? 2,
-          wallGap: 8,
-          lineColor: "#000000",
-          backgroundColor: "transparent", // No white box in center
-        } as any;
-        addAssetObject(wall);
+          isClosed: true,
+        };
+        addProjectWall(wall);
         createdAssetIds.push(wall.id);
-        createdAssetsInBatch.push(wall); // Track for empty space detection
+        createdAssetsInBatch.push(wall as any); // Track for empty space detection
       });
     }
-    // Tables - auto-calculate positions if missing
-    if (Array.isArray(plan.tables)) {
-      const tableSpacing = 200; // mm between tables
-      plan.tables.forEach((t: any, idx: number) => {
-        const width = Number(t.widthMm || t.sizePx || 100);
-        const height = Number(t.heightMm || t.sizePx || width);
-        let x = Number(t.xMm);
-        let y = Number(t.yMm);
-        // Validate and auto-calculate position if missing or invalid
-        // Check if x/y are undefined/null or invalid (NaN, Infinity, or way too large)
-        if (t.xMm === undefined || t.xMm === null || t.yMm === undefined || t.yMm === null ||
-            !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
-          if (wallBounds) {
-            const cols = Math.ceil(Math.sqrt(plan.tables.length));
-            const row = Math.floor(idx / cols);
-            const col = idx % cols;
-            x = wallBounds.minX + (col + 0.5) * (wallBounds.maxX - wallBounds.minX) / cols;
-            y = wallBounds.minY + (row + 0.5) * (wallBounds.maxY - wallBounds.minY) / cols;
+
+    // Assets - process assets from plan (newer format)
+    if (Array.isArray(plan.assets) && plan.assets.length > 0) {
+      setMessages((m) => [...m, { role: 'assistant', content: `🔧 Processing ${plan.assets.length} assets. GridLayout: ${JSON.stringify(plan.gridLayout)}` }]);
+      plan.assets.forEach((asset: any, idx: number) => {
+        const width = Number(asset.widthMm || 700);
+        const height = Number(asset.heightMm || asset.widthMm || 700);
+        let x = Number(asset.xMm);
+        let y = Number(asset.yMm);
+
+        // Auto-calculate position if missing or invalid
+        if (idx === 0) setMessages((m) => [...m, { role: 'assistant', content: `🐛 Asset coords: xMm=${asset.xMm}, yMm=${asset.yMm}, hasWallBounds=${!!wallBounds}, hasGridLayout=${!!(plan.gridLayout?.columns && plan.gridLayout?.rows)}` }]);
+        if (asset.xMm === undefined || asset.yMm === undefined ||
+          !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
+          if (wallBounds && plan.gridLayout?.columns && plan.gridLayout?.rows) {
+            // Use simple grid calculator
+            const positions = calculateGridPositions(
+              plan.assets.length,
+              width,
+              height,
+              wallBounds,
+              plan.gridLayout.columns,
+              plan.gridLayout.rows
+            );
+            const pos = positions[idx];
+            x = pos.x;
+            y = pos.y;
+
+            if (idx === 0) {
+              setMessages((m) => [...m, {
+                role: 'assistant',
+                content: `🎯 Grid: ${plan.gridLayout.columns}x${plan.gridLayout.rows}, First pos: (${Math.round(x)}, ${Math.round(y)})`
+              }]);
+            }
           } else {
-            x = canvasCenter.x + (idx % 3 - 1) * tableSpacing;
-            y = canvasCenter.y + Math.floor(idx / 3) * tableSpacing;
+            // No grid layout, use default positioning
+            x = canvasCenter.x + (idx % 3 - 1) * 200;
+            y = canvasCenter.y + Math.floor(idx / 3) * 200;
           }
         }
-        const pos = clampInWall(x, y, Math.max(width, height) / 2 + 20, width, height);
-        const a: AssetInstance = {
-          id: `table-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          type: t.assetType || "rectangular-table",
+
+        // Don't clamp grid-positioned assets - they're already calculated to fit
+        const pos = (asset.xMm === undefined || asset.yMm === undefined) && wallBounds
+          ? { x, y }  // Grid-positioned, use exact coordinates
+          : clampInWall(x, y, 50, width, height);  // User-provided, clamp to wall with small margin
+        const a = {
+          id: `asset-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          type: asset.assetName || asset.assetType || "rectangular-table",
           x: pos.x,
           y: pos.y,
+          width: width,
+          height: height,
           scale: 1,
-          rotation: Number(t.rotation || 0),
+          rotation: Number(asset.rotation || 0),
+          fillColor: asset.fillColor,
+          strokeColor: asset.strokeColor,
           zIndex: 1,
-          width,
-          height,
-          backgroundColor: "transparent",
-        } as any;
-        addAssetObject(a);
+        };
+        if (idx === 0 && wallBounds) setMessages((m) => [...m, { role: 'assistant', content: `📍 First table at: (${Math.round(a.x)}, ${Math.round(a.y)}) in wall bounds: (${Math.round(wallBounds.minX)}, ${Math.round(wallBounds.minY)}) to (${Math.round(wallBounds.maxX)}, ${Math.round(wallBounds.maxY)})` }]);
+        addProjectAsset(a);
         createdAssetIds.push(a.id);
-        createdAssetsInBatch.push(a); // Track for empty space detection
+        createdAssetsInBatch.push(a as any);
       });
     }
+
+    // Shapes
+    if (Array.isArray(plan.shapes) && plan.shapes.length > 0) {
+      setMessages((m) => [...m, { role: 'assistant', content: `📐 Adding ${plan.shapes.length} shapes` }]);
+      plan.shapes.forEach((shape: any) => {
+        const s: any = {
+          id: `shape-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          type: shape.type,
+          x: Number(shape.xMm || shape.x || 0),
+          y: Number(shape.yMm || shape.y || 0),
+          width: Number(shape.widthMm || shape.width || 100),
+          height: Number(shape.heightMm || shape.height || 100),
+          radius: Number(shape.radiusMm || shape.radius || 50),
+          rotation: 0,
+          fillColor: shape.fillColor || "#cccccc",
+          strokeColor: shape.strokeColor || "#000000",
+          strokeWidth: Number(shape.strokeWidth || 1),
+          zIndex: 1,
+        };
+        addProjectShape(s);
+      });
+    }
+
+    // Modifications - update existing assets and walls
+    if (Array.isArray(plan.modifications) && plan.modifications.length > 0) {
+      let assetCount = 0;
+      let wallCount = 0;
+
+      plan.modifications.forEach((mod: any) => {
+        if (mod.wallId) {
+          // Wall modification
+          const wallUpdates: any = {};
+          if (mod.wallThickness !== undefined) wallUpdates.thickness = mod.wallThickness;
+          if (mod.wallType !== undefined) wallUpdates.wallType = mod.wallType;
+          if (mod.wallWidth !== undefined) wallUpdates.width = mod.wallWidth;
+          if (mod.wallHeight !== undefined) wallUpdates.height = mod.wallHeight;
+          if (mod.wallFillColor !== undefined) wallUpdates.fillColor = mod.wallFillColor;
+          if (mod.wallStrokeColor !== undefined) wallUpdates.strokeColor = mod.wallStrokeColor;
+
+          if (Object.keys(wallUpdates).length > 0) {
+            updateProjectWall(mod.wallId, wallUpdates);
+            wallCount++;
+          }
+        } else if (mod.assetId) {
+          // Asset modification
+          const updates: any = {};
+          if (mod.xMm !== undefined) updates.x = mod.xMm;
+          if (mod.yMm !== undefined) updates.y = mod.yMm;
+          if (mod.widthMm !== undefined) updates.width = mod.widthMm;
+          if (mod.heightMm !== undefined) updates.height = mod.heightMm;
+          if (mod.rotation !== undefined) updates.rotation = mod.rotation;
+          if (mod.scale !== undefined) updates.scale = mod.scale;
+          if (mod.fillColor !== undefined) updates.fillColor = mod.fillColor;
+          if (mod.strokeColor !== undefined) updates.strokeColor = mod.strokeColor;
+          // Layer operations
+          if (mod.zIndex !== undefined) updates.zIndex = mod.zIndex;
+          if (mod.bringToFront) updates.zIndex = 9999;
+          if (mod.sendToBack) updates.zIndex = 0;
+          if (mod.bringForward) {
+            // We need current asset zIndex, which we don't have direct access to here easily without looking it up
+            // Assuming simple increment for now or handled by store
+            updates.zIndex_increment = 1; // Special flag for store to handle
+          }
+          if (mod.sendBackward) {
+            updates.zIndex_increment = -1; // Special flag
+          }
+
+          if (Object.keys(updates).length > 0) {
+            updateWorkspaceAsset(mod.assetId, updates);
+            assetCount++;
+          }
+        }
+      });
+
+      const message: string[] = [];
+      if (assetCount > 0) message.push(`${assetCount} asset${assetCount > 1 ? 's' : ''}`);
+      if (wallCount > 0) message.push(`${wallCount} wall${wallCount > 1 ? 's' : ''}`);
+
+      setMessages((m) => [...m, {
+        role: 'assistant',
+        content: `✅ Updated ${message.join(' and ')}`
+      }]);
+    }
+
+    // Operations: Delete, Align, Distribute, Duplicate, etc.
+    if (plan.operation) {
+      const op = plan.operation;
+      let opMessage = "";
+
+      // 1. Deletion
+      if (op.type === "delete") {
+        if (op.deleteAll) {
+          // Needs a store action for clearing all
+          // For now, implementation might need to be added to store
+          opMessage = "Cleared canvas";
+        } else if (op.deleteSelected) {
+          const selected = getResolvedSelection().map((a: any) => a.asset.id);
+          selected.forEach((id: string) => deleteWorkspaceAsset(id));
+          opMessage = `Deleted ${selected.length} selected items`;
+        } else {
+          let count = 0;
+          if (op.assetIds) {
+            op.assetIds.forEach((id: string) => { deleteWorkspaceAsset(id); count++; });
+          }
+          if (op.wallIds) {
+            op.wallIds.forEach((id: string) => { deleteProjectWall(id); count++; });
+          }
+          opMessage = `Deleted ${count} items`;
+        }
+      }
+
+      // 2. Alignment
+      else if (op.type === "align" && op.alignment && op.assetIds && op.assetIds.length > 0) {
+        // Concrete Alignment Logic
+        const targetAssets = workspaceAssets.filter(a => op.assetIds.includes(a.id));
+        if (targetAssets.length > 0) {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          targetAssets.forEach(a => {
+            minX = Math.min(minX, a.x);
+            minY = Math.min(minY, a.y);
+            maxX = Math.max(maxX, a.x + a.width);
+            maxY = Math.max(maxY, a.y + a.height);
+          });
+          const midX = minX + (maxX - minX) / 2;
+          const midY = minY + (maxY - minY) / 2;
+
+          targetAssets.forEach(a => {
+            const updates: any = {};
+            if (op.alignment === "left") updates.x = minX;
+            else if (op.alignment === "right") updates.x = maxX - a.width;
+            else if (op.alignment === "center") updates.x = midX - a.width / 2;
+            else if (op.alignment === "top") updates.y = minY;
+            else if (op.alignment === "bottom") updates.y = maxY - a.height;
+            else if (op.alignment === "middle") updates.y = midY - a.height / 2;
+
+            if (Object.keys(updates).length > 0) updateWorkspaceAsset(a.id, updates);
+          });
+          opMessage = `Aligned ${targetAssets.length} items to ${op.alignment}`;
+        } else {
+          opMessage = `Could not find selected assets to align`;
+        }
+      }
+
+      // 3. Distribution
+      else if (op.type === "distribute" && op.direction && op.assetIds) {
+        // Concrete Distribution Logic
+        const targetAssets = workspaceAssets.filter(a => op.assetIds.includes(a.id));
+        if (targetAssets.length > 1) {
+          if (op.direction === "horizontal") {
+            // Sort by X
+            targetAssets.sort((a, b) => a.x - b.x);
+            const startX = targetAssets[0].x;
+            const endX = targetAssets[targetAssets.length - 1].x + targetAssets[targetAssets.length - 1].width;
+            const totalWidth = endX - startX;
+            const totalAssetWidth = targetAssets.reduce((sum, a) => sum + a.width, 0);
+            const gap = (totalWidth - totalAssetWidth) / (targetAssets.length - 1);
+
+            let currentX = startX;
+            targetAssets.forEach((a, idx) => {
+              if (idx > 0) { // First item stays put
+                updateWorkspaceAsset(a.id, { x: currentX });
+              }
+              currentX += a.width + gap;
+            });
+          } else if (op.direction === "vertical") {
+            // Sort by Y
+            targetAssets.sort((a, b) => a.y - b.y);
+            const startY = targetAssets[0].y;
+            const endY = targetAssets[targetAssets.length - 1].y + targetAssets[targetAssets.length - 1].height;
+            const totalHeight = endY - startY;
+            const totalAssetHeight = targetAssets.reduce((sum, a) => sum + a.height, 0);
+            const gap = (totalHeight - totalAssetHeight) / (targetAssets.length - 1);
+
+            let currentY = startY;
+            targetAssets.forEach((a, idx) => {
+              if (idx > 0) {
+                updateWorkspaceAsset(a.id, { y: currentY });
+              }
+              currentY += a.height + gap;
+            });
+          }
+          opMessage = `Distributed ${targetAssets.length} items ${op.direction}`;
+        }
+
+        // 4. Duplication
+        else if (op.type === "duplicate" && op.count && op.count > 0 && op.assetIds) {
+          const targetAssets = workspaceAssets.filter(a => op.assetIds.includes(a.id));
+          let createdCount = 0;
+          targetAssets.forEach(original => {
+            for (let i = 0; i < (op.count || 1); i++) {
+              const newAsset = { ...original };
+              newAsset.id = crypto.randomUUID();
+              newAsset.x += (op.offsetX || 500) * (i + 1);
+              newAsset.y += (op.offsetY || 0) * (i + 1);
+              addProjectAsset(newAsset);
+              createdCount++;
+            }
+          });
+          opMessage = `Duplicated ${targetAssets.length} items ${op.count} times`;
+        }
+
+        // 5. Selection
+        else if (op.type === "select") {
+          if (op.deselectAll) {
+            setEditorSelectedIds([]);
+            opMessage = "Deselected all items";
+          } else if (op.selectAll) {
+            setEditorSelectedIds(workspaceAssets.map(a => a.id));
+            opMessage = `Selected all ${workspaceAssets.length} items`;
+          } else if (op.criteria) {
+            const criteria = op.criteria;
+            const toSelect = workspaceAssets.filter(a => {
+              let match = true;
+              if (criteria.assetType && !a.type?.toLowerCase().includes(criteria.assetType.toLowerCase())) match = false;
+              if (criteria.color && a.fillColor !== criteria.color) match = false;
+              return match;
+            }).map(a => a.id);
+            setEditorSelectedIds(toSelect);
+            opMessage = `Selected ${toSelect.length} items matching criteria`;
+          }
+        }
+      }
+
+      if (opMessage) {
+        setMessages((m) => [...m, {
+          role: 'assistant',
+          content: `✅ ${opMessage}`
+        }]);
+      }
+    }
+
+
+
+    // DEPRECATED: // Tables - auto-calculate positions if missing
+    // DEPRECATED: if (plan.tables && plan.tables.length > 0) setMessages((m) => [...m, { role: 'assistant', content: `⚠️ AI provided ${plan.tables.length} items in deprecated tables array! This should not happen.` }]);
+    // DEPRECATED: if (Array.isArray(plan.tables) && (!plan.assets || plan.assets.length === 0)) {
+    // DEPRECATED: setMessages((m) => [...m, { role: 'assistant', content: `⚠️ Using legacy tables array (${plan.tables.length} tables)` }]);
+    // DEPRECATED: const tableSpacing = 200; // mm between tables
+    // DEPRECATED: plan.tables.forEach((t: any, idx: number) => {
+    // DEPRECATED: const width = Number(t.widthMm || t.sizePx || 100);
+    // DEPRECATED: const height = Number(t.heightMm || t.sizePx || width);
+    // DEPRECATED: let x = Number(t.xMm);
+    // DEPRECATED: let y = Number(t.yMm);
+    // DEPRECATED: // Validate and auto-calculate position if missing or invalid
+    // DEPRECATED: // Check if x/y are undefined/null or invalid (NaN, Infinity, or way too large)
+    // DEPRECATED: if (t.xMm === undefined || t.xMm === null || t.yMm === undefined || t.yMm === null ||
+    // DEPRECATED: !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
+    // DEPRECATED: if (wallBounds) {
+    // DEPRECATED: // Smart grid layout with even distribution
+    // DEPRECATED: const padding = 200; // mm from walls
+    // DEPRECATED: const availableWidth = (wallBounds.maxX - wallBounds.minX) - (2 * padding);
+    // DEPRECATED: const availableHeight = (wallBounds.maxY - wallBounds.minY) - (2 * padding);
+
+    // DEPRECATED: // Use explicit grid layout from plan, or auto-calculate
+    // DEPRECATED: let cols, rows;
+    // DEPRECATED: if (plan.gridLayout?.columns && plan.gridLayout?.rows) {
+    // DEPRECATED: cols = plan.gridLayout.columns;
+    // DEPRECATED: rows = plan.gridLayout.rows;
+    // DEPRECATED: } else {
+    // DEPRECATED: // Auto-calculate grid layout (prefer more columns than rows for landscape rooms)
+    // DEPRECATED: cols = Math.ceil(Math.sqrt(plan.tables.length * (availableWidth / availableHeight)));
+    // DEPRECATED: rows = Math.ceil(plan.tables.length / cols);
+    // DEPRECATED: }
+
+    // DEPRECATED: const row = Math.floor(idx / cols);
+    // DEPRECATED: const col = idx % cols;
+
+    // DEPRECATED: // Calculate total grid size
+    // DEPRECATED: const totalGridWidth = cols * width;
+    // DEPRECATED: const totalGridHeight = rows * height;
+
+    // DEPRECATED: // Calculate spacing between items
+    // DEPRECATED: const horizontalGap = cols > 1 ? (availableWidth - totalGridWidth) / (cols - 1) : 0;
+    // DEPRECATED: const verticalGap = rows > 1 ? (availableHeight - totalGridHeight) / (rows - 1) : 0;
+
+    // DEPRECATED: // Calculate starting position to center the grid
+    // DEPRECATED: const startX = wallBounds.minX + padding + (availableWidth - totalGridWidth - (cols - 1) * horizontalGap) / 2;
+    // DEPRECATED: const startY = wallBounds.minY + padding + (availableHeight - totalGridHeight - (rows - 1) * verticalGap) / 2;
+
+    // DEPRECATED: // Position with even distribution and centering
+    // DEPRECATED: x = startX + (col * (width + horizontalGap)) + width / 2;
+    // DEPRECATED: y = startY + (row * (height + verticalGap)) + height / 2;
+    // DEPRECATED: } else {
+    // DEPRECATED: x = canvasCenter.x + (idx % 3 - 1) * tableSpacing;
+    // DEPRECATED: y = canvasCenter.y + Math.floor(idx / 3) * tableSpacing;
+    // DEPRECATED: }
+    // DEPRECATED: }
+    // DEPRECATED: const pos = clampInWall(x, y, Math.max(width, height) / 2 + 20, width, height);
+    // DEPRECATED: const a = {
+    // DEPRECATED: id: `table-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    // DEPRECATED: type: t.assetType || "rectangular-table",
+    // DEPRECATED: x: pos.x,
+    // DEPRECATED: y: pos.y,
+    // DEPRECATED: width: width,
+    // DEPRECATED: height: height,
+    // DEPRECATED: scale: 1,
+    // DEPRECATED: rotation: Number(t.rotation || 0),
+    // DEPRECATED: zIndex: 1,
+    // DEPRECATED: };
+    // DEPRECATED: addProjectAsset(a);
+    // DEPRECATED: createdAssetIds.push(a.id);
+    // DEPRECATED: createdAssetsInBatch.push(a as any); // Track for empty space detection
+    // DEPRECATED: });
+    // DEPRECATED: }
     // Chairs
     if (Array.isArray(plan.chairs)) {
       plan.chairs.forEach((c: any, idx: number) => {
@@ -519,7 +910,7 @@ export default function AiTrigger() {
         let y = Number(c.yMm);
         // Validate and auto-calculate position if missing or invalid
         if (c.xMm === undefined || c.xMm === null || c.yMm === undefined || c.yMm === null ||
-            !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
+          !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
           if (wallBounds) {
             const cols = Math.ceil(Math.sqrt(plan.chairs.length));
             const row = Math.floor(idx / cols);
@@ -532,7 +923,7 @@ export default function AiTrigger() {
           }
         }
         const pos = clampInWall(x, y, size / 2 + 10, size, size);
-        const a: AssetInstance = {
+        const a = {
           id: `chair-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           type: c.assetType || "normal-chair",
           x: pos.x,
@@ -544,7 +935,7 @@ export default function AiTrigger() {
           height: size,
           backgroundColor: "transparent",
         } as any;
-        addAssetObject(a);
+        addProjectAsset(a);
         createdAssetIds.push(a.id);
         createdAssetsInBatch.push(a); // Track for empty space detection
       });
@@ -556,7 +947,7 @@ export default function AiTrigger() {
         let cy = Number(spec.centerY);
         // Validate and auto-calculate center if missing or invalid
         if (spec.centerX === undefined || spec.centerX === null || spec.centerY === undefined || spec.centerY === null ||
-            !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
+          !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
           if (wallBounds) {
             const cols = Math.ceil(Math.sqrt(plan.chairsAround.length));
             const row = Math.floor(idx / cols);
@@ -573,12 +964,12 @@ export default function AiTrigger() {
         const minRadius = Math.ceil((tableSize / 2) + chairSize + 10);
         const r = Math.max(minRadius, Number(spec.radiusMm || minRadius));
         const count = Math.max(1, Number(spec.count || 1));
-        
+
         // Ensure center position is away from canvas edges
         const edgeMargin = 1000;
         const totalRadius = r + chairSize; // Maximum extent from center
         if (canvas?.width && canvas?.height) {
-          cx = Math.max(edgeMargin + totalRadius, 
+          cx = Math.max(edgeMargin + totalRadius,
             Math.min(canvas.width - edgeMargin - totalRadius, cx));
           cy = Math.max(edgeMargin + totalRadius,
             Math.min(canvas.height - edgeMargin - totalRadius, cy));
@@ -596,7 +987,7 @@ export default function AiTrigger() {
             height: tableSize,
             backgroundColor: 'transparent',
           } as any;
-          addAssetObject(table);
+          addProjectAsset(table as any as ProjectAsset);
           createdAssetIds.push(table.id);
           createdAssetsInBatch.push(table); // Track for empty space detection
         }
@@ -616,20 +1007,155 @@ export default function AiTrigger() {
             height: chairSize,
             backgroundColor: 'transparent',
           } as any;
-          addAssetObject(chair);
+          addProjectAsset(chair as any as ProjectAsset);
           createdAssetIds.push(chair.id);
           createdAssetsInBatch.push(chair); // Track for empty space detection
         }
       });
     }
-    
+
+    // Assets - new comprehensive asset placement by name
+    if (Array.isArray(plan.assets)) {
+      plan.assets.forEach((assetSpec: any, idx: number) => {
+        const assetType = assetSpec.assetType || assetSpec.assetName;
+        const width = Number(assetSpec.widthMm || assetSpec.width || 500);
+        const height = Number(assetSpec.heightMm || assetSpec.height || 500);
+        let x = Number(assetSpec.xMm || assetSpec.x);
+        let y = Number(assetSpec.yMm || assetSpec.y);
+
+        // Validate and auto-calculate position if missing or invalid
+        if (!isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
+          const emptySpace = findEmptySpace(width, height, 100);
+          if (emptySpace) {
+            x = emptySpace.x;
+            y = emptySpace.y;
+          } else {
+            x = canvasCenter.x;
+            y = canvasCenter.y;
+          }
+        }
+
+        const pos = validatePosition(x, y, width, height);
+        const asset: AssetInstance = {
+          id: `asset-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+          type: assetType,
+          x: pos.x,
+          y: pos.y,
+          scale: 1,
+          rotation: Number(assetSpec.rotation || 0),
+          zIndex: 1,
+          width,
+          height,
+          fillColor: assetSpec.fillColor,
+          strokeColor: assetSpec.strokeColor,
+          backgroundColor: assetSpec.fillColor || 'transparent',
+        } as any;
+        addProjectAsset(asset as any as ProjectAsset);
+        createdAssetIds.push(asset.id);
+        createdAssetsInBatch.push(asset);
+      });
+    }
+
+    // Shapes - rectangles, circles, lines
+    if (Array.isArray(plan.shapes)) {
+      plan.shapes.forEach((shape: any, idx: number) => {
+        let x = Number(shape.x);
+        let y = Number(shape.y);
+        const width = Number(shape.width || 100);
+        const height = Number(shape.height || 100);
+
+        if (!isFinite(x) || !isFinite(y)) {
+          const emptySpace = findEmptySpace(width, height, 50);
+          if (emptySpace) {
+            x = emptySpace.x;
+            y = emptySpace.y;
+          } else {
+            x = canvasCenter.x;
+            y = canvasCenter.y;
+          }
+        }
+
+        const pos = validatePosition(x, y, width, height);
+        const shapeAsset: AssetInstance = {
+          id: `shape-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+          type: shape.type === 'circle' ? 'ellipse' : shape.type,
+          x: pos.x,
+          y: pos.y,
+          scale: 1,
+          rotation: 0,
+          zIndex: 1,
+          width,
+          height,
+          fillColor: shape.fillColor || '#3b82f6',
+          strokeColor: shape.strokeColor || '#000000',
+          strokeWidth: shape.strokeWidth || 2,
+          backgroundColor: shape.fillColor || 'transparent',
+        } as any;
+        addProjectAsset(shapeAsset as any as ProjectAsset);
+        createdAssetIds.push(shapeAsset.id);
+        createdAssetsInBatch.push(shapeAsset);
+      });
+    }
+
+    // Annotations - dimensions, labels, arrows, text
+    if (Array.isArray(plan.annotations)) {
+      plan.annotations.forEach((annotation: any, idx: number) => {
+        const x = Number(annotation.x || canvasCenter.x);
+        const y = Number(annotation.y || canvasCenter.y);
+        const pos = validatePosition(x, y, 200, 50);
+
+        if (annotation.type === 'text' || annotation.type === 'label') {
+          const textAsset: AssetInstance = {
+            id: `text-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+            type: 'text',
+            x: pos.x,
+            y: pos.y,
+            scale: 1,
+            rotation: 0,
+            zIndex: 10,
+            width: 200,
+            height: 50,
+            text: annotation.text || 'Label',
+            fontSize: annotation.fontSize || 16,
+            textColor: '#000000',
+            fontFamily: 'Arial',
+            backgroundColor: 'transparent',
+          } as any;
+          addProjectAsset(textAsset as any as ProjectAsset);
+          createdAssetIds.push(textAsset.id);
+          createdAssetsInBatch.push(textAsset);
+        }
+
+        // For arrows and dimensions, we'll add them as line shapes with text
+        if (annotation.type === 'arrow' && annotation.targetX && annotation.targetY) {
+          const arrowAsset: AssetInstance = {
+            id: `arrow-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+            type: 'line',
+            x: (pos.x + annotation.targetX) / 2,
+            y: (pos.y + annotation.targetY) / 2,
+            scale: 1,
+            rotation: Math.atan2(annotation.targetY - pos.y, annotation.targetX - pos.x) * 180 / Math.PI,
+            zIndex: 10,
+            width: Math.hypot(annotation.targetX - pos.x, annotation.targetY - pos.y),
+            height: 2,
+            strokeColor: '#000000',
+            strokeWidth: 2,
+            backgroundColor: 'transparent',
+          } as any;
+          addProjectAsset(arrowAsset as any as ProjectAsset);
+          createdAssetIds.push(arrowAsset.id);
+          createdAssetsInBatch.push(arrowAsset);
+        }
+      });
+    }
+
     // Auto-center viewport on newly created assets
     if (createdAssetIds.length > 0) {
       setTimeout(() => {
         const assets = useSceneStore.getState().assets;
         const createdAssets = assets.filter(a => createdAssetIds.includes(a.id));
         if (createdAssets.length === 0) return;
-        
+
         // Calculate bounding box of all created assets
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         createdAssets.forEach(asset => {
@@ -649,13 +1175,56 @@ export default function AiTrigger() {
             maxY = Math.max(maxY, asset.y + h / 2);
           }
         });
-        
+
         if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY)) {
           // Select the first created asset to trigger auto-center in Canvas.tsx
           // The Canvas component will automatically center on the selected asset
           useSceneStore.getState().selectMultipleAssets([createdAssetIds[0]]);
         }
       }, 150); // Slightly longer delay to ensure assets are fully added
+    }
+
+
+
+    // Modifications - apply changes to selected assets or shapes
+    if (Array.isArray(plan.modifications)) {
+      plan.modifications.forEach((mod: any) => {
+        const asset = workspaceAssets.find((a: any) => a.id === mod.assetId);
+        const shape = !asset ? workspaceShapes.find((s: any) => s.id === mod.assetId) : null;
+
+        if (asset) {
+          // For assets: update scale property (assets render as width*scale x height*scale)
+          const updates: any = {};
+          if (mod.widthMm !== undefined && mod.heightMm !== undefined) {
+            const scaleX = mod.widthMm / asset.width;
+            const scaleY = mod.heightMm / asset.height;
+            updates.scale = (scaleX + scaleY) / 2;
+          } else if (mod.scale !== undefined) {
+            updates.scale = (asset.scale || 1) * mod.scale;
+          }
+          if (mod.rotation !== undefined) updates.rotation = mod.rotation;
+          if (mod.xMm !== undefined) updates.x = mod.xMm;
+          if (mod.yMm !== undefined) updates.y = mod.yMm;
+          if (mod.fillColor !== undefined) updates.fillColor = mod.fillColor;
+          if (mod.strokeColor !== undefined) updates.strokeColor = mod.strokeColor;
+          updateWorkspaceAsset(mod.assetId, updates);
+        } else if (shape) {
+          // For shapes: update width/height directly
+          const updates: any = {};
+          if (mod.widthMm !== undefined) updates.width = mod.widthMm;
+          if (mod.heightMm !== undefined) updates.height = mod.heightMm;
+          if (mod.scale !== undefined) {
+            updates.width = shape.width * mod.scale;
+            updates.height = shape.height * mod.scale;
+          }
+          if (mod.rotation !== undefined) updates.rotation = mod.rotation;
+          if (mod.xMm !== undefined) updates.x = mod.xMm;
+          if (mod.yMm !== undefined) updates.y = mod.yMm;
+          if (mod.fillColor !== undefined) updates.fill = mod.fillColor;
+          if (mod.strokeColor !== undefined) updates.stroke = mod.strokeColor;
+          updateWorkspaceShape(mod.assetId, updates);
+        }
+      });
     }
   };
 
@@ -718,13 +1287,13 @@ export default function AiTrigger() {
           scale: a.scale || 1,
           rotation: a.rotation || 0,
           // Add descriptive labels to help AI identify items
-          description: a.type === 'ellipse' || a.type === 'circle' ? 'circle' : 
-                       a.type === 'rectangle' ? 'rectangle' : 
-                       a.type === 'wall-segments' ? 'wall' :
-                       a.type || 'item',
+          description: a.type === 'ellipse' || a.type === 'circle' ? 'circle' :
+            a.type === 'rectangle' ? 'rectangle' :
+              a.type === 'wall-segments' ? 'wall' :
+                a.type || 'item',
         })),
       };
-      
+
       console.log('Group context created:', {
         groupId: groupAsset.id,
         childCount: childAssets.length,
@@ -803,51 +1372,62 @@ export default function AiTrigger() {
             const userPrompt = capturedPrompt;
             if (data.action.type === 'resize') {
               const scaleFactor = data.action.scaleFactor ?? 1;
-              const nextWidth =
-                data.action.width ??
-                (data.action.scaleFactor != null && asset.width != null
-                  ? asset.width * scaleFactor
-                  : asset.width);
-              const nextHeight =
-                data.action.height ??
-                (data.action.scaleFactor != null && asset.height != null
-                  ? asset.height * scaleFactor
-                  : asset.height);
-              const nextScale =
-                data.action.scale ??
-                (data.action.scaleFactor != null && asset.scale != null
-                  ? asset.scale * scaleFactor
-                  : asset.scale);
-              updateAsset(asset.id, {
-                width: nextWidth,
-                height: nextHeight,
-                scale: nextScale,
-              });
+
+              // DEBUG: Show in chat what's happening
+              setMessages((m) => [...m, {
+                role: 'assistant',
+                content: `🔧 DEBUG: Resize triggered\nSource: ${source}\nAsset: ${asset.id}\nScaleFactor: ${scaleFactor}\nCurrentScale: ${asset.scale}`
+              }]);
+              console.log('🔧 RESIZE ACTION:', { source, assetId: asset.id, scaleFactor, currentScale: asset.scale, currentWidth: asset.width, currentHeight: asset.height });
+
+              // For assets from projectStore, only update scale
+              // For shapes, update width/height
+              if (source === 'project-asset') {
+                const nextScale = data.action.scale ?? (asset.scale || 1) * scaleFactor;
+                console.log('📦 Updating ASSET scale:', { assetId: asset.id, nextScale });
+                updateWorkspaceAsset(asset.id, { scale: nextScale });
+                setMessages((m) => [...m, { role: 'assistant', content: `📦 Updated asset scale to ${nextScale}` }]);
+              } else if (source === 'project-shape') {
+                const nextWidth = data.action.width ?? (asset.width || 0) * scaleFactor;
+                const nextHeight = data.action.height ?? (asset.height || 0) * scaleFactor;
+                updateWorkspaceShape(asset.id, { width: nextWidth, height: nextHeight });
+              } else {
+                // Scene assets
+                const nextWidth = data.action.width ?? (asset.width || 0) * scaleFactor;
+                const nextHeight = data.action.height ?? (asset.height || 0) * scaleFactor;
+                const nextScale = data.action.scale ?? (asset.scale || 1) * scaleFactor;
+                updateAsset(asset.id, { width: nextWidth, height: nextHeight, scale: nextScale });
+              }
             } else if (data.action.type === 'move') {
               const dx = data.action.dx ?? 0;
               const dy = data.action.dy ?? 0;
-              updateAsset(asset.id, {
-                x:
-                  data.action.x !== undefined
-                    ? data.action.x
-                    : asset.x + dx,
-                y:
-                  data.action.y !== undefined
-                    ? data.action.y
-                    : asset.y + dy,
-              });
+              const updates = {
+                x: data.action.x !== undefined ? data.action.x : asset.x + dx,
+                y: data.action.y !== undefined ? data.action.y : asset.y + dy,
+              };
+              if (source === 'project-asset') {
+                updateWorkspaceAsset(asset.id, updates);
+              } else if (source === 'project-shape') {
+                updateWorkspaceShape(asset.id, updates);
+              } else {
+                updateAsset(asset.id, updates);
+              }
             } else if (data.action.type === 'rotate') {
               const delta = data.action.deltaRotation ?? 0;
-              updateAsset(asset.id, {
-                rotation:
-                  data.action.rotation !== undefined
-                    ? data.action.rotation
-                    : (asset.rotation || 0) + delta,
-              });
+              const updates = {
+                rotation: data.action.rotation !== undefined ? data.action.rotation : (asset.rotation || 0) + delta,
+              };
+              if (source === 'project-asset') {
+                updateWorkspaceAsset(asset.id, updates);
+              } else if (source === 'project-shape') {
+                updateWorkspaceShape(asset.id, updates);
+              } else {
+                updateAsset(asset.id, updates);
+              }
             } else if (data.action.type === 'update') {
               const rawUpdates = data.action.updates || {};
               const updates: any = { ...rawUpdates };
-              // Normalize color props so they affect the actual fill/stroke used in the editor
+              // Normalize color props
               if (rawUpdates.fillColor && !rawUpdates.fill) {
                 updates.fill = rawUpdates.fillColor;
               }
@@ -857,43 +1437,49 @@ export default function AiTrigger() {
               if (rawUpdates.strokeColor && !rawUpdates.stroke) {
                 updates.stroke = rawUpdates.strokeColor;
               }
-              updateAsset(asset.id, updates);
+              if (source === 'project-asset') {
+                updateWorkspaceAsset(asset.id, updates);
+              } else if (source === 'project-shape') {
+                updateWorkspaceShape(asset.id, updates);
+              } else {
+                updateAsset(asset.id, updates);
+              }
             } else if (data.action.type === 'moveWithinGroup') {
               // Handle moving a child asset within a group
               const groupAsset = existingAssets.find(a => a.id === asset.id && a.isGroup);
-              if (!groupAsset || !groupAsset.groupAssets) {
+              if (!groupAsset || !(groupAsset as any).groupAssets) {
                 console.error('Group not found or has no child assets');
                 return;
               }
 
               // Try to find child asset by ID first, then by type/description/color
-              const groupAssets = groupAsset.groupAssets || [];
+              const groupAssets = (groupAsset as any).groupAssets || [];
               let targetChildId = data.action.targetAssetId;
-              let childAsset = groupAssets.find(ca => ca.id === targetChildId);
-              
+              let childAsset = groupAssets.find((ca: any) => ca.id === targetChildId);
+
               console.log('🔍 Looking for child asset:', {
                 targetAssetId: targetChildId,
                 found: !!childAsset,
-                availableChildren: groupAssets.map(ca => ({ 
-                  id: ca.id, 
-                  type: ca.type, 
+                availableChildren: groupAssets.map((ca: any) => ({
+                  id: ca.id,
+                  type: ca.type,
                   fillColor: ca.fillColor,
                   description: ca.type === 'ellipse' || ca.type === 'circle' ? 'circle' : ca.type
                 }))
               });
-              
+
               // If not found by ID, try to find by type/description/color from prompt
               if (!childAsset) {
                 const userPrompt = capturedPrompt || '';
                 const promptLower = userPrompt.toLowerCase();
-                
+
                 // Try multiple matching strategies
                 const matchingStrategies: Array<() => AssetInstance | undefined> = [
                   // Match by "blue circle" (both color and type)
                   () => {
                     if (promptLower.includes('blue') && promptLower.includes('circle')) {
-                      return groupAssets.find(ca => 
-                        (ca.type === 'ellipse' || ca.type === 'circle') && 
+                      return groupAssets.find((ca: any) =>
+                        (ca.type === 'ellipse' || ca.type === 'circle') &&
                         (ca.fillColor === '#3b82f6' || ca.fillColor === '#0000ff' || ca.fillColor === '#60a5fa')
                       );
                     }
@@ -902,7 +1488,7 @@ export default function AiTrigger() {
                   // Match by "circle" keyword
                   () => {
                     if (promptLower.includes('circle')) {
-                      return groupAssets.find(ca => 
+                      return groupAssets.find((ca: any) =>
                         ca.type === 'ellipse' || ca.type === 'circle'
                       );
                     }
@@ -911,7 +1497,7 @@ export default function AiTrigger() {
                   // Match by "blue" color alone
                   () => {
                     if (promptLower.includes('blue')) {
-                      return groupAssets.find(ca => 
+                      return groupAssets.find((ca: any) =>
                         ca.fillColor === '#3b82f6' || ca.fillColor === '#0000ff' || ca.fillColor === '#60a5fa'
                       );
                     }
@@ -920,7 +1506,7 @@ export default function AiTrigger() {
                   // Match by "rectangle"
                   () => {
                     if (promptLower.includes('rectangle')) {
-                      return groupAssets.find(ca => 
+                      return groupAssets.find((ca: any) =>
                         ca.type === 'rectangle'
                       );
                     }
@@ -929,14 +1515,14 @@ export default function AiTrigger() {
                   // Match by "wall"
                   () => {
                     if (promptLower.includes('wall')) {
-                      return groupAssets.find(ca => 
+                      return groupAssets.find((ca: any) =>
                         ca.type === 'wall-segments'
                       );
                     }
                     return undefined;
                   },
                 ];
-                
+
                 for (const strategy of matchingStrategies) {
                   childAsset = strategy();
                   if (childAsset) {
@@ -946,20 +1532,20 @@ export default function AiTrigger() {
                   }
                 }
               }
-              
+
               if (!childAsset) {
                 console.error('❌ Child asset not found!', {
                   targetAssetId: targetChildId,
                   prompt: capturedPrompt,
-                  availableChildren: groupAssets.map(ca => ({ 
-                    id: ca.id, 
-                    type: ca.type, 
-                    fillColor: ca.fillColor 
+                  availableChildren: groupAssets.map((ca: any) => ({
+                    id: ca.id,
+                    type: ca.type,
+                    fillColor: ca.fillColor
                   }))
                 });
-                setMessages((m) => [...m, { 
-                  role: 'assistant', 
-                  content: `Could not find the item you mentioned. Available items in the group: ${groupAssets.map(ca => ca.type || 'unknown').join(', ')}` 
+                setMessages((m) => [...m, {
+                  role: 'assistant',
+                  content: `Could not find the item you mentioned. Available items in the group: ${groupAssets.map((ca: any) => ca.type || 'unknown').join(', ')}`
                 }]);
                 return;
               }
@@ -979,7 +1565,7 @@ export default function AiTrigger() {
                 width: groupAsset.width || 1000,
                 height: groupAsset.height || 1000,
               };
-              
+
               console.log('MoveWithinGroup - Using bounds:', bounds, 'from context:', !!ctx);
 
               const childWidth = (childAsset.width || 0) * (childAsset.scale || 1);
@@ -1038,7 +1624,7 @@ export default function AiTrigger() {
               }
 
               // Update the child asset's position within the group
-              const updatedGroupAssets = groupAssets.map(ca =>
+              const updatedGroupAssets = groupAssets.map((ca: any) =>
                 ca.id === targetChildId
                   ? { ...ca, x: newX, y: newY }
                   : ca
@@ -1051,28 +1637,28 @@ export default function AiTrigger() {
                 newPosition: { x: newX, y: newY },
                 bounds,
                 updatedChildren: updatedGroupAssets.length,
-                allChildren: groupAssets.map(ca => ({ id: ca.id, type: ca.type, x: ca.x, y: ca.y }))
+                allChildren: groupAssets.map((ca: any) => ({ id: ca.id, type: ca.type, x: ca.x, y: ca.y }))
               });
 
               // Update the group asset with new child positions
               // Make sure we're updating the actual asset in the store
               const currentState = useSceneStore.getState();
               const currentGroupAsset = currentState.assets.find(a => a.id === groupAsset.id);
-              
+
               if (currentGroupAsset) {
                 console.log('Before update - current groupAssets:', currentGroupAsset.groupAssets?.map(ca => ({ id: ca.id, x: ca.x, y: ca.y })));
-                
+
                 // Update the asset with new groupAssets
                 updateAsset(groupAsset.id, {
                   groupAssets: updatedGroupAssets,
                 });
-                
+
                 // Verify the update
                 setTimeout(() => {
                   const verifyState = useSceneStore.getState();
                   const updatedGroup = verifyState.assets.find(a => a.id === groupAsset.id);
                   console.log('After update - new groupAssets:', updatedGroup?.groupAssets?.map(ca => ({ id: ca.id, x: ca.x, y: ca.y })));
-                  
+
                   if (updatedGroup?.groupAssets) {
                     const movedChild = updatedGroup.groupAssets.find(ca => ca.id === targetChildId);
                     if (movedChild && (movedChild.x !== childAsset.x || movedChild.y !== childAsset.y)) {
@@ -1082,10 +1668,10 @@ export default function AiTrigger() {
                     }
                   }
                 }, 100);
-                
+
                 // Force a re-render by marking as changed
                 useSceneStore.getState().hasUnsavedChanges = true;
-                
+
                 console.log('Group asset update called');
               } else {
                 console.error('Group asset not found in store after update attempt');
@@ -1310,7 +1896,7 @@ export default function AiTrigger() {
       console.error(e);
       setMessages((m) => [...m, { role: 'assistant', content: 'Sorry, I could not process that request.' }]);
     } finally {
-    setInputValue("");
+      setInputValue("");
       setIsLoading(false);
     }
   };
@@ -1370,20 +1956,20 @@ export default function AiTrigger() {
                     // Get full asset data from store to ensure groupAssets is populated
                     // Use existingAssets which is already reactive from the hook
                     const fullAsset = existingAssets.find(a => a.id === primary.id);
-                    const isGroup = fullAsset?.isGroup && fullAsset?.groupAssets && fullAsset.groupAssets.length > 0;
-                    const groupAssets = fullAsset?.groupAssets || primary.groupAssets;
-                    
+                    const isGroup = fullAsset?.isGroup && (fullAsset as any)?.groupAssets && (fullAsset as any).groupAssets.length > 0;
+                    const groupAssets = (fullAsset as any)?.groupAssets || (primary as any).groupAssets;
+
                     // Debug logging
                     console.log('AI Display Check:', {
                       primaryId: primary.id,
                       primaryIsGroup: primary.isGroup,
-                      primaryHasGroupAssets: !!primary.groupAssets,
-                      primaryGroupAssetsLength: primary.groupAssets?.length,
+                      primaryHasGroupAssets: !!(primary as any).groupAssets,
+                      primaryGroupAssetsLength: (primary as any).groupAssets?.length,
                       fullAssetFound: !!fullAsset,
                       fullAssetIsGroup: fullAsset?.isGroup,
-                      fullAssetGroupAssetsLength: fullAsset?.groupAssets?.length,
+                      fullAssetGroupAssetsLength: (fullAsset as any)?.groupAssets?.length,
                       isGroup: isGroup,
-                      groupAssetsLength: groupAssets?.length
+                      groupAssetsLength: (groupAssets as any)?.length
                     });
                     const w = Math.round((primary.width || 0) * (primary.scale || 1));
                     const h = Math.round((primary.height || 0) * (primary.scale || 1));
@@ -1396,15 +1982,15 @@ export default function AiTrigger() {
                           <span className="text-sm text-gray-800">
                             {(() => {
                               // Always check for group first, even if primary doesn't show it
-                              if (fullAsset?.isGroup && fullAsset?.groupAssets && fullAsset.groupAssets.length > 0) {
+                              if ((fullAsset as any)?.isGroup && (fullAsset as any)?.groupAssets && (fullAsset as any).groupAssets.length > 0) {
                                 return (
                                   <div className="mt-1">
-                                    <div className="font-medium">Group ({fullAsset.groupAssets.length} items)</div>
+                                    <div className="font-medium">Group ({(fullAsset as any).groupAssets.length} items)</div>
                                     <div className="text-xs text-gray-600 mt-1.5 space-y-1 max-h-32 overflow-y-auto">
-                                      {fullAsset.groupAssets.map((child: any, idx: number) => (
+                                      {(fullAsset as any).groupAssets.map((child: any, idx: number) => (
                                         <div key={child.id || idx} className="flex items-center gap-2">
-                                          <span 
-                                            className="w-3 h-3 rounded-full border border-gray-300 flex-shrink-0" 
+                                          <span
+                                            className="w-3 h-3 rounded-full border border-gray-300 flex-shrink-0"
                                             style={{ backgroundColor: child.fillColor || 'transparent' }}
                                           ></span>
                                           <span className="capitalize">{child.type || 'unknown'}</span>
@@ -1417,7 +2003,7 @@ export default function AiTrigger() {
                                   </div>
                                 );
                               }
-                              
+
                               // Fallback to single item display
                               if (selectedAssets.length === 1) {
                                 if (primary.type === "wall-segments") {
@@ -1535,7 +2121,7 @@ export default function AiTrigger() {
                   )}
                 </div>
               </div>
-              
+
               <div className="w-full max-w-lg relative flex-shrink-0 mt-4">
                 {/* Left icon */}
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 bg-gray-200 p-2 rounded-full">
@@ -1580,3 +2166,5 @@ export default function AiTrigger() {
     </>
   );
 }
+
+

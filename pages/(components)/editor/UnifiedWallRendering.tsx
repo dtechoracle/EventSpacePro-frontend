@@ -89,50 +89,50 @@ export default function UnifiedWallRendering({ mmToPx }: UnifiedWallRenderingPro
 
   // Compute centerline segments for existing walls and the live preview
   const centerlineSegments = useMemo(() => {
-    const segs: { a:{x:number;y:number}; b:{x:number;y:number}; t:number }[] = [];
+    const segs: { a: { x: number; y: number }; b: { x: number; y: number }; t: number }[] = [];
     for (const a of assets) {
       if (a.type !== 'wall-segments') continue;
       if (a.wallNodes && a.wallEdges) {
         for (const e of a.wallEdges) {
           const p1 = a.wallNodes![e.a];
           const p2 = a.wallNodes![e.b];
-          segs.push({ a:{ x:p1.x, y:p1.y }, b:{ x:p2.x, y:p2.y }, t: a.wallThickness ?? 2 });
+          segs.push({ a: { x: p1.x, y: p1.y }, b: { x: p2.x, y: p2.y }, t: a.wallThickness ?? 2 });
         }
       } else if (a.wallSegments) {
         for (const s of a.wallSegments) {
-          segs.push({ a:{ x:s.start.x + a.x, y:s.start.y + a.y }, b:{ x:s.end.x + a.x, y:s.end.y + a.y }, t: a.wallThickness ?? 2 });
+          segs.push({ a: { x: s.start.x + a.x, y: s.start.y + a.y }, b: { x: s.end.x + a.x, y: s.end.y + a.y }, t: a.wallThickness ?? 2 });
         }
       }
     }
     // Include in-progress temp segment
     if (currentWallStart && currentWallTempEnd) {
-      segs.push({ a:{ x: currentWallStart.x, y: currentWallStart.y }, b:{ x: currentWallTempEnd.x, y: currentWallTempEnd.y }, t: useSceneStore.getState().getCurrentWallThickness() });
+      segs.push({ a: { x: currentWallStart.x, y: currentWallStart.y }, b: { x: currentWallTempEnd.x, y: currentWallTempEnd.y }, t: useSceneStore.getState().getCurrentWallThickness() });
     }
     return segs;
   }, [assets, currentWallStart, currentWallTempEnd]);
 
   // Detect intersections and render dots only (no extra wall overlay)
   const intersections = useMemo(() => {
-    const pts: {x:number;y:number; dir1:{x:number;y:number}; dir2:{x:number;y:number}; t1:number; t2:number }[] = [];
-    const lineX = (p1:any,p2:any,p3:any,p4:any) => {
-      const denom = (p1.x-p2.x)*(p3.y-p4.y)-(p1.y-p2.y)*(p3.x-p4.x);
+    const pts: { x: number; y: number; dir1: { x: number; y: number }; dir2: { x: number; y: number }; t1: number; t2: number }[] = [];
+    const lineX = (p1: any, p2: any, p3: any, p4: any) => {
+      const denom = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
       if (Math.abs(denom) < 1e-9) return null;
-      const t = ((p1.x-p3.x)*(p3.y-p4.y)-(p1.y-p3.y)*(p3.x-p4.x))/denom;
-      const u = ((p1.x-p3.x)*(p1.y-p2.y)-(p1.y-p3.y)*(p1.x-p2.x))/denom;
+      const t = ((p1.x - p3.x) * (p3.y - p4.y) - (p1.y - p3.y) * (p3.x - p4.x)) / denom;
+      const u = ((p1.x - p3.x) * (p1.y - p2.y) - (p1.y - p3.y) * (p1.x - p2.x)) / denom;
       // Only count true crossings strictly inside both segments (exclude endpoints/snap points)
       const eps = 1e-4;
-      if (t<=eps||t>=1-eps||u<=eps||u>=1-eps) return null;
-      return { x: p1.x + t*(p2.x-p1.x), y: p1.y + t*(p2.y-p1.y), t, u } as any;
+      if (t <= eps || t >= 1 - eps || u <= eps || u >= 1 - eps) return null;
+      return { x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y), t, u } as any;
     };
-    for (let i=0;i<centerlineSegments.length;i++){
-      for (let j=i+1;j<centerlineSegments.length;j++){
-        const res:any = lineX(centerlineSegments[i].a, centerlineSegments[i].b, centerlineSegments[j].a, centerlineSegments[j].b);
+    for (let i = 0; i < centerlineSegments.length; i++) {
+      for (let j = i + 1; j < centerlineSegments.length; j++) {
+        const res: any = lineX(centerlineSegments[i].a, centerlineSegments[i].b, centerlineSegments[j].a, centerlineSegments[j].b);
         if (res) {
           const p = { x: res.x, y: res.y };
           const v1 = { x: centerlineSegments[i].b.x - centerlineSegments[i].a.x, y: centerlineSegments[i].b.y - centerlineSegments[i].a.y };
-          const l1 = Math.hypot(v1.x, v1.y) || 1; const dir1 = { x: v1.x/l1, y: v1.y/l1 };
+          const l1 = Math.hypot(v1.x, v1.y) || 1; const dir1 = { x: v1.x / l1, y: v1.y / l1 };
           const v2 = { x: centerlineSegments[j].b.x - centerlineSegments[j].a.x, y: centerlineSegments[j].b.y - centerlineSegments[j].a.y };
-          const l2 = Math.hypot(v2.x, v2.y) || 1; const dir2 = { x: v2.x/l2, y: v2.y/l2 };
+          const l2 = Math.hypot(v2.x, v2.y) || 1; const dir2 = { x: v2.x / l2, y: v2.y / l2 };
           pts.push({ x: p.x, y: p.y, dir1, dir2, t1: centerlineSegments[i].t ?? 2, t2: centerlineSegments[j].t ?? 2 });
         }
       }
@@ -141,7 +141,7 @@ export default function UnifiedWallRendering({ mmToPx }: UnifiedWallRenderingPro
     const dedup: any[] = [];
     const tol = 0.3;
     for (const p of pts) {
-      if (!dedup.some((q:any) => Math.hypot(q.x-p.x, q.y-p.y) <= tol)) dedup.push(p);
+      if (!dedup.some((q: any) => Math.hypot(q.x - p.x, q.y - p.y) <= tol)) dedup.push(p);
     }
     return dedup;
   }, [centerlineSegments]);
@@ -156,9 +156,9 @@ export default function UnifiedWallRendering({ mmToPx }: UnifiedWallRenderingPro
   }
 
   return (
-    <svg className="absolute inset-0 pointer-events-none" style={{ zIndex: 5, overflow: "visible" }}>
+    <svg className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, overflow: "visible" }}>
       {/* No filled overlay; per-asset walls render strokes. We only render dots and (optionally) tiny cleanup plugs. */}
-      {intersections.map((p:any, idx:number) => {
+      {intersections.map((p: any, idx: number) => {
         // Draw two tiny background-colored strokes along each segment direction to visually clip strokes (no fill)
         const halfA = (p.t2 * mmToPx) / 2 + 1; // use opposite thickness to clip through
         const halfB = (p.t1 * mmToPx) / 2 + 1;
@@ -183,16 +183,16 @@ export default function UnifiedWallRendering({ mmToPx }: UnifiedWallRenderingPro
         // Build thick wall polygons (existing + preview) for overlap subtraction
         const polys: any[] = [];
         let maxThicknessPx = visualThicknessPx;
-        assets.filter(a=>a && a.type==='wall-segments').forEach(a=>{
+        assets.filter(a => a && a.type === 'wall-segments').forEach(a => {
           const poly = wallAssetToPolygonMm(a);
           if (poly) polys.push(poly);
           if (a.wallThickness) maxThicknessPx = Math.max(maxThicknessPx, a.wallThickness);
         });
-        if (currentWallSegments && currentWallSegments.length>0) {
+        if (currentWallSegments && currentWallSegments.length > 0) {
           const tmp = [...currentWallSegments];
           if (currentWallStart && currentWallTempEnd) tmp.push({ start: currentWallStart, end: currentWallTempEnd });
           const tempAsset: AssetInstance = {
-            id: '__preview__', type:'wall-segments', x:0, y:0, scale:1, rotation:0,
+            id: '__preview__', type: 'wall-segments', x: 0, y: 0, scale: 1, rotation: 0,
             wallSegments: tmp,
             wallThickness: useSceneStore.getState().getCurrentWallThickness(),
             wallGap: 8,
@@ -203,17 +203,17 @@ export default function UnifiedWallRendering({ mmToPx }: UnifiedWallRenderingPro
         }
         // Pairwise intersections -> draw as background-colored patches to hide the thick overlap box
         const patches: string[] = [];
-        for (let i=0;i<polys.length;i++){
-          for (let j=i+1;j<polys.length;j++){
+        for (let i = 0; i < polys.length; i++) {
+          for (let j = i + 1; j < polys.length; j++) {
             try {
               const inter = polygonClipping.intersection(polys[i] as any, polys[j] as any);
-              if (inter && Array.isArray(inter) && inter.length>0) {
+              if (inter && Array.isArray(inter) && inter.length > 0) {
                 patches.push(polygonToPathD(inter, mmToPx));
               }
-            } catch {}
+            } catch { }
           }
         }
-        return patches.map((d, k)=>(
+        return patches.map((d, k) => (
           <g key={`patch-${k}`}>
             <path d={d} fill="#ffffff" stroke="#ffffff" strokeWidth={maxThicknessPx + 2} />
           </g>

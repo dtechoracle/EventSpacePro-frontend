@@ -1,0 +1,85 @@
+﻿<?xml version="1.0" standalone="no"?>
+<svg viewBox="-512 -384 1024 768" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" stroke-linecap="round" stroke-linejoin="round" fill-rule="evenodd" xml:space="preserve" >
+<defs >
+<clipPath id="clipId0" >
+<path d="M0,768 1024,768 1024,0 0,0 z" />
+</clipPath>
+</defs>
+<g clip-path="url(#clipId0)" fill="none" stroke="rgb(0,0,0)" stroke-width="0.1" />
+<g clip-path="url(#clipId0)" fill="none" stroke="rgb(0,0,0)" stroke-width="0.25" >
+<polyline points="146.694,547.071 146.694,312.78 " />
+<polyline points="111.711,573.563 111.711,295.416 " />
+<polyline points="10.0392,560.216 10.0392,288.465 " />
+<polyline points="476.567,312.78 476.567,547.071 " />
+<polyline points="511.939,573.563 511.939,295.416 " />
+<polyline points="511.939,573.563 511.939,295.416 " />
+<polyline points="546.922,547.071 546.922,312.78 " />
+<polyline points="876.796,312.78 876.796,547.071 " />
+<polyline points="912.167,573.563 912.167,295.416 " />
+<polyline points="912.347,573.563 912.347,295.416 " />
+<polyline points="912.347,573.563 912.347,295.416 " />
+<polyline points="1013.96,560.216 1013.96,288.465 " />
+<polyline points="166.714,292.76 456.547,292.76 " />
+<polyline points="478.571,262.048 145.078,262.048 " />
+<polyline points="478.752,253.988 145.078,253.988 " />
+<polyline points="478.752,153.886 145.078,153.886 " />
+<polyline points="511.939,187.253 511.939,220.621 " />
+<polyline points="512.119,220.621 512.119,187.253 " />
+<path d="M476.567,312.78  A20.0204,20.0204 0 0,0 456.547,292.76 " />
+<path d="M566.942,292.76  A20.0204,20.0204 0 0,0 546.922,312.78 " />
+<path d="M912.167,295.416  A33.3674,33.3674 0 0,0 878.8,262.048 " />
+<polyline points="912.347,187.253 912.347,220.621 " />
+<polyline points="912.528,220.621 912.528,187.253 " />
+<path d="M878.98,253.988  A33.3674,33.3674 0 0,0 912.347,220.621 " />
+<path d="M912.347,187.253  A33.3674,33.3674 0 0,0 878.98,153.886 " />
+<path d="M1013.96,288.465  A86.7552,86.7552 0 0,0 912.347,202.992 " />
+<path d="M876.796,312.78  A20.0204,20.0204 0 0,0 856.775,292.76 " />
+<polyline points="878.98,153.886 545.306,153.886 " />
+<polyline points="878.98,253.988 545.306,253.988 " />
+<polyline points="878.8,262.048 545.306,262.048 " />
+<polyline points="566.942,292.76 856.775,292.76 " />
+<path d="M511.939,220.621  A33.3674,33.3674 0 0,0 545.306,253.988 " />
+<path d="M545.306,262.048  A33.3674,33.3674 0 0,0 511.939,295.416 " />
+<path d="M511.939,295.416  A33.3674,33.3674 0 0,0 478.571,262.048 " />
+<path d="M478.752,253.988  A33.3674,33.3674 0 0,0 512.119,220.621 " />
+<path d="M545.306,153.886  A33.3674,33.3674 0 0,0 511.939,187.253 " />
+<path d="M512.119,187.253  A33.3674,33.3674 0 0,0 478.752,153.886 " />
+<polyline points="111.711,187.253 111.711,220.621 " />
+<polyline points="96.7944,201.71 110.141,201.71 " />
+<path d="M145.078,262.048  A33.3674,33.3674 0 0,0 111.711,295.416 " />
+<path d="M111.711,220.621  A33.3674,33.3674 0 0,0 145.078,253.988 " />
+<path d="M145.078,153.886  A33.3674,33.3674 0 0,0 111.711,187.253 " />
+<path d="M96.7944,201.71  A86.7552,86.7552 0 0,0 10.0392,288.465 " />
+<path d="M166.714,292.76  A20.0204,20.0204 0 0,0 146.694,312.78 " />
+<polyline points="145.078,614.114 478.571,614.114 " />
+<polyline points="456.547,567.092 166.714,567.092 " />
+<path d="M456.547,567.092  A20.0204,20.0204 0 0,0 476.567,547.071 " />
+<path d="M878.8,614.114  A33.3674,33.3674 0 0,0 912.167,580.747 " />
+<polyline points="932.31,593.583 980.593,593.583 " />
+<polyline points="545.306,614.114 878.8,614.114 " />
+<path d="M546.922,547.071  A20.0204,20.0204 0 0,0 566.942,567.092 " />
+<path d="M856.775,567.092  A20.0204,20.0204 0 0,0 876.796,547.071 " />
+<polyline points="856.775,567.092 566.942,567.092 " />
+<path d="M912.289,573.563  A20.0204,20.0204 0 0,0 932.31,593.583 " />
+<path d="M980.593,593.583  A33.3674,33.3674 0 0,0 1013.96,560.216 " />
+<path d="M511.939,580.747  A33.3674,33.3674 0 0,0 545.306,614.114 " />
+<path d="M478.571,614.114  A33.3674,33.3674 0 0,0 511.939,580.747 " />
+<polyline points="91.6901,593.583 43.4066,593.583 " />
+<path d="M111.711,580.747  A33.3674,33.3674 0 0,0 145.078,614.114 " />
+<path d="M146.694,547.071  A20.0204,20.0204 0 0,0 166.714,567.092 " />
+<path d="M91.6901,593.583  A20.0204,20.0204 0 0,0 111.711,573.563 " />
+<path d="M10.0392,560.216  A33.3674,33.3674 0 0,0 43.4066,593.583 " />
+</g>
+<g clip-path="url(#clipId0)" fill="rgb(91,91,91)" stroke="rgb(91,91,91)" stroke-width="0" >
+<text transform="matrix(6.97316 0 -0 6.97316 60.2353 595.705)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >Please go to www.autodwg.com to register and eliminate such limits.</text>
+<text transform="matrix(6.97316 0 -0 6.97316 60.2353 583.153)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >The note and watermark only exist in the trial version.</text>
+<text transform="matrix(6.97316 0 -0 6.97316 60.2353 595.705)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >Please go to www.autodwg.com to register and eliminate such limits.</text>
+<text transform="matrix(6.97316 0 -0 6.97316 60.2353 583.153)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >The note and watermark only exist in the trial version.</text>
+<text transform="matrix(6.97316 0 -0 6.97316 60.2353 595.705)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >Please go to www.autodwg.com to register and eliminate such limits.</text>
+<text transform="matrix(6.97316 0 -0 6.97316 60.2353 583.153)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >The note and watermark only exist in the trial version.</text>
+</g>
+<g clip-path="url(#clipId0)" fill="rgb(0,0,255)" stroke="rgb(0,0,255)" stroke-width="0" >
+<text transform="matrix(9.07748 0 -0 9.07748 110.431 384)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >AutoDWG DWG to SVG Converter FREE TRIAL</text>
+</g>
+</svg>
+

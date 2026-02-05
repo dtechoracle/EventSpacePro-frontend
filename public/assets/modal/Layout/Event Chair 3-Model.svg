@@ -1,0 +1,47 @@
+﻿<?xml version="1.0" standalone="no"?>
+<svg viewBox="-512 -384 1024 768" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" stroke-linecap="round" stroke-linejoin="round" fill-rule="evenodd" xml:space="preserve" >
+<defs >
+<clipPath id="clipId0" >
+<path d="M0,768 1024,768 1024,0 0,0 z" />
+</clipPath>
+</defs>
+<g clip-path="url(#clipId0)" fill="none" stroke="rgb(0,0,0)" stroke-width="0.1" />
+<g clip-path="url(#clipId0)" fill="none" stroke="rgb(0,0,0)" stroke-width="0.25" >
+<polyline points="688.777,171.399 688.777,73.1897 " />
+<polyline points="675.683,68.3495 675.683,166.559 " />
+<polyline points="348.317,166.559 348.317,68.3495 " />
+<polyline points="335.223,73.1897 335.223,171.399 " />
+<path d="M247.589,215.742  A65.4731,65.4731 0 0,0 217.371,270.913 " />
+<path d="M741.156,760.471  A65.4731,65.4731 0 0,0 806.629,694.997 " />
+<path d="M217.371,694.997  A65.4731,65.4731 0 0,0 282.844,760.471 " />
+<polyline points="827.851,117.253 814.568,130.537 " />
+<path d="M209.432,130.537  A13.0946,13.0946 0 0,0 226.31,131.928 " />
+<path d="M198.505,96.8665  A13.0946,13.0946 0 0,0 196.149,117.253 " />
+<polyline points="196.149,117.253 209.432,130.537 " />
+<path d="M825.495,96.8665  A594.714,594.714 0 0,0 198.505,96.8665 " />
+<path d="M797.69,131.928  A491.049,491.049 0 0,0 688.777,73.1897 " />
+<path d="M776.411,215.742  A491.049,491.049 0 0,0 688.777,171.399 " />
+<polyline points="217.371,694.997 217.371,270.913 " />
+<polyline points="806.629,694.997 806.629,270.913 " />
+<polyline points="282.844,760.471 741.156,760.471 " />
+<path d="M827.851,117.253  A13.0946,13.0946 0 0,0 825.495,96.8665 " />
+<path d="M797.69,131.928  A13.0946,13.0946 0 0,0 814.568,130.537 " />
+<path d="M806.629,270.913  A65.4731,65.4731 0 0,0 776.411,215.742 " />
+<path d="M335.223,171.399  A491.049,491.049 0 0,0 247.589,215.742 " />
+<path d="M335.223,73.1897  A491.049,491.049 0 0,0 226.31,131.928 " />
+<path d="M675.683,68.3495  A491.049,491.049 0 0,0 348.317,68.3495 " />
+<path d="M675.683,166.559  A491.049,491.049 0 0,0 348.317,166.559 " />
+</g>
+<g clip-path="url(#clipId0)" fill="rgb(91,91,91)" stroke="rgb(91,91,91)" stroke-width="0" >
+<text transform="matrix(11.4082 0 -0 11.4082 224.282 730.353)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >Please go to www.autodwg.com to register and eliminate such limits.</text>
+<text transform="matrix(11.4082 0 -0 11.4082 224.282 709.818)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >The note and watermark only exist in the trial version.</text>
+<text transform="matrix(11.4082 0 -0 11.4082 224.282 730.353)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >Please go to www.autodwg.com to register and eliminate such limits.</text>
+<text transform="matrix(11.4082 0 -0 11.4082 224.282 709.818)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >The note and watermark only exist in the trial version.</text>
+<text transform="matrix(11.4082 0 -0 11.4082 224.282 730.353)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >Please go to www.autodwg.com to register and eliminate such limits.</text>
+<text transform="matrix(11.4082 0 -0 11.4082 224.282 709.818)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >The note and watermark only exist in the trial version.</text>
+</g>
+<g clip-path="url(#clipId0)" fill="rgb(0,0,255)" stroke="rgb(0,0,255)" stroke-width="0" >
+<text transform="matrix(14.8509 0 -0 14.8509 256.251 384)" font-family="Arial,&apos;sans-serif&apos;" font-size="1.39636" >AutoDWG DWG to SVG Converter FREE TRIAL</text>
+</g>
+</svg>
+

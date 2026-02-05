@@ -45,6 +45,8 @@ import type { RemoteCursor } from '@/hooks/useMultiplayer';
 import { findSnapPoint } from '@/utils/wallSnapping';
 import { convertAssetToShapes } from '@/utils/assetUtils';
 import { texturePatterns } from '@/utils/texturePatterns';
+import { calculateSmartSnap } from '@/utils/smartSnapping'; // Added import
+
 interface Workspace2DProps {
   width?: number;
   height?: number;
@@ -275,10 +277,16 @@ export default function Workspace2D({
 
       // Handle panning first
       if (isPanning && dragStart) {
-        const dx = e.clientX - dragStart.x;
-        const dy = e.clientY - dragStart.y;
+        const currentX = e.clientX;
+        const currentY = e.clientY;
+        const dx = currentX - dragStart.x;
+        const dy = currentY - dragStart.y;
+
+        // Update dragStart FIRST to prevent delta accumulation/jumping
+        setDragStart({ x: currentX, y: currentY });
+
+        // Apply pan with natural direction
         panBy(dx, dy);
-        setDragStart({ x: e.clientX, y: e.clientY });
         return; // Don't process hover when panning
       }
 
@@ -363,69 +371,82 @@ export default function Workspace2D({
         let finalY = worldY;
         let guides: any[] = [];
 
-        // Snap to Objects Logic
         if (snapToObjectsEnabled && selectedIds.length === 1) {
-          // Get the single selected item to snap
           const id = selectedIds[0];
-          let itemRect = null;
+          let itemBounds: any = null;
 
           const shape = shapes.find(s => s.id === id);
           if (shape) {
-            itemRect = {
+            itemBounds = {
               x: shape.x + (worldX - draggedItemStart.x),
               y: shape.y + (worldY - draggedItemStart.y),
               width: shape.width,
               height: shape.height,
-              rotation: shape.rotation
+              id: shape.id
             };
           } else {
             const asset = assets.find(a => a.id === id);
             if (asset) {
-              itemRect = {
+              itemBounds = {
                 x: asset.x + (worldX - draggedItemStart.x),
                 y: asset.y + (worldY - draggedItemStart.y),
                 width: (asset.width || 0) * (asset.scale || 1),
                 height: (asset.height || 0) * (asset.scale || 1),
-                rotation: asset.rotation
+                rotation: asset.rotation,
+                id: asset.id
               };
             }
           }
 
-          if (itemRect) {
-            // Collect other objects to snap to
-            const others = [
+          if (itemBounds) {
+            // Collect targets
+            const targets = [
               ...shapes.filter(s => s.id !== id).map(s => ({
-                id: s.id, x: s.x, y: s.y, width: s.width, height: s.height, rotation: s.rotation, type: 'shape'
+                x: s.x, y: s.y, width: s.width, height: s.height, id: s.id
               })),
               ...assets.filter(a => a.id !== id).map(a => ({
-                id: a.id, x: a.x, y: a.y, width: (a.width || 0) * (a.scale || 1), height: (a.height || 0) * (a.scale || 1), rotation: a.rotation, type: 'asset'
-              }))
+                x: a.x,
+                y: a.y,
+                width: (a.width || 0) * (a.scale || 1),
+                height: (a.height || 0) * (a.scale || 1),
+                id: a.id
+              })),
+              ...walls.filter(w => w.id !== id).map(w => {
+                // Calculate wall bounding box from nodes
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                w.nodes.forEach(n => {
+                  minX = Math.min(minX, n.x);
+                  minY = Math.min(minY, n.y);
+                  maxX = Math.max(maxX, n.x);
+                  maxY = Math.max(maxY, n.y);
+                });
+                return {
+                  x: (minX + maxX) / 2,
+                  y: (minY + maxY) / 2,
+                  width: maxX - minX,
+                  height: maxY - minY,
+                  id: w.id
+                };
+              })
             ];
 
-            const result = snapToObjects(itemRect, others);
+            // Use our new smart snapping calc
+            const result = calculateSmartSnap(itemBounds, targets as any[], 10 / zoom);
 
-            // Calculate the delta from the original drag start
-            // We need to back-calculate the world position that would result in this snapped position
-            // snappedPos = originalPos + (worldX - draggedItemStart.x)
-            // worldX_new = snappedPos - originalPos + draggedItemStart.x
+            // result.dx/dy are the adjustments to the PROPOSED position (itemBounds)
+            // So final position = itemBounds.x + result.dx
+            // We need to set finalX such that finalX - draggedItemStart.x = itemBounds.x + result.dx - shape.x
+            // finalX = itemBounds.x + result.dx - shape.x + draggedItemStart.x
+            // Substituting itemBounds.x:
+            // finalX = (shape.x + worldX - draggedItemStart.x) + result.dx - shape.x + draggedItemStart.x
+            // finalX = worldX + result.dx
 
-            // Actually, simpler: just use the snapped position as the target
-            // But our update logic below uses (finalX - draggedItemStart.x) as the delta.
-            // So we need finalX such that:
-            // shape.x + (finalX - draggedItemStart.x) = result.x
-            // finalX = result.x - shape.x + draggedItemStart.x
-
-            if (shape) {
-              finalX = result.x - shape.x + draggedItemStart.x;
-              finalY = result.y - shape.y + draggedItemStart.y;
-            } else if (assets.find(a => a.id === id)) {
-              const asset = assets.find(a => a.id === id)!;
-              finalX = result.x - asset.x + draggedItemStart.x;
-              finalY = result.y - asset.y + draggedItemStart.y;
-            }
+            finalX = worldX + result.dx;
+            finalY = worldY + result.dy;
 
             guides = result.guides;
           }
+
         } else {
           // Standard Grid Snap
           const snapped = snapToGridFn({ x: worldX, y: worldY });
@@ -715,9 +736,10 @@ export default function Workspace2D({
       const worldX = (x - panX) / zoom;
       const worldY = (y - panY) / zoom;
 
-      if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
+      if (e.button === 1 || (e.button === 0 && (e.shiftKey || activeTool === 'pan'))) {
         setPanning(true);
-        setDragStart({ x, y });
+        // Use clientX/clientY to match handleMouseMove coordinate system
+        setDragStart({ x: e.clientX, y: e.clientY });
         e.preventDefault();
         return;
       }
@@ -3141,13 +3163,17 @@ export default function Workspace2D({
             />
           )}
 
-          {/* Snap Guides */}
-          <SnapGuidesRenderer />
+
 
           {/* SelectionTool handles will be rendered outside the scaled group for fixed size */}
         </g>
         {/* Render SelectionTool outside scaled group so handles stay fixed size */}
         <SelectionTool isActive={activeTool === 'select'} />
+
+        {/* Snap Guides - Rendered last to be on top */}
+        <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>
+          <SnapGuidesRenderer zoom={zoom} />
+        </g>
       </svg>
 
       <TextAnnotationTool isActive={activeTool === 'text-annotation'} />

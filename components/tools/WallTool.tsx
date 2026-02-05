@@ -7,6 +7,8 @@ import { snapTo90Degrees } from '@/lib/wallGeometry';
 import { calculateNodeJunctions, Point } from '@/utils/geometry';
 import { findWallIntersection } from '@/utils/wallSplitting';
 
+import { findSnapPointInShapes } from '@/utils/snapToDrawing';
+
 interface WallToolProps {
     isActive: boolean;
     thickness?: number;
@@ -56,6 +58,19 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                 y: Math.round(worldPos.y / gridSize) * gridSize
             }
             : worldPos;
+
+        const { snapToObjects } = useEditorStore.getState();
+
+        // 0. Check for Object Snapping (Shapes/Assets)
+        if (snapToObjects) {
+            const { shapes, walls, assets } = useProjectStore.getState();
+            // Filter out current wall to avoid self-snapping if needed (though walls is usually safe here)
+            const allElements = [...shapes, ...walls.filter(w => w.id !== currentWallId), ...assets];
+            const snapResult = findSnapPointInShapes(worldPos, allElements, 20 / zoom);
+            if (snapResult) {
+                snapped = { x: snapResult.x, y: snapResult.y };
+            }
+        }
 
         // Apply 90-degree snapping if we have a last node
         if (lastNode) {
@@ -128,7 +143,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             if (dist < SNAP_DISTANCE * 2) {
                 // Snap directly to first node to close the loop
                 snapped = firstNode;
-                
+
                 // Close the loop by adding edge from last to first
                 // Check if edge already exists
                 const edgeExists = currentWall.edges.some(e =>

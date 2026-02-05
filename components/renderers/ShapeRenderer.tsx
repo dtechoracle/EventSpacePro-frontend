@@ -13,10 +13,10 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
     // Default pure black stroke so new shapes/lines pop clearly
     const strokeColor = shape.stroke || '#000000';
     const fillColor = shape.fill || 'transparent';
-    // Ensure strokeWidth is always a valid number, defaulting to 4 if undefined/null/0
+    // Ensure strokeWidth is always a valid number, defaulting to 3 if undefined/null/0
     const strokeWidth = (shape.strokeWidth !== undefined && shape.strokeWidth !== null && shape.strokeWidth > 0)
         ? shape.strokeWidth
-        : 5;
+        : 3;
 
     const highlightColor = '#3b82f6';
     const showHighlight = isHovered || isSelected;
@@ -37,7 +37,8 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
         } else if (fillType === 'hatch') {
             return `url(#${hatchId})`;
         } else if (fillType === 'texture') {
-            return shape.fillTexture ? `url(#${shape.fillTexture})` : fillColor;
+            const scale = shape.fillTextureScale || 1;
+            return shape.fillTexture ? `url(#${shape.fillTexture}-scale-${scale})` : fillColor;
         } else if (fillType === 'image' && shape.fillImage) {
             return `url(#${patternId})`;
         } else {
@@ -60,7 +61,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
         const commonProps = {
             fill: getFillValue(isHighlight),
             stroke: isHighlight ? highlightColor : strokeColor,
-            strokeWidth: isHighlight ? strokeWidth + 12 : strokeWidth,
+            strokeWidth: isHighlight ? strokeWidth + 4 : strokeWidth,
             opacity: isHighlight ? 0.8 : 1,
             strokeDasharray: shape.lineType !== 'double' ? dashArray : undefined,
             style: { pointerEvents: shape.id === 'background-texture' ? 'none' : 'auto' } as React.CSSProperties,
@@ -522,7 +523,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
         if (shape.fillType !== 'hatch') return null;
 
         const pattern = shape.hatchPattern || 'horizontal';
-        const spacing = shape.hatchSpacing || 5;
+        const spacing = shape.hatchSpacing || 50;
         const color = shape.hatchColor || '#000000';
 
         return (
@@ -564,10 +565,31 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                         <circle cx={spacing * 1.5} cy={spacing * 1.5} r="1" fill={color} />
                     </>
                 )}
-                {pattern === 'grid' && (
+
+                {pattern === 'brick' && (
                     <>
                         <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth="1" />
-                        <line x1={spacing} y1="0" x2={spacing} y2={spacing * 2} stroke={color} strokeWidth="1" />
+                        <line x1={spacing} y1="0" x2={spacing} y2={spacing} stroke={color} strokeWidth="1" />
+                        <line x1="0" y1={spacing} x2={0} y2={spacing * 2} stroke={color} strokeWidth="1" />
+                        {/* Brick offset logic is hard in simple pattern without complex path. 
+                            Standard brick:
+                            ________
+                            |  |  |
+                            |__|__|
+                              |  |
+                            __|__| 
+                            
+                            Pattern tile:
+                            M 0,0 L 20,0 (top line)
+                            M 0,10 L 20,10 (middle line)
+                            M 0,20 L 20,20 (bottom line)
+                            M 10,0 L 10,10 (vertical top)
+                            M 0,10 L 0,20 (vertical bottom left)
+                            M 20,10 L 20,20 (vertical bottom right)
+                            
+                            Let's try a simple brick path.
+                         */}
+                        <path d={`M 0,${spacing} H ${spacing * 2} M 0,${spacing * 2} H ${spacing * 2} M ${spacing},0 V ${spacing} M 0,${spacing} V ${spacing * 2} M ${spacing * 2},${spacing} V ${spacing * 2}`} stroke={color} strokeWidth="1" fill="none" />
                     </>
                 )}
             </pattern>

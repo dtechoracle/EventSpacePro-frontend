@@ -26,13 +26,30 @@ export default function WallRendering({
     return null;
   }
 
+  // DEBUG LOG
+  React.useEffect(() => {
+    if ((asset as any).showDimensions) {
+      console.log('WallRendering Debug:', {
+        id: asset.id,
+        showDimensions: (asset as any).showDimensions,
+        nodes: asset.wallNodes?.length,
+        edges: asset.wallEdges?.length,
+        segments: (asset as any).wallSegments?.length
+      });
+      if ((asset as any).wallSegments) {
+        console.log('Wall Segments Data:', JSON.stringify((asset as any).wallSegments));
+      }
+    }
+  }, [asset]);
+
   return (
     <div
       style={{
-        position: "absolute",
-        left: leftPx,
-        top: topPx,
-        transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        height: '100%',
         cursor: "move",
         zIndex: asset.zIndex || 0,
         isolation: "isolate",
@@ -113,159 +130,160 @@ export default function WallRendering({
               width={width}
               height={height}
               viewBox={`${-width / 2} ${-height / 2} ${width} ${height}`}
-              style={{ overflow: "visible", pointerEvents: "none" }}
+              style={{ overflow: "visible", pointerEvents: "all" }}
             >
-            {/* Render legacy segments only when we DON'T have node-edge data */}
-            {!asset.wallNodes &&
-              asset.wallSegments &&
-              asset.wallSegments.length > 0 &&
-              (() => {
-                const mmToPx = 2.000021;
-                const unitScale = mmToPx * asset.scale;
-                const wallThicknessMm = asset.wallThickness ?? 75;
-                const wallGap = wallThicknessMm;
+              {/* Render legacy segments only when we DON'T have node-edge data */}
+              {!asset.wallNodes &&
+                asset.wallSegments &&
+                asset.wallSegments.length > 0 &&
+                (() => {
+                  const mmToPx = 2.000021;
+                  const unitScale = mmToPx * asset.scale;
+                  const wallThicknessMm = asset.wallThickness ?? 75;
+                  const wallGap = wallThicknessMm;
 
-                // Wall segments are already in relative coordinates
-                const relativeSegments = asset.wallSegments;
+                  // Wall segments are already in relative coordinates
+                  const relativeSegments = asset.wallSegments;
 
-                // Build wall geometry with mitered corners
-                // buildWallGeometry expects wallThickness as the total wall width (distance between lines)
-                // It will divide by 2 internally to calculate the perpendicular offset
-                const geometry = buildWallGeometry(relativeSegments, wallGap, wallThicknessMm);
+                  // Build wall geometry with mitered corners
+                  // buildWallGeometry expects wallThickness as the total wall width (distance between lines)
+                  // It will divide by 2 internally to calculate the perpendicular offset
+                  const geometry = buildWallGeometry(relativeSegments, wallGap, wallThicknessMm);
 
-                if (
-                  geometry.outerPoints.length === 0 ||
-                  geometry.innerPoints.length === 0
-                ) {
-                  return null;
-                }
+                  if (
+                    geometry.outerPoints.length === 0 ||
+                    geometry.innerPoints.length === 0
+                  ) {
+                    return null;
+                  }
 
-                const outerPointsScaled = geometry.outerPoints.map((point) => ({
-                  x: point.x * unitScale,
-                  y: point.y * unitScale,
-                }));
+                  const outerPointsScaled = geometry.outerPoints.map((point) => ({
+                    x: point.x * unitScale,
+                    y: point.y * unitScale,
+                  }));
 
-                const innerPointsScaled = geometry.innerPoints.map((point) => ({
-                  x: point.x * unitScale,
-                  y: point.y * unitScale,
-                }));
+                  const innerPointsScaled = geometry.innerPoints.map((point) => ({
+                    x: point.x * unitScale,
+                    y: point.y * unitScale,
+                  }));
 
-                const toCommands = (pts: typeof outerPointsScaled) =>
-                  pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-                const outerCommands = toCommands(outerPointsScaled);
-                const innerCommands = toCommands([...innerPointsScaled].reverse());
-                const outerPath = `${outerCommands} Z`;
-                const innerPath = `${innerCommands} Z`;
-                const ringPath = `${outerCommands} Z ${innerCommands} Z`;
+                  const toCommands = (pts: typeof outerPointsScaled) =>
+                    pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+                  const outerCommands = toCommands(outerPointsScaled);
+                  const innerCommands = toCommands([...innerPointsScaled].reverse());
+                  const outerPath = `${outerCommands} Z`;
+                  const innerPath = `${innerCommands} Z`;
+                  const ringPath = `${outerCommands} Z ${innerCommands} Z`;
 
-                const strokeWidth = Math.max(1.2, asset.scale * 1.2);
-                const bandFill = asset.backgroundColor ?? asset.fillColor ?? "#f8fafc";
-                return (
-                  <>
-                    <path d={ringPath} fill={bandFill} fillRule="evenodd" />
-                    <path
-                      d={outerPath}
-                      fill="none"
-                      stroke={asset.lineColor ?? "#000000"}
-                      strokeWidth={strokeWidth}
-                      strokeLinejoin="round"
-                      strokeLinecap="square"
-                    />
-                    <path
-                      d={innerPath}
-                      fill="none"
-                      stroke={asset.lineColor ?? "#000000"}
-                      strokeWidth={strokeWidth}
-                      strokeLinejoin="round"
-                      strokeLinecap="square"
-                    />
-                    {showDebugOutlines && (
-                      <>
-                        <path d={outerPath} fill="none" stroke="#FF00FF" strokeWidth={1} strokeDasharray="4,4" />
-                        <path d={innerPath} fill="none" stroke="#FF00FF" strokeWidth={1} strokeDasharray="4,4" />
-                      </>
-                    )}
-                  </>
-                );
-              })()}
-
-            {/* Node-edge rendering path (takes precedence if present) */}
-            {asset.wallNodes &&
-              asset.wallEdges &&
-              asset.wallEdges.length > 0 &&
-              (() => {
-                const mmToPx = 2.000021;
-                const unitScale = mmToPx * asset.scale;
-                const wallThicknessMm = asset.wallThickness ?? 75;
-                const wallGap = wallThicknessMm;
-                
-                // Convert edges into segments (absolute -> relative to asset center)
-                const segments = asset.wallEdges.map((edge) => {
-                  const a = asset.wallNodes![edge.a];
-                  const b = asset.wallNodes![edge.b];
-                  return {
-                    start: { x: a.x - asset.x, y: a.y - asset.y },
-                    end: { x: b.x - asset.x, y: b.y - asset.y },
-                  };
-                });
-                
-                // Build wall geometry with mitered corners
-                // buildWallGeometry expects wallThickness as the total wall width (distance between lines)
-                // It will divide by 2 internally to calculate the perpendicular offset
-                const geometry = buildWallGeometry(segments, wallGap, wallThicknessMm);
-                
-                // DEBUG: Show geometry points
-                const debugText = `Geometry: ${geometry.outerPoints.length} outer, ${geometry.innerPoints.length} inner points`;
-                
-                if (
-                  geometry.outerPoints.length === 0 ||
-                  geometry.innerPoints.length === 0
-                )
+                  const strokeWidth = Math.max(1.2, asset.scale * 1.2);
+                  const bandFill = asset.backgroundColor ?? asset.fillColor ?? "#f8fafc";
                   return (
-                    <text x="0" y="0" fill="red" fontSize="12">
-                      {debugText} - No geometry!
-                    </text>
+                    <>
+                      <path d={ringPath} fill={bandFill} fillRule="evenodd" />
+                      <path
+                        d={outerPath}
+                        fill="none"
+                        stroke={asset.lineColor ?? "#000000"}
+                        strokeWidth={strokeWidth}
+                        strokeLinejoin="round"
+                        strokeLinecap="square"
+                      />
+                      <path
+                        d={innerPath}
+                        fill="none"
+                        stroke={asset.lineColor ?? "#000000"}
+                        strokeWidth={strokeWidth}
+                        strokeLinejoin="round"
+                        strokeLinecap="square"
+                      />
+                      {showDebugOutlines && (
+                        <>
+                          <path d={outerPath} fill="none" stroke="#FF00FF" strokeWidth={1} strokeDasharray="4,4" />
+                          <path d={innerPath} fill="none" stroke="#FF00FF" strokeWidth={1} strokeDasharray="4,4" />
+                        </>
+                      )}
+                    </>
                   );
-                const outerPointsScaled = geometry.outerPoints.map((p) => ({
-                  x: p.x * unitScale,
-                  y: p.y * unitScale,
-                }));
-                const innerPointsScaled = geometry.innerPoints.map((p) => ({
-                  x: p.x * unitScale,
-                  y: p.y * unitScale,
-                }));
-                const toCommands = (pts: typeof outerPointsScaled) =>
-                  pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-                const outerCommands = toCommands(outerPointsScaled);
-                const innerCommands = toCommands([...innerPointsScaled].reverse());
-                const outerPath = `${outerCommands} Z`;
-                const innerPath = `${innerCommands} Z`;
-                const ringPath = `${outerCommands} Z ${innerCommands} Z`;
-                const strokeWidth = Math.max(1.2, asset.scale * 1.2);
-                const bandFill = asset.backgroundColor ?? asset.fillColor ?? "#f8fafc";
-                return (
-                  <>
-                    <path d={ringPath} fill={bandFill} fillRule="evenodd" />
-                    <path
-                      d={outerPath}
-                      fill="none"
-                      stroke={asset.lineColor ?? "#000000"}
-                      strokeWidth={strokeWidth}
-                      strokeLinejoin="round"
-                      strokeLinecap="square"
-                    />
-                    <path
-                      d={innerPath}
-                      fill="none"
-                      stroke={asset.lineColor ?? "#000000"}
-                      strokeWidth={strokeWidth}
-                      strokeLinejoin="round"
-                      strokeLinecap="square"
-                    />
-                  </>
-                );
-              })()}
-          </svg>
+                })()}
+
+              {/* Node-edge rendering path (takes precedence if present) */}
+              {asset.wallNodes &&
+                asset.wallEdges &&
+                asset.wallEdges.length > 0 &&
+                (() => {
+                  const mmToPx = 2.000021;
+                  const unitScale = mmToPx * asset.scale;
+                  const wallThicknessMm = asset.wallThickness ?? 75;
+                  const wallGap = wallThicknessMm;
+
+                  // Convert edges into segments (absolute -> relative to asset center)
+                  const segments = asset.wallEdges.map((edge) => {
+                    const a = asset.wallNodes![edge.a];
+                    const b = asset.wallNodes![edge.b];
+                    return {
+                      start: { x: a.x - asset.x, y: a.y - asset.y },
+                      end: { x: b.x - asset.x, y: b.y - asset.y },
+                    };
+                  });
+
+                  // Build wall geometry with mitered corners
+                  // buildWallGeometry expects wallThickness as the total wall width (distance between lines)
+                  // It will divide by 2 internally to calculate the perpendicular offset
+                  const geometry = buildWallGeometry(segments, wallGap, wallThicknessMm);
+
+                  // DEBUG: Show geometry points
+                  const debugText = `Geometry: ${geometry.outerPoints.length} outer, ${geometry.innerPoints.length} inner points`;
+
+                  if (
+                    geometry.outerPoints.length === 0 ||
+                    geometry.innerPoints.length === 0
+                  )
+                    return (
+                      <text x="0" y="0" fill="red" fontSize="12">
+                        {debugText} - No geometry!
+                      </text>
+                    );
+                  const outerPointsScaled = geometry.outerPoints.map((p) => ({
+                    x: p.x * unitScale,
+                    y: p.y * unitScale,
+                  }));
+                  const innerPointsScaled = geometry.innerPoints.map((p) => ({
+                    x: p.x * unitScale,
+                    y: p.y * unitScale,
+                  }));
+                  const toCommands = (pts: typeof outerPointsScaled) =>
+                    pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+                  const outerCommands = toCommands(outerPointsScaled);
+                  const innerCommands = toCommands([...innerPointsScaled].reverse());
+                  const outerPath = `${outerCommands} Z`;
+                  const innerPath = `${innerCommands} Z`;
+                  const ringPath = `${outerCommands} Z ${innerCommands} Z`;
+                  const strokeWidth = Math.max(1.2, asset.scale * 1.2);
+                  const bandFill = asset.backgroundColor ?? asset.fillColor ?? "#f8fafc";
+                  return (
+                    <>
+                      <path d={ringPath} fill={bandFill} fillRule="evenodd" />
+                      <path
+                        d={outerPath}
+                        fill="none"
+                        stroke={asset.lineColor ?? "#000000"}
+                        strokeWidth={strokeWidth}
+                        strokeLinejoin="round"
+                        strokeLinecap="square"
+                      />
+                      <path
+                        d={innerPath}
+                        fill="none"
+                        stroke={asset.lineColor ?? "#000000"}
+                        strokeWidth={strokeWidth}
+                        strokeLinejoin="round"
+                        strokeLinecap="square"
+                      />
+                    </>
+                  );
+                })()}
+            </svg>
+
           </>
         );
       })()}

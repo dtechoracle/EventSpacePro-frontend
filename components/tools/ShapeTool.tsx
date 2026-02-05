@@ -119,6 +119,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         let currentSnapPoint: SnapPoint | null = null;
         if (snapToObjects) {
             const { shapes, walls, assets } = useProjectStore.getState();
+            // Filter out current shape if needed (not applicable here as we create new)
             const allElements = [...shapes, ...walls, ...assets];
             const snapResult = findSnapPointInShapes(worldPos, allElements, 20 / zoom);
             if (snapResult) {

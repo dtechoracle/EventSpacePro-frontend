@@ -516,7 +516,12 @@ const Dashboard = () => {
           <div className="mb-10">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-800">Recent Events</h2>
-              <span className="text-sm text-gray-500">{filteredEvents.length} {filteredEvents.length === 1 ? 'event' : 'events'}</span>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-gray-500">{filteredEvents.length} {filteredEvents.length === 1 ? 'event' : 'events'}</span>
+                <a href="/dashboard/projects" className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                  View all <BsBoxArrowUpRight className="w-3 h-3" />
+                </a>
+              </div>
             </div>
             {(isLoading || isLoadingEvents) ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -540,33 +545,14 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredEvents.map((event) => {
+                {filteredEvents.slice(0, 6).map((event) => {
                   const { walls, shapes, assets } = buildPreviewData(event);
-
-                  // Debug logging - always log to track preview data
-                  console.log(`[Dashboard] Event ${event._id} preview data from DATABASE:`, {
-                    eventName: event.name,
-                    eventId: event._id,
-                    walls: walls.length,
-                    shapes: shapes.length,
-                    assets: assets.length,
-                    hasCanvasData: !!event.canvasData,
-                    canvasDataWalls: event.canvasData?.walls?.length || 0,
-                    canvasDataShapes: event.canvasData?.shapes?.length || 0,
-                    canvasDataAssets: event.canvasData?.assets?.length || 0,
-                    hasCanvasAssets: !!event.canvasAssets,
-                    canvasAssetsCount: event.canvasAssets?.length || 0,
-                  });
-
-
-
                   return (
                     <EventCard
                       key={event._id}
                       event={event}
                       user={user}
                       previewData={{ walls, shapes, assets }}
-                    // Refresh query on toggle could be nice, but internal state handles UI
                     />
                   );
                 })}
@@ -578,9 +564,6 @@ const Dashboard = () => {
           <div>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-800">Templates</h2>
-              <a href="#" className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                View all <BsBoxArrowUpRight className="w-3 h-3" />
-              </a>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {/* Template Placeholder Cards */}
@@ -588,24 +571,24 @@ const Dashboard = () => {
                 whileHover={{ scale: 1.03, y: -4 }}
                 className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
               >
-                <div className="h-40 bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center">
-                  <div className="text-white text-5xl">🛏️</div>
+                <div className="h-40 bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
+                  <div className="text-white text-5xl">🌳</div>
                 </div>
                 <div className="p-4">
-                  <h3 className="font-semibold text-sm text-gray-800">Bedroom</h3>
-                  <p className="text-xs text-gray-500 mt-1">Bedroom layout template</p>
+                  <h3 className="font-semibold text-sm text-gray-800">Outdoor</h3>
+                  <p className="text-xs text-gray-500 mt-1">Outdoor event layout with various zones</p>
                 </div>
               </motion.div>
               <motion.div
                 whileHover={{ scale: 1.03, y: -4 }}
                 className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
               >
-                <div className="h-40 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
-                  <div className="text-white text-5xl">💼</div>
+                <div className="h-40 bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
+                  <div className="text-white text-5xl">🎪</div>
                 </div>
                 <div className="p-4">
-                  <h3 className="font-semibold text-sm text-gray-800">Office Space</h3>
-                  <p className="text-xs text-gray-500 mt-1">Office layout template</p>
+                  <h3 className="font-semibold text-sm text-gray-800">Marquee Event</h3>
+                  <p className="text-xs text-gray-500 mt-1">Large marquee setup for special events</p>
                 </div>
               </motion.div>
               <motion.div

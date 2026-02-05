@@ -1,9 +1,9 @@
 export const TEMPLATES = [
     {
         id: "bedroom",
-        name: "Bedroom",
-        description: "Master bedroom with king bed and wardrobe",
-        icon: "🛏️",
+        name: "Outdoor",
+        description: "Outdoor event layout with various zones",
+        icon: "🌳",
         canvasData: {
             walls: [
                 { id: "w1", start: { x: 100, y: 100 }, end: { x: 500, y: 100 }, thickness: 10 },
@@ -20,9 +20,9 @@ export const TEMPLATES = [
     },
     {
         id: "office",
-        name: "Office Space",
-        description: "Professional office layout",
-        icon: "💼",
+        name: "Marquee Event",
+        description: "Large marquee setup for special events",
+        icon: "🎪",
         canvasData: {
             walls: [
                 { id: "w1", start: { x: 100, y: 100 }, end: { x: 600, y: 100 }, thickness: 10 },
@@ -31,8 +31,8 @@ export const TEMPLATES = [
                 { id: "w4", start: { x: 100, y: 400 }, end: { x: 100, y: 100 }, thickness: 10 }
             ],
             assets: [
-                { id: "desk1", type: "furniture-desk", x: 150, y: 150, width: 120, height: 60, rotation: 0 },
-                { id: "chair1", type: "furniture-chair-office", x: 200, y: 220, width: 40, height: 40, rotation: 0 }
+                // { id: "desk1", type: "furniture-desk", x: 150, y: 150, width: 120, height: 60, rotation: 0 },
+                // { id: "chair1", type: "furniture-chair-office", x: 200, y: 220, width: 40, height: 40, rotation: 0 }
             ],
             shapes: []
         }
