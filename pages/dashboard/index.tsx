@@ -636,7 +636,7 @@ const Dashboard = () => {
                       <div className="text-white text-5xl">🌳</div>
                     </div>
                     <div className="p-4">
-                      <h3 className="font-semibold text-sm text-gray-800">Outdoor</h3>
+                      <h3 className="font-semibold text-sm text-gray-800">Outdoor Event</h3>
                       <p className="text-xs text-gray-500 mt-1">Outdoor event layout with various zones</p>
                     </div>
                   </motion.div>

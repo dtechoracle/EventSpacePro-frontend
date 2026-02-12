@@ -1,7 +1,7 @@
 export const TEMPLATES = [
     {
         id: "bedroom",
-        name: "Outdoor",
+        name: "Outdoor Event",
         description: "Outdoor event layout with various zones",
         icon: "🌳",
         canvasData: {
