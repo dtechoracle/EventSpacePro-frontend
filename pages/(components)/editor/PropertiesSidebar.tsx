@@ -330,14 +330,14 @@ export default function PropertiesSidebar(): React.JSX.Element {
               </div>
             )}
 
-            {/* Snap to Grid */}
+            {/* Smart Snap (Alignment) */}
             {showGrid && (
               <div className="flex justify-between items-center py-2">
                 <span>Snap to Grid</span>
                 <div className="inline-flex rounded-lg bg-[#0000000D] p-1">
                   <button
-                    onClick={() => !snapToGridEnabled && handleToggleSnapToGrid()}
-                    className={`px-4 py-1 text-xs rounded-md transition-all ${snapToGridEnabled
+                    onClick={() => snapToGridEnabled && handleToggleSnapToGrid()}
+                    className={`px-4 py-1 text-xs rounded-md transition-all ${!snapToGridEnabled
                       ? "bg-white text-gray-900 shadow-sm font-medium"
                       : "text-gray-600 hover:text-gray-900"
                       }`}
@@ -345,8 +345,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     On
                   </button>
                   <button
-                    onClick={() => snapToGridEnabled && handleToggleSnapToGrid()}
-                    className={`px-4 py-1 text-xs rounded-md transition-all ${!snapToGridEnabled
+                    onClick={() => !snapToGridEnabled && handleToggleSnapToGrid()}
+                    className={`px-4 py-1 text-xs rounded-md transition-all ${snapToGridEnabled
                       ? "bg-white text-gray-900 shadow-sm font-medium"
                       : "text-gray-600 hover:text-gray-900"
                       }`}
@@ -414,6 +414,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-500">
                   {itemType} Properties
                 </div>
+
+
 
                 {/* Position */}
                 {(itemType === 'shape' || itemType === 'asset') && (
@@ -1520,28 +1522,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       </div>
                     </div>
 
-                    {/* Show Dimensions Toggle */}
-                    <div className="flex justify-between items-center mb-2 pt-2 border-t border-gray-100">
-                      <span className="text-gray-500">Show Dimensions</span>
-                      <button
-                        onClick={() => {
-                          const cur = !!(selectedItem as any).showDimensions;
-                          const next = !cur;
-                          if (itemType === 'wall' && !(selectedItem as any).wallSegments) {
-                            updateWall(selectedItem.id, { showDimensions: next } as any);
-                            syncToScene(selectedItem.id, { showDimensions: next });
-                          }
-                          else {
-                            updateAsset(selectedItem.id, { showDimensions: next } as any);
-                            updateSceneAsset(selectedItem.id, { showDimensions: next } as any);
-                          }
-                        }}
-                        className={`w-10 h-5 rounded-full flex items-center transition-colors px-1 ${(selectedItem as any).showDimensions ? "bg-blue-600 justify-end" : "bg-gray-300 justify-start"
-                          }`}
-                      >
-                        <div className="w-3 h-3 bg-white rounded-full shadow-sm" />
-                      </button>
-                    </div>
+
                   </div>
                 )}
 
@@ -1601,6 +1582,37 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         max={48}
                       />
                     </div>
+                  </div>
+                )}
+
+                {/* Show Dimensions Toggle (Global Bottom) */}
+                {(itemType === 'shape' || itemType === 'asset' || itemType === 'wall') && (
+                  <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-100">
+                    <span className="text-gray-500">Show Dimensions</span>
+                    <button
+                      onClick={() => {
+                        const cur = !!(selectedItem as any).showDimensions;
+                        const next = !cur;
+
+                        // Handle based on types
+                        if (itemType === 'wall' && !(selectedItem as any).wallSegments) {
+                          updateWall(selectedItem.id, { showDimensions: next } as any);
+                          syncToScene(selectedItem.id, { showDimensions: next });
+                        }
+                        else if (itemType === 'asset' || (itemType === 'wall' && (selectedItem as any).wallSegments)) {
+                          updateAsset(selectedItem.id, { showDimensions: next } as any);
+                          updateSceneAsset(selectedItem.id, { showDimensions: next } as any);
+                        }
+                        else if (itemType === 'shape') {
+                          updateShape(selectedItem.id, { showDimensions: next } as any);
+                          syncToScene(selectedItem.id, { showDimensions: next });
+                        }
+                      }}
+                      className={`w-10 h-5 rounded-full flex items-center transition-colors px-1 ${(selectedItem as any).showDimensions ? "bg-blue-600 justify-end" : "bg-gray-300 justify-start"
+                        }`}
+                    >
+                      <div className="w-3 h-3 bg-white rounded-full shadow-sm" />
+                    </button>
                   </div>
                 )}
               </div>

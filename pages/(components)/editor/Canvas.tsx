@@ -564,6 +564,7 @@ export default function Canvas({
     >
       <div
         className="relative w-full h-full"
+        ref={canvasRef}
         style={{
           transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
           transformOrigin: "0 0" // Explicit 0 0 to be absolute certain
@@ -588,12 +589,12 @@ export default function Canvas({
           {/* (Moved to bottom for Z-index safety) */}
 
           {/* Unified wall rendering (boolean union of all wall polygons incl. preview) */}
-          <div className={isDrawingActive ? "pointer-events-none" : ""}>
+          <div className={`absolute inset-0 ${isDrawingActive ? "pointer-events-none" : ""}`}>
             <UnifiedWallRendering mmToPx={mmToPx} />
           </div>
 
           {/* Drawing Path (Shapes, Pen) */}
-          <div className="pointer-events-none" style={{ zIndex: 50 }}>
+          <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 50 }}>
             <DrawingPath
               isDrawing={isDrawing}
               tempPath={tempPath}
@@ -615,7 +616,6 @@ export default function Canvas({
 
           {/* Single Canvas (the scene itself) */}
           <div
-            ref={canvasRef}
             data-canvas-container="true"
             className={`relative ${isDrawingActive ||
               isRectangularSelectionMode

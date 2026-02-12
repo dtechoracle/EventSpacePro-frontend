@@ -40,8 +40,12 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
         point: { x: number; y: number };
     } | null>(null);
 
+    // State for alignment guides (Removed visual guides as per user request, but kept logic for magnetic snap)
+    // const [alignmentGuides, setAlignmentGuides] = useState<{ type: 'horizontal' | 'vertical'; x?: number; y?: number; label?: string }[]>([]);
+
+    const SNAP_PIXELS = 15; // Screen pixels tolerance for snapping
     const SNAP_DISTANCE = 10; // mm
-    const JUNCTION_SNAP_THRESHOLD = 15; // mm - threshold for detecting wall edges
+    const JUNCTION_SNAP_THRESHOLD = 15; // mm
 
     // Get current wall being drawn
     const currentWall = currentWallId ? walls.find(w => w.id === currentWallId) : null;
@@ -52,6 +56,8 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
         if (!isActive || !isDrawing) return;
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
+
+        // Base snapping: Grid or Raw
         let snapped = snapToGrid
             ? {
                 x: Math.round(worldPos.x / gridSize) * gridSize,
@@ -60,11 +66,11 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             : worldPos;
 
         const { snapToObjects } = useEditorStore.getState();
+        const guides: { type: 'horizontal' | 'vertical'; x?: number; y?: number; label?: string }[] = [];
 
-        // 0. Check for Object Snapping (Shapes/Assets)
+        // 0. Check for Object Snapping (Shapes/Assets) - if enabled
         if (snapToObjects) {
             const { shapes, walls, assets } = useProjectStore.getState();
-            // Filter out current wall to avoid self-snapping if needed (though walls is usually safe here)
             const allElements = [...shapes, ...walls.filter(w => w.id !== currentWallId), ...assets];
             const snapResult = findSnapPointInShapes(worldPos, allElements, 20 / zoom);
             if (snapResult) {
@@ -72,44 +78,118 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             }
         }
 
-        // Apply 90-degree snapping if we have a last node
-        if (lastNode) {
-            snapped = snapTo90Degrees(lastNode, snapped, 6);
+        // 1. ALIGNMENT SNAPPING (Inference) - Priority over grid
+        // Only apply if NOT snapping to grid (avoid fighting)
+        if (!snapToGrid) {
+            // Find interesting X and Y coordinates from other walls
+            // We only align to start/end nodes of other walls to avoid noise
+            const interestingX: number[] = [];
+            const interestingY: number[] = [];
+
+            walls.forEach(w => {
+                // Don't align to current wall's own nodes to avoid self-reference confusion (except maybe start/end)
+                if (w.id === currentWallId) {
+                    // Align to first node of current wall is useful for rectangles
+                    if (w.nodes.length > 0) {
+                        interestingX.push(w.nodes[0].x);
+                        interestingY.push(w.nodes[0].y);
+                    }
+                    return;
+                }
+                w.nodes.forEach(n => {
+                    interestingX.push(n.x);
+                    interestingY.push(n.y);
+                });
+            });
+
+            // Check horizontal alignment (cursor Y matches interesting Y)
+            const snapTol = SNAP_PIXELS / zoom;
+            let bestYDisplay: number | null = null;
+            let bestXDisplay: number | null = null;
+
+            // Sort by distance to find closest snap
+            interestingY.sort((a, b) => Math.abs(worldPos.y - a) - Math.abs(worldPos.y - b));
+            if (interestingY.length > 0 && Math.abs(worldPos.y - interestingY[0]) < snapTol) {
+                snapped.y = interestingY[0];
+                guides.push({ type: 'horizontal', y: interestingY[0], label: '' });
+                bestYDisplay = interestingY[0];
+            }
+
+            interestingX.sort((a, b) => Math.abs(worldPos.x - a) - Math.abs(worldPos.x - b));
+            if (interestingX.length > 0 && Math.abs(worldPos.x - interestingX[0]) < snapTol) {
+                snapped.x = interestingX[0];
+                guides.push({ type: 'vertical', x: interestingX[0], label: '' });
+                bestXDisplay = interestingX[0];
+            }
+
+            // 2. 90-degree constraint (if enabled or implied)
+            // If we have a last node, and NO alignment snap occurred, we can enforce 90-degree
+            if (lastNode && !bestXDisplay && !bestYDisplay) {
+                // Only snap to 90 if significant movement or Shift key (TODO: Shift key)
+                // For now, let's keep the existing behavior: snap if close to axis
+                const dx = Math.abs(worldPos.x - lastNode.x);
+                const dy = Math.abs(worldPos.y - lastNode.y);
+
+                // If very close to vertical
+                if (dx < snapTol) {
+                    snapped.x = lastNode.x;
+                    guides.push({ type: 'vertical', x: lastNode.x });
+                }
+                // If very close to horizontal
+                else if (dy < snapTol) {
+                    snapped.y = lastNode.y;
+                    guides.push({ type: 'horizontal', y: lastNode.y });
+                }
+            } else if (lastNode) {
+                // If we DID snap to alignment, check if that alignment creates a 90-degree line with lastNode
+                // e.g. if we snapped X, does that make a vertical line? Yes.
+                // If we snapped Y, does that make a horizontal line? Yes.
+                // This is handled implicitly.
+            }
         }
 
-        // FIRST PRIORITY: Check if near first node to close loop (before other junctions)
+        // 3. LOOP CLOSING (Highest Priority)
+        // Check if near first node of current wall
         let closingLoop = false;
         if (currentWall && currentWall.nodes.length > 2) {
             const firstNode = currentWall.nodes[0];
-            const dist = Math.hypot(snapped.x - firstNode.x, snapped.y - firstNode.y);
+            const dist = Math.hypot(worldPos.x - firstNode.x, worldPos.y - firstNode.y);
 
-            if (dist < SNAP_DISTANCE * 2) { // Larger snap radius for closing loop
-                // Snap to first node to close the loop
-                snapped = firstNode;
+            // Screen-relative snap distance for loop closing
+            // We use worldPos instead of snapped to ensure we can snap even if grid pulled us away
+            if (dist < (20 / zoom)) {
+                snapped = { x: firstNode.x, y: firstNode.y };
                 closingLoop = true;
                 setJunctionTarget({
                     wallId: currentWallId!,
                     edgeId: '',
                     point: firstNode,
                 });
+                // Clear guides if we are closing loop (cleaner UI)
+                guides.length = 0;
             }
         }
 
-        // SECOND PRIORITY: Check for junction opportunities with existing walls (only if not closing loop)
+        // 4. JUNCTION SNAPPING
         if (!closingLoop) {
             const junction = findWallIntersection(snapped, walls, JUNCTION_SNAP_THRESHOLD, currentWallId || undefined);
 
             if (junction) {
                 snapped = junction.point;
                 setJunctionTarget(junction);
+                // Clear alignment guides if we snap to a junction (hard snap wins)
+                guides.length = 0;
             } else {
                 setJunctionTarget(null);
             }
         }
 
+        // Apply guides
+        // setAlignmentGuides(guides); // Visual guides disabled
+
         // Update preview point for preview line
         setPreviewPoint(snapped);
-    }, [isActive, isDrawing, lastNode, screenToWorld, snapToGrid, gridSize, walls, currentWallId, JUNCTION_SNAP_THRESHOLD, currentWall, SNAP_DISTANCE]);
+    }, [isActive, isDrawing, lastNode, screenToWorld, snapToGrid, gridSize, walls, currentWallId, JUNCTION_SNAP_THRESHOLD, currentWall, zoom]);
 
     // Handle click to add node
     const handleClick = useCallback((e: MouseEvent) => {
@@ -140,7 +220,8 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             const dist = Math.hypot(snapped.x - firstNode.x, snapped.y - firstNode.y);
 
             // Use larger snap distance for closing loop (same as in handleMouseMove)
-            if (dist < SNAP_DISTANCE * 2) {
+            // Fix: Use screen-relative distance (20px) to match visual indicator
+            if (dist < (20 / zoom)) {
                 // Snap directly to first node to close the loop
                 snapped = firstNode;
 
@@ -393,6 +474,44 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                     />
                 );
             })()}
+
+            {/* Alignment Guides (Inference) - Removed visuals */
+            /*
+            {alignmentGuides.map((guide, i) => {
+                const infiniteLength = 100000; // Large enough to cover screen
+                if (guide.type === 'horizontal') {
+                    return (
+                        <line
+                            key={`align-h-${i}`}
+                            x1={-infiniteLength}
+                            y1={guide.y}
+                            x2={infiniteLength}
+                            y2={guide.y}
+                            stroke="#3b82f6" // Blue
+                            strokeWidth={1 / zoom}
+                            strokeDasharray={`${8 / zoom},${4 / zoom}`} // Longer dash for inference
+                            opacity={0.6}
+                            vectorEffect="non-scaling-stroke"
+                        />
+                    );
+                } else {
+                    return (
+                        <line
+                            key={`align-v-${i}`}
+                            x1={guide.x}
+                            y1={-infiniteLength}
+                            x2={guide.x}
+                            y2={infiniteLength}
+                            stroke="#3b82f6" // Blue
+                            strokeWidth={1 / zoom}
+                            strokeDasharray={`${8 / zoom},${4 / zoom}`}
+                            opacity={0.6}
+                            vectorEffect="non-scaling-stroke"
+                        />
+                    );
+                }
+            })}
+            */}
 
             {/* Guide lines - horizontal (red) and vertical (green) from start point */}
             {isDrawing && lastNode && previewPoint && (() => {

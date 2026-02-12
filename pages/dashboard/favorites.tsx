@@ -8,7 +8,7 @@ import { apiRequest } from "@/helpers/Config";
 import { useRouter } from "next/router";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
-import EventCard from "@/pages/(components)/dashboard/EventCard";
+import EventCard from "@/components/dashboard/EventCard";
 import { buildPreviewData } from "@/helpers/previewHelpers";
 
 interface EventData {

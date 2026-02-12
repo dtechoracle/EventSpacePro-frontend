@@ -70,13 +70,13 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
 
                     <button
                         onClick={toggleSnapToGrid}
-                        className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${snapToGrid
+                        className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${!snapToGrid
                             ? 'bg-blue-500 text-white'
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
-                        title="Toggle Snap to Grid"
+                        title="Toggle Smart Snap"
                     >
-                        Snap
+                        Smart Snap
                     </button>
 
                     <div className="flex items-center gap-1 ml-2">

@@ -50,11 +50,10 @@ export default function GridSizeSelector({ className = "" }: GridSizeSelectorPro
       <div className="flex items-center gap-2">
         <button
           onClick={toggleGrid}
-          className={`w-8 h-8 border-2 flex items-center justify-center rounded-md transition-colors ${
-            showGrid
+          className={`w-8 h-8 border-2 flex items-center justify-center rounded-md transition-colors ${showGrid
               ? "border-green-600 text-green-600 bg-green-50"
               : "border-gray-300 text-gray-500 hover:border-gray-400"
-          }`}
+            }`}
           title={`${showGrid ? 'Hide' : 'Show'} Grid`}
         >
           <Grid3X3 size={16} />
@@ -90,7 +89,7 @@ export default function GridSizeSelector({ className = "" }: GridSizeSelectorPro
                   className="fixed inset-0 z-[9998]"
                   onClick={() => setIsOpen(false)}
                 />
-                
+
                 {/* Dropdown */}
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95, y: -10 }}
@@ -106,11 +105,10 @@ export default function GridSizeSelector({ className = "" }: GridSizeSelectorPro
                         setSelectedGridSizeIndex(index);
                         setIsOpen(false);
                       }}
-                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${
-                        index === selectedGridSizeIndex
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${index === selectedGridSizeIndex
                           ? "bg-blue-50 text-blue-700 font-medium"
                           : "text-gray-700"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <span>{formatGridSize(size)}</span>
@@ -120,23 +118,22 @@ export default function GridSizeSelector({ className = "" }: GridSizeSelectorPro
                       </div>
                     </button>
                   ))}
-                  
-                  {/* Snap to Grid Toggle */}
+
+                  {/* Smart Snap (Alignment) Toggle */}
                   <div className="border-t border-gray-100 mt-1 pt-1">
                     <button
                       onClick={() => {
                         toggleSnapToGrid();
                         setIsOpen(false);
                       }}
-                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${
-                        snapToGridEnabled
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${!snapToGridEnabled
                           ? "bg-green-50 text-green-700 font-medium"
                           : "text-gray-700"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span>Snap to Grid</span>
-                        {snapToGridEnabled && (
+                        <span>Smart Snap</span>
+                        {!snapToGridEnabled && (
                           <div className="w-2 h-2 bg-green-600 rounded-full"></div>
                         )}
                       </div>

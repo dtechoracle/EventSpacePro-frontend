@@ -1,4 +1,4 @@
-import EventCard from "@/pages/(components)/dashboard/EventCard";
+import EventCard from "@/components/dashboard/EventCard";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import { useRouter } from "next/router";
 import { useQuery } from "@tanstack/react-query";

@@ -25,6 +25,7 @@ import TexturePatternDefs from './TexturePatternDefs';
 import LabelArrowRenderer from './renderers/LabelArrowRenderer';
 import TextAnnotationRenderer from './renderers/TextAnnotationRenderer';
 import SnapGuidesRenderer from './renderers/SnapGuidesRenderer';
+import { AutoDimensionRenderer } from './renderers/AutoDimensionRenderer';
 import ContextMenu from './ui/ContextMenu';
 import DuplicateDistributeModal from './ui/DuplicateDistributeModal';
 import { AnchorType, getAnchorsForObject, snapToObjects } from '@/utils/snapAnchors';
@@ -174,102 +175,36 @@ export default function Workspace2D({
     [snapToGrid, gridSize]
   );
 
+  // Use ResizeObserver to track layout changes (size AND position shifts)
   useEffect(() => {
-    if (canvasRef.current) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      setCanvasOffset({ left: rect.left, top: rect.top });
-    }
-  }, [setCanvasOffset]);
+    if (!canvasRef.current) return;
 
-  // ESC handler for snap mode and global undo/redo
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if input/textarea is focused
-      if (document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement) {
-        return;
-      }
-
-      const store = useProjectStore.getState();
-
-      // Undo/Redo shortcuts
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        store.undo();
-      }
-      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
-        e.preventDefault();
-        store.redo();
-      }
-
-      // Copy
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
-        e.preventDefault();
-        if (selectedIds.length > 0) {
-          store.copySelection(selectedIds);
-          toast.success("Copied to clipboard");
-        }
-      }
-
-      // Paste
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
-        e.preventDefault();
-        const newIds = store.pasteSelection(mouseWorldPos);
-        if (newIds.length > 0) {
-          setSelectedIds(newIds);
-          // toast.success("Pasted");
-        }
-      }
-
-      // Delete / Backspace
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault();
-        if (selectedIds.length > 0) {
-          store.saveToHistory();
-          let deletedCount = 0;
-
-          selectedIds.forEach(id => {
-            // Try removing from all collections
-            if (store.shapes.some(s => s.id === id)) { store.removeShape(id); deletedCount++; }
-            else if (store.assets.some(a => a.id === id)) { store.removeAsset(id); deletedCount++; }
-            else if (store.walls.some(w => w.id === id)) { store.removeWall(id); deletedCount++; }
-            else if (store.textAnnotations.some(t => t.id === id)) { store.removeTextAnnotation(id); deletedCount++; }
-            else if (store.labelArrows.some(l => l.id === id)) { store.removeLabelArrow(id); deletedCount++; }
-            else if (store.dimensions.some(d => d.id === id)) { store.removeDimension(id); deletedCount++; }
-          });
-
-          if (deletedCount > 0) {
-            setSelectedIds([]);
-            toast.success("Deleted");
-          }
-        }
-      }
-
-      if (e.key === 'Escape') {
-        if (isSnapMode) {
-          setSnapMode(false);
-          console.log('Snap mode cancelled with ESC');
-        } else if (selectedIds.length > 0) {
-          setSelectedIds([]);
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSnapMode, setSnapMode, selectedIds, setSelectedIds]);
-
-  useEffect(() => {
-    const updateSize = () => {
+    const updateMetrics = () => {
       if (canvasRef.current) {
         const rect = canvasRef.current.getBoundingClientRect();
         setViewportSize({ width: rect.width, height: rect.height });
+        setCanvasOffset({ left: rect.left, top: rect.top });
       }
     };
 
-    updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
-  }, []);
+    // Initial measure
+    updateMetrics();
+
+    // Observe changes
+    const resizeObserver = new ResizeObserver(() => {
+      updateMetrics();
+    });
+
+    resizeObserver.observe(canvasRef.current);
+    window.addEventListener('resize', updateMetrics); // Fallback/Additional check for window resize events
+    window.addEventListener('scroll', updateMetrics); // Check for scroll events that might shift layout
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateMetrics);
+      window.removeEventListener('scroll', updateMetrics);
+    };
+  }, [setCanvasOffset]);
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
@@ -1275,6 +1210,7 @@ export default function Workspace2D({
           if (!itemSelected) {
             // Clear selection and any auto-generated wall dimensions when clicking empty space
             clearSelection();
+            useEditorStore.getState().setSelectedEdgeId(null);
 
             // If we are in wall mode but clicked empty space (and not drawing), we might want to ensure we are not stuck
             // But usually wall mode allows drawing.
@@ -1461,50 +1397,51 @@ export default function Workspace2D({
     let zoomToastTimeout: NodeJS.Timeout | null = null;
 
     const handleWheel = (e: WheelEvent) => {
-      // Trackpad behavior like other design tools:
-      // - Two-finger scroll (no Ctrl/Meta) -> pan
-      // - Pinch zoom (Ctrl/Meta held) -> zoom
-      const isPinchZoom = e.ctrlKey || e.metaKey;
+      // Mouse wheel behavior:
+      // - Shift + Wheel -> Pan
+      // - Standard Wheel / Pinch (Ctrl) -> Zoom
 
-      if (isPinchZoom) {
-        e.preventDefault();
-        e.stopPropagation();
+      e.preventDefault();
+      e.stopPropagation();
 
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      const isPanAction = e.shiftKey;
 
-        const newZoom = zoom * delta;
-
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        const worldX = (mouseX - panX) / zoom;
-        const worldY = (mouseY - panY) / zoom;
-
-        const newPanX = mouseX - worldX * newZoom;
-        const newPanY = mouseY - worldY * newZoom;
-
-        setZoom(newZoom);
-        setPan(newPanX, newPanY);
-
-        // Show toast notification about grid size
-        if (zoomToastTimeout) clearTimeout(zoomToastTimeout);
-        zoomToastTimeout = setTimeout(() => {
-          const zoomPercent = Math.round(newZoom * 100);
-          toast(`Zoom: ${zoomPercent}% • Grid may adjust for visibility`, {
-            duration: 1500,
-            icon: '🔍',
-            style: {
-              fontSize: '12px',
-              padding: '8px 12px',
-            },
-          });
-        }, 100);
-      } else {
-        // Two-finger scroll / mouse wheel without modifier -> pan
-        // Do NOT preventDefault so browser scrollbars / page scroll work if needed
+      if (isPanAction) {
         panBy(-e.deltaX, -e.deltaY);
+        return;
       }
+
+      // Zoom Handling
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      const newZoom = Math.max(0.1, Math.min(10, zoom * delta));
+
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const worldX = (mouseX - panX) / zoom;
+      const worldY = (mouseY - panY) / zoom;
+
+      // Calculate new pan to keep mouse over same world point
+      const newPanX = mouseX - worldX * newZoom;
+      const newPanY = mouseY - worldY * newZoom;
+
+      setZoom(newZoom);
+      setPan(newPanX, newPanY);
+
+      // Show toast notification about grid size
+      if (zoomToastTimeout) clearTimeout(zoomToastTimeout);
+      zoomToastTimeout = setTimeout(() => {
+        const zoomPercent = Math.round(newZoom * 100);
+        toast(`Zoom: ${zoomPercent}%`, {
+          duration: 1500,
+          icon: '🔍',
+          style: {
+            fontSize: '12px',
+            padding: '8px 12px',
+          },
+        });
+      }, 100);
     };
 
     canvas.addEventListener('wheel', handleWheel, { passive: false });
@@ -3060,6 +2997,14 @@ export default function Workspace2D({
                   }
                   return null;
                 })}
+
+                {/* Auto Dimensions (Show Dimensions Toggle) */}
+                <AutoDimensionRenderer
+                  walls={walls}
+                  shapes={shapes}
+                  assets={assets}
+                  zoom={zoom}
+                />
               </>
             );
           })()}

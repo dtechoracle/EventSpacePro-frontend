@@ -34,8 +34,7 @@ export default function DimensionOverlay({ mmToPx }: { mmToPx: number }) {
         <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 1000, overflow: "visible" }}>
             <svg className="w-full h-full overflow-visible">
                 {assets.map((asset) => {
-                    if (!(asset as any).showDimensions) return null;
-
+                    // Show dimensions for all elements by default
                     const dimensions: any[] = [];
 
                     // Case 1: Wall Segments (Manual Walls - Relative Coords)
@@ -54,8 +53,8 @@ export default function DimensionOverlay({ mmToPx }: { mmToPx: number }) {
                                 startPoint: { x: start.x, y: start.y },
                                 endPoint: { x: end.x, y: end.y },
                                 value: Math.round(len),
-                                offset: 50,
-                                color: '#333'
+                                offset: 15,
+                                color: '#666'
                             });
                         });
                     }
@@ -81,8 +80,8 @@ export default function DimensionOverlay({ mmToPx }: { mmToPx: number }) {
                                     startPoint: { x: start.x, y: start.y },
                                     endPoint: { x: end.x, y: end.y },
                                     value: Math.round(len),
-                                    offset: 50,
-                                    color: '#333'
+                                    offset: 15,
+                                    color: '#666'
                                 });
                             }
                         });
@@ -112,8 +111,8 @@ export default function DimensionOverlay({ mmToPx }: { mmToPx: number }) {
                             startPoint: { x: pTL.x, y: pTL.y },
                             endPoint: { x: pTR.x, y: pTR.y },
                             value: Math.round(w),
-                            offset: -30,
-                            color: '#333'
+                            offset: -15,
+                            color: '#666'
                         });
 
                         // Right dimension
@@ -121,8 +120,8 @@ export default function DimensionOverlay({ mmToPx }: { mmToPx: number }) {
                             startPoint: { x: pTR.x, y: pTR.y },
                             endPoint: { x: pBR.x, y: pBR.y },
                             value: Math.round(h),
-                            offset: 30,
-                            color: '#333'
+                            offset: 15,
+                            color: '#666'
                         });
                     }
 

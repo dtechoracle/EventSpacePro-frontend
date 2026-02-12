@@ -11,7 +11,8 @@ import WorkspacePreview from "@/components/WorkspacePreview";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
 import { ASSET_LIBRARY } from "@/lib/assets";
-import EventCard from "@/pages/(components)/dashboard/EventCard";
+import EventCard from "@/components/dashboard/EventCard";
+import ProjectFolder from "@/components/dashboard/ProjectFolder";
 
 interface EventData {
   _id: string;
@@ -512,102 +513,165 @@ const Dashboard = () => {
             <CreateEventModal onClose={() => setShowCreateEventModal(false)} />
           )}
 
-          {/* Events Section */}
-          <div className="mb-10">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-gray-800">Recent Events</h2>
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-gray-500">{filteredEvents.length} {filteredEvents.length === 1 ? 'event' : 'events'}</span>
-                <a href="/dashboard/projects" className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                  View all <BsBoxArrowUpRight className="w-3 h-3" />
+          {/* New User Empty State - Unified View */}
+          {!isLoading && !isLoadingEvents && (!data?.data || data.data.length === 0) && !searchQuery ? (
+            <div className="flex flex-col items-center justify-center h-full max-h-[60vh] text-center space-y-6 animate-in fade-in zoom-in duration-500">
+              <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mb-4 shadow-sm">
+                <svg className="w-10 h-10 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to EventSpacePro</h2>
+                <p className="text-gray-500 max-w-md mx-auto text-lg mb-8">
+                  You don't have any projects yet. Create your first project to start organizing your events and layouts.
+                </p>
+                <a
+                  href="/dashboard/projects"
+                  className="px-8 py-4 bg-blue-600 text-white text-lg rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl active:scale-95 transform transition-transform inline-flex items-center gap-2"
+                >
+                  <BsBoxArrowUpRight className="w-5 h-5" />
+                  <span>Create First Project</span>
                 </a>
               </div>
             </div>
-            {(isLoading || isLoadingEvents) ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <div
-                    key={i}
-                    className="bg-gray-100 rounded-lg h-48 animate-pulse"
-                  />
-                ))}
-              </div>
-            ) : filteredEvents.length === 0 ? (
-              <div className="bg-gray-50 rounded-lg p-12 text-center">
-                <BsCalendar className="text-4xl text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 mb-4">No models yet</p>
-                <button
-                  onClick={() => setShowCreateEventModal(true)}
-                  className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
-                >
-                  Create your first model
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredEvents.slice(0, 6).map((event) => {
-                  const { walls, shapes, assets } = buildPreviewData(event);
-                  return (
-                    <EventCard
-                      key={event._id}
-                      event={event}
-                      user={user}
-                      previewData={{ walls, shapes, assets }}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          ) : (
+            <>
+              {/* Projects Folders Section */}
+              <div className="mb-10">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-800">Projects</h2>
+                  <a href="/dashboard/projects" className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                    Manage Projects <BsBoxArrowUpRight className="w-3 h-3" />
+                  </a>
+                </div>
 
-          {/* Templates Section */}
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-gray-800">Templates</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {/* Template Placeholder Cards */}
-              <motion.div
-                whileHover={{ scale: 1.03, y: -4 }}
-                className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
-              >
-                <div className="h-40 bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
-                  <div className="text-white text-5xl">🌳</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+                  {isLoading ? (
+                    [1, 2, 3, 4, 5].map((i) => (
+                      <div key={i} className="h-40 bg-gray-100 rounded-2xl animate-pulse" />
+                    ))
+                  ) : (
+                    data?.data?.slice(0, 5).map((project) => (
+                      <ProjectFolder key={project._id} project={project} />
+                    ))
+                  )}
+
+                  {/* Fallback empty state for search results or weird states */}
+                  {!isLoading && (!data?.data || data.data.length === 0) && (
+                    <div className="col-span-full py-8 text-center text-gray-500 italic">
+                      No projects found matching your search.
+                    </div>
+                  )}
                 </div>
-                <div className="p-4">
-                  <h3 className="font-semibold text-sm text-gray-800">Outdoor</h3>
-                  <p className="text-xs text-gray-500 mt-1">Outdoor event layout with various zones</p>
+              </div>
+
+              {/* Events Section */}
+              <div className="mb-10">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-800">Recent Events</h2>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-gray-500">{filteredEvents.length} {filteredEvents.length === 1 ? 'event' : 'events'}</span>
+                    <a href="/dashboard/projects" className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                      View all <BsBoxArrowUpRight className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
-              </motion.div>
-              <motion.div
-                whileHover={{ scale: 1.03, y: -4 }}
-                className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
-              >
-                <div className="h-40 bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
-                  <div className="text-white text-5xl">🎪</div>
+                {(isLoading || isLoadingEvents) ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div
+                        key={i}
+                        className="bg-gray-100 rounded-lg h-48 animate-pulse"
+                      />
+                    ))}
+                  </div>
+                ) : filteredEvents.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center space-y-6 animate-in fade-in zoom-in duration-500">
+                    <div className="w-24 h-24 bg-[var(--accent)]/10 rounded-full flex items-center justify-center mb-4">
+                      <BsStars className="w-12 h-12 text-[var(--accent)]" />
+
+                    </div>
+                    <h2 className="text-3xl font-bold text-gray-800">Start Creating Today</h2>
+                    <p className="text-gray-500 max-w-md text-lg">
+                      Create your first event to start designing layouts and organizing spaces.
+                    </p>
+                    <button
+                      onClick={() => setShowCreateEventModal(true)}
+                      className="px-8 py-4 text-lg font-semibold bg-[var(--accent)] text-white rounded-xl hover:opacity-90 flex items-center gap-2 shadow-lg hover:shadow-xl transition-all"
+                    >
+                      <BsStars className="w-5 h-5" />
+                      <span>Create New Event</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {filteredEvents.slice(0, 6).map((event) => {
+                      const { walls, shapes, assets } = buildPreviewData(event);
+                      return (
+                        <EventCard
+                          key={event._id}
+                          event={event}
+                          user={user}
+                          previewData={{ walls, shapes, assets }}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Templates Section */}
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-800">Templates</h2>
                 </div>
-                <div className="p-4">
-                  <h3 className="font-semibold text-sm text-gray-800">Marquee Event</h3>
-                  <p className="text-xs text-gray-500 mt-1">Large marquee setup for special events</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {/* Template Placeholder Cards */}
+                  <motion.div
+                    whileHover={{ scale: 1.03, y: -4 }}
+                    className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
+                  >
+                    <div className="h-40 bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
+                      <div className="text-white text-5xl">🌳</div>
+                    </div>
+                    <div className="p-4">
+                      <h3 className="font-semibold text-sm text-gray-800">Outdoor</h3>
+                      <p className="text-xs text-gray-500 mt-1">Outdoor event layout with various zones</p>
+                    </div>
+                  </motion.div>
+                  <motion.div
+                    whileHover={{ scale: 1.03, y: -4 }}
+                    className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
+                  >
+                    <div className="h-40 bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
+                      <div className="text-white text-5xl">🎪</div>
+                    </div>
+                    <div className="p-4">
+                      <h3 className="font-semibold text-sm text-gray-800">Marquee Event</h3>
+                      <p className="text-xs text-gray-500 mt-1">Large marquee setup for special events</p>
+                    </div>
+                  </motion.div>
+                  <motion.div
+                    whileHover={{ scale: 1.03, y: -4 }}
+                    className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
+                  >
+                    <div className="h-40 bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center">
+                      <div className="text-gray-500 text-4xl">📐</div>
+                    </div>
+                    <div className="p-4">
+                      <h3 className="font-semibold text-sm text-gray-800">Starter Template</h3>
+                      <p className="text-xs text-gray-500 mt-1">Begin with a blank canvas</p>
+                    </div>
+                  </motion.div>
                 </div>
-              </motion.div>
-              <motion.div
-                whileHover={{ scale: 1.03, y: -4 }}
-                className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
-              >
-                <div className="h-40 bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center">
-                  <div className="text-gray-500 text-4xl">📐</div>
-                </div>
-                <div className="p-4">
-                  <h3 className="font-semibold text-sm text-gray-800">Starter Template</h3>
-                  <p className="text-xs text-gray-500 mt-1">Begin with a blank canvas</p>
-                </div>
-              </motion.div>
-            </div>
-          </div>
+              </div>
+            </>
+          )}
+
         </div>
-      </div >
-    </div >
+      </div>
+    </div>
   );
 };
 
