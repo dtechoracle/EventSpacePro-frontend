@@ -10,17 +10,26 @@ export interface WallCutout {
     width: number;
 }
 
+export function isCutoutAsset(asset: Partial<Asset>): boolean {
+    const id = (asset.id || '').toLowerCase();
+    const type = (asset.type || '').toLowerCase();
+    return id.includes('door') ||
+        id.includes('window') ||
+        id.includes('group 91') ||
+        id.includes('group-91') ||
+        type.includes('door') ||
+        type.includes('window') ||
+        type.includes('group 91') ||
+        type.includes('group-91');
+}
+
 export function detectWallCutout(
     asset: Asset,
     wall: Wall,
     threshold = 50
 ): WallCutout | null {
     // Check if it's a door/window by id, type, or path
-    const isDoorOrWindow =
-        asset.id?.toLowerCase().includes('door') ||
-        asset.id?.toLowerCase().includes('window') ||
-        asset.type?.toLowerCase().includes('door') ||
-        asset.type?.toLowerCase().includes('window');
+    const isDoorOrWindow = isCutoutAsset(asset);
 
     if (!isDoorOrWindow || !asset.x || !asset.y || !asset.width) {
         return null;

@@ -10,7 +10,7 @@ interface ToolbarProps {
 }
 
 export default function Toolbar({ className = '' }: ToolbarProps) {
-    const { activeTool, setActiveTool, showGrid, toggleGrid, snapToGrid, toggleSnapToGrid, zoomIn, zoomOut, resetZoom } = useEditorStore();
+    const { activeTool, setActiveTool, showGrid, toggleGrid, snapToGrid, toggleSnapToGrid, zoomIn, zoomOut, resetZoom, zoom } = useEditorStore();
     const { undo, redo, history } = useProjectStore();
     const { setRectangularSelectionMode, toggleSnapToGrid: toggleSceneSnap } = useSceneStore();
 
@@ -89,10 +89,10 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
                         </button>
                         <button
                             onClick={resetZoom}
-                            className="px-2 py-1 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md text-sm"
-                            title="Reset Zoom"
+                            className="px-2 py-1 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md text-sm min-w-[60px]"
+                            title="Reset to 100%"
                         >
-                            100%
+                            {Math.round(zoom * 100)}%
                         </button>
                         <button
                             onClick={zoomIn}

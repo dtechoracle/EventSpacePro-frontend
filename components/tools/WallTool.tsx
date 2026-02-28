@@ -206,12 +206,25 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
         }
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
+        const { snapToObjects, zoom } = useEditorStore.getState();
+
         let snapped = snapToGrid
             ? {
                 x: Math.round(worldPos.x / gridSize) * gridSize,
                 y: Math.round(worldPos.y / gridSize) * gridSize
             }
             : worldPos;
+
+        // Apply Smart Snapping (Objects) - Priority over Grid but under Loop Closing
+        if (snapToObjects) {
+            const { shapes, walls, assets } = useProjectStore.getState();
+            // Exclude current wall from snap candidates to avoid self-snapping issues (except for specific logic below)
+            const allElements = [...shapes, ...walls.filter(w => w.id !== currentWallId), ...assets];
+            const snapResult = findSnapPointInShapes(worldPos, allElements, 20 / zoom);
+            if (snapResult) {
+                snapped = { x: snapResult.x, y: snapResult.y };
+            }
+        }
 
         // FIRST PRIORITY: Check for loop closing (before other snapping)
         // This must happen before 90-degree snapping to prevent interference

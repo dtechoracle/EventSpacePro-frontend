@@ -1,12 +1,12 @@
 "use client";
 
-import ProjectCard from "../../(components)/projects/ProjectCard";
+import ProjectCard from "@/components/dashboard/ProjectCard";
 import DashboardSidebar from "../../(components)/DashboardSidebar";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import { AssetInstance } from "@/store/sceneStore";
 import { BsSearch } from "react-icons/bs";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import CreateProjectModal from "../../(components)/projects/CreateProjectModal";
 import ImportModal from "../../(components)/projects/ImportMOdal";
 
@@ -45,48 +45,69 @@ interface ApiResponse {
   data: ProjectData[];
 }
 
-// Shimmer loading component for ProjectCard
-const ProjectCardShimmer = () => (
-  <div className="relative w-full bg-white rounded-2xl border border-gray-200 p-6 overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
-    <div className="absolute inset-0 -translate-x-full via-gray-50 to-transparent animate-[shimmer_2s_infinite]"></div>
-    
-    <div className="space-y-5 relative">
-      <div className="flex items-start justify-between">
-        <div className="flex-1 space-y-3">
-          <div className="h-7 bg-gray-200 rounded-lg w-3/4 animate-pulse"></div>
-          <div className="h-4 bg-gray-100 rounded-md w-1/2 animate-pulse"></div>
-        </div>
-        <div className="w-10 h-10 bg-gray-100 rounded-xl animate-pulse"></div>
-      </div>
-      
-      <div className="space-y-2.5 pt-3">
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 bg-gray-100 rounded animate-pulse"></div>
-          <div className="h-3 bg-gray-100 rounded w-24 animate-pulse"></div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 bg-gray-100 rounded animate-pulse"></div>
-          <div className="h-3 bg-gray-100 rounded w-32 animate-pulse"></div>
-        </div>
-      </div>
-      
-      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-        <div className="h-4 bg-gray-100 rounded-md w-28 animate-pulse"></div>
-        <div className="w-20 h-8 bg-gray-100 rounded-lg animate-pulse"></div>
-      </div>
-    </div>
-  </div>
-);
 
 const Projects = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  
+
   const { data, isLoading, error } = useQuery<ApiResponse>({
     queryKey: ["projects"],
     queryFn: () => apiRequest("/projects", "GET", null, true),
+    staleTime: 0,
+    gcTime: 0,
   });
+
+  const { data: allProjectEvents, isLoading: isLoadingEvents } = useQuery({
+    queryKey: ["all-events", data?.data?.map(p => p.slug)],
+    queryFn: async () => {
+      if (!data?.data) return [];
+      const eventPromises = data.data.map(async (project) => {
+        try {
+          const res = await apiRequest(`/projects/${project.slug}/events`, "GET", null, true);
+          const events = res.data || [];
+          const fullEventPromises = events.map(async (event: any) => {
+            try {
+              const fullEventRes = await apiRequest(`/projects/${project.slug}/events/${event._id}`, "GET", null, true);
+              return fullEventRes.data || fullEventRes;
+            } catch (error) {
+              return { ...event, canvasData: null, canvasAssets: [] };
+            }
+          });
+          const fullEvents = await Promise.all(fullEventPromises);
+          return { projectSlug: project.slug, events: fullEvents };
+        } catch (error) {
+          return { projectSlug: project.slug, events: [] };
+        }
+      });
+      return Promise.all(eventPromises);
+    },
+    enabled: !!data?.data && data.data.length > 0,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: true,
+  });
+
+  const projectsWithEvents = useMemo(() => {
+    if (!data?.data) return [];
+    if (!allProjectEvents) return data.data;
+
+    return data.data.map(project => {
+      const eventsData = allProjectEvents.find(p => p.projectSlug === project.slug);
+      return {
+        ...project,
+        events: eventsData?.events || project.events || []
+      };
+    });
+  }, [data?.data, allProjectEvents]);
+
+  const filteredProjects = useMemo(() => {
+    if (!searchQuery) return projectsWithEvents;
+    const query = searchQuery.toLowerCase();
+    return projectsWithEvents.filter(project =>
+      project.name?.toLowerCase().includes(query)
+    );
+  }, [projectsWithEvents, searchQuery]);
 
   return (
     <div className="h-screen flex overflow-hidden bg-gray-50">
@@ -142,15 +163,15 @@ const Projects = () => {
           {showImportModal && (
             <ImportModal onClose={() => setShowImportModal(false)} />
           )}
-          
+
           <div className="mb-6">
             <h2 className="text-2xl font-semibold">Recents</h2>
           </div>
 
-          {isLoading && (
+          {(isLoading || isLoadingEvents) && (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 mt-8">
               {Array.from({ length: 6 }).map((_, index) => (
-                <ProjectCardShimmer key={index} />
+                <div key={index} className="h-64 bg-gray-100 rounded-2xl animate-pulse" />
               ))}
             </div>
           )}
@@ -174,15 +195,15 @@ const Projects = () => {
             </div>
           )}
 
-          {data && data.data && data.data.length > 0 && (
+          {filteredProjects && filteredProjects.length > 0 && !(isLoading || isLoadingEvents) && (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 mt-8">
-              {data.data.map((project) => (
-                <ProjectCard key={project?._id || Math.random()} project={project} />
+              {filteredProjects.map((project) => (
+                <ProjectCard key={project._id} project={project} />
               ))}
             </div>
           )}
 
-          {data && data.data && data.data.length === 0 && (
+          {filteredProjects && filteredProjects.length === 0 && !(isLoading || isLoadingEvents) && (
             <div className="mt-8 flex items-center justify-center rounded-2xl bg-white shadow-sm border border-gray-200 p-16">
               <div className="text-center space-y-6 max-w-md">
                 <div className="w-20 h-20 mx-auto bg-gray-50 rounded-2xl flex items-center justify-center">
@@ -196,7 +217,10 @@ const Projects = () => {
                     Get started by creating your first project and bring your ideas to life.
                   </p>
                 </div>
-                <button className="mt-2 px-8 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors duration-200 text-sm font-medium inline-flex items-center gap-2">
+                <button
+                  onClick={() => setShowCreateProjectModal(true)}
+                  className="mt-2 px-8 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors duration-200 text-sm font-medium inline-flex items-center gap-2"
+                >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>

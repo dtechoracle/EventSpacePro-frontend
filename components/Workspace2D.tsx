@@ -18,13 +18,16 @@ import ShapeTool from './tools/ShapeTool';
 import FreehandTool from './tools/FreehandTool';
 import SelectionTool from './tools/SelectionTool';
 import DimensionTool from './tools/DimensionTool';
+import ArchTool from './tools/ArchTool';
 import LabelArrowTool from './tools/LabelArrowTool';
 import TextAnnotationTool from './tools/TextAnnotationTool';
 import TrimTool from './tools/TrimTool';
 import TexturePatternDefs from './TexturePatternDefs';
+import { PlacementRenderer } from './renderers/PlacementRenderer';
 import LabelArrowRenderer from './renderers/LabelArrowRenderer';
 import TextAnnotationRenderer from './renderers/TextAnnotationRenderer';
 import SnapGuidesRenderer from './renderers/SnapGuidesRenderer';
+import SnapMarkersRenderer from './renderers/SnapMarkersRenderer';
 import { AutoDimensionRenderer } from './renderers/AutoDimensionRenderer';
 import ContextMenu from './ui/ContextMenu';
 import DuplicateDistributeModal from './ui/DuplicateDistributeModal';
@@ -119,6 +122,8 @@ export default function Workspace2D({
     setHoveredId,
     snapToObjects: snapToObjectsEnabled,
     toggleSnapToObjects,
+    placementMode,
+    setPlacementMode,
   } = useEditorStore();
 
   const {
@@ -644,7 +649,7 @@ export default function Workspace2D({
         // Apply zoom
         const delta = e.deltaY;
         const zoomFactor = delta > 0 ? 0.9 : 1.1; // Zoom out if scrolling down, in if scrolling up
-        const newZoom = Math.max(0.1, Math.min(10, zoom * zoomFactor));
+        const newZoom = Math.max(0.000001, Math.min(1000000, zoom * zoomFactor));
 
         // Calculate world position after zoom
         const worldXAfter = (mouseX - panX) / newZoom;
@@ -1218,7 +1223,7 @@ export default function Workspace2D({
             // We just called clearSelection().
 
             dimensions
-              .filter((d) => d.type === 'wall')
+              .filter((d) => (d as any).type === 'wall')
               .forEach((d) => removeDimension(d.id));
             // Start rectangular selection if in selection tool mode
             if (activeTool === 'select') {
@@ -1242,7 +1247,140 @@ export default function Workspace2D({
     [activeTool, setPanning, panX, panY, zoom, shapes, assets, walls, setSelectedIds, clearSelection, selectedIds, setIsDraggingItem, setDraggedItemStart, sceneStore]
   );
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    // Handle Placement Mode
+    if (placementMode.active && placementMode.data && e.button === 0) {
+      const { walls: newWalls, assets: newAssets, shapes: newShapes } = placementMode.data;
+      const { x: worldX, y: worldY } = mouseWorldPos;
+
+      // Calculate the center of the bounding box of the new items
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+      if (newWalls.length > 0) {
+        newWalls.forEach((w: any) => {
+          w.nodes.forEach((n: any) => {
+            minX = Math.min(minX, n.x);
+            minY = Math.min(minY, n.y);
+            maxX = Math.max(maxX, n.x);
+            maxY = Math.max(maxY, n.y);
+          });
+        });
+      }
+      if (newAssets.length > 0) {
+        newAssets.forEach((a: any) => {
+          const w = (a.width || 0) * (a.scale || 1);
+          const h = (a.height || 0) * (a.scale || 1);
+          minX = Math.min(minX, a.x - w / 2);
+          maxX = Math.max(maxX, a.x + w / 2);
+          minY = Math.min(minY, a.y - h / 2);
+          maxY = Math.max(maxY, a.y + h / 2);
+        });
+      }
+      const minX_init = minX;
+      if (newShapes.length > 0) {
+        newShapes.forEach((s: any) => {
+          minX = Math.min(minX, s.x - s.width / 2);
+          maxX = Math.max(maxX, s.x + s.width / 2);
+          minY = Math.min(minY, s.y - s.height / 2);
+          maxY = Math.max(maxY, s.y + s.height / 2);
+        });
+      }
+
+      const newTextAnnotations = placementMode.data.textAnnotations || [];
+      if (newTextAnnotations.length > 0) {
+        newTextAnnotations.forEach((t: any) => {
+          const w = (t.text?.length || 1) * (t.fontSize || 16) * 0.6;
+          const h = (t.fontSize || 16) * 1.2;
+          minX = Math.min(minX, t.x - w / 2);
+          maxX = Math.max(maxX, t.x + w / 2);
+          minY = Math.min(minY, t.y - h / 2);
+          maxY = Math.max(maxY, t.y + h / 2);
+        });
+      }
+
+      // If no bounds found (empty plan?), just use 0,0
+      if (!isFinite(minX)) { minX = 0; maxX = 0; minY = 0; maxY = 0; }
+
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+
+      const dx = worldX - centerX;
+      const dy = worldY - centerY;
+
+      // Apply items with offset
+      const store = useProjectStore.getState();
+      store.saveToHistory();
+
+      // ── Track all newly placed IDs for auto-selection ──────────────────────
+      const placedIds: string[] = [];
+
+      // Batch add walls
+      newWalls.forEach((w: any) => {
+        const newWallId = generateId();
+        placedIds.push(newWallId);
+
+        // Re-map node IDs for uniqueness, apply offset ONCE
+        const nodeIdMap = new Map<string, string>();
+        w.nodes.forEach((n: any) => nodeIdMap.set(n.id, generateId()));
+
+        const newNodes = w.nodes.map((n: any) => ({
+          ...n,
+          id: nodeIdMap.get(n.id),
+          x: n.x + dx,
+          y: n.y + dy,
+        }));
+        const newEdges = w.edges.map((e: any) => ({
+          ...e,
+          id: generateId(),
+          nodeA: nodeIdMap.get(e.nodeA),
+          nodeB: nodeIdMap.get(e.nodeB),
+        }));
+
+        store.addWall({ ...w, id: newWallId, nodes: newNodes, edges: newEdges });
+      });
+
+      // Batch add assets
+      newAssets.forEach((a: any) => {
+        const newId = generateId();
+        placedIds.push(newId);
+        store.addAsset({ ...a, id: newId, x: a.x + dx, y: a.y + dy });
+      });
+
+      // Batch add shapes
+      newShapes.forEach((s: any) => {
+        const newId = generateId();
+        placedIds.push(newId);
+        store.addShape({ ...s, id: newId, x: s.x + dx, y: s.y + dy });
+      });
+
+      // Batch add textAnnotations
+      newTextAnnotations.forEach((t: any) => {
+        const newId = generateId();
+        placedIds.push(newId);
+        store.addTextAnnotation({ ...t, id: newId, x: t.x + dx, y: t.y + dy });
+      });
+
+      setPlacementMode({ active: false, data: null });
+
+      // ── Auto-select all placed items so the user can move them as a group ──
+      if (placedIds.length > 0) {
+        setSelectedIds(placedIds);
+        // Deselect after 5 seconds
+        setTimeout(() => {
+          setSelectedIds([]);
+        }, 5000);
+      }
+
+      // ── Pan the viewport to center on the newly placed content ──
+      const canvasEl = canvasRef.current;
+      const canvasW = canvasEl?.clientWidth ?? window.innerWidth;
+      const canvasH = canvasEl?.clientHeight ?? window.innerHeight;
+      setPan(canvasW / 2 - worldX * zoom, canvasH / 2 - worldY * zoom);
+
+      toast.success('Plan placed! Items selected — drag to reposition, or click elsewhere to deselect.', { duration: 4500 });
+      return;
+    }
+
     // Finalize rectangular selection
     if (selectionRect) {
       const minX = Math.min(selectionRect.x1, selectionRect.x2);
@@ -1327,7 +1465,7 @@ export default function Workspace2D({
     setDraggedItemStart(null);
     setDraggedPoint(null);
     sceneStore.setSnapGuides([]); // Clear snap guides
-  }, [setPanning, selectionRect, shapes, assets, walls, textAnnotations, labelArrows, setSelectedIds, sceneStore, draggedPoint, clearSelection]);
+  }, [setPanning, selectionRect, shapes, assets, walls, textAnnotations, labelArrows, setSelectedIds, sceneStore, draggedPoint, clearSelection, setPan, zoom]);
 
   const handleAssetDrop = useCallback(
     async (e: React.DragEvent<HTMLDivElement>) => {
@@ -1413,7 +1551,7 @@ export default function Workspace2D({
 
       // Zoom Handling
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      const newZoom = Math.max(0.1, Math.min(10, zoom * delta));
+      const newZoom = Math.max(0.000001, Math.min(1000000, zoom * delta));
 
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
@@ -1494,6 +1632,60 @@ export default function Workspace2D({
         if (newIds.length > 0) {
           useEditorStore.getState().setSelectedIds(newIds);
           toast.success(`Pasted ${newIds.length} item(s)`, { duration: 1500 });
+        }
+      }
+      // Bring to front (Shift + ])
+      else if (e.shiftKey && e.key === '}') {
+        e.preventDefault();
+        const { selectedIds } = useEditorStore.getState();
+        if (selectedIds.length > 0) {
+          const store = useProjectStore.getState();
+          const { walls, shapes, assets, dimensions, labelArrows, textAnnotations, updateShape, updateWall, updateAsset, updateDimension, updateLabelArrow, updateTextAnnotation } = store;
+          const allItems = [...walls, ...shapes, ...assets, ...dimensions, ...textAnnotations, ...labelArrows];
+          const currentMaxZ = allItems.length ? Math.max(...allItems.map((i: any) => i.zIndex || 0)) : 0;
+          let z = currentMaxZ + 1;
+
+          store.saveToHistory();
+          const applyZToId = (itemId: string) => {
+            if (shapes.find((s) => s.id === itemId)) updateShape(itemId, { zIndex: z++ }, true);
+            else if (walls.find((w) => w.id === itemId)) updateWall(itemId, { zIndex: z++ }, true);
+            else if (assets.find((a) => a.id === itemId)) updateAsset(itemId, { zIndex: z++ }, true);
+            else if (dimensions.find((d) => d.id === itemId)) updateDimension(itemId, { zIndex: z++ }, true);
+            else if (labelArrows.find((la) => la.id === itemId)) updateLabelArrow(itemId, { zIndex: z++ }, true);
+            else if (textAnnotations.find((t) => t.id === itemId)) updateTextAnnotation(itemId, { zIndex: z++ }, true);
+            else {
+              const group = store.groups.find(g => g.id === itemId);
+              if (group) group.itemIds.forEach(applyZToId);
+            }
+          };
+          selectedIds.forEach(applyZToId);
+        }
+      }
+      // Send to back (Shift + [)
+      else if (e.shiftKey && e.key === '{') {
+        e.preventDefault();
+        const { selectedIds } = useEditorStore.getState();
+        if (selectedIds.length > 0) {
+          const store = useProjectStore.getState();
+          const { walls, shapes, assets, dimensions, labelArrows, textAnnotations, updateShape, updateWall, updateAsset, updateDimension, updateLabelArrow, updateTextAnnotation } = store;
+          const allItems = [...walls, ...shapes, ...assets, ...dimensions, ...textAnnotations, ...labelArrows];
+          const currentMinZ = allItems.length ? Math.min(...allItems.map((i: any) => i.zIndex || 0)) : 0;
+          let z = currentMinZ - 1;
+
+          store.saveToHistory();
+          const applyZToId = (itemId: string) => {
+            if (shapes.find((s) => s.id === itemId)) updateShape(itemId, { zIndex: z-- }, true);
+            else if (walls.find((w) => w.id === itemId)) updateWall(itemId, { zIndex: z-- }, true);
+            else if (assets.find((a) => a.id === itemId)) updateAsset(itemId, { zIndex: z-- }, true);
+            else if (dimensions.find((d) => d.id === itemId)) updateDimension(itemId, { zIndex: z-- }, true);
+            else if (labelArrows.find((la) => la.id === itemId)) updateLabelArrow(itemId, { zIndex: z-- }, true);
+            else if (textAnnotations.find((t) => t.id === itemId)) updateTextAnnotation(itemId, { zIndex: z-- }, true);
+            else {
+              const group = store.groups.find(g => g.id === itemId);
+              if (group) group.itemIds.forEach(applyZToId);
+            }
+          };
+          selectedIds.forEach(applyZToId);
         }
       }
       // Duplicate (Ctrl+D)
@@ -2717,21 +2909,26 @@ export default function Workspace2D({
           action: () => {
             state.saveToHistory();
             let z = currentMaxZ + 1;
-            selectedIds.forEach((id) => {
-              if (shapes.find((s) => s.id === id)) {
-                updateShape(id, { zIndex: z++ });
-              } else if (walls.find((w) => w.id === id)) {
-                updateWall(id, { zIndex: z++ });
-              } else if (assets.find((a) => a.id === id)) {
-                updateAsset(id, { zIndex: z++ });
-              } else if (dimensions.find((d) => d.id === id)) {
-                updateDimension(id, { zIndex: z++ });
-              } else if (labelArrows.find((la) => la.id === id)) {
-                updateLabelArrow(id, { zIndex: z++ });
-              } else if (textAnnotations.find((t) => t.id === id)) {
-                updateTextAnnotation(id, { zIndex: z++ });
+            const applyZToId = (itemId: string) => {
+              if (shapes.find((s) => s.id === itemId)) {
+                updateShape(itemId, { zIndex: z++ }, true);
+              } else if (walls.find((w) => w.id === itemId)) {
+                updateWall(itemId, { zIndex: z++ }, true);
+              } else if (assets.find((a) => a.id === itemId)) {
+                updateAsset(itemId, { zIndex: z++ }, true);
+              } else if (dimensions.find((d) => d.id === itemId)) {
+                updateDimension(itemId, { zIndex: z++ }, true);
+              } else if (labelArrows.find((la) => la.id === itemId)) {
+                updateLabelArrow(itemId, { zIndex: z++ }, true);
+              } else if (textAnnotations.find((t) => t.id === itemId)) {
+                updateTextAnnotation(itemId, { zIndex: z++ }, true);
+              } else {
+                const group = state.groups.find(g => g.id === itemId);
+                if (group) group.itemIds.forEach(applyZToId);
               }
-            });
+            };
+            selectedIds.forEach(applyZToId);
+            closeContextMenu();
           },
         },
         {
@@ -2741,21 +2938,26 @@ export default function Workspace2D({
           action: () => {
             state.saveToHistory();
             let z = currentMinZ - 1;
-            selectedIds.forEach((id) => {
-              if (shapes.find((s) => s.id === id)) {
-                updateShape(id, { zIndex: z-- });
-              } else if (walls.find((w) => w.id === id)) {
-                updateWall(id, { zIndex: z-- });
-              } else if (assets.find((a) => a.id === id)) {
-                updateAsset(id, { zIndex: z-- });
-              } else if (dimensions.find((d) => d.id === id)) {
-                updateDimension(id, { zIndex: z-- });
-              } else if (labelArrows.find((la) => la.id === id)) {
-                updateLabelArrow(id, { zIndex: z-- });
-              } else if (textAnnotations.find((t) => t.id === id)) {
-                updateTextAnnotation(id, { zIndex: z-- });
+            const applyZToId = (itemId: string) => {
+              if (shapes.find((s) => s.id === itemId)) {
+                updateShape(itemId, { zIndex: z-- }, true);
+              } else if (walls.find((w) => w.id === itemId)) {
+                updateWall(itemId, { zIndex: z-- }, true);
+              } else if (assets.find((a) => a.id === itemId)) {
+                updateAsset(itemId, { zIndex: z-- }, true);
+              } else if (dimensions.find((d) => d.id === itemId)) {
+                updateDimension(itemId, { zIndex: z-- }, true);
+              } else if (labelArrows.find((la) => la.id === itemId)) {
+                updateLabelArrow(itemId, { zIndex: z-- }, true);
+              } else if (textAnnotations.find((t) => t.id === itemId)) {
+                updateTextAnnotation(itemId, { zIndex: z-- }, true);
+              } else {
+                const group = state.groups.find(g => g.id === itemId);
+                if (group) group.itemIds.forEach(applyZToId);
               }
-            });
+            };
+            selectedIds.forEach(applyZToId);
+            closeContextMenu();
           },
         }
       );
@@ -2899,6 +3101,7 @@ export default function Workspace2D({
         <TexturePatternDefs />
         <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>
           {showGrid && <GridRenderer gridSize={sceneGridSize} viewportSize={viewportSize} zoom={zoom} panX={panX} panY={panY} unitSystem={unitSystem} />}
+          <SnapMarkersRenderer />
 
           {/* Unified Rendering sorted by Z-Index */}
           {(() => {
@@ -2932,16 +3135,6 @@ export default function Workspace2D({
                   } else if (item._renderType === 'shape') {
                     // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     const { _renderType, ...shape } = item as any;
-                    if (shape.type === 'freehand') {
-                      return (
-                        <FreehandRenderer
-                          key={shape.id}
-                          shape={shape}
-                          isSelected={selectedIds.includes(shape.id)}
-                          isHovered={hoveredId === shape.id}
-                        />
-                      );
-                    }
                     return (
                       <ShapeRenderer
                         key={shape.id}
@@ -3008,6 +3201,13 @@ export default function Workspace2D({
               </>
             );
           })()}
+
+          {/* AI Plan Placement Preview */}
+          {placementMode.active && placementMode.data && (
+            <PlacementRenderer
+              mouseWorldPos={mouseWorldPos}
+            />
+          )}
 
           {/* Snap Mode Source Highlight */}
           {isSnapMode && snapSourceId && (() => {
@@ -3079,7 +3279,7 @@ export default function Workspace2D({
           />
 
           <DimensionTool isActive={activeTool === 'dimension'} />
-          <LabelArrowTool isActive={activeTool === 'label-arrow'} />
+          <ArchTool isActive={activeTool === 'arch'} />
           <LabelArrowTool isActive={activeTool === 'label-arrow'} />
           <TrimTool isActive={activeTool === 'trim'} />
 

@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { ASSET_LIBRARY, AssetDef, AssetCategory } from "@/lib/assets"
+import { ASSET_LIBRARY, AssetDef, AssetCategory, ASSET_CATEGORIES } from "@/lib/assets"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 
@@ -9,13 +9,6 @@ type AssetsModalProps = {
   isOpen: boolean
   onClose: () => void
 }
-
-const CATEGORIES: AssetCategory[] = [
-  "Funiture",
-  "Layout",
-  "Sitting Styles",
-  "Windows and column",
-]
 
 const formatLabel = (text: string) =>
   text
@@ -26,7 +19,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
   const modalRef = useRef<HTMLDivElement | null>(null)
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const [activeCategory, setActiveCategory] =
-    useState<AssetCategory>("Funiture")
+    useState<AssetCategory>("test")
   const [searchTerm, setSearchTerm] = useState("")
 
   useEffect(() => {
@@ -85,7 +78,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
       whileTap={{ scale: 0.95 }}
       className="w-[4.5rem] h-[4.5rem] rounded-xl bg-[#00000005] hover:bg-[#0933BB12] p-2 flex flex-col items-center justify-center"
     >
-      <Image src={asset.path} alt={asset.label} width={26} height={26} />
+      <Image src={encodeURI(asset.path)} alt={asset.label} width={26} height={26} />
       <span className="text-[0.6rem] mt-1 text-center leading-tight">
         {formatLabel(asset.label)}
       </span>
@@ -142,16 +135,16 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
             >
               {/* Tabs */}
               <div className="flex gap-2 mb-3 overflow-x-auto flex-shrink-0">
-                {CATEGORIES.map(cat => (
+                {ASSET_CATEGORIES.map(category => (
                   <button
-                    key={cat}
-                    onClick={() => setActiveCategory(cat)}
-                    className={`px-3 py-1 rounded text-xs whitespace-nowrap ${activeCategory === cat
+                    key={category}
+                    onClick={() => setActiveCategory(category)}
+                    className={`px-3 py-1 rounded text-xs whitespace-nowrap ${activeCategory === category
                       ? "bg-[var(--accent)] text-white"
                       : "bg-gray-200"
                       }`}
                   >
-                    {formatLabel(cat)}
+                    {formatLabel(category)}
                   </button>
                 ))}
               </div>

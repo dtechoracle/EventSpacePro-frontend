@@ -7,14 +7,15 @@ import { EventData } from "@/store/sceneStore";
 // Type for API response that wraps EventData
 type EventDataResponse =
   | {
-      data: EventData;
-    }
+    data: EventData;
+  }
   | EventData;
 
 const MM_TO_PX = 2; // must match the constant used in Canvas for mm -> px
 const ZOOM_SENSITIVITY = 0.001;
-const MIN_ZOOM_BASE = 0.3; // base lowest zoom allowed
-const MIN_ZOOM_PADDING = 1.12; // slight buffer so min zoom feels a bit larger
+const MAX_ZOOM = 1000000;
+const MIN_ZOOM_BASE = 0.000001; // Allow zooming out to 0.0001%
+const MIN_ZOOM_PADDING = 1.0; // Remove padding factor restriction
 const OVERSCROLL_MAX = 120; // px maximum visual overscroll
 const OVERSCROLL_RESIST = 0.45; // resistance factor for overscroll movement
 const EDGE_PADDING_MM = 10; // padding in mm to keep canvas away from viewport edges
@@ -120,13 +121,8 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
       const canvasPxWNoZoom = canvas.width * MM_TO_PX;
       const canvasPxHNoZoom = canvas.height * MM_TO_PX;
       if (!canvasPxWNoZoom || !canvasPxHNoZoom) return MIN_ZOOM_BASE;
-      const minW = rect.width / canvasPxWNoZoom;
-      const minH = rect.height / canvasPxHNoZoom;
-      const min = Math.min(minW, minH);
-      // apply a small padding factor so minimum zoom is slightly larger than exact fit
-      const padded = min * MIN_ZOOM_PADDING;
-      // clamp to sensible bounds
-      return Math.min(3, Math.max(MIN_ZOOM_BASE, padded));
+      // Allow full zoom out
+      return MIN_ZOOM_BASE;
     };
 
     const onWheel = (e: WheelEvent) => {
@@ -157,7 +153,7 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
         const delta = -e.deltaY * ZOOM_SENSITIVITY;
         const desired = targetZoom.current + delta;
         const minZoom = computeMinZoom();
-        const newZoom = Math.min(3, Math.max(minZoom, desired));
+        const newZoom = Math.min(1000000, Math.max(minZoom, desired));
         const newOffset = {
           x: cursor.x - sceneX * newZoom,
           y: cursor.y - sceneY * newZoom,
@@ -192,10 +188,10 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
       const canvasPxWNoZoom = canvas.width * MM_TO_PX;
       const canvasPxHNoZoom = canvas.height * MM_TO_PX;
       if (!canvasPxWNoZoom || !canvasPxHNoZoom) return;
-  const minW = rect.width / canvasPxWNoZoom;
-  const minH = rect.height / canvasPxHNoZoom;
-  const minZoom = Math.min(minW, minH) * MIN_ZOOM_PADDING;
-  const clampedMin = Math.min(3, Math.max(MIN_ZOOM_BASE, minZoom));
+      const minW = rect.width / canvasPxWNoZoom;
+      const minH = rect.height / canvasPxHNoZoom;
+      const minZoom = Math.min(minW, minH) * MIN_ZOOM_PADDING;
+      const clampedMin = Math.min(1000000, Math.max(MIN_ZOOM_BASE, minZoom));
       if (targetZoom.current < clampedMin) {
         targetZoom.current = clampedMin;
         // center the canvas in viewport at this zoom and clamp to bounds
@@ -265,13 +261,13 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
     const leftScene = canvasPos.x - canvasW / 2;
     const topScene = canvasPos.y - canvasH / 2;
 
-  // convert padding (mm) to screen px at this zoom so edges never come closer than EDGE_PADDING_MM
-  const padPx = EDGE_PADDING_MM * MM_TO_PX * zoomVal;
+    // convert padding (mm) to screen px at this zoom so edges never come closer than EDGE_PADDING_MM
+    const padPx = EDGE_PADDING_MM * MM_TO_PX * zoomVal;
 
-  // allowed offset.x range so canvas covers viewport horizontally (with padding)
-  // require canvas right edge >= padPx from viewport right, and left edge >= padPx from viewport left
-  const minOffsetX = vw - padPx - (leftScene + canvasW) * zoomVal; // offset.x >= minOffsetX
-  const maxOffsetX = padPx - leftScene * zoomVal; // offset.x <= maxOffsetX
+    // allowed offset.x range so canvas covers viewport horizontally (with padding)
+    // require canvas right edge >= padPx from viewport right, and left edge >= padPx from viewport left
+    const minOffsetX = vw - padPx - (leftScene + canvasW) * zoomVal; // offset.x >= minOffsetX
+    const maxOffsetX = padPx - leftScene * zoomVal; // offset.x <= maxOffsetX
 
     let x = offsetCandidate.x;
     if (minOffsetX > maxOffsetX) {
@@ -291,8 +287,8 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
     }
 
     // vertical
-  const minOffsetY = vh - padPx - (topScene + canvasH) * zoomVal;
-  const maxOffsetY = padPx - topScene * zoomVal;
+    const minOffsetY = vh - padPx - (topScene + canvasH) * zoomVal;
+    const maxOffsetY = padPx - topScene * zoomVal;
     let y = offsetCandidate.y;
     if (minOffsetY > maxOffsetY) {
       y = vh / 2 - (topScene + canvasH / 2) * zoomVal;
@@ -311,16 +307,16 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
     return { x, y };
   };
 
-    // Strictly enforce bounds whenever offset/zoom/canvas changes to avoid exposing background
-    useEffect(() => {
-      const el = containerRef.current;
-      if (!el) return;
-      const strict = clampOffset(offset, targetZoom.current, false);
-      if (strict.x !== offset.x || strict.y !== offset.y) {
-        // Always snap targetOffset to strict bounds to avoid exposure
-        targetOffset.current = strict;
-      }
-    }, [offset, zoom, canvas.width, canvas.height, canvasPos.x, canvasPos.y]);
+  // Strictly enforce bounds whenever offset/zoom/canvas changes to avoid exposing background
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const strict = clampOffset(offset, targetZoom.current, false);
+    if (strict.x !== offset.x || strict.y !== offset.y) {
+      // Always snap targetOffset to strict bounds to avoid exposure
+      targetOffset.current = strict;
+    }
+  }, [offset, zoom, canvas.width, canvas.height, canvasPos.x, canvasPos.y]);
 
   return (
     <div

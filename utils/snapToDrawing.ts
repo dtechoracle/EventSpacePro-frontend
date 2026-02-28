@@ -12,11 +12,10 @@ type SnapTarget = Shape | Wall | Asset;
 /**
  * Find the closest snap point on a target element
  */
-export function findClosestSnapPoint(
-    cursorPos: { x: number; y: number },
-    element: SnapTarget,
-    snapThreshold: number = 20
-): SnapPoint | null {
+/**
+ * Get all potential snap points for an element
+ */
+export function getSnapPoints(element: SnapTarget): SnapPoint[] {
     const snapPoints: SnapPoint[] = [];
 
     // Handle Shapes
@@ -137,6 +136,18 @@ export function findClosestSnapPoint(
             }
         });
     }
+    return snapPoints;
+}
+
+/**
+ * Find the closest snap point on a target element
+ */
+export function findClosestSnapPoint(
+    cursorPos: { x: number; y: number },
+    element: SnapTarget,
+    snapThreshold: number = 20
+): SnapPoint | null {
+    const snapPoints = getSnapPoints(element);
 
     // Find closest snap point
     let closestPoint: SnapPoint | null = null;

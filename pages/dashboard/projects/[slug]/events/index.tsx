@@ -8,6 +8,7 @@ import { BsSearch } from "react-icons/bs";
 import { useState } from "react";
 import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
 import { useUserStore } from "@/store/userStore";
+import { buildPreviewData } from "@/helpers/previewHelpers";
 
 interface EventData {
   _id: string;
@@ -57,35 +58,6 @@ const Events = () => {
     },
     enabled: !!slug,
   });
-
-  // Helper (copied from dashboard index)
-  const buildPreviewData = (event: EventData) => {
-    const walls = (event.canvasData?.walls as any[]) || [];
-    const shapes = (event.canvasData?.shapes as any[]) || [];
-    const assets = (event.canvasData?.assets as any[]) || [];
-
-    // Normalize shapes
-    const normalizedShapes = shapes.map((s: any) => ({
-      ...s,
-      fill: s.fill && s.fill !== 'transparent' ? s.fill : (s.backgroundColor || 'transparent')
-    }));
-
-    // Fallback if empty but canvasAssets exist
-    if (!walls.length && !shapes.length && !assets.length && event.canvasAssets) {
-      // Minimal fallback
-      return {
-        walls: [],
-        shapes: [],
-        assets: event.canvasAssets.map((a: any) => ({
-          ...a,
-          fillColor: a.fillColor || a.backgroundColor || '#3B82F6',
-          type: a.type
-        }))
-      };
-    }
-
-    return { walls, shapes: normalizedShapes, assets };
-  };
 
   return (
     <div className="h-screen flex overflow-hidden bg-gray-50">

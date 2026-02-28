@@ -230,12 +230,25 @@ export default function AiTrigger() {
       const scene = useSceneStore.getState();
       scene.selectAsset(null);
       scene.selectedAssetIds = [];
+      setIsOpen(true);
+      setTimeout(() => inputRef.current?.focus(), 0);
     } catch (e) {
       console.warn("Failed to clear selection", e);
+      setIsOpen(true);
     }
   };
 
+  const setPlacementMode = useEditorStore((s) => s.setPlacementMode);
+
+  // Manual clearSelection function
+  // ...
+
   const applyPlan = (plan: any) => {
+
+    const generatedWalls: any[] = [];
+    const generatedAssets: any[] = [];
+    const generatedShapes: any[] = [];
+    const generatedTextAnnotations: any[] = [];
 
     // Simple grid position calculator
     const calculateGridPositions = (
@@ -288,13 +301,6 @@ export default function AiTrigger() {
 
     const createdAssetIds: string[] = []; // DEBUG
     console.log('Plan object:', JSON.stringify(plan, null, 2)); // DEBUG
-    console.log('Plan has walls:', Array.isArray(plan.walls), plan.walls?.length); // DEBUG
-    console.log('Plan has assets:', Array.isArray(plan.assets), plan.assets?.length); // DEBUG
-    console.log('Plan has tables:', Array.isArray(plan.tables), plan.tables?.length); // DEBUG
-    console.log('Plan has chairs:', Array.isArray(plan.chairs), plan.chairs?.length); // DEBUG
-    console.log('Plan has chairsAround:', Array.isArray(plan.chairsAround), plan.chairsAround?.length); // DEBUG
-    console.log('Plan has shapes:', Array.isArray(plan.shapes), plan.shapes?.length); // DEBUG
-    console.log('Plan has annotations:', Array.isArray(plan.annotations), plan.annotations?.length); // DEBUG
 
     if (!plan) return;
     const createdAssetsInBatch: AssetInstance[] = []; // Track assets created in this batch
@@ -309,9 +315,10 @@ export default function AiTrigger() {
     };
     const canvasCenter = getCanvasCenter();
 
-    // Find empty space on canvas by checking existing asset bounding boxes
-    // Keep assets away from canvas edges (at least 1000mm margin)
+    // Find empty space on canvas (Keep existing logic for now, though it might be less relevant for placement mode)
+    // ... (Keep the findEmptySpace function as is)
     const findEmptySpace = (requiredWidth: number, requiredHeight: number, margin = 100): { x: number; y: number } | null => {
+      // ... (Same implementation as before)
       const edgeMargin = 1000; // Keep assets away from canvas edges
 
       if (existingAssets.length === 0 && createdAssetsInBatch.length === 0) {
@@ -529,7 +536,8 @@ export default function AiTrigger() {
           zIndex: 0,
           isClosed: true,
         };
-        addProjectWall(wall);
+        // addProjectWall(wall); // REPLACED
+        generatedWalls.push(wall);
         createdAssetIds.push(wall.id);
         createdAssetsInBatch.push(wall as any); // Track for empty space detection
       });
@@ -593,7 +601,8 @@ export default function AiTrigger() {
           zIndex: 1,
         };
         if (idx === 0 && wallBounds) setMessages((m) => [...m, { role: 'assistant', content: `📍 First table at: (${Math.round(a.x)}, ${Math.round(a.y)}) in wall bounds: (${Math.round(wallBounds.minX)}, ${Math.round(wallBounds.minY)}) to (${Math.round(wallBounds.maxX)}, ${Math.round(wallBounds.maxY)})` }]);
-        addProjectAsset(a);
+        // addProjectAsset(a); // REPLACED
+        generatedAssets.push(a);
         createdAssetIds.push(a.id);
         createdAssetsInBatch.push(a as any);
       });
@@ -603,25 +612,241 @@ export default function AiTrigger() {
     if (Array.isArray(plan.shapes) && plan.shapes.length > 0) {
       setMessages((m) => [...m, { role: 'assistant', content: `📐 Adding ${plan.shapes.length} shapes` }]);
       plan.shapes.forEach((shape: any) => {
+        // Normalise type: AI may return 'rect', 'circle', 'rectangle', 'ellipse'
+        let shapeType = shape.type || 'rectangle';
+        if (shapeType === 'rect') shapeType = 'rectangle';
+        if (shapeType === 'circle') shapeType = 'ellipse';
+
         const s: any = {
           id: `shape-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          type: shape.type,
-          x: Number(shape.xMm || shape.x || 0),
-          y: Number(shape.yMm || shape.y || 0),
-          width: Number(shape.widthMm || shape.width || 100),
-          height: Number(shape.heightMm || shape.height || 100),
-          radius: Number(shape.radiusMm || shape.radius || 50),
-          rotation: 0,
-          fillColor: shape.fillColor || "#cccccc",
-          strokeColor: shape.strokeColor || "#000000",
-          strokeWidth: Number(shape.strokeWidth || 1),
+          type: shapeType,
+          x: Number(shape.xMm ?? shape.x ?? 0),
+          y: Number(shape.yMm ?? shape.y ?? 0),
+          width: Number(shape.widthMm ?? shape.width ?? 100),
+          height: Number(shape.heightMm ?? shape.height ?? shape.widthMm ?? shape.width ?? 100),
+          rotation: Number(shape.rotation ?? 0),
+          fill: shape.fillColor ?? shape.fill ?? '#cccccc',
+          stroke: shape.strokeColor ?? shape.stroke ?? '#000000',
+          strokeWidth: Number(shape.strokeWidth ?? 2),
           zIndex: 1,
         };
-        addProjectShape(s);
+        // addProjectShape(s); // REPLACED by placement mode
+        generatedShapes.push(s);
       });
     }
 
+    // Chairs
+    if (Array.isArray(plan.chairs)) {
+      setMessages((m) => [...m, { role: 'assistant', content: `🪑 Adding ${plan.chairs.length} chairs` }]);
+      plan.chairs.forEach((c: any, idx: number) => {
+        const size = Number(c.widthMm || c.sizePx || 24);
+        let x = Number(c.xMm);
+        let y = Number(c.yMm);
+        // Validate and auto-calculate position if missing or invalid
+        if (c.xMm === undefined || c.xMm === null || c.yMm === undefined || c.yMm === null ||
+          !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
+          if (wallBounds) {
+            const cols = Math.ceil(Math.sqrt(plan.chairs.length));
+            const row = Math.floor(idx / cols);
+            const col = idx % cols;
+            x = wallBounds.minX + (col + 0.5) * (wallBounds.maxX - wallBounds.minX) / cols;
+            y = wallBounds.minY + (row + 0.5) * (wallBounds.maxY - wallBounds.minY) / cols;
+          } else {
+            x = canvasCenter.x + (idx % 5 - 2) * 100;
+            y = canvasCenter.y + Math.floor(idx / 5) * 100;
+          }
+        }
+        const pos = clampInWall(x, y, size / 2 + 10, size, size);
+        const a = {
+          id: `chair-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          type: c.assetType || "normal-chair",
+          x: pos.x,
+          y: pos.y,
+          scale: 1,
+          rotation: Number(c.rotation || 0),
+          zIndex: 1,
+          width: size,
+          height: size,
+          backgroundColor: c.fillColor || "transparent",
+        };
+        // addProjectAsset(a);
+        generatedAssets.push(a);
+        createdAssetIds.push(a.id);
+        createdAssetsInBatch.push(a as any); // Track for empty space detection
+      });
+    }
+
+    // Chairs around: place chairs in a circle around a center and optionally drop a table at center
+    if (Array.isArray(plan.chairsAround)) {
+      setMessages((m) => [...m, { role: 'assistant', content: `Creating ${plan.chairsAround.length} chair groups` }]);
+      plan.chairsAround.forEach((spec: any, idx: number) => {
+        let cx = Number(spec.centerX);
+        let cy = Number(spec.centerY);
+        // Validate and auto-calculate center if missing or invalid
+        if (spec.centerX === undefined || spec.centerX === null || spec.centerY === undefined || spec.centerY === null ||
+          !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
+          if (wallBounds) {
+            const cols = Math.ceil(Math.sqrt(plan.chairsAround.length));
+            const row = Math.floor(idx / cols);
+            const col = idx % cols;
+            cx = wallBounds.minX + (col + 0.5) * (wallBounds.maxX - wallBounds.minX) / cols;
+            cy = wallBounds.minY + (row + 0.5) * (wallBounds.maxY - wallBounds.minY) / cols;
+          } else {
+            cx = canvasCenter.x + (idx % 3 - 1) * 300;
+            cy = canvasCenter.y + Math.floor(idx / 3) * 300;
+          }
+        }
+        const chairSize = Number(spec.chairSizePx || 24);
+        const tableSize = Number(spec.tableSizePx || 24);
+        const minRadius = Math.ceil((tableSize / 2) + chairSize + 10);
+        const r = Math.max(minRadius, Number(spec.radiusMm || minRadius));
+        const count = Math.max(1, Number(spec.count || 1));
+
+        // Ensure center position is away from canvas edges
+        const edgeMargin = 1000;
+        const totalRadius = r + chairSize; // Maximum extent from center
+        if (canvas?.width && canvas?.height) {
+          cx = Math.max(edgeMargin + totalRadius,
+            Math.min(canvas.width - edgeMargin - totalRadius, cx));
+          cy = Math.max(edgeMargin + totalRadius,
+            Math.min(canvas.height - edgeMargin - totalRadius, cy));
+        }
+        if (spec.tableAsset) {
+          const table = {
+            id: `table-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            type: spec.tableAsset,
+            x: cx,
+            y: cy,
+            scale: 1,
+            rotation: 0,
+            zIndex: 1,
+            width: tableSize,
+            height: tableSize,
+            fillColor: spec.fillColor,
+            strokeColor: spec.strokeColor,
+            strokeWidth: spec.strokeWidth,
+            backgroundColor: spec.fillColor || 'transparent',
+          };
+          // addProjectAsset(table);
+          generatedAssets.push(table);
+          createdAssetIds.push(table.id);
+          createdAssetsInBatch.push(table as any); // Track for empty space detection
+        }
+        for (let i = 0; i < count; i++) {
+          const angle = (i / count) * Math.PI * 2;
+          const x = cx + Math.cos(angle) * r;
+          const y = cy + Math.sin(angle) * r;
+          const chair = {
+            id: `chair-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 5)}`,
+            type: spec.chairAsset || 'normal-chair',
+            x: x,
+            y: y,
+            scale: 1,
+            rotation: (angle * 180 / Math.PI) + 90, // Valid rotation
+            zIndex: 1,
+            width: chairSize,
+            height: chairSize,
+            fillColor: spec.fillColor,
+            strokeColor: spec.strokeColor,
+            strokeWidth: spec.strokeWidth,
+            backgroundColor: spec.fillColor || 'transparent',
+          };
+          // addProjectAsset(chair);
+          generatedAssets.push(chair);
+          createdAssetIds.push(chair.id);
+          createdAssetsInBatch.push(chair as any);
+        }
+      });
+    }
+
+    // Generic Assets
+    if (Array.isArray(plan.assets)) {
+      setMessages((m) => [...m, { role: 'assistant', content: `Adding ${plan.assets.length} assets` }]);
+      plan.assets.forEach((assetSpec: any, idx: number) => {
+        const assetType = assetSpec.assetType || assetSpec.assetName;
+        const width = Number(assetSpec.widthMm || assetSpec.width || 500);
+        const height = Number(assetSpec.heightMm || assetSpec.height || 500);
+        let x = Number(assetSpec.xMm || assetSpec.x);
+        let y = Number(assetSpec.yMm || assetSpec.y);
+
+        // Validate and auto-calculate position if missing or invalid
+        if (!isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
+          const emptySpace = findEmptySpace(width, height, 100);
+          if (emptySpace) {
+            x = emptySpace.x;
+            y = emptySpace.y;
+          } else {
+            x = canvasCenter.x;
+            y = canvasCenter.y;
+          }
+        }
+
+        const pos = validatePosition(x, y, width, height);
+        const asset: AssetInstance = {
+          id: `asset-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+          type: assetType,
+          x: pos.x,
+          y: pos.y,
+          scale: 1,
+          rotation: Number(assetSpec.rotation || 0),
+          zIndex: 1,
+          width,
+          height,
+          fillColor: assetSpec.fillColor,
+          strokeColor: assetSpec.strokeColor,
+          strokeWidth: assetSpec.strokeWidth,
+          backgroundColor: assetSpec.fillColor || 'transparent',
+        } as any;
+        // addProjectAsset(asset);
+        generatedAssets.push(asset);
+        createdAssetIds.push(asset.id);
+        createdAssetsInBatch.push(asset);
+      });
+    }
+
+    // Annotations
+    if (Array.isArray(plan.annotations)) {
+      setMessages((m) => [...m, { role: 'assistant', content: `Adding ${plan.annotations.length} text annotations` }]);
+      plan.annotations.forEach((annotation: any, idx: number) => {
+        const x = Number(annotation.x ?? annotation.xMm ?? canvasCenter.x);
+        const y = Number(annotation.y ?? annotation.yMm ?? canvasCenter.y);
+        const pos = clampInWall(x, y);
+
+        if (annotation.type === 'text' || annotation.type === 'label') {
+          generatedTextAnnotations.push({
+            id: `text-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+            type: 'text',
+            x: pos.x,
+            y: pos.y,
+            text: annotation.text || 'Label',
+            fontSize: annotation.fontSize || 16,
+            textColor: annotation.textColor || '#000000',
+            fontFamily: 'Arial',
+            rotation: annotation.rotation || 0,
+          });
+        }
+      });
+    }
+
+    // Check if we have generated content to place
+    if (generatedWalls.length > 0 || generatedAssets.length > 0 || generatedShapes.length > 0 || generatedTextAnnotations.length > 0) {
+      setPlacementMode({
+        active: true,
+        data: {
+          walls: generatedWalls,
+          assets: generatedAssets,
+          shapes: generatedShapes,
+          textAnnotations: generatedTextAnnotations
+        }
+      });
+      setIsOpen(false);
+      setInputValue("");
+      return;
+    }
+
     // Modifications - update existing assets and walls
+    // (Keep modification logic as is, if any)
+
     if (Array.isArray(plan.modifications) && plan.modifications.length > 0) {
       let assetCount = 0;
       let wallCount = 0;

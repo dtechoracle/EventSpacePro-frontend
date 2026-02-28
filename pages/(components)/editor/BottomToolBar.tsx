@@ -65,7 +65,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     const [activeTool, setActiveTool] = useState<string | null>(null);
 
     // NEW STORE
-    const { setActiveTool: setEditorTool, activeTool: editorActiveTool } = useEditorStore();
+    const { setActiveTool: setEditorTool, activeTool: editorActiveTool, archWaveMode, toggleArchWaveMode } = useEditorStore();
 
     const {
         isPenMode,
@@ -187,6 +187,11 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 deactivateAllTools();
                 setEditorTool("shape-polygon");
                 setActiveTool("polygon");
+                break;
+            case "arch":
+                deactivateAllTools();
+                setEditorTool("arch");
+                setActiveTool("arch");
                 break;
 
             // Drawing tools
@@ -601,6 +606,49 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 </motion.div>
             )}
 
+            {/* ─── Arc Wave Mode context bar ─────────────────────────────── */}
+            {editorActiveTool === 'arch' && (
+                <motion.div
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 20, opacity: 0 }}
+                    className="flex items-center gap-3 bg-white px-3 py-1.5 rounded-xl shadow-md border border-indigo-100 text-xs"
+                >
+                    <span className="text-gray-500 font-medium">Arc tool:</span>
+                    <span className="text-gray-400">
+                        {archWaveMode
+                            ? 'Chaining arcs: Set start → end → bulge for each segment. Dbl-click to finish.'
+                            : 'Single Arc: Set start → end → bulge. Tip: Hold Shift to chain segments.'}
+                    </span>
+                    <button
+                        onClick={toggleArchWaveMode}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${archWaveMode
+                            ? 'bg-indigo-500 text-white border-indigo-500 shadow-sm'
+                            : 'bg-white text-indigo-600 border-indigo-300 hover:border-indigo-500'
+                            }`}
+                        title={archWaveMode ? 'Disable wave mode' : 'Enable wave mode — chain arcs into a wave'}
+                    >
+                        <span>〰</span>
+                        <span>{archWaveMode ? 'Wave ON' : 'Wave'}</span>
+                    </button>
+                </motion.div>
+            )}
+
+            {/* ─── Freehand context bar ─────────────────────────────────── */}
+            {editorActiveTool === 'freehand' && (
+                <motion.div
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 20, opacity: 0 }}
+                    className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-md border border-blue-100 text-xs text-gray-500"
+                >
+                    <span className="text-blue-500 font-medium">Freehand:</span>
+                    Hold &amp; drag to draw • Release near
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border-2 border-blue-400 font-bold text-blue-500" style={{ fontSize: 9 }}>●</span>
+                    start to close &amp; fill • <kbd className="px-1 py-0.5 rounded bg-gray-100 font-mono text-[10px]">Esc</kbd> to cancel
+                </motion.div>
+            )}
+
             <motion.div
                 initial={{ y: 100, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
@@ -667,7 +715,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                                     animate={{ opacity: 1, y: 0, scale: 1 }}
                                     exit={{ opacity: 0, y: 8, scale: 0.98 }}
                                     transition={{ duration: 0.15 }}
-                                    className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-white rounded-md shadow-lg border p-1.5 w-48 z-[10000]"
+                                    className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-white rounded-md shadow-lg border p-1.5 w-48 z-[10000]"
                                     onMouseEnter={() => setOpenIndex(index)}
                                     onMouseLeave={() => setOpenIndex(null)}
                                 >

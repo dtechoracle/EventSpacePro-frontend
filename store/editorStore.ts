@@ -10,6 +10,7 @@ export type Tool =
   | 'shape-line'
   | 'shape-arrow'
   | 'shape-polygon'
+  | 'arch'
   | 'freehand'
   | 'asset'
   | 'dimension'
@@ -17,6 +18,8 @@ export type Tool =
   | 'text-annotation'
   | 'trim'
   | 'pan';
+
+export type DimensionType = 'linear' | 'aligned' | 'angular' | 'radial';
 
 export type EditorState = {
   // Viewport state
@@ -49,6 +52,14 @@ export type EditorState = {
   // Text editing state
   editingTextId: string | null;
   setEditingTextId: (id: string | null) => void;
+
+  // Dimension Tool State
+  dimensionType: DimensionType;
+  setDimensionType: (type: DimensionType) => void;
+
+  // Arc Tool State
+  archWaveMode: boolean;
+  toggleArchWaveMode: () => void;
 
   // Methods
   setZoom: (zoom: number) => void;
@@ -91,6 +102,20 @@ export type EditorState = {
   // Utility methods
   screenToWorld: (screenX: number, screenY: number) => { x: number; y: number };
   worldToScreen: (worldX: number, worldY: number) => { x: number; y: number };
+
+  // Placement Mode
+  placementMode: {
+    active: boolean;
+    data: {
+      walls: any[];
+      assets: any[];
+      shapes: any[];
+      textAnnotations?: any[];
+      width?: number; // Optional bounding width
+      height?: number; // Optional bounding height
+    } | null;
+  };
+  setPlacementMode: (mode: { active: boolean; data: any | null }) => void;
 };
 
 export const useEditorStore = create<EditorState>()(
@@ -122,18 +147,26 @@ export const useEditorStore = create<EditorState>()(
       editingTextId: null,
       setEditingTextId: (id) => set({ editingTextId: id }),
 
+      // Dimension Tool
+      dimensionType: 'linear',
+      setDimensionType: (type) => set({ dimensionType: type }),
+
+      // Arc Wave Mode
+      archWaveMode: false,
+      toggleArchWaveMode: () => set((state) => ({ archWaveMode: !state.archWaveMode })),
+
       // Zoom methods
       // Zoom methods - "Infinity" zoom (very wide range)
-      setZoom: (zoom) => set({ zoom: Math.max(0.0001, Math.min(10000, zoom)) }),
+      setZoom: (zoom) => set({ zoom: Math.max(0.000001, Math.min(1000000, zoom)) }),
 
       zoomIn: () => {
         const state = get();
-        set({ zoom: Math.min(10000, state.zoom * 1.2) });
+        set({ zoom: Math.min(1000000, state.zoom * 1.2) });
       },
 
       zoomOut: () => {
         const state = get();
-        set({ zoom: Math.max(0.0001, state.zoom / 1.2) });
+        set({ zoom: Math.max(0.000001, state.zoom / 1.2) });
       },
 
       resetZoom: () => set({ zoom: 1 }),
@@ -230,6 +263,11 @@ export const useEditorStore = create<EditorState>()(
           y: localY + state.canvasOffset.top,
         };
       },
+
+      // Placement Mode
+      placementMode: { active: false, data: null },
+      setPlacementMode: (mode) => set({ placementMode: mode }),
+
     }),
     {
       name: 'editor-storage',
@@ -240,6 +278,7 @@ export const useEditorStore = create<EditorState>()(
         showGrid: state.showGrid,
         gridSize: state.gridSize,
         snapToGrid: state.snapToGrid,
+        dimensionType: state.dimensionType,
         // Don't persist canvasOffset
       }),
     }

@@ -22,6 +22,8 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
     const [previewPoint, setPreviewPoint] = useState<{ x: number; y: number } | null>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [lastClickTime, setLastClickTime] = useState(0);
+    const [isLineDragging, setIsLineDragging] = useState(false);
+    const dragStartPos = React.useRef<{ x: number; y: number } | null>(null);
 
     // Single-segment state for rectangles/ellipses
     const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
@@ -96,9 +98,21 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         }
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
-        const snapped = snapToGrid
+        const { snapToObjects, zoom } = useEditorStore.getState();
+
+        let snapped = snapToGrid
             ? { x: Math.round(worldPos.x / gridSize) * gridSize, y: Math.round(worldPos.y / gridSize) * gridSize }
             : worldPos;
+
+        // Apply Smart Snapping on Click
+        if (snapToObjects) {
+            const { shapes, walls, assets } = useProjectStore.getState();
+            const allElements = [...shapes, ...walls, ...assets];
+            const snapResult = findSnapPointInShapes(worldPos, allElements, 20 / zoom);
+            if (snapResult) {
+                snapped = { x: snapResult.x, y: snapResult.y };
+            }
+        }
 
         setStartPoint(snapped);
         setEndPoint(snapped);
@@ -179,7 +193,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         let finalHeight = height;
 
         const newShape: Shape = {
-            id: `shape-${Date.now()}`,
+            id: crypto.randomUUID(),
             type: shapeType,
             x: centerX,
             y: centerY,
@@ -247,7 +261,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             const rotation = Math.atan2(dy, dx) * (180 / Math.PI);
 
             const newShape: Shape = {
-                id: `shape-${Date.now()}`,
+                id: crypto.randomUUID(),
                 type: shapeType,
                 x: centerX,
                 y: centerY,
@@ -297,7 +311,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             const relativePoints = pts.map(p => ({ x: p.x - centerX, y: p.y - centerY }));
 
             const newShape: Shape = {
-                id: `shape-${Date.now()}`,
+                id: crypto.randomUUID(),
                 type: finalType as any,
                 x: centerX,
                 y: centerY,
@@ -323,42 +337,31 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         setIsDrawing(false);
     }, [segments, lastPoint, shapeType, addShape, getNextZIndex, setSelectedIds, setActiveTool]);
 
-    // Handle click for line/polyline
-    const handleLineClick = useCallback((e: MouseEvent) => {
+    // Handle Mousedown for line/polyline
+    const handleLineMouseDown = useCallback((e: MouseEvent) => {
         if (!isActive || !isLineMode || e.button !== 0) return;
-
-        // Safety: if polygon modal is open, do not start drawing
         if (isPolygon && showPolygonModal) return;
 
-        // Ignore clicks that are not inside the main workspace SVG
         const target = e.target as Element | null;
-        if (!target || !target.closest('svg[data-workspace-root="true"]')) {
-            return;
-        }
-
-        const now = Date.now();
-        const timeSinceLast = now - lastClickTime;
-        setLastClickTime(now);
+        if (!target || !target.closest('svg[data-workspace-root="true"]')) return;
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
         let snapped = snapToGrid
             ? { x: Math.round(worldPos.x / gridSize) * gridSize, y: Math.round(worldPos.y / gridSize) * gridSize }
             : worldPos;
 
-        // If starting a new line and a line/arrow is selected, start from its endpoint
+        // Snapping logic (existing)
         if (!isDrawing) {
             const { selectedIds } = useEditorStore.getState();
             if (selectedIds.length === 1) {
                 const selectedShape = shapes.find(s => s.id === selectedIds[0]);
                 if (selectedShape && (selectedShape.type === 'line' || selectedShape.type === 'arrow')) {
+                    // Check endpoints of selected line
                     let endpoint: { x: number; y: number } | null = null;
-
                     if (selectedShape.points && selectedShape.points.length >= 2) {
-                        // Polyline - use the last point
                         const last = selectedShape.points[selectedShape.points.length - 1];
                         endpoint = { x: selectedShape.x + last.x, y: selectedShape.y + last.y };
                     } else {
-                        // Legacy straight line - calculate endpoint from rotation
                         const rot = (selectedShape.rotation || 0) * (Math.PI / 180);
                         const halfLen = selectedShape.width / 2;
                         endpoint = {
@@ -366,9 +369,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                             y: selectedShape.y + halfLen * Math.sin(rot)
                         };
                     }
-
                     if (endpoint) {
-                        // Check if click is near the endpoint
                         const snapThreshold = 20 / useEditorStore.getState().zoom;
                         if (Math.hypot(worldPos.x - endpoint.x, worldPos.y - endpoint.y) < snapThreshold * 2) {
                             snapped = endpoint;
@@ -378,7 +379,6 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             }
         }
 
-        // snap to existing endpoints only (no forced 90°)
         const snapThreshold = 20 / useEditorStore.getState().zoom;
         for (const p of existingEndpoints) {
             if (Math.hypot(snapped.x - p.x, snapped.y - p.y) < snapThreshold) {
@@ -387,7 +387,6 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             }
         }
 
-        // Also snap to the start of the current line (to close loop)
         if (segments.length > 0) {
             const start = segments[0].start;
             if (Math.hypot(snapped.x - start.x, snapped.y - start.y) < snapThreshold) {
@@ -396,28 +395,124 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         }
 
         if (!isDrawing) {
+            // START NEW LINE
             setIsDrawing(true);
             setLastPoint(snapped);
             setPreviewPoint(snapped);
-            return;
-        }
-
-        if (lastPoint) {
-            const dist = Math.hypot(snapped.x - lastPoint.x, snapped.y - lastPoint.y);
-            if (dist < 5) return;
-
-            const newSegment = { start: lastPoint, end: snapped };
-            const nextSegments = [...segments, newSegment];
-            setSegments(nextSegments);
-            setLastPoint(snapped);
-            setPreviewPoint(snapped);
-
-            // double click to finish AFTER adding the segment
-            if (timeSinceLast < 300) {
-                finishLine(nextSegments, snapped);
+            setIsLineDragging(true);
+            dragStartPos.current = snapped;
+        } else {
+            // ADD SEGMENT
+            if (lastPoint) {
+                const dist = Math.hypot(snapped.x - lastPoint.x, snapped.y - lastPoint.y);
+                // Allow small movements, but ensure we don't just click in place
+                if (dist >= 0) {
+                    // Add segment immediately on mousedown
+                    const newSegment = { start: lastPoint, end: snapped };
+                    const nextSegments = [...segments, newSegment];
+                    setSegments(nextSegments);
+                    setLastPoint(snapped);
+                    setPreviewPoint(snapped);
+                    setIsLineDragging(true);
+                    dragStartPos.current = snapped;
+                }
             }
         }
-    }, [isActive, isLineMode, lastPoint, segments, lastClickTime, screenToWorld, snapToGrid, gridSize, existingEndpoints, finishLine]);
+    }, [isActive, isLineMode, isPolygon, showPolygonModal, screenToWorld, snapToGrid, gridSize, isDrawing, existingEndpoints, segments, lastPoint, shapes]);
+
+    const handleLineMouseUp = useCallback((e: MouseEvent) => {
+        if (!isDrawing) return;
+
+        if (isLineDragging && dragStartPos.current && lastPoint) {
+            const worldPos = screenToWorld(e.clientX, e.clientY);
+            // Re-calculate snap
+            let snapped = snapToGrid
+                ? { x: Math.round(worldPos.x / gridSize) * gridSize, y: Math.round(worldPos.y / gridSize) * gridSize }
+                : worldPos;
+
+            // Snap logic again for accuracy... or typically we rely on mousemove's previewPoint?
+            // But previewPoint is state, better to recalc or trust mousemove updated it?
+            // Let's recalc strict snap for accuracy.
+            const snapThreshold = 20 / useEditorStore.getState().zoom;
+            for (const p of existingEndpoints) {
+                if (Math.hypot(snapped.x - p.x, snapped.y - p.y) < snapThreshold) {
+                    snapped = p;
+                    break;
+                }
+            }
+            if (segments.length > 0) {
+                const start = segments[0].start;
+                if (Math.hypot(snapped.x - start.x, snapped.y - start.y) < snapThreshold) {
+                    snapped = start;
+                }
+            }
+
+            const dist = Math.hypot(snapped.x - dragStartPos.current.x, snapped.y - dragStartPos.current.y);
+
+            // If we dragged significantly, we want to finish the segment at the NEW position
+            if (dist > 10) {
+                // The mousedown added a segment from Previous -> StartOfDrag.
+                // Now we need to add a segment from StartOfDrag -> CurrentPos.
+                // Wait, Mousedown adds segment Last -> Current.
+                // If I drag, I am moving Current.
+
+                // If I already added the segment at mousedown, then dragging effectively "moves" the end of that segment?
+                // No, my logic in mousedown was: add segment `lastPoint -> snapped`.
+                // `lastPoint` becomes `snapped`.
+                // So if I drag now, `lastPoint` is the START of the drag.
+                // I need to update the LAST segment's end? 
+                // Or add a NEW segment?
+
+                // Correct logic for "Drag to Draw":
+                // MouseDown: Start Point defined. (Do NOT add segment yet if it's the very first point).
+                //   If it's the very first point: just set LastPoint.
+                //   If it's a subsequent point: Add segment `Prev -> Current`.
+
+                // If I drag from the very first point:
+                // MouseDown: Set LastPoint.
+                // MouseMove: Preview shows Line `LastPoint -> Mouse`.
+                // MouseUp: Add segment `LastPoint -> Mouse`.
+
+                // So if isLineDragging, MouseUp should ADD the segment.
+                // Mousedown should NOT add the segment if we interpret it as start of drag?
+                // But Mousedown IS the "click" if we don't drag.
+
+                // Refined Hybrid Logic:
+                // MouseDown: 
+                //   If !isDrawing: Start (LastPoint = Click). Drawing = true.
+                //   If isDrawing: Add segment `Prev -> Click`. Set LastPoint = Click.
+                //   State: isLineDragging = true. dragStartPos = Click.
+
+                // MouseUp:
+                //   If isLineDragging:
+                //     dist = distance(dragStartPos, Current).
+                //     If dist > threshold (It was a drag):
+                //        We effectively "drew" a line from `dragStartPos` to `Current`.
+                //        Add segment `dragStartPos -> Current`.
+                //        Set LastPoint = Current.
+
+                // This works for "Click-Click" (dist ~ 0, MouseUp does nothing).
+                // And "Click-Drag-Release" (dist > 0, MouseUp adds segment).
+
+                // BUT: Mousedown ALREADY joined Prev -> Click.
+                // If I click-drag-release:
+                // 1. MouseDown: Prev -> Click (Segment A added). LastPoint = Click.
+                // 2. Drag to Release.
+                // 3. MouseUp: Click -> Release (Segment B added via logic above). LastPoint = Release.
+
+                // Result: Segment A covers the gap to start of drag. Segment B covers the drag.
+                // This is correct polyline behavior!
+
+                const newSegment = { start: lastPoint, end: snapped };
+                const nextSegments = [...segments, newSegment];
+                setSegments(nextSegments);
+                setLastPoint(snapped);
+                setPreviewPoint(snapped);
+            }
+        }
+        setIsLineDragging(false);
+        dragStartPos.current = null;
+    }, [isDrawing, isLineDragging, lastPoint, segments, screenToWorld, snapToGrid, gridSize, existingEndpoints]);
 
     // Attach event listeners
     useEffect(() => {
@@ -432,15 +527,18 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         }
 
         if (isLineMode) {
-            window.addEventListener('click', handleLineClick);
+            window.addEventListener('mousedown', handleLineMouseDown);
             window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleLineMouseUp);
             const handleKey = (e: KeyboardEvent) => {
                 if (e.key === 'Escape') finishLine();
+                if (e.key === 'Enter') finishLine();
             };
             window.addEventListener('keydown', handleKey);
             return () => {
-                window.removeEventListener('click', handleLineClick);
+                window.removeEventListener('mousedown', handleLineMouseDown);
                 window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleLineMouseUp);
                 window.removeEventListener('keydown', handleKey);
             };
         } else {
@@ -453,7 +551,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 window.removeEventListener('mouseup', handleMouseUp);
             };
         }
-    }, [isActive, isLineMode, handleLineClick, handleMouseDown, handleMouseMove, handleMouseUp, finishLine]);
+    }, [isActive, isLineMode, handleLineMouseDown, handleLineMouseUp, handleMouseDown, handleMouseMove, handleMouseUp, finishLine]);
 
     // Render
     if (!isActive) return null;
@@ -504,12 +602,11 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         return (
             <>
                 {/* Line/Polyline Preview */}
-                {isLineMode && segments.length > 0 && previewPoint && (
+                {isLineMode && previewPoint && (
                     <>
                         {/* Guide lines - horizontal (red) and vertical (green) from last point */}
                         {(() => {
-                            const lastSeg = segments[segments.length - 1];
-                            const lastPt = lastSeg.end;
+                            const lastPt = lastPoint;
                             const dx = previewPoint.x - lastPt.x;
                             const dy = previewPoint.y - lastPt.y;
                             const wallLength = Math.sqrt(dx * dx + dy * dy);
@@ -571,8 +668,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
 
                         {/* Distance measurement */}
                         {(() => {
-                            const lastSeg = segments[segments.length - 1];
-                            const lastPt = lastSeg.end;
+                            const lastPt = lastPoint;
                             const dx = previewPoint.x - lastPt.x;
                             const dy = previewPoint.y - lastPt.y;
                             const length = Math.sqrt(dx * dx + dy * dy);
@@ -596,16 +692,16 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                                         height={16}
                                         fill="white"
                                         stroke="#3b82f6"
-                                        strokeWidth={1 / zoom}
-                                        rx={2 / zoom}
+                                        strokeWidth={1 / (useEditorStore.getState().zoom || 1)}
+                                        rx={2 / (useEditorStore.getState().zoom || 1)}
                                         opacity={0.95}
                                         vectorEffect="non-scaling-stroke"
                                     />
                                     <text
                                         x={0}
-                                        y={4 / zoom}
+                                        y={4 / (useEditorStore.getState().zoom || 1)}
                                         fill="#1f2937"
-                                        fontSize={11 / zoom}
+                                        fontSize={11 / (useEditorStore.getState().zoom || 1)}
                                         fontWeight="600"
                                         textAnchor="middle"
                                         dominantBaseline="middle"
@@ -630,9 +726,10 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                                 vectorEffect="non-scaling-stroke"
                             />
                         ))}
+                        {/* Current active segment */}
                         <line
-                            x1={segments[segments.length - 1].end.x}
-                            y1={segments[segments.length - 1].end.y}
+                            x1={lastPoint.x}
+                            y1={lastPoint.y}
                             x2={previewPoint.x}
                             y2={previewPoint.y}
                             stroke="#3b82f6"

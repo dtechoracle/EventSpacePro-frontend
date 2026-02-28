@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useId } from 'react';
 import { Wall, Shape, Asset } from '@/store/projectStore';
 import { fitWorkspaceToContainer, calculateWorkspaceBounds } from '@/utils/workspaceBounds';
 import { ASSET_LIBRARY } from '@/lib/assets';
@@ -27,6 +27,9 @@ export default function WorkspacePreview({
     height = 300,
     backgroundColor = '#ffffff'
 }: WorkspacePreviewProps) {
+    // Generate a unique id per instance so that SVG pattern refs don't clash
+    // when multiple WorkspacePreview cards render on the same page.
+    const uid = useId().replace(/:/g, '_');
     const hasContent = walls.length > 0 || shapes.length > 0 || assets.length > 0;
 
     // Calculate optimal viewport to fit all items (like Figma - zoom out to fit everything)
@@ -79,23 +82,23 @@ export default function WorkspacePreview({
                 <svg
                     width="100%"
                     height="100%"
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
+                    style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
                         display: 'block',
-                }}
+                    }}
                     viewBox={`0 0 ${width} ${height}`}
                     preserveAspectRatio="xMidYMid meet"
                 >
-                    {/* Background grid for better visibility */}
+                    {/* Background grid - use unique id per instance to avoid SVG ref conflicts */}
                     <defs>
-                        <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#f3f4f6" strokeWidth="0.5"/>
+                        <pattern id={`grid_${uid}`} width="20" height="20" patternUnits="userSpaceOnUse">
+                            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#f3f4f6" strokeWidth="0.5" />
                         </pattern>
                     </defs>
-                    <rect width="100%" height="100%" fill="url(#grid)" opacity="0.3" />
-                    
+                    <rect width="100%" height="100%" fill={`url(#grid_${uid})`} opacity="0.3" />
+
                     <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
                         {/* Render walls (support wall-polygon) */}
                         {walls.map((wall) => {
@@ -143,9 +146,9 @@ export default function WorkspacePreview({
                                         const nodeA = wall.nodes.find(n => n.id === edge.nodeA);
                                         const nodeB = wall.nodes.find(n => n.id === edge.nodeB);
                                         if (!nodeA || !nodeB) return null;
-                                        
+
                                         const thickness = Math.max(edge.thickness || 75, 2) / viewport.zoom;
-                                        
+
                                         return (
                                             <line
                                                 key={edge.id}
@@ -226,10 +229,10 @@ export default function WorkspacePreview({
                                         />
                                     );
                                 }
-                                
+
                                 return (
                                     <line
-                        key={shape.id}
+                                        key={shape.id}
                                         transform={transform}
                                         x1={-shape.width / 2}
                                         y1={0}
@@ -238,7 +241,7 @@ export default function WorkspacePreview({
                                         stroke={stroke}
                                         strokeWidth={strokeWidth}
                                         strokeLinecap="round"
-                    />
+                                    />
                                 );
                             }
 
@@ -253,7 +256,7 @@ export default function WorkspacePreview({
                                         Math.min(
                                             12,
                                             shape.polygonSides ||
-                                                (shape.points ? shape.points.length : 4)
+                                            (shape.points ? shape.points.length : 4)
                                         )
                                     );
                                     const r = Math.min(shape.width, shape.height) / 2;
@@ -288,15 +291,15 @@ export default function WorkspacePreview({
                             // If an explicit path exists on the asset, prefer it (covers backend-provided paths)
                             const path = (asset as any).path;
                             const assetWithPath = path
-                              ? { ...asset, path, type: asset.type, width: asset.width || 100, height: asset.height || 100, metadata: asset.metadata }
-                              : asset;
+                                ? { ...asset, path, type: asset.type, width: asset.width || 100, height: asset.height || 100, metadata: asset.metadata }
+                                : asset;
                             return (
-                    <AssetRenderer
-                        key={asset.id}
-                                asset={assetWithPath as any}
-                        isSelected={false}
-                        isHovered={false}
-                    />
+                                <AssetRenderer
+                                    key={asset.id}
+                                    asset={assetWithPath as any}
+                                    isSelected={false}
+                                    isHovered={false}
+                                />
                             );
                         })}
                     </g>

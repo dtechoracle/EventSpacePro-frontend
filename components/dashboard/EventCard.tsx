@@ -126,20 +126,13 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle }
                     </svg>
                 </button>
 
-                {/* Workspace Preview - Wider than tall */}
-                <div className="bg-white w-full relative overflow-hidden" style={{ aspectRatio: '2.5/1', height: '160px' }}>
-                    {/* Note: In a real refactor, we should pass the fallback data correctly. 
-                 For now, we rely on the event data having canvasData. 
-                 If it doesn't (and uses `canvasAssets`), the preview might be empty here unlike the main dashboard 
-                 which has complex fallback logic.
-                 To fix this, we should really move `buildPreviewData` to a shared utility or helper.
-                 I will assume for this step that `buildPreviewData` is sufficient or I will COPY the fallback logic.
-             */}
+                {/* Workspace Preview */}
+                <div className="bg-white w-full relative overflow-hidden" style={{ height: '160px' }}>
                     <WorkspacePreview
                         walls={walls}
                         shapes={shapes}
                         assets={assets}
-                        width={400}
+                        width={480}
                         height={160}
                         backgroundColor="#ffffff"
                     />

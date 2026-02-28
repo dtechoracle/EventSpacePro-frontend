@@ -41,7 +41,7 @@ export type Group = {
 export type Shape = {
     id: string;
     groupId?: string;
-    type: 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand' | 'polygon';
+    type: 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand' | 'polygon' | 'arc';
     x: number;
     y: number;
     width: number;
@@ -56,17 +56,19 @@ export type Shape = {
     sourceAssetId?: string;
 
     // Advanced fill options
-    fillType?: 'color' | 'gradient' | 'hatch' | 'image' | 'texture';
+    fillType?: 'color' | 'gradient' | 'hatch' | 'image' | 'texture' | 'none';
     gradientType?: 'linear' | 'radial';
     gradientColors?: string[]; // Array of color stops
     gradientAngle?: number; // For linear gradients (0-360 degrees)
     hatchPattern?: 'horizontal' | 'vertical' | 'diagonal-right' | 'diagonal-left' | 'cross' | 'diagonal-cross' | 'dots' | 'brick';
     hatchSpacing?: number; // Spacing between hatch lines in pixels
     hatchColor?: string; // Color of hatch pattern
+    hatchThickness?: number; // Thickness of hatch lines (default 1)
     fillImage?: string; // Base64 or URL for image fill
     fillImageScale?: number; // Scale factor for image fill
     fillTexture?: string; // ID of the texture pattern
     fillTextureScale?: number; // Scale for texture pattern
+    fillTextureThickness?: number; // Thickness multiplier for texture lines/dots
 
     // Arrow properties
     // Arrow properties
@@ -78,6 +80,10 @@ export type Shape = {
     // Line style (for lines and arrows)
     strokeDasharray?: string; // e.g., "5,5" for dashed, "2,2" for dotted, "10,5" for dash-dot, etc.
     lineType?: 'solid' | 'dashed' | 'dotted' | 'double'; // High-level line type
+
+    // Display options
+    showDimensions?: boolean;
+    dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
 };
 
 export type Asset = {
@@ -118,6 +124,11 @@ export type Asset = {
     wallThickness?: number;
     wallGap?: number;
     backgroundColor?: string;
+    fillTextureThickness?: number;
+
+    // Display options
+    showDimensions?: boolean;
+    dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
 };
 
 export type Wall = {
@@ -129,8 +140,11 @@ export type Wall = {
     fillType?: 'color' | 'texture';
     fillTexture?: string;
     fillTextureScale?: number;
+    fillTextureThickness?: number;
     isClosed?: boolean; // For closed loops
     zIndex: number;
+    showDimensions?: boolean;
+    dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
 };
 
 export type Layer = {
@@ -149,19 +163,26 @@ export type Canvas = {
     unit: 'mm' | 'cm' | 'm';
 };
 
-export type Dimension = {
+export interface Dimension {
     id: string;
-    type: 'linear' | 'wall'; // 'wall' is auto-generated/linked
-    startPoint: { x: number, y: number };
-    endPoint: { x: number, y: number };
-    offset: number; // Distance from the measured line
-    value?: number; // Optional override, otherwise calculated
+    type: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
+    startPoint: { x: number; y: number };
+    endPoint: { x: number; y: number };
+    centerPoint?: { x: number; y: number }; // For angular/radial
+    offset: number;
+
+    value?: number; // Optional manual override or cached value
     targetId?: string; // ID of the object being measured (e.g., wall ID)
-    zIndex: number;
-    strokeWidth?: number; // Line thickness (default 7.5)
-    color?: string; // Line and text color (default black)
-    fontSize?: number; // Text size (default 12)
-};
+
+    // Visual properties
+    color?: string;
+    fontSize?: number;
+    strokeWidth?: number;
+    lineStyle?: 'solid' | 'dashed' | 'dotted' | 'double';
+
+    zIndex?: number;
+    groupId?: string;
+}
 
 export type Comment = {
     id: string;
@@ -182,6 +203,10 @@ export type TextAnnotation = {
     fontSize?: number;
     color?: string;
     fontFamily?: string;
+    fontWeight?: string;
+    fontStyle?: string;
+    textDecoration?: string;
+    backgroundColor?: string;
     rotation?: number; // Rotation in degrees
     zIndex: number;
 };
@@ -320,17 +345,17 @@ export type ProjectState = {
     // Methods - Dimensions
     dimensions: Dimension[];
     addDimension: (dimension: Dimension) => void;
-    updateDimension: (id: string, updates: Partial<Dimension>) => void;
+    updateDimension: (id: string, updates: Partial<Dimension>, skipHistory?: boolean) => void;
     removeDimension: (id: string) => void;
 
     // Methods - Text Annotations
     addTextAnnotation: (annotation: TextAnnotation) => void;
-    updateTextAnnotation: (id: string, updates: Partial<TextAnnotation>) => void;
+    updateTextAnnotation: (id: string, updates: Partial<TextAnnotation>, skipHistory?: boolean) => void;
     removeTextAnnotation: (id: string) => void;
 
     // Methods - Label Arrows
     addLabelArrow: (arrow: LabelArrow) => void;
-    updateLabelArrow: (id: string, updates: Partial<LabelArrow>) => void;
+    updateLabelArrow: (id: string, updates: Partial<LabelArrow>, skipHistory?: boolean) => void;
     removeLabelArrow: (id: string) => void;
 
     // Methods - Comments
@@ -1473,8 +1498,8 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
-            updateDimension: (id, updates) => {
-                get().saveToHistory();
+            updateDimension: (id, updates, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     dimensions: state.dimensions.map((d) => (d.id === id ? { ...d, ...updates } : d)),
                     hasUnsavedChanges: true,
@@ -1498,8 +1523,8 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
-            updateTextAnnotation: (id, updates) => {
-                get().saveToHistory();
+            updateTextAnnotation: (id, updates, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     textAnnotations: state.textAnnotations.map((a) => (a.id === id ? { ...a, ...updates } : a)),
                     hasUnsavedChanges: true,
@@ -1523,8 +1548,8 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
-            updateLabelArrow: (id, updates) => {
-                get().saveToHistory();
+            updateLabelArrow: (id, updates, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     labelArrows: state.labelArrows.map((a) => (a.id === id ? { ...a, ...updates } : a)),
                     hasUnsavedChanges: true,

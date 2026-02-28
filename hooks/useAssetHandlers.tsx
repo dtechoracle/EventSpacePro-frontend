@@ -23,14 +23,17 @@ interface UseAssetHandlersProps {
     draggingOffset: React.MutableRefObject<{ x: number; y: number }>;
     draggingAssetStart: React.MutableRefObject<{ x: number; y: number }>;
   };
+  groupScaleCenterRef: React.MutableRefObject<{ x: number; y: number } | null>;
 }
 
 export function useAssetHandlers({
   clientToCanvasMM,
   mouseRefs,
+  groupScaleCenterRef,
 }: UseAssetHandlersProps) {
   const assets = useSceneStore((s) => s.assets);
   const selectedAssetId = useSceneStore((s) => s.selectedAssetId);
+  const selectedAssetIds = useSceneStore((s) => s.selectedAssetIds);
   const addAssetObject = useSceneStore((s) => s.addAssetObject);
   const selectAsset = useSceneStore((s) => s.selectAsset);
   const updateAsset = useSceneStore((s) => s.updateAsset);
@@ -49,7 +52,7 @@ export function useAssetHandlers({
         console.log('Asset click in snap mode - letting canvas handle it. Asset:', assetId);
         return;
       }
-      
+
       e.stopPropagation();
       const asset = assets.find((a) => a.id === assetId);
       if (!asset) return;
@@ -132,9 +135,22 @@ export function useAssetHandlers({
 
       const { x: mouseX, y: mouseY } = clientToCanvasMM(e.clientX, e.clientY);
 
+      // Compute group center if multiple assets are selected
+      const currentSelectedIds = useSceneStore.getState().selectedAssetIds;
+      if (currentSelectedIds.length > 1) {
+        const selectedAssets = assets.filter(a => currentSelectedIds.includes(a.id));
+        const minX = Math.min(...selectedAssets.map(a => a.x - (a.width || 0) * (a.scale || 1) / 2));
+        const maxX = Math.max(...selectedAssets.map(a => a.x + (a.width || 0) * (a.scale || 1) / 2));
+        const minY = Math.min(...selectedAssets.map(a => a.y - (a.height || 0) * (a.scale || 1) / 2));
+        const maxY = Math.max(...selectedAssets.map(a => a.y + (a.height || 0) * (a.scale || 1) / 2));
+        groupScaleCenterRef.current = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+      } else {
+        groupScaleCenterRef.current = null;
+      }
+
       // Use distance from asset center to mouse position for stable scaling
-      const assetCenterX = asset.x;
-      const assetCenterY = asset.y;
+      const assetCenterX = groupScaleCenterRef.current ? groupScaleCenterRef.current.x : asset.x;
+      const assetCenterY = groupScaleCenterRef.current ? groupScaleCenterRef.current.y : asset.y;
 
       // Calculate initial distance from asset center to mouse position
       mouseRefs.initialDistance.current = Math.sqrt(

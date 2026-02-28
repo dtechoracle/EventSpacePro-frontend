@@ -56,11 +56,77 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
     const arrowSize = 100; // 100mm arrow size? Might be too big/small depending on scale.
     // Let's assume 1 unit = 1mm. 100mm is 10cm.
 
-    // Extension line overshoot
-    const overshoot = 50;
+    // Extension line overshoot (how far the tick extends past the dimension line)
+    const overshoot = 10;
 
     // Convert fontSize to world units (fontSize is in points, we scale it)
     const worldFontSize = fontSize * 2; // Approximate conversion
+
+    const isRadial = dimension.type === 'radial' || dimension.type === 'circular';
+
+    if (isRadial) {
+        // Radial Dimension Rendering
+        // Line from center (start) to edge (end)
+        // Arrow at end only
+        // Text "R {value}"
+
+        const text = `R ${Math.round(value || length)}`;
+
+        // Calculate angle for text
+        let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        if (angle > 90 || angle < -90) angle += 180;
+
+        return (
+            <g className="dimension-group" style={{ pointerEvents: 'all', cursor: 'pointer' }}>
+                {/* Main Line */}
+                <line
+                    x1={startPoint.x}
+                    y1={startPoint.y}
+                    x2={endPoint.x}
+                    y2={endPoint.y}
+                    stroke={color}
+                    strokeWidth={strokeWidth}
+                />
+
+                {/* Arrow at End (Edge) */}
+                <path
+                    d={`M ${endPoint.x} ${endPoint.y} L ${endPoint.x - nx * arrowSize + px * (arrowSize * 0.3)} ${endPoint.y - ny * arrowSize + py * (arrowSize * 0.3)} M ${endPoint.x} ${endPoint.y} L ${endPoint.x - nx * arrowSize - px * (arrowSize * 0.3)} ${endPoint.y - ny * arrowSize - py * (arrowSize * 0.3)}`}
+                    stroke={color}
+                    strokeWidth={strokeWidth}
+                    fill="none"
+                />
+
+                {/* Text Label */}
+                <g transform={`translate(${midX}, ${midY}) rotate(${angle})`}>
+                    <rect
+                        x="-40"
+                        y="-15"
+                        width="80"
+                        height="30"
+                        fill="white"
+                        opacity="0.8"
+                    />
+                    <text
+                        x="0"
+                        y="0"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fontSize={worldFontSize}
+                        fill={color}
+                        fontFamily="sans-serif"
+                    >
+                        {text}
+                    </text>
+                </g>
+                {/* Center Mark */}
+                <path
+                    d={`M ${startPoint.x - 10} ${startPoint.y} L ${startPoint.x + 10} ${startPoint.y} M ${startPoint.x} ${startPoint.y - 10} L ${startPoint.x} ${startPoint.y + 10}`}
+                    stroke={color}
+                    strokeWidth={strokeWidth * 0.5}
+                />
+            </g>
+        );
+    }
 
     return (
         <g className="dimension-group" style={{ pointerEvents: 'all', cursor: 'pointer' }}>
@@ -85,14 +151,44 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
             />
 
             {/* Main Dimension Line */}
-            <line
-                x1={p1x}
-                y1={p1y}
-                x2={p2x}
-                y2={p2y}
-                stroke={color}
-                strokeWidth={strokeWidth}
-            />
+            {dimension.lineStyle === 'double' ? (
+                <>
+
+                    {/* Double Line Implementation */}
+                    <line
+                        x1={p1x + px * (strokeWidth * 0.75)}
+                        y1={p1y + py * (strokeWidth * 0.75)}
+                        x2={p2x + px * (strokeWidth * 0.75)}
+                        y2={p2y + py * (strokeWidth * 0.75)}
+                        stroke={color}
+                        strokeWidth={strokeWidth * 0.5}
+                        strokeDasharray="10 10"
+                    />
+                    <line
+                        x1={p1x - px * (strokeWidth * 0.75)}
+                        y1={p1y - py * (strokeWidth * 0.75)}
+                        x2={p2x - px * (strokeWidth * 0.75)}
+                        y2={p2y - py * (strokeWidth * 0.75)}
+                        stroke={color}
+                        strokeWidth={strokeWidth * 0.5}
+                        strokeDasharray="10 10"
+                    />
+                </>
+            ) : (
+                <line
+                    x1={p1x}
+                    y1={p1y}
+                    x2={p2x}
+                    y2={p2y}
+                    stroke={color}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={
+                        dimension.lineStyle === 'dotted' ? '4 4' :
+                            dimension.lineStyle === 'dashed' ? '15 10' :
+                                undefined
+                    }
+                />
+            )}
 
             {/* Arrows / Ticks */}
             {/* Start Arrow */}
@@ -136,4 +232,3 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
         </g>
     );
 };
-

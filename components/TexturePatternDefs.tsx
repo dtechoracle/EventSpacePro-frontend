@@ -11,33 +11,44 @@ export default function TexturePatternDefs() {
     const { shapes, walls } = useProjectStore();
 
     // 1. Identify all unique scales used for each pattern ID in the scene
+    // 1. Identify all unique scales used for each pattern ID in the scene
     const usedScales = useMemo(() => {
-        const scales = new Map<string, Set<number>>();
+        const scales = new Map<string, Set<{ scale: number; thickness: number }>>();
 
         // Helper
-        const addScale = (textureId: string | undefined, scale: number | undefined) => {
+        const addParams = (textureId: string | undefined, scale: number | undefined, thickness: number | undefined) => {
             if (!textureId) return;
             if (!scales.has(textureId)) scales.set(textureId, new Set());
-            // Default scale is 1 if undefined
-            scales.get(textureId)!.add(scale || 1);
+
+            const set = scales.get(textureId)!;
+            const s = scale || 1;
+            const t = thickness || 1;
+
+            // Check existence to avoid dupe objects (Set checks ref equality)
+            let exists = false;
+            set.forEach(item => {
+                if (item.scale === s && item.thickness === t) exists = true;
+            });
+
+            if (!exists) set.add({ scale: s, thickness: t });
         };
 
         // Check shapes
         shapes.forEach(shape => {
             if (shape.fillType === 'texture' && shape.fillTexture) {
-                addScale(shape.fillTexture, shape.fillTextureScale);
+                addParams(shape.fillTexture, shape.fillTextureScale, shape.fillTextureThickness);
             }
         });
 
         // Check walls
         walls.forEach(wall => {
             if (wall.fillType === 'texture' && wall.fillTexture) {
-                addScale(wall.fillTexture, wall.fillTextureScale);
+                addParams(wall.fillTexture, wall.fillTextureScale, wall.fillTextureThickness);
             }
         });
 
-        // Ensure default scale 1 is always available for all patterns (for palette previews etc)
-        texturePatterns.forEach(p => addScale(p.id, 1));
+        // Ensure default 1,1 is always available for all patterns (for palette previews etc)
+        texturePatterns.forEach(p => addParams(p.id, 1, 1));
 
         return scales;
     }, [shapes, walls]);
@@ -48,37 +59,32 @@ export default function TexturePatternDefs() {
         const variants: React.ReactNode[] = [];
 
         texturePatterns.forEach(pattern => {
-            const patternScales = usedScales.get(pattern.id) || new Set([1]);
+            const patternScales = usedScales.get(pattern.id) || new Set([{ scale: 1, thickness: 1 }]);
 
-            patternScales.forEach(scale => {
-                const scaledId = `${pattern.id}-scale-${scale}`;
-
-                // Base size is 256 for grass/sand, but we need to check the SVG content or standardize
-                // Most texturePatterns in utils have viewBox="0 0 256 256" implicitly or explicitly
-                // We'll trust the pattern definition
-                // BUT: To scale a pattern in SVG, we use patternTransform="scale(S)"
-                // Note: unique ID is required
+            patternScales.forEach(({ scale, thickness }) => {
+                const scaledId = `${pattern.id}-scale-${scale}-thick-${thickness}`;
 
                 if (pattern.id === 'grass' || pattern.id === 'sand') {
-                    // Special procedural patterns
-                    // We need to clone the logic but apply scale
-                    // Ideally we'd refactor grass/sand to be part of the standard list, but they have complex filters
-                    // For now, let's just support scaling them if they were in the standard list,
-                    // but since they are hardcoded below, we handle them separately or refactor.
-                    // Refactoring them to be generated variants is better.
+                    // Procedural handled below
                 } else {
-                    // Standard SVG string patterns
-                    // We need to inject the ID and patternTransform
-                    // The stored SVG string usually contains <pattern id="...">...</pattern>
-                    // We need to parse/replace it.
-                    // This is brittle with Regex. A better approach in `utils/texturePatterns` would be returning the inner content.
-                    // Assuming `pattern.svg` is the `<pattern ...> ... </pattern>` string.
-
                     let svgStr = pattern.svg;
                     // Replace ID
                     svgStr = svgStr.replace(/id="[^"]*"/, `id="${scaledId}"`);
+
+                    // Apply thickness scaling to stroke-width
+                    // This regex finds stroke-width="X" and multiplies X by thickness
+                    if (thickness !== 1) {
+                        svgStr = svgStr.replace(/stroke-width="([\d.]+)"/g, (match, p1) => {
+                            return `stroke-width="${parseFloat(p1) * thickness}"`;
+                        });
+                        // Also scale circle radius for dots/etc if needed, though stroke-width is main target
+                        // If patterns use circles for "dots", they might use 'r' attribute
+                        svgStr = svgStr.replace(/r="([\d.]+)"/g, (match, p1) => {
+                            return `r="${parseFloat(p1) * thickness}"`;
+                        });
+                    }
+
                     // Add/Replace patternTransform
-                    // Apply a 0.5 multiplier to standard patterns for finer default tiling
                     const finalScale = scale * 0.5;
                     if (svgStr.includes('patternTransform=')) {
                         svgStr = svgStr.replace(/patternTransform="[^"]*"/, `patternTransform="scale(${finalScale})"`);
@@ -97,8 +103,8 @@ export default function TexturePatternDefs() {
     }, [usedScales]);
 
     // Scales for procedural patterns (grass/sand)
-    const grassScales = Array.from(usedScales.get('grass') || [1]);
-    const sandScales = Array.from(usedScales.get('sand') || [1]);
+    const grassParams = Array.from(usedScales.get('grass') || [{ scale: 1, thickness: 1 }]);
+    const sandParams = Array.from(usedScales.get('sand') || [{ scale: 1, thickness: 1 }]);
 
     return (
         <defs>
@@ -106,34 +112,40 @@ export default function TexturePatternDefs() {
             {patternVariants}
 
             {/* Procedural Grass Pattern variants */}
-            {grassScales.map(scale => (
-                <pattern key={`grass-${scale}`} id={`grass-scale-${scale}`} patternUnits="userSpaceOnUse" width="128" height="128" patternTransform={`scale(${scale})`}>
-                    <rect width="128" height="128" fill="#228B22" />
-                    <filter id={`grassNoise-${scale}`}>
-                        <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="4" stitchTiles="stitch" />
-                        <feColorMatrix type="matrix" values="0 0 0 0 0, 0 0 0 0 0, 0 0 0 0 0, 0 0 0 1 0" />
-                    </filter>
-                    <rect width="128" height="128" filter={`url(#grassNoise-${scale})`} opacity="0.4" style={{ mixBlendMode: 'overlay' }} />
-                    <path d="M10,120 Q15,90 25,100 M40,120 Q45,80 35,90 M80,120 Q85,70 70,80 M110,120 Q105,80 120,90"
-                        stroke="#2d5a02" strokeWidth="2" fill="none" opacity="0.3" />
+            {/* Procedural Grass Pattern variants - Now using External SVG Asset */}
+            {grassParams.map(({ scale, thickness }) => (
+                <pattern
+                    key={`grass-${scale}-${thickness}`}
+                    id={`grass-scale-${scale}-thick-${thickness}`}
+                    patternUnits="userSpaceOnUse"
+                    width="512"
+                    height="512"
+                    patternTransform={`scale(${scale})`}
+                >
+                    <image
+                        href="/assets/grass-texture.svg"
+                        width="512"
+                        height="512"
+                        preserveAspectRatio="none"
+                    />
                 </pattern>
             ))}
 
             {/* Procedural Sand Pattern variants */}
-            {sandScales.map(scale => (
-                <pattern key={`sand-${scale}`} id={`sand-scale-${scale}`} patternUnits="userSpaceOnUse" width="128" height="128" patternTransform={`scale(${scale})`}>
+            {sandParams.map(({ scale, thickness }) => (
+                <pattern key={`sand-${scale}-${thickness}`} id={`sand-scale-${scale}-thick-${thickness}`} patternUnits="userSpaceOnUse" width="128" height="128" patternTransform={`scale(${scale})`}>
                     <rect width="128" height="128" fill="#e6c288" />
-                    <filter id={`sandNoise-${scale}`}>
+                    <filter id={`sandNoise-${scale}-${thickness}`}>
                         <feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="4" stitchTiles="stitch" />
                         <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 3 -1" />
                     </filter>
-                    <rect width="128" height="128" filter={`url(#sandNoise-${scale})`} opacity="0.35" />
+                    <rect width="128" height="128" filter={`url(#sandNoise-${scale}-${thickness})`} opacity="0.35" />
                     {/* Larger, more visible particles */}
-                    <circle cx="25" cy="25" r="3" fill="#d4a76a" opacity="0.6" />
-                    <circle cx="75" cy="45" r="4" fill="#c69c6d" opacity="0.5" />
-                    <circle cx="100" cy="100" r="3" fill="#d4a76a" opacity="0.6" />
-                    <circle cx="40" cy="90" r="2.5" fill="#8b5e3c" opacity="0.4" />
-                    <circle cx="110" cy="20" r="2.5" fill="#8b5e3c" opacity="0.4" />
+                    <circle cx="25" cy="25" r={3 * thickness} fill="#d4a76a" opacity="0.6" />
+                    <circle cx="75" cy="45" r={4 * thickness} fill="#c69c6d" opacity="0.5" />
+                    <circle cx="100" cy="100" r={3 * thickness} fill="#d4a76a" opacity="0.6" />
+                    <circle cx="40" cy="90" r={2.5 * thickness} fill="#8b5e3c" opacity="0.4" />
+                    <circle cx="110" cy="20" r={2.5 * thickness} fill="#8b5e3c" opacity="0.4" />
                 </pattern>
             ))}
         </defs>

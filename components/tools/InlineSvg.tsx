@@ -19,7 +19,7 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth }: InlineSvgProps) =>
         }
 
         let active = true;
-        fetch(src)
+        fetch(encodeURI(src))
             .then(res => res.text())
             .then(text => {
                 if (!active) return;
@@ -73,9 +73,9 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth }: InlineSvgProps) =>
 
             // Apply dynamic values to the ROOT SVG element ONLY (cascading style)
             // Use defaults if props are undefined to ensure visibility
-            svg.setAttribute("fill", fill ?? "#000000");
-            svg.setAttribute("stroke", stroke ?? "none");
-            svg.setAttribute("stroke-width", String(strokeWidth ?? 0));
+            svg.setAttribute("fill", fill ?? "transparent");
+            svg.setAttribute("stroke", stroke ?? "#000000");
+            svg.setAttribute("stroke-width", String(strokeWidth ?? 10));
 
             return new XMLSerializer().serializeToString(doc);
         } catch (e) {

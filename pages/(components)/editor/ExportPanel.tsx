@@ -10,6 +10,7 @@ import html2canvas from "html2canvas";
 import PlanPreview from "../dashboard/PlanPreview";
 import toast from "react-hot-toast";
 import { ASSET_LIBRARY } from "@/lib/assets";
+import { getDimensionsForObject, getDimensionsForWall, renderDimensionToCanvas } from "@/utils/dimensionUtils";
 
 const svgCache: Record<string, string> = {};
 
@@ -417,40 +418,92 @@ export default function ExportPanel() {
           // Render SVG Asset
           ctx.drawImage(img, -w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
         } else if (asset.type === 'circle') {
-          const fillColor = asset.backgroundColor || asset.fillColor || "#e5e7eb";
+          const fillColor = (asset as any).fillType === 'none' ? 'transparent' : (asset.backgroundColor || asset.fillColor || "#e5e7eb");
           const strokeColor = asset.strokeColor || "#000000";
           const strokeWidth = (asset.strokeWidth || 2) * MM_TO_PX;
           const rx = Math.max(0, Math.abs(w * MM_TO_PX / 2));
           const ry = Math.max(0, Math.abs(h * MM_TO_PX / 2));
 
-          console.log(`exportAllAssetsDirectly: Rendering circle`, {
-            fillColor,
-            strokeColor,
-            strokeWidth,
-            rx,
-            ry,
-            x,
-            y,
-            w,
-            h,
-          });
+          ctx.fillStyle = fillColor;
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = strokeWidth;
+
+          if ((asset as any).strokeDasharray) {
+            ctx.setLineDash((asset as any).strokeDasharray.split(',').map((v: string) => parseFloat(v) * MM_TO_PX));
+          }
+
+          ctx.beginPath();
+          ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+          if (fillColor !== 'transparent') ctx.fill();
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else if (asset.type === 'arc' && (asset as any).points) {
+          const pts = (asset as any).points;
+          ctx.strokeStyle = asset.strokeColor || "#000000";
+          ctx.lineWidth = (asset.strokeWidth || 2) * MM_TO_PX;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          if ((asset as any).strokeDasharray) {
+            ctx.setLineDash((asset as any).strokeDasharray.split(',').map((v: string) => parseFloat(v) * MM_TO_PX));
+          }
+
+          if (pts.length === 3) {
+            const [p1, p2, p3] = pts;
+            const qcx = 2 * p3.x - (p1.x + p2.x) / 2;
+            const qcy = 2 * p3.y - (p1.y + p2.y) / 2;
+            ctx.beginPath();
+            ctx.moveTo((p1.x) * MM_TO_PX, (p1.y) * MM_TO_PX);
+            ctx.quadraticCurveTo((qcx) * MM_TO_PX, (qcy) * MM_TO_PX, (p2.x) * MM_TO_PX, (p2.y) * MM_TO_PX);
+            ctx.stroke();
+          } else if (pts.length > 3) {
+            ctx.beginPath();
+            ctx.moveTo((pts[0].x) * MM_TO_PX, (pts[0].y) * MM_TO_PX);
+            for (let i = 1; i < pts.length; i += 2) {
+              const next = pts[i + 1];
+              const passThrough = pts[i];
+              if (!next) break;
+              const qcx = 2 * passThrough.x - (pts[i - 1].x + next.x) / 2;
+              const qcy = 2 * passThrough.y - (pts[i - 1].y + next.y) / 2;
+              ctx.quadraticCurveTo((qcx) * MM_TO_PX, (qcy) * MM_TO_PX, (next.x) * MM_TO_PX, (next.y) * MM_TO_PX);
+            }
+            ctx.stroke();
+          }
+          ctx.setLineDash([]);
+        } else {
+          const fillColor = (asset as any).fillType === 'none' ? 'transparent' : (asset.backgroundColor || asset.fillColor || "#e5e7eb");
+          const strokeColor = asset.strokeColor || "#000000";
+          const strokeWidth = (asset.strokeWidth || 1) * MM_TO_PX;
 
           ctx.fillStyle = fillColor;
           ctx.strokeStyle = strokeColor;
           ctx.lineWidth = strokeWidth;
-          ctx.beginPath();
-          ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-        } else {
-          ctx.fillStyle = asset.backgroundColor || asset.fillColor || "#e5e7eb";
-          ctx.strokeStyle = asset.strokeColor || "#000000";
-          ctx.lineWidth = (asset.strokeWidth || 1) * MM_TO_PX;
-          ctx.fillRect(-w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
+
+          if ((asset as any).strokeDasharray) {
+            ctx.setLineDash((asset as any).strokeDasharray.split(',').map((v: string) => parseFloat(v) * MM_TO_PX));
+          }
+
+          if (fillColor !== 'transparent') ctx.fillRect(-w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
           ctx.strokeRect(-w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
+          ctx.setLineDash([]);
         }
         ctx.restore();
       }
+    });
+
+    // --- Render Dimensions ---
+    console.log("exportAllAssetsDirectly: Rendering dimensions");
+    const dimensions: any[] = [];
+    walls.forEach(w => dimensions.push(...getDimensionsForWall(w)));
+    shapes.forEach(s => {
+      if ((s as any).showDimensions) dimensions.push(...getDimensionsForObject(s, `auto-dim-${s.id}`));
+    });
+    assets.forEach(a => {
+      if ((a as any).showDimensions) dimensions.push(...getDimensionsForObject(a, `auto-dim-${a.id}`));
+    });
+
+    dimensions.forEach(dim => {
+      renderDimensionToCanvas(ctx, dim, minX, minY, padding, MM_TO_PX);
     });
 
     // Validate that something was actually drawn
@@ -700,26 +753,99 @@ export default function ExportPanel() {
             // Render SVG Asset
             ctx.drawImage(img, -w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
           } else if (asset.type === 'circle') {
-            ctx.fillStyle = asset.backgroundColor || asset.fillColor || "#e5e7eb";
-            ctx.strokeStyle = asset.strokeColor || "#000000";
-            ctx.lineWidth = (asset.strokeWidth || 1) * MM_TO_PX;
-            ctx.beginPath();
-            // Ensure positive radii to prevent IndexSizeError
+            const fillColor = (asset as any).fillType === 'none' ? 'transparent' : (asset.backgroundColor || asset.fillColor || "#e5e7eb");
+            const strokeColor = asset.strokeColor || "#000000";
+            const strokeWidth = (asset.strokeWidth || 2) * MM_TO_PX;
             const rx = Math.max(0, Math.abs(w * MM_TO_PX / 2));
             const ry = Math.max(0, Math.abs(h * MM_TO_PX / 2));
+
+            ctx.fillStyle = fillColor;
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = strokeWidth;
+
+            if ((asset as any).strokeDasharray) {
+              ctx.setLineDash((asset as any).strokeDasharray.split(',').map((v: string) => parseFloat(v) * MM_TO_PX));
+            }
+
+            ctx.beginPath();
             ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-            ctx.fill();
+            if (fillColor !== 'transparent') ctx.fill();
             ctx.stroke();
-          } else {
-            ctx.fillStyle = asset.backgroundColor || asset.fillColor || "#e5e7eb";
+            ctx.setLineDash([]);
+          } else if (asset.type === 'arc' && (asset as any).points) {
+            const pts = (asset as any).points;
             ctx.strokeStyle = asset.strokeColor || "#000000";
-            ctx.lineWidth = (asset.strokeWidth || 1) * MM_TO_PX;
-            ctx.fillRect(-w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
+            ctx.lineWidth = (asset.strokeWidth || 2) * MM_TO_PX;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            if ((asset as any).strokeDasharray) {
+              ctx.setLineDash((asset as any).strokeDasharray.split(',').map((v: string) => parseFloat(v) * MM_TO_PX));
+            }
+
+            if (pts.length === 3) {
+              const [p1, p2, p3] = pts;
+              const qcx = 2 * p3.x - (p1.x + p2.x) / 2;
+              const qcy = 2 * p3.y - (p1.y + p2.y) / 2;
+              ctx.beginPath();
+              ctx.moveTo((p1.x) * MM_TO_PX, (p1.y) * MM_TO_PX);
+              ctx.quadraticCurveTo((qcx) * MM_TO_PX, (qcy) * MM_TO_PX, (p2.x) * MM_TO_PX, (p2.y) * MM_TO_PX);
+              ctx.stroke();
+            } else if (pts.length > 3) {
+              ctx.beginPath();
+              ctx.moveTo((pts[0].x) * MM_TO_PX, (pts[0].y) * MM_TO_PX);
+              for (let i = 1; i < pts.length; i += 2) {
+                const next = pts[i + 1];
+                const passThrough = pts[i];
+                if (!next) break;
+                const qcx = 2 * passThrough.x - (pts[i - 1].x + next.x) / 2;
+                const qcy = 2 * passThrough.y - (pts[i - 1].y + next.y) / 2;
+                ctx.quadraticCurveTo((qcx) * MM_TO_PX, (qcy) * MM_TO_PX, (next.x) * MM_TO_PX, (next.y) * MM_TO_PX);
+              }
+              ctx.stroke();
+            }
+            ctx.setLineDash([]);
+          } else {
+            const fillColor = (asset as any).fillType === 'none' ? 'transparent' : (asset.backgroundColor || asset.fillColor || "#e5e7eb");
+            const strokeColor = asset.strokeColor || "#000000";
+            const strokeWidth = (asset.strokeWidth || 1) * MM_TO_PX;
+
+            ctx.fillStyle = fillColor;
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = strokeWidth;
+
+            if ((asset as any).strokeDasharray) {
+              ctx.setLineDash((asset as any).strokeDasharray.split(',').map((v: string) => parseFloat(v) * MM_TO_PX));
+            }
+
+            if (fillColor !== 'transparent') ctx.fillRect(-w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
             ctx.strokeRect(-w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
+            ctx.setLineDash([]);
           }
           ctx.restore();
         }
 
+      });
+
+      // --- Render Dimensions for Selection ---
+      console.log("exportSelection: Rendering dimensions for selection");
+      const selectedDimensions: any[] = [];
+
+      // Walls in selection
+      walls.filter(w => selectedIds.includes(w.id)).forEach(w => {
+        selectedDimensions.push(...getDimensionsForWall(w));
+      });
+      // Shapes in selection
+      shapes.filter(s => selectedIds.includes(s.id)).forEach(s => {
+        if ((s as any).showDimensions) selectedDimensions.push(...getDimensionsForObject(s, `auto-dim-${s.id}`));
+      });
+      // Assets in selection
+      assets.filter(a => selectedIds.includes(a.id)).forEach(a => {
+        if ((a as any).showDimensions) selectedDimensions.push(...getDimensionsForObject(a, `auto-dim-${a.id}`));
+      });
+
+      selectedDimensions.forEach(dim => {
+        renderDimensionToCanvas(ctx, dim, minX, minY, padding, MM_TO_PX);
       });
 
       // Scale to paper size and save

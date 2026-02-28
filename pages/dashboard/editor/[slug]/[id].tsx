@@ -100,7 +100,7 @@ function ElementsPane() {
     // Dimensions
     ...dimensions.map((d) => ({
       id: d.id,
-      label: d.type === "wall" ? "Wall Dimension" : "Dimension",
+      label: (d.type as string) === "wall" ? "Wall Dimension" : "Dimension",
       type: "Dimension" as const,
       x: (d.startPoint.x + d.endPoint.x) / 2,
       y: (d.startPoint.y + d.endPoint.y) / 2,

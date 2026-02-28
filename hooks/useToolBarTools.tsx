@@ -31,6 +31,7 @@ import {
   FaUpload,
   FaExpand,
   FaMinus,
+  FaBezierCurve,
 } from "react-icons/fa";
 
 export interface ToolOption {
@@ -68,6 +69,7 @@ export function useToolbarTools(): Tool[] {
         { id: "arrow-shape", label: "Arrow", icon: <FaArrowRight size={14} /> },
         { id: "freehand", label: "Freehand Draw", icon: <FaPenNib size={14} /> },
         { id: "polygon", label: "Polygon", icon: <FaDrawPolygon size={14} /> },
+        { id: "arch", label: "Arch", icon: <FaBezierCurve size={14} /> },
       ],
     },
     // 3) Assets

@@ -39,8 +39,8 @@ export default function Canvas({
   // Workspace (viewport) transform
   const MM_TO_PX = 2; // keep consistent with other components
   const ZOOM_SENSITIVITY = 0.001;
-  const MIN_ZOOM_BASE = 0.3;
-  const MIN_ZOOM_PADDING = 1.12;
+  const MIN_ZOOM_BASE = 0.000001; // Allow zooming out to 0.0001%
+  const MIN_ZOOM_PADDING = 1; // No padding restriction
   const EDGE_PADDING_MM = 10;
 
   // Large virtual scene so the user can pan/scroll comfortably
@@ -248,11 +248,9 @@ export default function Canvas({
       const rect = el.getBoundingClientRect();
       // ensure the entire viewport is always covered by the SCENE, not just the paper
       if (!scenePxWNoZoom || !scenePxHNoZoom) return MIN_ZOOM_BASE;
-      const minW = rect.width / scenePxWNoZoom;
-      const minH = rect.height / scenePxHNoZoom;
-      const min = Math.min(minW, minH);
-      const padded = min * MIN_ZOOM_PADDING;
-      return Math.min(3, Math.max(MIN_ZOOM_BASE, padded));
+      // With effectively infinite zoom, we don't strictly enforce covering the viewport with the scene
+      // allowing the user to zoom out as much as they want.
+      return MIN_ZOOM_BASE;
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -278,10 +276,12 @@ export default function Canvas({
         const sceneX = (cursor.x - targetOffset.current.x) / targetZoom.current;
         const sceneY = (cursor.y - targetOffset.current.y) / targetZoom.current;
         // Flip so pinch-in (positive deltaY on most trackpads) zooms OUT, pinch-out zooms IN.
-        const delta = -e.deltaY * ZOOM_SENSITIVITY;
+        const delta = -e.deltaY * 0.001;
         const desired = targetZoom.current + delta;
-        const minZoom = computeMinZoom();
-        const newZoom = Math.min(3, Math.max(minZoom, desired));
+        const minZoom = MIN_ZOOM_BASE;
+        // Allow effectively infinite zoom (1000000 = 100,000,000%)
+        const newZoom = Math.min(1000000, Math.max(minZoom, desired));
+
         const newOffset = {
           x: cursor.x - sceneX * newZoom,
           y: cursor.y - sceneY * newZoom,
@@ -412,6 +412,8 @@ export default function Canvas({
 
   // Use custom hooks
   const { straightenPath } = useDrawingLogic();
+  // Shared ref for group-scale operations (avoids circular hook dependency)
+  const groupScaleCenterRef = useRef<{ x: number; y: number } | null>(null);
   const mouseRefs = useCanvasMouseHandlers({
     workspaceZoom,
     mmToPx,
@@ -420,11 +422,13 @@ export default function Canvas({
     canvas,
     clientToCanvasMM,
     straightenPath,
+    groupScaleCenterRef,
   });
   const { copiedAssetId } = useCanvasKeyboardHandlers();
   const assetHandlers = useAssetHandlers({
     clientToCanvasMM,
     mouseRefs,
+    groupScaleCenterRef,
   });
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);

@@ -51,16 +51,14 @@ export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRen
             // Extract dimensions from the SVG itself
             const { width: svgWidth, height: svgHeight } = getSvgSize(text);
 
-            // If the asset in the store has no dimensions (or they differ significantly), update the store.
-            // This ensures the asset uses the "real" SVG size.
+            // If the asset in the store has no dimensions, update the store.
+            // This ensures the asset uses the "real" SVG size only if no width/height was explicitly provided.
             if (svgWidth && svgHeight) {
                 const currentW = asset.width;
                 const currentH = asset.height;
 
-                // Check if update is needed (if missing or different by > 1px)
-                const needsUpdate = !currentW || !currentH ||
-                    Math.abs(currentW - svgWidth) > 1 ||
-                    Math.abs(currentH - svgHeight) > 1;
+                // Check if update is needed (only if missing)
+                const needsUpdate = !currentW || !currentH;
 
                 if (needsUpdate) {
                     console.log(`[AssetRenderer] Updating asset ${asset.id} dimensions from SVG: ${svgWidth}x${svgHeight}`);
@@ -151,8 +149,17 @@ export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRen
             svg = svg.replace(/stroke='([^']*)'/gi, (match, value) => value === 'none' ? match : `stroke='${asset.strokeColor}'`);
         }
         if (asset.strokeWidth) {
-            svg = svg.replace(/stroke-width="([^"]*)"/gi, `stroke-width="${asset.strokeWidth}"`);
-            svg = svg.replace(/stroke-width='([^']*)'/gi, `stroke-width='${asset.strokeWidth}'`);
+            // Apply strokeWidth to all vector shapes forcefully
+            svg = svg.replace(/<(path|rect|circle|ellipse|line|polygon|polyline)[^>]*>/gi, (match) => {
+                let newMatch = match;
+                if (/stroke-width=['"][^'"]*['"]/i.test(newMatch)) {
+                    newMatch = newMatch.replace(/stroke-width=['"][^'"]*['"]/gi, `stroke-width="${asset.strokeWidth}"`);
+                } else {
+                    // Inject stroke-width if it's missing entirely on the shape
+                    newMatch = newMatch.replace(/\/?>/, ` stroke-width="${asset.strokeWidth}"$&`);
+                }
+                return newMatch;
+            });
         }
 
         return svg;

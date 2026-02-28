@@ -121,10 +121,10 @@ export default function DashboardSidebar() {
               ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
               : "text-gray-600 hover:bg-gray-50"
               }`}
-            title={isCollapsed ? "My Events" : undefined}
+            title={isCollapsed ? "My Projects" : undefined}
           >
             <BsFolder className="w-4 h-4 flex-shrink-0" />
-            {!isCollapsed && <span>My Events</span>}
+            {!isCollapsed && <span>My Projects</span>}
           </a>
           <a
             href="#"
@@ -148,8 +148,8 @@ export default function DashboardSidebar() {
               router.push("/dashboard/templates");
             }}
             className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors ${router.pathname === "/dashboard/templates"
-                ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
-                : "text-gray-600"
+              ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
+              : "text-gray-600"
               }`}
             title={isCollapsed ? "Templates" : undefined}
           >
@@ -163,8 +163,8 @@ export default function DashboardSidebar() {
               router.push("/dashboard/ai");
             }}
             className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors ${router.pathname === "/dashboard/ai"
-                ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
-                : "text-gray-600"
+              ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
+              : "text-gray-600"
               }`}
             title={isCollapsed ? "AI Assistant" : undefined}
           >
@@ -178,8 +178,8 @@ export default function DashboardSidebar() {
               router.push("/dashboard/trash");
             }}
             className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors ${router.pathname === "/dashboard/trash"
-                ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
-                : "text-gray-600"
+              ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
+              : "text-gray-600"
               }`}
             title={isCollapsed ? "Trash" : undefined}
           >

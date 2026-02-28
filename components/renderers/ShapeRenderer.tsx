@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React from 'react';
 import { Shape } from '@/store/projectStore';
@@ -36,9 +36,12 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
             return `url(#${gradientId})`;
         } else if (fillType === 'hatch') {
             return `url(#${hatchId})`;
+        } else if (fillType === 'none') {
+            return 'transparent';
         } else if (fillType === 'texture') {
             const scale = shape.fillTextureScale || 1;
-            return shape.fillTexture ? `url(#${shape.fillTexture}-scale-${scale})` : fillColor;
+            const thickness = shape.fillTextureThickness || 1;
+            return shape.fillTexture ? `url(#${shape.fillTexture}-scale-${scale}-thick-${thickness})` : fillColor;
         } else if (fillType === 'image' && shape.fillImage) {
             return `url(#${patternId})`;
         } else {
@@ -46,7 +49,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
         }
     };
 
-    const renderShape = (isHighlight: boolean) => {
+    const renderPrimitive = (isHighlight: boolean, overrideProps: any = {}) => {
         // Determine strokeDasharray based on lineType
         let dashArray = shape.strokeDasharray;
         if (shape.lineType === 'dashed') {
@@ -56,7 +59,6 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
         } else if (shape.lineType === 'solid' || !shape.lineType) {
             dashArray = undefined;
         }
-        // For 'double', we don't use dashArray (handled separately in rendering)
 
         const commonProps = {
             fill: getFillValue(isHighlight),
@@ -65,6 +67,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
             opacity: isHighlight ? 0.8 : 1,
             strokeDasharray: shape.lineType !== 'double' ? dashArray : undefined,
             style: { pointerEvents: shape.id === 'background-texture' ? 'none' : 'auto' } as React.CSSProperties,
+            ...overrideProps
         };
 
         if (shape.type === 'rectangle') {
@@ -162,7 +165,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                             {/* Outer/Bottom thick line */}
                             <polyline
                                 points={points}
-                                fill="none"
+                                fill={commonProps.fill}
                                 stroke={commonProps.stroke}
                                 strokeWidth={outerWidth}
                                 opacity={commonProps.opacity}
@@ -172,7 +175,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                             {/* Inner "gap" line - using white for now */}
                             <polyline
                                 points={points}
-                                fill="none"
+                                fill={commonProps.fill}
                                 stroke="#ffffff" // Assuming white background
                                 strokeWidth={gapWidth}
                                 opacity={1}
@@ -201,7 +204,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                     <g>
                         <polyline
                             points={points}
-                            fill="none"
+                            fill={commonProps.fill}
                             stroke={commonProps.stroke}
                             strokeWidth={commonProps.strokeWidth}
                             opacity={commonProps.opacity}
@@ -422,7 +425,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                     <g>
                         <polyline
                             points={polyPoints}
-                            fill="none"
+                            fill={commonProps.fill}
                             stroke={commonProps.stroke}
                             strokeWidth={commonProps.strokeWidth}
                             opacity={commonProps.opacity}
@@ -482,6 +485,85 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
             );
         }
 
+        if (shape.type === 'arc' && shape.points && shape.points.length >= 3) {
+
+            // ── WAVE / compound arc (>3 points) ──────────────────────────────
+            if (shape.points.length > 3 && shape.points.length % 2 === 1) {
+                const pts = shape.points;
+                let d = `M ${pts[0].x} ${pts[0].y}`;
+                for (let i = 1; i < pts.length - 1; i += 2) {
+                    const start = pts[i - 1];
+                    const passThrough = pts[i];
+                    const next = pts[i + 1];
+
+                    const qcx = 2 * passThrough.x - (start.x + next.x) / 2;
+                    const qcy = 2 * passThrough.y - (start.y + next.y) / 2;
+
+                    d += ` Q ${qcx} ${qcy} ${next.x} ${next.y}`;
+                }
+
+                return (
+                    <g>
+                        <path
+                            d={d}
+                            {...commonProps}
+                            stroke={commonProps.stroke}
+                        />
+                        {!isHighlight && isSelected && pts.map((p, i) => (
+                            <circle
+                                key={i}
+                                cx={p.x} cy={p.y} r={4}
+                                fill={i % 2 === 0 ? '#ffffff' : '#fbbf24'}
+                                stroke={i % 2 === 0 ? '#3b82f6' : '#f59e0b'}
+                                strokeWidth={1.5}
+                                className="cursor-move"
+                            />
+                        ))}
+                    </g>
+                );
+            }
+
+            // ── Single quadratic-bezier arc (exactly 3 points) ───────────────
+            const [p1, p2, p3] = shape.points;
+            const qcx = 2 * p2.x - (p1.x + p3.x) / 2;
+            const qcy = 2 * p2.y - (p1.y + p3.y) / 2;
+            const pathData = `M ${p1.x} ${p1.y} Q ${qcx} ${qcy} ${p3.x} ${p3.y}`;
+
+            return (
+                <g>
+                    <path
+                        d={pathData}
+                        {...commonProps}
+                        stroke={commonProps.stroke}
+                    />
+                    {!isHighlight && isSelected && shape.points.map((p, i) => (
+                        <circle
+                            key={i}
+                            cx={p.x} cy={p.y} r={4}
+                            fill={i === 2 ? '#fbbf24' : '#ffffff'}
+                            stroke={i === 2 ? '#f59e0b' : '#3b82f6'}
+                            strokeWidth={1.5}
+                            className="cursor-move"
+                        />
+                    ))}
+                </g>
+            );
+        }
+
+        if (shape.type === 'freehand' && shape.points && shape.points.length >= 2) {
+            const pathData = `M ${shape.points[0].x} ${shape.points[0].y} ` +
+                shape.points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ');
+
+            return (
+                <path
+                    d={pathData}
+                    {...commonProps}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                />
+            );
+        }
+
         return null;
     };
 
@@ -525,52 +607,53 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
         const pattern = shape.hatchPattern || 'horizontal';
         const spacing = shape.hatchSpacing || 50;
         const color = shape.hatchColor || '#000000';
+        const strokeWidth = shape.hatchThickness || 1;
 
         return (
             <pattern id={hatchId} patternUnits="userSpaceOnUse" width={spacing * 2} height={spacing * 2}>
                 <rect width={spacing * 2} height={spacing * 2} fill="transparent" />
                 {pattern === 'horizontal' && (
-                    <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth="1" />
+                    <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth={strokeWidth} />
                 )}
                 {pattern === 'vertical' && (
-                    <line x1={spacing} y1="0" x2={spacing} y2={spacing * 2} stroke={color} strokeWidth="1" />
+                    <line x1={spacing} y1="0" x2={spacing} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
                 )}
                 {pattern === 'diagonal-right' && (
                     <>
-                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth="1" />
-                        <line x1="0" y1={spacing * 2} x2={spacing * 2} y2="0" stroke={color} strokeWidth="1" />
+                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
+                        <line x1="0" y1={spacing * 2} x2={spacing * 2} y2="0" stroke={color} strokeWidth={strokeWidth} />
                     </>
                 )}
                 {pattern === 'diagonal-left' && (
                     <>
-                        <line x1="0" y1={spacing * 2} x2={spacing * 2} y2="0" stroke={color} strokeWidth="1" />
-                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth="1" />
+                        <line x1="0" y1={spacing * 2} x2={spacing * 2} y2="0" stroke={color} strokeWidth={strokeWidth} />
+                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
                     </>
                 )}
                 {pattern === 'cross' && (
                     <>
-                        <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth="1" />
-                        <line x1={spacing} y1="0" x2={spacing} y2={spacing * 2} stroke={color} strokeWidth="1" />
+                        <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth={strokeWidth} />
+                        <line x1={spacing} y1="0" x2={spacing} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
                     </>
                 )}
                 {pattern === 'diagonal-cross' && (
                     <>
-                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth="1" />
-                        <line x1={spacing * 2} y1="0" x2="0" y2={spacing * 2} stroke={color} strokeWidth="1" />
+                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
+                        <line x1={spacing * 2} y1="0" x2="0" y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
                     </>
                 )}
                 {pattern === 'dots' && (
                     <>
-                        <circle cx={spacing / 2} cy={spacing / 2} r="1" fill={color} />
-                        <circle cx={spacing * 1.5} cy={spacing * 1.5} r="1" fill={color} />
+                        <circle cx={spacing / 2} cy={spacing / 2} r={strokeWidth} fill={color} />
+                        <circle cx={spacing * 1.5} cy={spacing * 1.5} r={strokeWidth} fill={color} />
                     </>
                 )}
 
                 {pattern === 'brick' && (
                     <>
-                        <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth="1" />
-                        <line x1={spacing} y1="0" x2={spacing} y2={spacing} stroke={color} strokeWidth="1" />
-                        <line x1="0" y1={spacing} x2={0} y2={spacing * 2} stroke={color} strokeWidth="1" />
+                        <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth={strokeWidth} />
+                        <line x1={spacing} y1="0" x2={spacing} y2={spacing} stroke={color} strokeWidth={strokeWidth} />
+                        <line x1="0" y1={spacing} x2={0} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
                         {/* Brick offset logic is hard in simple pattern without complex path. 
                             Standard brick:
                             ________
@@ -589,7 +672,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                             
                             Let's try a simple brick path.
                          */}
-                        <path d={`M 0,${spacing} H ${spacing * 2} M 0,${spacing * 2} H ${spacing * 2} M ${spacing},0 V ${spacing} M 0,${spacing} V ${spacing * 2} M ${spacing * 2},${spacing} V ${spacing * 2}`} stroke={color} strokeWidth="1" fill="none" />
+                        <path d={`M 0,${spacing} H ${spacing * 2} M 0,${spacing * 2} H ${spacing * 2} M ${spacing},0 V ${spacing} M 0,${spacing} V ${spacing * 2} M ${spacing * 2},${spacing} V ${spacing * 2}`} stroke={color} strokeWidth="1" fill={getFillValue(false)} />
                     </>
                 )}
             </pattern>
@@ -601,11 +684,18 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
         if (shape.fillType !== 'image' || !shape.fillImage) return null;
 
         const scale = shape.fillImageScale || 1;
-        const size = 100 * scale;
+        // Use the shape's own bounds so the image covers the shape at scale=1,
+        // and tiles at smaller scales (e.g. scale=0.5 = 4 tiles across the shape).
+        const tileW = Math.max(1, shape.width * scale);
+        const tileH = Math.max(1, shape.height * scale);
 
         return (
-            <pattern id={patternId} patternUnits="userSpaceOnUse" width={size} height={size}>
-                <image href={shape.fillImage} x="0" y="0" width={size} height={size} preserveAspectRatio="xMidYMid slice" />
+            <pattern id={patternId} patternUnits="userSpaceOnUse"
+                x={-shape.width / 2} y={-shape.height / 2}
+                width={tileW} height={tileH}>
+                <image href={shape.fillImage} x="0" y="0"
+                    width={tileW} height={tileH}
+                    preserveAspectRatio="xMidYMid slice" />
             </pattern>
         );
     };
@@ -621,10 +711,11 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
 
             <g transform={transform} style={{ cursor: 'pointer' }}>
                 {/* Render highlight behind the shape */}
-                {showHighlight && renderShape(true)}
+                {showHighlight && renderPrimitive(true)}
                 {/* Render actual shape */}
-                {renderShape(false)}
+                {renderPrimitive(false)}
             </g>
         </>
     );
+
 }

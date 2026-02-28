@@ -17,6 +17,7 @@ interface UseCanvasMouseHandlersProps {
   straightenPath: (
     path: { x: number; y: number }[]
   ) => { x: number; y: number }[];
+  groupScaleCenterRef: React.MutableRefObject<{ x: number; y: number } | null>;
 }
 
 export function useCanvasMouseHandlers({
@@ -27,6 +28,7 @@ export function useCanvasMouseHandlers({
   canvas,
   clientToCanvasMM,
   straightenPath,
+  groupScaleCenterRef,
 }: UseCanvasMouseHandlersProps) {
   // Keep in sync with Canvas scene dimensions
   const SCENE_W_MM = 20000;
@@ -102,6 +104,7 @@ export function useCanvasMouseHandlers({
     (s) => s.finishRectangularSelection
   );
   const moveSelectedAssets = useSceneStore((s) => s.moveSelectedAssets);
+  const scaleSelectedAssets = useSceneStore((s) => s.scaleSelectedAssets);
   const clearSelection = useSceneStore((s) => s.clearSelection);
   const setDraggingAsset = useSceneStore((s) => (s as any).setDraggingAsset);
 
@@ -127,6 +130,8 @@ export function useCanvasMouseHandlers({
   const draggingAssetStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const isDraggingMultiple = useRef(false);
   const lastMousePos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  // Stores the previous mouse distance from group center during group scaling
+  const prevGroupScaleDistance = useRef<number>(0);
 
   // Expose refs for external access
   const refs = {
@@ -274,37 +279,55 @@ export function useCanvasMouseHandlers({
         selectedAssetId &&
         scaleHandleType.current
       ) {
-        const asset = assets.find((a) => a.id === selectedAssetId);
-        if (asset) {
-          const { x: mouseX, y: mouseY } = clientToCanvasMM(
-            e.clientX,
-            e.clientY
+        const { x: mouseX, y: mouseY } = clientToCanvasMM(
+          e.clientX,
+          e.clientY
+        );
+
+        const currentSelectedIds = useSceneStore.getState().selectedAssetIds;
+
+        if (currentSelectedIds.length > 1 && groupScaleCenterRef.current) {
+          // --- GROUP SCALE ---
+          // Scale all selected assets relative to the shared bounding-box centre.
+          const center = groupScaleCenterRef.current;
+          const currentDist = Math.sqrt(
+            Math.pow(mouseX - center.x, 2) + Math.pow(mouseY - center.y, 2)
           );
 
-          const assetCenterX = asset.x;
-          const assetCenterY = asset.y;
+          if (prevGroupScaleDistance.current > 0) {
+            const scaleRatio = currentDist / prevGroupScaleDistance.current;
+            scaleSelectedAssets(scaleRatio, center.x, center.y);
+          }
+          prevGroupScaleDistance.current = currentDist;
+        } else {
+          // --- SINGLE ASSET SCALE (original logic) ---
+          const asset = assets.find((a) => a.id === selectedAssetId);
+          if (asset) {
+            const assetCenterX = asset.x;
+            const assetCenterY = asset.y;
 
-          if (asset.type === 'line') {
-            // Adjust line length (width) based on mouse projection along line axis
-            const angleRad = (asset.rotation || 0) * Math.PI / 180;
-            const dx = mouseX - assetCenterX;
-            const dy = mouseY - assetCenterY;
-            // Project (dx,dy) onto the line's local X axis
-            const localX = dx * Math.cos(angleRad) + dy * Math.sin(angleRad);
-            const newWidth = Math.max(2, Math.abs(localX) * 2);
-            updateAsset(selectedAssetId, { width: newWidth });
-          } else {
-            // Generic uniform scale for other assets
-            const currentDistance = Math.sqrt(
-              Math.pow(mouseX - assetCenterX, 2) +
-              Math.pow(mouseY - assetCenterY, 2)
-            );
-            const scaleRatio = currentDistance / initialDistance.current;
-            const newScale = Math.max(
-              0.1,
-              Math.min(10, initialScale.current * scaleRatio)
-            );
-            updateAsset(selectedAssetId, { scale: newScale });
+            if (asset.type === 'line') {
+              // Adjust line length (width) based on mouse projection along line axis
+              const angleRad = (asset.rotation || 0) * Math.PI / 180;
+              const dx = mouseX - assetCenterX;
+              const dy = mouseY - assetCenterY;
+              // Project (dx,dy) onto the line's local X axis
+              const localX = dx * Math.cos(angleRad) + dy * Math.sin(angleRad);
+              const newWidth = Math.max(2, Math.abs(localX) * 2);
+              updateAsset(selectedAssetId, { width: newWidth });
+            } else {
+              // Generic uniform scale for other assets
+              const currentDistance = Math.sqrt(
+                Math.pow(mouseX - assetCenterX, 2) +
+                Math.pow(mouseY - assetCenterY, 2)
+              );
+              const scaleRatio = currentDistance / initialDistance.current;
+              const newScale = Math.max(
+                0.001,
+                Math.min(1000, initialScale.current * scaleRatio)
+              );
+              updateAsset(selectedAssetId, { scale: newScale });
+            }
           }
         }
         return;
@@ -731,6 +754,7 @@ export function useCanvasMouseHandlers({
       initialMouseAngle.current = 0;
       scaleHandleType.current = null;
       heightHandleType.current = null;
+      prevGroupScaleDistance.current = 0;
     };
 
     document.addEventListener("mousedown", onDown);

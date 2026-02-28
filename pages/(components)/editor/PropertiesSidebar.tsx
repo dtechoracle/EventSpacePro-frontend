@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { FaUserCircle, FaChevronDown, FaChevronRight, FaAlignLeft, FaAlignCenter, FaAlignRight, FaArrowUp, FaArrowDown, FaArrowsAltV, FaArrowsAltH, FaCircleNotch } from "react-icons/fa";
+import { FaUserCircle, FaChevronDown, FaChevronRight, FaAlignLeft, FaAlignCenter, FaAlignRight, FaArrowUp, FaArrowDown, FaArrowsAltV, FaArrowsAltH, FaCircleNotch, FaBold, FaItalic, FaUnderline, FaHighlighter } from "react-icons/fa";
 import { IoPlayOutline } from "react-icons/io5";
 import ShareModal from "./ShareModal";
 import ExportPanel from "./ExportPanel";
@@ -171,6 +171,40 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
       {/* Grouping Controls Removed as per request (moved to Context Menu) */}
 
+      {/* Dimension Tool Properties - Show when tool is active OR a dimension is selected */}
+      {(editorStore.activeTool === 'dimension' || itemType === 'dimension') && (
+        <div className="mb-6 p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            Line Style
+          </h3>
+          <div className="grid grid-cols-3 gap-2">
+            {(['solid', 'dashed', 'dotted', 'double'] as const).map((style) => (
+              <button
+                key={style}
+                onClick={() => {
+                  if (itemType === 'dimension' && selectedDimension) {
+                    updateDimension(selectedDimension.id, { lineStyle: style });
+                  }
+                }}
+                className={`px-3 py-2 text-sm rounded-lg border transition-all ${selectedDimension?.lineStyle === style || (!selectedDimension?.lineStyle && style === 'solid')
+                  ? "bg-blue-50 border-blue-200 text-blue-600 font-medium"
+                  : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                  }`}
+              >
+                {style.charAt(0).toUpperCase() + style.slice(1)}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 text-xs text-gray-500 leading-relaxed">
+            Choose the visual style of the dimension line.
+
+            {editorStore.dimensionType === 'aligned' && "Measure direct point-to-point distance."}
+            {editorStore.dimensionType === 'angular' && "Measure angle (Center → Start → End)."}
+            {editorStore.dimensionType === 'radial' && "Measure radius (Center → Circle Edge)."}
+          </div>
+        </div>
+      )}
+
       {/* Model Section */}
       <div className="mb-5">
         <button
@@ -330,14 +364,13 @@ export default function PropertiesSidebar(): React.JSX.Element {
               </div>
             )}
 
-            {/* Smart Snap (Alignment) */}
             {showGrid && (
               <div className="flex justify-between items-center py-2">
                 <span>Snap to Grid</span>
                 <div className="inline-flex rounded-lg bg-[#0000000D] p-1">
                   <button
-                    onClick={() => snapToGridEnabled && handleToggleSnapToGrid()}
-                    className={`px-4 py-1 text-xs rounded-md transition-all ${!snapToGridEnabled
+                    onClick={() => !snapToGridEnabled && handleToggleSnapToGrid()}
+                    className={`px-4 py-1 text-xs rounded-md transition-all ${snapToGridEnabled
                       ? "bg-white text-gray-900 shadow-sm font-medium"
                       : "text-gray-600 hover:text-gray-900"
                       }`}
@@ -345,8 +378,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     On
                   </button>
                   <button
-                    onClick={() => !snapToGridEnabled && handleToggleSnapToGrid()}
-                    className={`px-4 py-1 text-xs rounded-md transition-all ${snapToGridEnabled
+                    onClick={() => snapToGridEnabled && handleToggleSnapToGrid()}
+                    className={`px-4 py-1 text-xs rounded-md transition-all ${!snapToGridEnabled
                       ? "bg-white text-gray-900 shadow-sm font-medium"
                       : "text-gray-600 hover:text-gray-900"
                       }`}
@@ -356,6 +389,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 </div>
               </div>
             )}
+
+
 
 
 
@@ -490,6 +525,102 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         className="sidebar-input w-16 text-right"
                       />
                     </div>
+                  </div>
+                )}
+
+                {/* Auto Dimensions Settings */}
+                {(itemType === 'shape' || itemType === 'asset') && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-500">
+                      Dimensions Display
+                    </div>
+
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Show Dimensions</span>
+                      <button
+                        onClick={() => {
+                          const val = !((selectedItem as any).showDimensions);
+                          if (itemType === 'shape') updateShape(selectedItem.id, { showDimensions: val });
+                          if (itemType === 'asset') updateAsset(selectedItem.id, { showDimensions: val });
+                        }}
+                        className={`w-10 h-5 rounded-full flex items-center transition-colors px-1 ${(selectedItem as any).showDimensions ? 'bg-blue-600' : 'bg-gray-300'
+                          }`}
+                      >
+                        <div
+                          className={`w-3.5 h-3.5 bg-white rounded-full shadow-sm transform transition-transform ${(selectedItem as any).showDimensions ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                        />
+                      </button>
+                    </div>
+
+                    {(selectedItem as any).showDimensions && (
+                      <div className="space-y-2 mb-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Type</span>
+                          <select
+                            value={(selectedItem as any).dimensionType || 'solid'}
+                            onChange={(e) => {
+                              const val = e.target.value as any;
+                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionType: val });
+                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionType: val });
+                            }}
+                            className="text-xs border rounded px-2 py-1 bg-white w-32"
+                          >
+                            <option value="solid">Solid</option>
+                            <option value="dashed">Dashed</option>
+                            <option value="dotted">Dotted</option>
+                            <option value="circular">Circular</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Dimensions (Wall specific) */}
+                {itemType === 'wall' && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-500">
+                      Dimensions Display
+                    </div>
+
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Show Dimensions</span>
+                      <button
+                        onClick={() => {
+                          const val = !((selectedItem as any).showDimensions);
+                          updateWall(selectedItem.id, { showDimensions: val });
+                        }}
+                        className={`w-10 h-5 rounded-full flex items-center transition-colors px-1 ${(selectedItem as any).showDimensions ? 'bg-blue-600' : 'bg-gray-300'
+                          }`}
+                      >
+                        <div
+                          className={`w-3.5 h-3.5 bg-white rounded-full shadow-sm transform transition-transform ${(selectedItem as any).showDimensions ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                        />
+                      </button>
+                    </div>
+
+                    {(selectedItem as any).showDimensions && (
+                      <div className="space-y-2 mb-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Type</span>
+                          <select
+                            value={(selectedItem as any).dimensionType || 'solid'}
+                            onChange={(e) => {
+                              const val = e.target.value as any;
+                              updateWall(selectedItem.id, { dimensionType: val });
+                            }}
+                            className="text-xs border rounded px-2 py-1 bg-white w-32"
+                          >
+                            <option value="solid">Solid</option>
+                            <option value="dashed">Dashed</option>
+                            <option value="dotted">Dotted</option>
+                            <option value="circular">Circular</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -629,6 +760,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   </div>
                 )}
 
+
+
                 {/* Rotation */}
                 {(itemType === 'shape' || itemType === 'asset') && (
                   <div className="flex justify-between items-center mb-2">
@@ -662,22 +795,21 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <div className="mb-3">
                         <label className="block text-xs text-gray-500 mb-1">Fill Type</label>
                         <select
-                          value={(selectedItem as any).fillType || 'color'}
+                          value={(selectedItem as any).fillType || 'solid'}
                           onChange={(e) => updateShape(selectedItem.id, { fillType: e.target.value as any })}
                           className="w-full text-xs border rounded px-2 py-1 bg-white"
                         >
-                          <option value="color">Color</option>
-                          <option value="gradient">Gradient</option>
                           <option value="solid">Solid Color</option>
-                          <option value="hatch">Hatch Pattern</option>
+                          <option value="gradient">Gradient</option>
                           <option value="texture">Texture</option>
                           <option value="image">Image</option>
+                          <option value="none">None</option>
                         </select>
                       </div>
                     )}
 
                     {/* Color Fill (Shape or Asset) */}
-                    {((!((selectedItem as any).fillType) || (selectedItem as any).fillType === 'color') || itemType === 'asset') && (
+                    {((!((selectedItem as any).fillType) || (selectedItem as any).fillType === 'solid' || (selectedItem as any).fillType === 'color') || itemType === 'asset') && (
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-gray-500">Fill Color</span>
                         <div className="flex items-center gap-2">
@@ -685,7 +817,11 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             type="text"
                             value={(itemType === 'asset' ? (selectedItem as any).fillColor : (selectedItem as any).fill) || '#ffffff'}
                             onChange={(e) => {
-                              if (itemType === 'shape') updateShape(selectedItem.id, { fill: e.target.value });
+                              // Ensure fillType is set to solid if undefined
+                              const changes: any = { fill: e.target.value };
+                              if (!(selectedItem as any).fillType) changes.fillType = 'solid';
+
+                              if (itemType === 'shape') updateShape(selectedItem.id, changes);
                               if (itemType === 'asset') {
                                 updateAsset(selectedItem.id, { fillColor: e.target.value });
                                 updateSceneAsset(selectedItem.id, { fillColor: e.target.value });
@@ -697,7 +833,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             type="color"
                             value={(itemType === 'asset' ? (selectedItem as any).fillColor : (selectedItem as any).fill) || '#ffffff'}
                             onChange={(e) => {
-                              if (itemType === 'shape') updateShape(selectedItem.id, { fill: e.target.value });
+                              const changes: any = { fill: e.target.value };
+                              if (!(selectedItem as any).fillType) changes.fillType = 'solid';
+
+                              if (itemType === 'shape') updateShape(selectedItem.id, changes);
                               if (itemType === 'asset') {
                                 updateAsset(selectedItem.id, { fillColor: e.target.value });
                                 updateSceneAsset(selectedItem.id, { fillColor: e.target.value });
@@ -766,71 +905,6 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       </div>
                     )}
 
-                    {/* Hatch Fill */}
-                    {(selectedItem as any).fillType === 'hatch' && (
-                      <div className="space-y-2 mb-2">
-                        <span className="text-gray-500 text-xs mb-1 block">Pattern</span>
-
-                        <div className="grid grid-cols-4 gap-1 mb-2">
-                          {[
-                            { id: 'horizontal', label: 'Horizontal' },
-                            { id: 'vertical', label: 'Vertical' },
-                            { id: 'diagonal-right', label: 'Diag /' },
-                            { id: 'diagonal-left', label: 'Diag \\' },
-                            { id: 'cross', label: 'Cross +' },
-                            { id: 'diagonal-cross', label: 'Diag X' },
-                            { id: 'diagonal-cross', label: 'Diag X' },
-                            { id: 'dots', label: 'Dots' },
-                            { id: 'brick', label: 'Brick' },
-                          ].map((pattern) => (
-                            <button
-                              key={pattern.id}
-                              onClick={() => updateShape(selectedItem.id, { hatchPattern: pattern.id as any })}
-                              className={`h-8 border rounded flex items-center justify-center relative ${(selectedItem as any).hatchPattern === pattern.id ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-200 hover:border-gray-300'
-                                } bg-white`}
-                              title={pattern.label}
-                            >
-                              <svg width="100%" height="100%" viewBox="0 0 20 20">
-                                <pattern id={`preview-${pattern.id}`} patternUnits="userSpaceOnUse" width="10" height="10">
-                                  <rect width="10" height="10" fill="white" />
-                                  {pattern.id === 'horizontal' && <line x1="0" y1="5" x2="10" y2="5" stroke="#000" strokeWidth="1" />}
-                                  {pattern.id === 'vertical' && <line x1="5" y1="0" x2="5" y2="10" stroke="#000" strokeWidth="1" />}
-                                  {pattern.id === 'diagonal-right' && <path d="M-2,2 l4,-4 M0,10 l10,-10 M8,12 l4,-4" stroke="#000" strokeWidth="1" />}
-                                  {pattern.id === 'diagonal-left' && <path d="M-2,8 l4,4 M0,0 l10,10 M8,-2 l4,4" stroke="#000" strokeWidth="1" />}
-                                  {pattern.id === 'cross' && <path d="M0,5 h10 M5,0 v10" stroke="#000" strokeWidth="1" />}
-                                  {pattern.id === 'diagonal-cross' && <path d="M-2,2 l4,-4 M0,10 l10,-10 M8,12 l4,-4 M-2,8 l4,4 M0,0 l10,10 M8,-2 l4,4" stroke="#000" strokeWidth="1" />}
-                                  {pattern.id === 'dots' && <circle cx="5" cy="5" r="1" fill="#000" />}
-                                  {pattern.id === 'dots' && <circle cx="5" cy="5" r="1" fill="#000" />}
-                                  {pattern.id === 'brick' && <path d="M0,5 h10 M5,0 v5 M0,5 v5 M10,5 v5" stroke="#000" strokeWidth="1" />}
-                                </pattern>
-                                <rect width="100%" height="100%" fill={`url(#preview-${pattern.id})`} />
-                              </svg>
-                            </button>
-                          ))}
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-500 text-xs">Spacing</span>
-                          <input
-                            type="number"
-                            value={(selectedItem as any).hatchSpacing || 50}
-                            onChange={(e) => updateShape(selectedItem.id, { hatchSpacing: Number(e.target.value) })}
-                            className="sidebar-input w-12 text-right text-xs"
-                            min={1}
-                            max={200}
-                          />
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-500 text-xs">Color</span>
-                          <input
-                            type="color"
-                            value={(selectedItem as any).hatchColor || '#000000'}
-                            onChange={(e) => updateShape(selectedItem.id, { hatchColor: e.target.value })}
-                            className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
-                          />
-                        </div>
-                      </div>
-                    )}
-
                     {/* Texture Fill */}
                     {(selectedItem as any).fillType === 'texture' && (
                       <div className="space-y-2 mb-2">
@@ -840,15 +914,60 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               key={pattern.id}
                               className={`h-8 border rounded overflow-hidden relative ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500' : 'border-gray-300'
                                 }`}
-                              onClick={() => updateShape(selectedItem.id, { fillTexture: pattern.id } as any)}
+                              onClick={() => {
+                                const val = pattern.id;
+                                if ((itemType as string) === 'wall' && !(selectedItem as any).wallSegments) {
+                                  updateWall(selectedItem.id, { fillTexture: val });
+                                  syncToScene(selectedItem.id, { fillTexture: val });
+                                }
+                                else if ((itemType as string) === 'shape') {
+                                  updateShape(selectedItem.id, { fillTexture: val });
+                                }
+                                else {
+                                  updateAsset(selectedItem.id, { fillTexture: val } as any);
+                                  updateSceneAsset(selectedItem.id, { fillTexture: val } as any);
+                                }
+                              }}
                               title={pattern.name}
                             >
-                              <svg width="100%" height="100%">
-                                <defs dangerouslySetInnerHTML={{ __html: pattern.svg }} />
-                                <rect width="100%" height="100%" fill={`url(#${pattern.id})`} />
+                              <svg width="100%" height="100%" viewBox="0 0 512 512" preserveAspectRatio="none">
+                                {pattern.id === 'grass' ? (
+                                  <image href="/assets/grass-texture.svg" width="512" height="512" preserveAspectRatio="none" />
+                                ) : (
+                                  <>
+                                    <defs dangerouslySetInnerHTML={{ __html: pattern.svg.replace(/id="([^"]+)"/g, 'id="preview-shape-$1"') }} />
+                                    <rect width="512" height="512" fill={`url(#preview-shape-${pattern.id})`} />
+                                  </>
+                                )}
                               </svg>
                             </button>
                           ))}
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Scale</span>
+                          <input
+                            type="number"
+                            value={(selectedItem as any).fillTextureScale || 1}
+                            onChange={(e) => updateShape(selectedItem.id, { fillTextureScale: Number(e.target.value) } as any)}
+                            className="sidebar-input w-12 text-right text-xs"
+                            min={0.1}
+                            max={10}
+                            step={0.1}
+                          />
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Thickness</span>
+                          <input
+                            type="number"
+                            value={(selectedItem as any).fillTextureThickness || 1}
+                            onChange={(e) => updateShape(selectedItem.id, { fillTextureThickness: Number(e.target.value) } as any)}
+                            className="sidebar-input w-12 text-right text-xs"
+                            min={0.1}
+                            max={10}
+                            step={0.1}
+                          />
                         </div>
                       </div>
                     )}
@@ -1082,7 +1201,55 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         </>
                       )}
                     </div>
+                    {/* Text Styling */}
+                    <div className="flex justify-between items-center mb-4 mt-3">
+                      <span className="text-gray-500">Style</span>
+                      <div className="flex gap-1 bg-white p-0.5 rounded border">
+                        <button
+                          onClick={() => updateTextAnnotation(selectedTextAnnotation.id, { fontWeight: selectedTextAnnotation.fontWeight === 'bold' ? 'normal' : 'bold' })}
+                          className={`p-1.5 rounded transition-colors ${selectedTextAnnotation.fontWeight === 'bold' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                          title="Bold"
+                        >
+                          <FaBold size={12} />
+                        </button>
+                        <button
+                          onClick={() => updateTextAnnotation(selectedTextAnnotation.id, { fontStyle: selectedTextAnnotation.fontStyle === 'italic' ? 'normal' : 'italic' })}
+                          className={`p-1.5 rounded transition-colors ${selectedTextAnnotation.fontStyle === 'italic' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                          title="Italic"
+                        >
+                          <FaItalic size={12} />
+                        </button>
+                        <button
+                          onClick={() => updateTextAnnotation(selectedTextAnnotation.id, { textDecoration: selectedTextAnnotation.textDecoration === 'underline' ? 'none' : 'underline' })}
+                          className={`p-1.5 rounded transition-colors ${selectedTextAnnotation.textDecoration === 'underline' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                          title="Underline"
+                        >
+                          <FaUnderline size={12} />
+                        </button>
+                      </div>
+                    </div>
 
+                    {/* Highlight (Background Color) */}
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="flex items-center gap-1.5 text-gray-500">
+                        <FaHighlighter size={12} />
+                        <span>Highlight</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={selectedTextAnnotation.backgroundColor && selectedTextAnnotation.backgroundColor !== 'transparent' ? selectedTextAnnotation.backgroundColor : '#ffff00'}
+                          onChange={(e) => updateTextAnnotation(selectedTextAnnotation.id, { backgroundColor: e.target.value })}
+                          className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                        />
+                        <button
+                          onClick={() => updateTextAnnotation(selectedTextAnnotation.id, { backgroundColor: 'transparent' })}
+                          className="text-xs text-red-500 hover:underline"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
                     {/* Text Color */}
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-gray-500">Color</span>
@@ -1200,6 +1367,94 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   </div>
                 )}
 
+                {/* Dimension Properties */}
+                {itemType === 'dimension' && selectedDimension && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="text-xs font-semibold mb-2 text-gray-600">Dimension Properties</div>
+
+                    {/* Value Override */}
+                    <div className="mb-2">
+                      <label className="block text-xs text-gray-500 mb-1">Text Value (Override)</label>
+                      <input
+                        type="text"
+                        placeholder="Auto"
+                        value={selectedDimension.value || ''}
+                        onChange={(e) => {
+                          const val = e.target.value ? parseFloat(e.target.value) : undefined;
+                          updateDimension(selectedDimension.id, { value: isNaN(val as number) ? undefined : val });
+                        }}
+                        className="w-full text-sm border rounded px-2 py-1 bg-white"
+                      />
+                    </div>
+
+                    {/* Font Size */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Font Size</span>
+                      <input
+                        type="number"
+                        value={selectedDimension.fontSize || 12}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateDimension(selectedDimension.id, { fontSize: Math.max(8, Math.min(72, val)) });
+                        }}
+                        className="sidebar-input w-16 text-right"
+                        min={8}
+                        max={72}
+                      />
+                    </div>
+
+                    {/* Color */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Color</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={selectedDimension.color || '#000000'}
+                          onChange={(e) => updateDimension(selectedDimension.id, { color: e.target.value })}
+                          className="sidebar-input w-20 text-xs"
+                        />
+                        <input
+                          type="color"
+                          value={selectedDimension.color || '#000000'}
+                          onChange={(e) => updateDimension(selectedDimension.id, { color: e.target.value })}
+                          className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Stroke Width */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Line Thickness</span>
+                      <input
+                        type="number"
+                        value={selectedDimension.strokeWidth || 10}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateDimension(selectedDimension.id, { strokeWidth: Math.max(0.5, val) });
+                        }}
+                        className="sidebar-input w-16 text-right"
+                        min={0.5}
+                        step={0.5}
+                      />
+                    </div>
+
+                    {/* Offset */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Offset</span>
+                      <input
+                        type="number"
+                        value={selectedDimension.offset || 20}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateDimension(selectedDimension.id, { offset: val });
+                        }}
+                        className="sidebar-input w-16 text-right"
+                        step={5}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {/* Wall Properties */}
                 {(itemType === 'wall' || (itemType === 'asset' && (selectedAsset as any)?.type === 'wall-segments')) && (selectedWall || selectedAsset) && (
                   <div className="mt-3 pt-3 border-t border-gray-100">
@@ -1225,6 +1480,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       >
                         <option value="color">Color</option>
                         <option value="texture">Texture</option>
+                        <option value="none">None</option>
                       </select>
                     </div>
 
@@ -1276,13 +1532,16 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           {texturePatterns.map((pattern) => (
                             <button
                               key={pattern.id}
-                              className={`h-24 border rounded overflow-hidden relative transition-all duration-200 hover:scale-150 hover:z-50 hover:shadow-xl hover:ring-2 hover:ring-white ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500 z-10' : 'border-gray-300 z-0'
+                              className={`h-8 border rounded overflow-hidden relative ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500' : 'border-gray-300'
                                 }`}
                               onClick={() => {
                                 const val = pattern.id;
-                                if (itemType === 'wall' && !(selectedItem as any).wallSegments) {
+                                if ((itemType as string) === 'wall' && !(selectedItem as any).wallSegments) {
                                   updateWall(selectedItem.id, { fillTexture: val });
                                   syncToScene(selectedItem.id, { fillTexture: val });
+                                }
+                                else if ((itemType as string) === 'shape') {
+                                  updateShape(selectedItem.id, { fillTexture: val });
                                 }
                                 else {
                                   updateAsset(selectedItem.id, { fillTexture: val } as any);
@@ -1291,9 +1550,15 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               }}
                               title={pattern.name}
                             >
-                              <svg width="100%" height="100%">
-                                <defs dangerouslySetInnerHTML={{ __html: pattern.svg }} />
-                                <rect width="100%" height="100%" fill={`url(#${pattern.id})`} />
+                              <svg width="100%" height="100%" viewBox="0 0 512 512" preserveAspectRatio="none">
+                                {pattern.id === 'grass' ? (
+                                  <image href="/assets/grass-texture.svg" width="512" height="512" preserveAspectRatio="none" />
+                                ) : (
+                                  <>
+                                    <defs dangerouslySetInnerHTML={{ __html: pattern.svg.replace(/id="([^"]+)"/g, 'id="preview-wall-$1"') }} />
+                                    <rect width="512" height="512" fill={`url(#preview-wall-${pattern.id})`} />
+                                  </>
+                                )}
                               </svg>
                             </button>
                           ))}
@@ -1312,6 +1577,30 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               else {
                                 updateAsset(selectedItem.id, { fillTextureScale: val } as any);
                                 updateSceneAsset(selectedItem.id, { fillTextureScale: val } as any);
+                              }
+                            }}
+                            className="sidebar-input w-12 text-right text-xs"
+                            min={0.1}
+                            max={10}
+                            step={0.1}
+                          />
+                        </div>
+
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Thickness</span>
+                          <input
+                            type="number"
+                            value={(selectedItem as any).fillTextureThickness || 1}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              const safeVal = Math.max(0.1, val);
+                              if (itemType === 'wall') {
+                                updateWall(selectedItem.id, { fillTextureThickness: safeVal });
+                                syncToScene(selectedItem.id, { fillTextureThickness: safeVal });
+                              }
+                              else {
+                                updateAsset(selectedItem.id, { fillTextureThickness: safeVal } as any);
+                                updateSceneAsset(selectedItem.id, { fillTextureThickness: safeVal } as any);
                               }
                             }}
                             className="sidebar-input w-12 text-right text-xs"
@@ -1532,6 +1821,25 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   <div className="mt-3 pt-3 border-t border-gray-100">
                     <div className="text-xs font-semibold mb-2 text-gray-600">Dimension Properties</div>
 
+                    {/* Dimension Type */}
+                    <div className="mb-3">
+                      <span className="text-gray-500 text-xs mb-1 block">Type</span>
+                      <div className="grid grid-cols-2 gap-1">
+                        {(['linear', 'aligned', 'angular', 'radial'] as const).map((type) => (
+                          <button
+                            key={type}
+                            onClick={() => updateDimension(selectedDimension.id, { type })}
+                            className={`px-2 py-1 text-xs rounded border transition-colors ${selectedDimension.type === type
+                              ? "bg-blue-50 border-blue-300 text-blue-600 font-medium"
+                              : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                              }`}
+                          >
+                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* Stroke Width */}
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-gray-500">Line Width</span>
@@ -1615,6 +1923,27 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     </button>
                   </div>
                 )}
+
+                {/* Dimension Type Selector (Shape Only) - Visible when Show Dimensions is ON */}
+                {itemType === 'shape' && (selectedItem as any).showDimensions && (
+                  <div className="mt-2 pl-2 border-l-2 border-gray-100">
+                    <span className="text-gray-500 text-xs mb-1 block">Dimension Style</span>
+                    <div className="grid grid-cols-2 gap-1">
+                      {(['linear', 'aligned', 'angular', 'radial'] as const).map((type) => (
+                        <button
+                          key={type}
+                          onClick={() => updateShape(selectedItem.id, { dimensionType: type } as any)}
+                          className={`px-2 py-1 text-xs rounded border transition-colors ${((selectedItem as any).dimensionType || 'linear') === type
+                            ? "bg-blue-50 border-blue-300 text-blue-600 font-medium"
+                            : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                            }`}
+                        >
+                          {type.charAt(0).toUpperCase() + type.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1622,6 +1951,6 @@ export default function PropertiesSidebar(): React.JSX.Element {
         )}
       </div>
       <ExportPanel />
-    </aside>
+    </aside >
   );
 }

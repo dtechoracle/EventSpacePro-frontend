@@ -6,7 +6,7 @@ import { calculateNodeJunctions, Point } from '@/utils/geometry';
 import { useEditorStore } from '@/store/editorStore';
 import { useProjectStore } from '@/store/projectStore';
 import { pointToLineDistance } from '@/utils/wallOpenings';
-import { calculateAllCutouts, getCutoutsForEdge, WallCutout } from '@/utils/wallCutouts';
+import { calculateAllCutouts, getCutoutsForEdge, WallCutout, isCutoutAsset } from '@/utils/wallCutouts';
 
 interface WallRendererProps {
     wall: Wall;
@@ -156,10 +156,7 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
 
             // 1. Find asset openings (doors/windows)
             // Instead of relying on attachedToWallId, detect any door/window asset that lies on this edge.
-            const doorWindowAssets = assets.filter(asset => {
-                const type = (asset.type || '').toLowerCase();
-                return type.includes('door') || type.includes('window');
-            });
+            const doorWindowAssets = assets.filter(asset => isCutoutAsset(asset));
 
             doorWindowAssets.forEach(asset => {
                 const { distance, t } = pointToLineDistance(
@@ -536,7 +533,7 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                                         d={fillPath}
                                         fill={
                                             wall.fillType === 'texture' && wall.fillTexture
-                                                ? `url(#${wall.fillTexture}-scale-${wall.fillTextureScale || 1})`
+                                                ? `url(#${wall.fillTexture}-scale-${wall.fillTextureScale || 1}-thick-${wall.fillTextureThickness || 1})`
                                                 : (wall.fill || '#ffffff')
                                         }
                                         stroke="none"

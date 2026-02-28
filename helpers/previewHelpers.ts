@@ -41,6 +41,19 @@ export const buildPreviewData = (event: EventData | any) => {
         };
     });
 
+    // Debug log to verify dimensions are preserved
+    if (shapes.length > 0) {
+        /* console.log(`[Dashboard] Normalized shapes with dimensions:`, shapes.map((s: any) => ({
+        id: s.id,
+        type: s.type,
+        width: s.width,
+        height: s.height,
+        x: s.x,
+        y: s.y,
+        fill: s.fill,
+        }))); */
+    }
+
     // Normalize assets to ensure fillColor property is set
     const assets = rawAssets.map((a: any) => ({
         ...a,

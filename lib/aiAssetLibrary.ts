@@ -52,8 +52,8 @@ export const AI_ASSET_KNOWLEDGE: AIAssetKnowledge[] = ASSET_LIBRARY.map((asset) 
         tags.push('window', 'opening', 'architectural');
     }
 
-    // Seating style patterns
-    if (asset.category === 'Sitting Styles') {
+    // Seating style patterns (now all under 'test')
+    if (name.includes('boardroom') || name.includes('auditorium') || name.includes('classroom') || name.includes('banquet')) {
         tags.push('layout', 'arrangement', 'seating style', 'configuration');
         aliases.push(`${asset.label} arrangement`, `${asset.label} layout`, `${asset.label} setup`);
     }
@@ -131,17 +131,17 @@ export function getAssetSuggestions(context: {
     if (context.eventType) {
         const type = context.eventType.toLowerCase();
         if (type.includes('wedding') || type.includes('banquet')) {
-            suggestions.push(...getAssetsByCategory('Sitting Styles').filter(a =>
+            suggestions.push(...getAssetsByCategory('test').filter(a =>
                 a.label.includes('Banquet') || a.label.includes('Crescent')
             ));
         }
         if (type.includes('conference') || type.includes('meeting')) {
-            suggestions.push(...getAssetsByCategory('Sitting Styles').filter(a =>
+            suggestions.push(...getAssetsByCategory('test').filter(a =>
                 a.label.includes('Boardroom') || a.label.includes('Classroom')
             ));
         }
         if (type.includes('theater') || type.includes('presentation')) {
-            suggestions.push(...getAssetsByCategory('Sitting Styles').filter(a =>
+            suggestions.push(...getAssetsByCategory('test').filter(a =>
                 a.label.includes('Theatre') || a.label.includes('Seminar')
             ));
         }

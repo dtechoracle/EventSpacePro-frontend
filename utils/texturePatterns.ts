@@ -38,14 +38,7 @@ export const texturePatterns = [
       <path d="M0,0 L0,100 M0,0 L100,0" stroke="#cccccc" stroke-width="5"/>
     </pattern>`
   },
-  {
-    id: 'hatching',
-    name: 'Hatching',
-    svg: `<pattern id="hatching" patternUnits="userSpaceOnUse" width="200" height="200">
-      <rect width="200" height="200" fill="#ffffff"/>
-      <path d="M0,200 L200,0" stroke="#333333" stroke-width="5"/>
-    </pattern>`
-  },
+
   {
     id: 'marble',
     name: 'Marble',
@@ -59,17 +52,8 @@ export const texturePatterns = [
   {
     id: 'grass',
     name: 'Grass',
-    svg: `<pattern id="grass" patternUnits="userSpaceOnUse" width="200" height="200">
-      <rect width="200" height="200" fill="#228B22"/>
-      <path d="M25,200 L15,140 L35,110 L25,80" stroke="#155515" stroke-width="12" fill="none" stroke-linecap="round"/>
-      <path d="M75,200 L85,130 L65,100 L75,70" stroke="#1a6b1a" stroke-width="10" fill="none" stroke-linecap="round"/>
-      <path d="M125,200 L115,150 L135,120 L125,90" stroke="#155515" stroke-width="12" fill="none" stroke-linecap="round"/>
-      <path d="M175,200 L185,140 L165,110 L175,80" stroke="#1a6b1a" stroke-width="10" fill="none" stroke-linecap="round"/>
-      
-      <!-- Added extra blades for density -->
-      <path d="M50,200 L50,160" stroke="#104010" stroke-width="8" fill="none" stroke-linecap="round"/>
-      <path d="M100,200 L100,150" stroke="#104010" stroke-width="8" fill="none" stroke-linecap="round"/>
-      <path d="M150,200 L150,160" stroke="#104010" stroke-width="8" fill="none" stroke-linecap="round"/>
+    svg: `<pattern id="grass" patternUnits="userSpaceOnUse" width="512" height="512">
+      <image href="/assets/grass-texture.svg" width="512" height="512" preserveAspectRatio="none" />
     </pattern>`
   },
   {
@@ -100,7 +84,7 @@ export const texturePatterns = [
   }
 ];
 
-export type TextureId = 'wood-grain' | 'brick' | 'dots' | 'grid' | 'hatching' | 'marble' | 'grass' | 'sand';
+export type TextureId = 'wood-grain' | 'brick' | 'dots' | 'grid' | 'marble' | 'grass' | 'sand';
 
 export function getTextureFill(textureId: TextureId): string {
   return `url(#${textureId})`;

@@ -1,0 +1,5 @@
+﻿pages/(components)/editor/PropertiesSidebar.tsx(186,61): error TS2322: Type '"solid" | "dashed" | "dotted" | "double"' is not assignable to type '"solid" | "dotted" | "double" | undefined'.
+  Type '"dashed"' is not assignable to type '"solid" | "dotted" | "double" | undefined'.
+pages/(components)/editor/PropertiesSidebar.tsx(871,37): error TS2367: This comparison appears to be unintentional because the types '"shape" | "asset"' and '"wall"' have no overlap.
+pages/(components)/editor/PropertiesSidebar.tsx(1446,42): error TS2367: This comparison appears to be unintentional because the types '"wall" | "asset"' and '"shape"' have no overlap.
+pages/dashboard/editor/[slug]/[id].tsx(103,14): error TS2367: This comparison appears to be unintentional because the types '"linear" | "aligned" | "angular" | "radial"' and '"wall"' have no overlap.

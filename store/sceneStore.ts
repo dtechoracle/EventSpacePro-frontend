@@ -55,6 +55,7 @@ export type AssetInstance = {
 
   // UI State properties
   showDimensions?: boolean; // toggle dimension display for walls/shapes
+  dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
 };
 
 export type CanvasData = {
@@ -279,6 +280,7 @@ type SceneState = {
   selectMultipleAssets: (ids: string[]) => void;
   clearSelection: () => void;
   moveSelectedAssets: (deltaX: number, deltaY: number) => void;
+  scaleSelectedAssets: (scaleRatio: number, groupCenterX: number, groupCenterY: number) => void;
   duplicateSelectedAssets: () => void;
   deleteSelectedAssets: () => void;
   setRectangularSelectionMode: (enabled: boolean) => void;
@@ -440,18 +442,18 @@ export const useSceneStore = create<SceneState>()(
         // Default properties for shapes
         const shapeDefaults: Partial<AssetInstance> =
           type === "square" || type === "circle"
-            ? { width: 50, height: 50, strokeWidth: 2, backgroundColor: defaultBackgroundColor }
+            ? { width: 50, height: 50, strokeWidth: 10, backgroundColor: defaultBackgroundColor }
             : type === "line"
-              ? { width: 100, height: 2, strokeWidth: 2, strokeColor: "#000000", backgroundColor: defaultBackgroundColor }
+              ? { width: 100, height: 2, strokeWidth: 10, strokeColor: "#000000", backgroundColor: defaultBackgroundColor }
               : type === "double-line"
-                ? { width: 2, height: 100, strokeWidth: 2, strokeColor: "#000000", lineGap: 8, lineColor: "#000000", backgroundColor: defaultBackgroundColor }
+                ? { width: 2, height: 100, strokeWidth: 10, strokeColor: "#000000", lineGap: 8, lineColor: "#000000", backgroundColor: defaultBackgroundColor }
                 : type === "drawn-line"
-                  ? { strokeWidth: 2, strokeColor: "#000000", backgroundColor: defaultBackgroundColor }
+                  ? { strokeWidth: 10, strokeColor: "#000000", backgroundColor: defaultBackgroundColor }
                   : type === "wall-segments"
                     ? { wallThickness: get().getCurrentWallThickness(), wallGap: 8, lineColor: "#000000", backgroundColor: defaultBackgroundColor }
                     : type === "text"
                       ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: defaultBackgroundColor }
-                      : { width: finalWidth, height: finalHeight, strokeWidth: 2, backgroundColor: defaultBackgroundColor }; // Use library dimensions or default, ensuring strokeWidth is 2
+                      : { width: finalWidth, height: finalHeight, strokeWidth: 10, strokeColor: "#000000", fillColor: "transparent", backgroundColor: defaultBackgroundColor }; // Use library dimensions or default, ensuring strokeWidth is 10
 
         set({
           assets: [
@@ -2362,6 +2364,24 @@ export const useSceneStore = create<SceneState>()(
 
         // Save to history
         setTimeout(() => get().saveToHistory(), 0);
+      },
+
+      scaleSelectedAssets: (scaleRatio, groupCenterX, groupCenterY) => {
+        const state = get();
+        const updatedAssets = state.assets.map(asset => {
+          if (!state.selectedAssetIds.includes(asset.id)) return asset;
+
+          // New scale
+          const newScale = Math.max(0.001, Math.min(1000, (asset.scale || 1) * scaleRatio));
+
+          // Move position proportionally relative to group centre
+          const newX = groupCenterX + (asset.x - groupCenterX) * scaleRatio;
+          const newY = groupCenterY + (asset.y - groupCenterY) * scaleRatio;
+
+          return { ...asset, scale: newScale, x: newX, y: newY };
+        });
+
+        set({ assets: updatedAssets, hasUnsavedChanges: true });
       },
 
       duplicateSelectedAssets: () => {

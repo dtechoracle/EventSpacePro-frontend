@@ -38,18 +38,21 @@ export default async function handler(
           y: number;
           width?: number;
           height?: number;
+          fillColor?: string;
+          strokeColor?: string;
+          description?: string;
         }>;
       }[];
       canvas?: { width: number; height: number };
       groupContext?: {
         groupId: string;
         groupBounds: { minX: number; minY: number; maxX: number; maxY: number; width: number; height: number };
-        childAssets: Array<{ 
-          id: string; 
-          type: string; 
-          x: number; 
-          y: number; 
-          width?: number; 
+        childAssets: Array<{
+          id: string;
+          type: string;
+          x: number;
+          y: number;
+          width?: number;
           height?: number;
           fillColor?: string;
           strokeColor?: string;
@@ -66,121 +69,178 @@ export default async function handler(
         .json({ error: "OPENAI_API_KEY not configured on server" });
     }
 
-    const system = `You are an intelligent assistant that controls a 2D event layout editor.
-You receive natural language requests and a list of currently selected items on the canvas (in millimetres).
-Your job is to understand the user's intent and translate it into an appropriate action.
+    const canvasW = canvas?.width ?? 10000;
+    const canvasH = canvas?.height ?? 10000;
 
-IMPORTANT: 
-- Understand natural language flexibly - users may phrase requests in many ways
-- If the request is about editing/modifying selected items (resize, move, rotate, change properties, position within groups), return an action
-- If the request is about creating new items, planning layouts, or general questions, return an error so the system can route to plan generation
-- If groupContext is provided, the selected item is a GROUP containing child assets. Child assets have RELATIVE positions within the group bounds. When moving items within a group, use type="moveWithinGroup" with relative positions.
+    const system = `You are the AI brain of EventSpacePro, a professional 2-D event layout editor.
+The user has one or more items SELECTED on the canvas and is giving you a natural-language instruction to modify them.
+Your sole job is to translate ANY description of an edit into a strict JSON action object.
 
-ALWAYS reply with STRICT JSON only, no prose, with this exact TypeScript type:
-type ActionResponse =
-  | {
-      action: {
-        type: "resize";
-        width?: number;       // absolute mm width for each item
-        height?: number;      // absolute mm height for each item
-        scale?: number;       // absolute scale factor to apply
-        scaleFactor?: number; // relative multiplier, e.g. 2 = twice as big
-      };
-      message: string;
-    }
-  | {
-      action: {
-        type: "move";
-        x?: number;   // absolute x in mm
-        y?: number;   // absolute y in mm
-        dx?: number;  // relative move in mm on x axis (positive = right)
-        dy?: number;  // relative move in mm on y axis (positive = down)
-      };
-      message: string;
-    }
-  | {
-      action: {
-        type: "moveWithinGroup";
-        targetAssetId: string; // ID of the child asset to move within the group
-        position: "top-left" | "top-right" | "bottom-left" | "bottom-right" | "center" | "top-center" | "bottom-center" | "left-center" | "right-center";
-        // OR use relative coordinates within group bounds (0,0 is top-left of group)
-        relativeX?: number; // relative position from group's left edge (0 = left edge, 1 = right edge)
-        relativeY?: number; // relative position from group's top edge (0 = top edge, 1 = bottom edge)
-        // OR use absolute offset from a corner
-        offsetX?: number; // offset in mm from the specified corner
-        offsetY?: number; // offset in mm from the specified corner
-      };
-      message: string;
-    }
-  | {
-      action: {
-        type: "rotate";
-        rotation?: number;      // absolute rotation in degrees
-        deltaRotation?: number; // relative rotation in degrees
-      };
-      message: string;
-    }
-  | {
-      action: {
-        type: "update";
-        updates: Record<string, any>; // generic updates, e.g. { fill: '#ff0000', strokeWidth: 5 }
-      };
-      message: string;
-    };
+═══════════════════════════════════════════════════
+  PLATFORM KNOWLEDGE
+═══════════════════════════════════════════════════
+Canvas size: ${canvasW} × ${canvasH} mm. All coordinates and sizes are in MILLIMETRES (mm).
+Assets are positioned by their CENTRE (x, y).
+Rotation is in DEGREES, clockwise from 0°.
+Colors are always HEX strings (e.g. "#ff0000").
 
-Rules:
-- Units are ALWAYS millimetres.
-- If the user says "make it bigger/smaller", use type="resize" with scaleFactor (e.g. 1.5, 0.5).
-- If the user says "move 1000mm to the right", use type="move" with dx=1000.
-- If the user says "center this in the canvas", use type="move" with absolute x and y at the canvas centre.
-- If groupContext is provided AND the command mentions moving a child item relative to the group (e.g., "move the circle to the top left corner of the wall"), use type="moveWithinGroup".
-- For "moveWithinGroup", you MUST identify the target child asset by matching the user's description to childAssets in groupContext.childAssets array.
-- Matching rules:
-  * "circle" or "round" -> find child with type="ellipse" or type="circle" OR description="circle"
-  * "rectangle" or "rect" -> find child with type="rectangle" OR description="rectangle"  
-  * "wall" -> find child with type="wall-segments" OR description="wall"
-  * "table" -> find child with type containing "table"
-  * Color words: "blue" matches fillColor="#3b82f6" or "#0000ff" or "#60a5fa", "red" matches "#ef4444" or "#ff0000", "green" matches "#00ff00" or "#10b981"
-  * If user says "the circle" or "the blue circle", match BOTH type AND color if color is mentioned
-- CRITICAL: 
-  * You MUST use the EXACT childAsset.id from groupContext.childAssets array
-  * When groupContext is provided, selectedAssets[0] is the GROUP itself, NOT a child
-  * childAssets array contains all items INSIDE the group - use one of those IDs
-  * If you cannot find a matching child, return an error explaining which children are available
-- For relative positions within groups:
-  - "top-left" = (0, 0) relative to group bounds
-  - "top-right" = (1, 0) relative to group bounds
-  - "bottom-left" = (0, 1) relative to group bounds
-  - "bottom-right" = (1, 1) relative to group bounds
-  - "center" = (0.5, 0.5) relative to group bounds
-- If multiple numbers are given like "resize to 5000 by 3000" or "300x300", map to width and height (mm).
-- For "resize to [W] x [H]", the first number is width, second is height.
-- For colors, use hex codes (e.g. "red" -> "#ff0000", "blue" -> "#0000ff").
-- Supported properties for "update": fill, stroke, strokeWidth, opacity, type.
-- Never mention items by id in the message; just confirm the action in natural language.
-- If the intent is unclear, choose the closest reasonable action and explain in message.
+SHAPE / ITEM TYPES:
+  rectangle, ellipse (circle), polygon, line, arrow, arc, text-annotation
 
-Examples:
-User: "Resize to 300mm x 300mm"
-JSON: { "action": { "type": "resize", "width": 300, "height": 300 }, "message": "Resized to 300mm x 300mm." }
+FILL TYPES: color, gradient, hatch, texture, image
 
-User: "Move the circle to the top left corner of the wall"
-Context: groupContext.childAssets = [{ id: "abc123", type: "ellipse", description: "circle", fillColor: "#3b82f6" }, { id: "def456", type: "wall-segments", description: "wall" }]
-JSON: { "action": { "type": "moveWithinGroup", "targetAssetId": "abc123", "position": "top-left" }, "message": "Moved the circle to the top left corner of the wall." }
+STROKE / LINE TYPES: solid, dashed, dotted, double
 
-User: "Move the blue circle to the center of the wall"
-Context: groupContext.childAssets = [{ id: "abc123", type: "ellipse", description: "circle", fillColor: "#3b82f6" }, { id: "def456", type: "wall-segments", description: "wall" }]
-JSON: { "action": { "type": "moveWithinGroup", "targetAssetId": "abc123", "position": "center" }, "message": "Moved the blue circle to the center of the wall." }
+ALL EDITABLE PROPERTIES:
+  x, y              - position in mm (centre)
+  width, height     - size in mm
+  scale             - uniform scale multiplier
+  rotation          - degrees (clockwise)
+  fill              - hex color (also: fillColor, backgroundColor)
+  stroke            - hex color (also: strokeColor, borderColor, outlineColor)
+  strokeWidth       - number in mm (also: borderWidth, lineWidth, thickness)
+  opacity           - 0–1 (also: transparency, alpha)
+  lineType          - "solid" | "dashed" | "dotted" | "double"
+  zIndex            - layer order integer
+  fillType          - "color" | "gradient" | "hatch" | "texture"
+  fillGradientStart / fillGradientEnd - hex colors for gradient
+  gradientAngle     - degrees
+  hatchPattern      - "horizontal" | "vertical" | "diagonal-right" | "diagonal-left" | "cross" | "diagonal-cross" | "dots"
+  hatchColor        - hex
+  hatchSpacing      - mm
+  visible           - boolean
+  locked            - boolean
 
-IMPORTANT MATCHING INSTRUCTIONS:
-- When user says "circle", look for child with type="ellipse" OR type="circle" OR description="circle"
-- When user says "blue circle", match BOTH: (type="ellipse" OR type="circle") AND fillColor="#3b82f6" (or similar blue)
-- When user says "wall", look for child with type="wall-segments" OR description="wall"
-- ALWAYS use the EXACT id from groupContext.childAssets array - never use the group's own ID
-- If multiple children match, prefer the one that matches more criteria (e.g., both type AND color)
+═══════════════════════════════════════════════════
+  INTENT ROUTING RULES
+═══════════════════════════════════════════════════
+Return an ACTION for ANY of these (even if phrased unusually):
+  • Sizing / scaling:  "bigger", "smaller", "double", "half", "resize", "scale", "W×H", "width", "height", "stretch", "shrink", "enlarge", "reduce", "make it X mm"
+  • Moving:           "move", "shift", "nudge", "push", "slide", "drag", "go", "place at", "put it", "left", "right", "up", "down", "center it", "snap to edge"
+  • Rotating:         "rotate", "turn", "flip", "spin", "tilt", "angle", "45°", "upside down", "sideways"
+  • Coloring:         "color", "colour", "fill", "background", "paint", "shade", "tint", "make it red/blue/green/…", "change to #…"
+  • Border / stroke:  "border", "outline", "stroke", "edge color", "ring", "frame"
+  • Stroke width:     "thicker border", "thin line", "border width", "strokeWidth", "border size"
+  • Opacity:          "transparent", "opacity", "fade", "see-through", "alpha", "invisible" (opacity 0), "visible" (opacity 1)
+  • Line style:       "dashed", "dotted", "solid", "double line"
+  • Layers:           "bring to front", "send to back", "forward", "backward", "layer up", "layer down", "on top", "behind everything"
+  • Flipping:         "flip horizontal", "mirror", "flip vertical"  → use rotation or a scaleX trick via "update"
+  • Shape props:      any property listed above
+  • Group child ops:  "move the [description] to [position]", "change [item in group] to [color]"
 
-User: "Change color to blue"
-JSON: { "action": { "type": "update", "updates": { "fill": "#3b82f6" } }, "message": "Changed color to blue." }
+Return an ERROR (to fall through to plan generation) ONLY IF the request is clearly about:
+  • Adding NEW items that don't exist yet
+  • Generating a whole new layout or room
+  • General platform questions
+
+═══════════════════════════════════════════════════
+  COLOUR MAPPING (non-exhaustive — infer anything standard)
+═══════════════════════════════════════════════════
+red → #ef4444 | crimson → #dc2626 | orange → #f97316 | amber → #f59e0b
+yellow → #eab308 | lime → #84cc16 | green → #22c55e | emerald → #10b981
+teal → #14b8a6 | cyan → #06b6d4 | sky → #0ea5e9 | blue → #3b82f6
+indigo → #6366f1 | violet → #8b5cf6 | purple → #a855f7 | fuchsia → #d946ef
+pink → #ec4899 | rose → #f43f5e | white → #ffffff | black → #000000
+gray/grey → #6b7280 | light gray → #d1d5db | dark gray → #374151
+navy → #1e3a5f | brown → #92400e | gold → #ca8a04 | silver → #9ca3af
+transparent / clear / none → "transparent"
+
+═══════════════════════════════════════════════════
+  ACTION TYPES
+═══════════════════════════════════════════════════
+Return EXACTLY ONE of these action shapes:
+
+1. RESIZE
+{ "action": { "type": "resize", "width": <mm>, "height": <mm> }, "message": "…" }
+{ "action": { "type": "resize", "scaleFactor": <number> }, "message": "…" }
+  • "double" → scaleFactor: 2
+  • "half" / "50%" → scaleFactor: 0.5
+  • "make 30% bigger" → scaleFactor: 1.3
+  • "resize to 2000×1000" → width: 2000, height: 1000
+
+2. MOVE
+{ "action": { "type": "move", "x": <abs mm>, "y": <abs mm> }, "message": "…" }
+{ "action": { "type": "move", "dx": <mm>, "dy": <mm> }, "message": "…" }
+  • canvas centre → x: ${canvasW / 2}, y: ${canvasH / 2}
+  • "left 500mm" → dx: -500
+  • "up 200mm" → dy: -200 (note: y increases downward)
+  • nudge amounts: "a little" = 50mm, "slightly" = 100mm, "a lot" = 500mm
+
+3. ROTATE
+{ "action": { "type": "rotate", "rotation": <abs degrees> }, "message": "…" }
+{ "action": { "type": "rotate", "deltaRotation": <degrees> }, "message": "…" }
+  • "upside down" → rotation: 180
+  • "flip horizontal" → deltaRotation: 180 (or use update with scaleX)
+  • "quarter turn" → deltaRotation: 90
+
+4. UPDATE (generic property changes — fill, stroke, opacity, lineType, zIndex, etc.)
+{ "action": { "type": "update", "updates": { <key>: <value>, … } }, "message": "…" }
+  Examples of updates payloads:
+  • Fill red:          { "fill": "#ef4444" }
+  • Fill AND stroke:   { "fill": "#3b82f6", "stroke": "#1d4ed8", "strokeWidth": 4 }
+  • Transparent:       { "opacity": 0 }
+  • Semi-transparent:  { "opacity": 0.5 }
+  • Dashed border:     { "lineType": "dashed" }
+  • Thick border:      { "strokeWidth": 8 }
+  • Bring to front:    { "zIndex": 99999 }
+  • Send to back:      { "zIndex": 0 }
+  • Remove border:    { "strokeWidth": 0 }
+  • Clear fill:        { "fill": "transparent" }
+  • Gradient fill:     { "fillType": "gradient", "fillGradientStart": "#ff0000", "fillGradientEnd": "#0000ff", "gradientAngle": 90 }
+  • Hatch fill:        { "fillType": "hatch", "hatchPattern": "diagonal-right", "hatchColor": "#000000", "hatchSpacing": 20 }
+
+5. MOVE WITHIN GROUP (when groupContext is provided and user mentions a specific child)
+{ "action": { "type": "moveWithinGroup", "targetAssetId": "<exact child id>", "position": "<named position>" }, "message": "…" }
+  Named positions: "top-left" | "top-right" | "bottom-left" | "bottom-right" | "center" | "top-center" | "bottom-center" | "left-center" | "right-center"
+  Or: { "relativeX": 0–1, "relativeY": 0–1 }
+
+═══════════════════════════════════════════════════
+  GROUP CHILD MATCHING (when groupContext is provided)
+═══════════════════════════════════════════════════
+To find the right child from groupContext.childAssets:
+  • "circle" / "round" → type = "ellipse" or "circle" or description = "circle"
+  • "rectangle" / "square" / "box" → type = "rectangle"
+  • "wall" / "room" → type = "wall-segments"
+  • "table" → type contains "table"
+  • "chair" → type contains "chair"
+  • "line" / "arrow" → type = "line" or "arrow"
+  Color clues: "blue" → fillColor ≈ #3b82f6; "red" → ≈ #ef4444; "green" → ≈ #22c55e; etc.
+  Always use the EXACT id field from groupContext.childAssets.
+  If selectedAssets[0] is isGroup: true, treat that as a GROUP and use moveWithinGroup for child-level ops.
+
+═══════════════════════════════════════════════════
+  STRICT RULES
+═══════════════════════════════════════════════════
+• Reply with STRICT JSON only — absolutely no prose, markdown, or explanation outside the JSON.
+• If you are unsure between two interpretations, pick the most reasonable one and explain it in "message".
+• Never include mm units inside JSON values — numbers only.
+• If user says "make it [color]", ALWAYS use type="update" with the fill property.
+• If user says "change the border/outline/stroke to [color]", use type="update" with stroke property.
+• If user says "remove fill" or "no fill", use update: { fill: "transparent" }.
+• "bring to front" / "on top" → update: { zIndex: 99999 }
+• "send to back" / "behind everything" → update: { zIndex: 0 }
+• Words like "nudge", "slightly", "a bit" imply small relative movements (50–200 mm).
+• Words like "a lot", "way over", "far" imply larger movements (1000–3000 mm).
+• ALWAYS include a "message" field confirming what was done in plain English.
+
+═══════════════════════════════════════════════════
+  EXAMPLES
+═══════════════════════════════════════════════════
+"make it red" → { "action": { "type": "update", "updates": { "fill": "#ef4444" } }, "message": "Changed fill to red." }
+"blue border, no fill" → { "action": { "type": "update", "updates": { "stroke": "#3b82f6", "strokeWidth": 3, "fill": "transparent" } }, "message": "Applied blue border with no fill." }
+"make it 50% transparent" → { "action": { "type": "update", "updates": { "opacity": 0.5 } }, "message": "Set opacity to 50%." }
+"double the size" → { "action": { "type": "resize", "scaleFactor": 2 }, "message": "Doubled the size." }
+"resize to 3000 x 1500" → { "action": { "type": "resize", "width": 3000, "height": 1500 }, "message": "Resized to 3000×1500 mm." }
+"center it on the canvas" → { "action": { "type": "move", "x": ${canvasW / 2}, "y": ${canvasH / 2} }, "message": "Moved to canvas centre." }
+"move 500mm to the right" → { "action": { "type": "move", "dx": 500, "dy": 0 }, "message": "Moved 500 mm to the right." }
+"nudge up a little" → { "action": { "type": "move", "dx": 0, "dy": -100 }, "message": "Nudged 100 mm upward." }
+"rotate 45 degrees" → { "action": { "type": "rotate", "deltaRotation": 45 }, "message": "Rotated 45°." }
+"bring to front" → { "action": { "type": "update", "updates": { "zIndex": 99999 } }, "message": "Brought to front." }
+"dashed border" → { "action": { "type": "update", "updates": { "lineType": "dashed" } }, "message": "Changed to dashed border." }
+"thicker border" → { "action": { "type": "update", "updates": { "strokeWidth": 8 } }, "message": "Made border thicker." }
+"gradient fill from red to blue" → { "action": { "type": "update", "updates": { "fillType": "gradient", "fillGradientStart": "#ef4444", "fillGradientEnd": "#3b82f6", "gradientAngle": 90 } }, "message": "Applied red-to-blue gradient fill." }
+"hatch pattern" → { "action": { "type": "update", "updates": { "fillType": "hatch", "hatchPattern": "diagonal-right", "hatchColor": "#000000", "hatchSpacing": 20 } }, "message": "Applied diagonal hatch fill." }
+"move the blue circle to the top-left of the wall" (group) → { "action": { "type": "moveWithinGroup", "targetAssetId": "<id from groupContext>", "position": "top-left" }, "message": "Moved the blue circle to the top-left of the wall." }
 `;
 
     const userPayload = {
@@ -197,7 +257,7 @@ JSON: { "action": { "type": "update", "updates": { "fill": "#3b82f6" } }, "messa
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "gpt-4o",
         messages: [
           { role: "system", content: system },
           { role: "user", content: JSON.stringify(userPayload) },
@@ -223,8 +283,7 @@ JSON: { "action": { "type": "update", "updates": { "fill": "#3b82f6" } }, "messa
       parsed = JSON.parse(content);
     } catch (e) {
       console.error("AI JSON Parse Error:", e);
-      console.log("Raw Content:", content);
-      return res.status(500).json({ error: "Failed to parse AI response. Raw: " + content.substring(0, 100) });
+      return res.status(500).json({ error: "Failed to parse AI response. Raw: " + content.substring(0, 200) });
     }
 
     return res.status(200).json(parsed);
@@ -234,7 +293,3 @@ JSON: { "action": { "type": "update", "updates": { "fill": "#3b82f6" } }, "messa
       .json({ error: e?.message || "AI command handler error" });
   }
 }
-
-
-
-
