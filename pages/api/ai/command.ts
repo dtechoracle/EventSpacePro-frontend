@@ -194,6 +194,20 @@ Return EXACTLY ONE of these action shapes:
   Named positions: "top-left" | "top-right" | "bottom-left" | "bottom-right" | "center" | "top-center" | "bottom-center" | "left-center" | "right-center"
   Or: { "relativeX": 0–1, "relativeY": 0–1 }
 
+6. DUPLICATE
+{ "action": { "type": "duplicate", "count": <number> }, "message": "…" }
+  • "make a copy" → count: 1
+  • "create 3 copies" → count: 3
+
+7. DELETE
+{ "action": { "type": "delete" }, "message": "…" }
+  • "remove this", "delete it", "erase"
+
+8. GROUP / UNGROUP
+{ "action": { "type": "group" }, "message": "…" }
+{ "action": { "type": "ungroup" }, "message": "…" }
+  • "group these together", "ungroup this"
+
 ═══════════════════════════════════════════════════
   GROUP CHILD MATCHING (when groupContext is provided)
 ═══════════════════════════════════════════════════

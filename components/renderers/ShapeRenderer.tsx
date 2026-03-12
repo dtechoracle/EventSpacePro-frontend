@@ -53,9 +53,9 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
         // Determine strokeDasharray based on lineType
         let dashArray = shape.strokeDasharray;
         if (shape.lineType === 'dashed') {
-            dashArray = '10,10';
+            dashArray = `${10 / zoom},${10 / zoom}`;
         } else if (shape.lineType === 'dotted') {
-            dashArray = '2,5';
+            dashArray = `${2 / zoom},${5 / zoom}`;
         } else if (shape.lineType === 'solid' || !shape.lineType) {
             dashArray = undefined;
         }

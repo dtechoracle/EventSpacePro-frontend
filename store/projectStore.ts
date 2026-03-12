@@ -228,6 +228,21 @@ export type LabelArrow = {
     zIndex: number;
 };
 
+export type ProjectSnapshot = {
+    walls: Wall[];
+    wallSegments: WallSegment[];
+    shapes: Shape[];
+    assets: Asset[];
+    textAnnotations: TextAnnotation[];
+    labelArrows: LabelArrow[];
+    dimensions: Dimension[];
+    groups: Group[];
+    layers: Layer[];
+    activeLayerId: string | null;
+    comments: Comment[];
+    canvas: Canvas;
+};
+
 // ============================================================================
 // Store
 // ============================================================================
@@ -266,8 +281,8 @@ export type ProjectState = {
 
     // History
     history: {
-        past: Array<{ walls: Wall[]; shapes: Shape[]; assets: Asset[]; textAnnotations: TextAnnotation[]; labelArrows: LabelArrow[]; dimensions: Dimension[]; groups: Group[] }>;
-        future: Array<{ walls: Wall[]; shapes: Shape[]; assets: Asset[]; textAnnotations: TextAnnotation[]; labelArrows: LabelArrow[]; dimensions: Dimension[]; groups: Group[] }>;
+        past: ProjectSnapshot[];
+        future: ProjectSnapshot[];
     };
 
     // Persistence
@@ -289,8 +304,11 @@ export type ProjectState = {
 
     // Methods - Walls (Legacy)
     addWall: (wall: Wall, skipHistory?: boolean) => void;
+    addWallBatch: (walls: Wall[], skipHistory?: boolean) => void;
     updateWall: (id: string, updates: Partial<Wall>, skipHistory?: boolean) => void;
-    removeWall: (id: string) => void;
+    updateWallBatch: (ids: string[], updates: Partial<Wall>, skipHistory?: boolean) => void;
+    batchUpdateWalls: (updates: { id: string; updates: Partial<Wall> }[], skipHistory?: boolean) => void;
+    removeWall: (id: string, skipHistory?: boolean) => void;
     getWall: (id: string) => Wall | undefined;
 
     // Methods - Wall Segments (New Engine)
@@ -303,22 +321,28 @@ export type ProjectState = {
     // Wall node/edge operations
     addWallNode: (wallId: string, node: WallNode) => void;
     updateWallNode: (wallId: string, nodeId: string, updates: Partial<Point>) => void;
-    removeWallNode: (wallId: string, nodeId: string) => void;
+    removeWallNode: (wallId: string, nodeId: string, skipHistory?: boolean) => void;
 
     addWallEdge: (wallId: string, edge: WallEdge) => void;
     updateWallEdge: (wallId: string, edgeId: string, updates: Partial<WallEdge>) => void;
-    removeWallEdge: (wallId: string, edgeId: string) => void;
+    removeWallEdge: (wallId: string, edgeId: string, skipHistory?: boolean) => void;
 
     // Methods - Shapes
     addShape: (shape: Shape, skipHistory?: boolean) => void;
+    addShapeBatch: (shapes: Shape[], skipHistory?: boolean) => void;
     updateShape: (id: string, updates: Partial<Shape>, skipHistory?: boolean) => void;
-    removeShape: (id: string) => void;
+    updateShapeBatch: (ids: string[], updates: Partial<Shape>, skipHistory?: boolean) => void;
+    batchUpdateShapes: (updates: { id: string; updates: Partial<Shape> }[], skipHistory?: boolean) => void;
+    removeShape: (id: string, skipHistory?: boolean) => void;
     getShape: (id: string) => Shape | undefined;
 
     // Methods - Assets
     addAsset: (asset: Asset, skipHistory?: boolean) => void;
+    addAssetBatch: (assets: Asset[], skipHistory?: boolean) => void;
     updateAsset: (id: string, updates: Partial<Asset>, skipHistory?: boolean) => void;
-    removeAsset: (id: string) => void;
+    updateAssetBatch: (ids: string[], updates: Partial<Asset>, skipHistory?: boolean) => void;
+    batchUpdateAssets: (updates: { id: string; updates: Partial<Asset> }[], skipHistory?: boolean) => void;
+    removeAsset: (id: string, skipHistory?: boolean) => void;
     getAsset: (id: string) => Asset | undefined;
 
     // Methods - Layers
@@ -332,7 +356,7 @@ export type ProjectState = {
     redo: () => void;
     saveToHistory: () => void;
     clearHistory: () => void;
-    commitDragHistory: (snapshot: { walls: Wall[]; shapes: Shape[]; assets: Asset[]; textAnnotations: TextAnnotation[]; labelArrows: LabelArrow[]; dimensions: Dimension[]; groups: Group[] }) => void;
+    commitDragHistory: (snapshot: ProjectSnapshot) => void;
 
     // Methods - Utility
     getNextZIndex: () => number;
@@ -347,27 +371,29 @@ export type ProjectState = {
     copySelection: (selectedIds: string[]) => void;
     cutSelection: (selectedIds: string[]) => void;
     pasteSelection: (cursorPos?: { x: number; y: number }) => string[]; // Returns new IDs for selection
+    removeItemsBatch: (ids: string[], skipHistory?: boolean) => void;
+    batchUpdateItems: (items: { id: string; type: 'shape' | 'asset' | 'wall' | 'dimension' | 'textAnnotation' | 'labelArrow'; updates: any }[], skipHistory?: boolean) => void;
 
     // Methods - Dimensions
     dimensions: Dimension[];
     addDimension: (dimension: Dimension, skipHistory?: boolean) => void;
     updateDimension: (id: string, updates: Partial<Dimension>, skipHistory?: boolean) => void;
-    removeDimension: (id: string) => void;
+    removeDimension: (id: string, skipHistory?: boolean) => void;
 
     // Methods - Text Annotations
     addTextAnnotation: (annotation: TextAnnotation, skipHistory?: boolean) => void;
     updateTextAnnotation: (id: string, updates: Partial<TextAnnotation>, skipHistory?: boolean) => void;
-    removeTextAnnotation: (id: string) => void;
+    removeTextAnnotation: (id: string, skipHistory?: boolean) => void;
 
     // Methods - Label Arrows
     addLabelArrow: (arrow: LabelArrow, skipHistory?: boolean) => void;
     updateLabelArrow: (id: string, updates: Partial<LabelArrow>, skipHistory?: boolean) => void;
-    removeLabelArrow: (id: string) => void;
+    removeLabelArrow: (id: string, skipHistory?: boolean) => void;
 
     // Methods - Comments
     addComment: (comment: Comment, skipHistory?: boolean) => void;
     updateComment: (id: string, updates: Partial<Comment>) => void;
-    removeComment: (id: string) => void;
+    removeComment: (id: string, skipHistory?: boolean) => void;
     resolveComment: (id: string) => void;
 
     // Methods - Groups
@@ -376,13 +402,14 @@ export type ProjectState = {
     removeGroup: (id: string) => void;
 
     // Methods - Wall Junctions
-    splitWallEdge: (wallId: string, edgeId: string, point: { x: number; y: number }) => WallNode;
+    splitWallEdge: (wallId: string, edgeId: string, point: { x: number; y: number }, skipHistory?: boolean) => WallNode;
     connectWallToEdge: (
         sourceWallId: string,
         sourceNodeId: string,
         targetWallId: string,
         targetEdgeId: string,
-        point: { x: number; y: number }
+        point: { x: number; y: number },
+        skipHistory?: boolean
     ) => void;
 };
 
@@ -1059,6 +1086,14 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
+            addWallBatch: (newWalls: Wall[], skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                set((state) => ({
+                    walls: [...state.walls, ...newWalls],
+                    hasUnsavedChanges: true,
+                }));
+            },
+
             updateWall: (id, updates, skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
@@ -1067,8 +1102,27 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
-            removeWall: (id) => {
-                get().saveToHistory();
+            updateWallBatch: (ids: string[], updates: Partial<Wall>, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                set((state) => ({
+                    walls: state.walls.map((w) => (ids.includes(w.id) ? { ...w, ...updates } : w)),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            batchUpdateWalls: (updates: { id: string; updates: Partial<Wall> }[], skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                set((state) => ({
+                    walls: state.walls.map((wall) => {
+                        const update = updates.find((u) => u.id === wall.id);
+                        return update ? { ...wall, ...update.updates } : wall;
+                    }),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            removeWall: (id, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.filter((w) => w.id !== id),
                     hasUnsavedChanges: true,
@@ -1081,6 +1135,7 @@ export const useProjectStore = create<ProjectState>()(
 
             // Wall node operations
             addWallNode: (wallId, node) => {
+                get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.map((w) =>
                         w.id === wallId ? { ...w, nodes: [...w.nodes, node] } : w
@@ -1090,6 +1145,7 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             updateWallNode: (wallId, nodeId, updates) => {
+                get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.map((w) =>
                         w.id === wallId
@@ -1105,7 +1161,8 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
-            removeWallNode: (wallId, nodeId) => {
+            removeWallNode: (wallId, nodeId, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.map((w) =>
                         w.id === wallId
@@ -1117,6 +1174,7 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             addWallEdge: (wallId, edge) => {
+                get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.map((w) =>
                         w.id === wallId ? { ...w, edges: [...w.edges, edge] } : w
@@ -1126,6 +1184,7 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             updateWallEdge: (wallId, edgeId, updates) => {
+                get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.map((w) =>
                         w.id === wallId
@@ -1141,7 +1200,8 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
-            removeWallEdge: (wallId, edgeId) => {
+            removeWallEdge: (wallId, edgeId, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.map((w) =>
                         w.id === wallId
@@ -1200,6 +1260,14 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
+            addShapeBatch: (newShapes: Shape[], skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                set((state) => ({
+                    shapes: [...state.shapes, ...newShapes],
+                    hasUnsavedChanges: true,
+                }));
+            },
+
             updateShape: (id, updates, skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
@@ -1208,8 +1276,27 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
-            removeShape: (id) => {
-                get().saveToHistory();
+            updateShapeBatch: (ids: string[], updates: Partial<Shape>, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                set((state) => ({
+                    shapes: state.shapes.map((s) => (ids.includes(s.id) ? { ...s, ...updates } : s)),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            batchUpdateShapes: (updates: { id: string; updates: Partial<Shape> }[], skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                set((state) => ({
+                    shapes: state.shapes.map((shape) => {
+                        const update = updates.find((u) => u.id === shape.id);
+                        return update ? { ...shape, ...update.updates } : shape;
+                    }),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            removeShape: (id, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => {
                     const shape = state.shapes.find((s) => s.id === id);
                     let updatedAssets = state.assets;
@@ -1242,10 +1329,22 @@ export const useProjectStore = create<ProjectState>()(
                 // Apply default strokeWidth of 2 if not already set
                 const assetWithDefaults = {
                     ...asset,
-                    strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : 2
+                    strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : 0.5
                 };
                 set((state) => ({
                     assets: [...state.assets, assetWithDefaults],
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            addAssetBatch: (newAssets: Asset[], skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                const assetsWithDefaults = newAssets.map(asset => ({
+                    ...asset,
+                    strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : 0.5
+                }));
+                set((state) => ({
+                    assets: [...state.assets, ...assetsWithDefaults],
                     hasUnsavedChanges: true,
                 }));
             },
@@ -1257,8 +1356,27 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
-            removeAsset: (id) => {
-                get().saveToHistory();
+            updateAssetBatch: (ids: string[], updates: Partial<Asset>, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                set((state) => ({
+                    assets: state.assets.map((a) => (ids.includes(a.id) ? { ...a, ...updates } : a)),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            batchUpdateAssets: (updates: { id: string; updates: Partial<Asset> }[], skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                set((state) => ({
+                    assets: state.assets.map((asset) => {
+                        const update = updates.find((u) => u.id === asset.id);
+                        return update ? { ...asset, ...update.updates } : asset;
+                    }),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            removeAsset: (id, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     assets: state.assets.filter((a) => a.id !== id),
                     shapes: state.shapes.filter((s) => s.sourceAssetId !== id),
@@ -1280,27 +1398,24 @@ export const useProjectStore = create<ProjectState>()(
                     };
                 });
             },
-            updateGroup: (id, updates) => {
-                set((state) => {
-                    state.saveToHistory();
-                    return {
-                        groups: state.groups.map((g) => (g.id === id ? { ...g, ...updates } : g)),
-                        hasUnsavedChanges: true
-                    };
-                });
+            updateGroup: (id, updates, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                set((state) => ({
+                    groups: state.groups.map((g) => (g.id === id ? { ...g, ...updates } : g)),
+                    hasUnsavedChanges: true
+                }));
             },
-            removeGroup: (id) => {
-                set((state) => {
-                    state.saveToHistory();
-                    return {
-                        groups: state.groups.filter((g) => g.id !== id),
-                        hasUnsavedChanges: true
-                    };
-                });
+            removeGroup: (id, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                set((state) => ({
+                    groups: state.groups.filter((g) => g.id !== id),
+                    hasUnsavedChanges: true
+                }));
             },
 
             // Layer methods
             addLayer: (layer) => {
+                get().saveToHistory();
                 set((state) => ({
                     layers: [...state.layers, layer],
                     hasUnsavedChanges: true,
@@ -1308,6 +1423,7 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             updateLayer: (id, updates) => {
+                get().saveToHistory();
                 set((state) => ({
                     layers: state.layers.map((l) => (l.id === id ? { ...l, ...updates } : l)),
                     hasUnsavedChanges: true,
@@ -1315,6 +1431,7 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             removeLayer: (id) => {
+                get().saveToHistory();
                 set((state) => ({
                     layers: state.layers.filter((l) => l.id !== id),
                     hasUnsavedChanges: true,
@@ -1327,45 +1444,99 @@ export const useProjectStore = create<ProjectState>()(
 
             // History methods
             undo: () => {
-                const { history, walls, shapes, assets, textAnnotations, labelArrows, dimensions, groups } = get();
-                if (history.past.length === 0) return;
+                const state = get();
+                const { history, canvas } = state;
+                if (history.past.length === 0) {
+                    console.log("[projectStore] Undo called but history.past is EMPTY");
+                    return;
+                }
+
+                console.log(`[projectStore] Undo triggered. Past size: ${history.past.length}`);
 
                 const previous = history.past[history.past.length - 1];
                 const newPast = history.past.slice(0, history.past.length - 1);
 
+                // Create a snapshot of CURRENT state before rolling back
+                const currentSnapshot: ProjectSnapshot = {
+                    walls: JSON.parse(JSON.stringify(state.walls)),
+                    wallSegments: JSON.parse(JSON.stringify(state.wallSegments)),
+                    shapes: JSON.parse(JSON.stringify(state.shapes)),
+                    assets: JSON.parse(JSON.stringify(state.assets)),
+                    textAnnotations: JSON.parse(JSON.stringify(state.textAnnotations)),
+                    labelArrows: JSON.parse(JSON.stringify(state.labelArrows)),
+                    dimensions: JSON.parse(JSON.stringify(state.dimensions)),
+                    groups: JSON.parse(JSON.stringify(state.groups)),
+                    layers: JSON.parse(JSON.stringify(state.layers)),
+                    activeLayerId: state.activeLayerId,
+                    comments: JSON.parse(JSON.stringify(state.comments)),
+                    canvas: JSON.parse(JSON.stringify(state.canvas)),
+                };
+
                 set({
                     walls: previous.walls || [],
+                    wallSegments: previous.wallSegments || [],
                     shapes: previous.shapes || [],
                     assets: previous.assets || [],
                     textAnnotations: previous.textAnnotations || [],
                     labelArrows: previous.labelArrows || [],
                     dimensions: previous.dimensions || [],
                     groups: previous.groups || [],
+                    layers: previous.layers || [],
+                    activeLayerId: previous.activeLayerId,
+                    comments: previous.comments || [],
+                    canvas: previous.canvas || canvas,
                     history: {
                         past: newPast,
-                        future: [{ walls, shapes, assets, textAnnotations, labelArrows, dimensions, groups }, ...history.future],
+                        future: [currentSnapshot, ...history.future].slice(0, 50),
                     },
                     hasUnsavedChanges: true,
                 });
             },
 
             redo: () => {
-                const { history, walls, shapes, assets, textAnnotations, labelArrows, dimensions, groups } = get();
-                if (history.future.length === 0) return;
+                const state = get();
+                const { history, canvas } = state;
+                if (history.future.length === 0) {
+                    console.log("[projectStore] Redo called but history.future is EMPTY");
+                    return;
+                }
+
+                console.log(`[projectStore] Redo triggered. Future size: ${history.future.length}`);
 
                 const next = history.future[0];
                 const newFuture = history.future.slice(1);
 
+                // Create a snapshot of CURRENT state before rolling forward
+                const currentSnapshot: ProjectSnapshot = {
+                    walls: JSON.parse(JSON.stringify(state.walls)),
+                    wallSegments: JSON.parse(JSON.stringify(state.wallSegments)),
+                    shapes: JSON.parse(JSON.stringify(state.shapes)),
+                    assets: JSON.parse(JSON.stringify(state.assets)),
+                    textAnnotations: JSON.parse(JSON.stringify(state.textAnnotations)),
+                    labelArrows: JSON.parse(JSON.stringify(state.labelArrows)),
+                    dimensions: JSON.parse(JSON.stringify(state.dimensions)),
+                    groups: JSON.parse(JSON.stringify(state.groups)),
+                    layers: JSON.parse(JSON.stringify(state.layers)),
+                    activeLayerId: state.activeLayerId,
+                    comments: JSON.parse(JSON.stringify(state.comments)),
+                    canvas: JSON.parse(JSON.stringify(state.canvas)),
+                };
+
                 set({
                     walls: next.walls || [],
+                    wallSegments: next.wallSegments || [],
                     shapes: next.shapes || [],
                     assets: next.assets || [],
                     textAnnotations: next.textAnnotations || [],
                     labelArrows: next.labelArrows || [],
                     dimensions: next.dimensions || [],
                     groups: next.groups || [],
+                    layers: next.layers || [],
+                    activeLayerId: next.activeLayerId,
+                    comments: next.comments || [],
+                    canvas: next.canvas || canvas,
                     history: {
-                        past: [...history.past, { walls, shapes, assets, textAnnotations, labelArrows, dimensions, groups }],
+                        past: [...history.past, currentSnapshot].slice(-50),
                         future: newFuture,
                     },
                     hasUnsavedChanges: true,
@@ -1373,15 +1544,20 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             saveToHistory: () => {
-                const { walls, shapes, assets, textAnnotations, labelArrows, dimensions, groups, history } = get();
-                const snapshot = {
+                const { walls, wallSegments, shapes, assets, textAnnotations, labelArrows, dimensions, groups, layers, activeLayerId, comments, canvas, history } = get();
+                const snapshot: ProjectSnapshot = {
                     walls: JSON.parse(JSON.stringify(walls)),
+                    wallSegments: JSON.parse(JSON.stringify(wallSegments)),
                     shapes: JSON.parse(JSON.stringify(shapes)),
                     assets: JSON.parse(JSON.stringify(assets)),
                     textAnnotations: JSON.parse(JSON.stringify(textAnnotations)),
                     labelArrows: JSON.parse(JSON.stringify(labelArrows)),
                     dimensions: JSON.parse(JSON.stringify(dimensions)),
                     groups: JSON.parse(JSON.stringify(groups)),
+                    layers: JSON.parse(JSON.stringify(layers)),
+                    activeLayerId: activeLayerId,
+                    comments: JSON.parse(JSON.stringify(comments)),
+                    canvas: JSON.parse(JSON.stringify(canvas)),
                 };
                 const newPast = [...history.past, snapshot].slice(-50);
                 set({
@@ -1401,7 +1577,7 @@ export const useProjectStore = create<ProjectState>()(
                 });
             },
 
-            commitDragHistory: (snapshot) => {
+            commitDragHistory: (snapshot: ProjectSnapshot) => {
                 const { history } = get();
                 const newPast = [...history.past, snapshot].slice(-50);
                 set({
@@ -1584,6 +1760,57 @@ export const useProjectStore = create<ProjectState>()(
                 return newIds;
             },
 
+            removeItemsBatch: (ids: string[], skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                set((state) => ({
+                    walls: state.walls.filter((w) => !ids.includes(w.id)),
+                    shapes: state.shapes.filter((s) => !ids.includes(s.id)),
+                    assets: state.assets.filter((a) => !ids.includes(a.id)),
+                    dimensions: state.dimensions.filter((d) => !ids.includes(d.id)),
+                    labelArrows: state.labelArrows.filter((la) => !ids.includes(la.id)),
+                    textAnnotations: state.textAnnotations.filter((ta) => !ids.includes(ta.id)),
+                    hasUnsavedChanges: true,
+                }));
+            },
+
+            batchUpdateItems: (items: { id: string; type: 'shape' | 'asset' | 'wall' | 'dimension' | 'textAnnotation' | 'labelArrow'; updates: any }[], skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                set((state) => {
+                    let newShapes = [...state.shapes];
+                    let newAssets = [...state.assets];
+                    let newWalls = [...state.walls];
+                    let newDimensions = [...state.dimensions];
+                    let newTextAnnotations = [...state.textAnnotations];
+                    let newLabelArrows = [...state.labelArrows];
+
+                    items.forEach(item => {
+                        if (item.type === 'shape') {
+                            newShapes = newShapes.map(s => (s.id === item.id ? { ...s, ...item.updates } : s));
+                        } else if (item.type === 'asset') {
+                            newAssets = newAssets.map(a => (a.id === item.id ? { ...a, ...item.updates } : a));
+                        } else if (item.type === 'wall') {
+                            newWalls = newWalls.map(w => (w.id === item.id ? { ...w, ...item.updates } : w));
+                        } else if (item.type === 'dimension') {
+                            newDimensions = newDimensions.map(d => (d.id === item.id ? { ...d, ...item.updates } : d));
+                        } else if (item.type === 'textAnnotation') {
+                            newTextAnnotations = newTextAnnotations.map(ta => (ta.id === item.id ? { ...ta, ...item.updates } : ta));
+                        } else if (item.type === 'labelArrow') {
+                            newLabelArrows = newLabelArrows.map(la => (la.id === item.id ? { ...la, ...item.updates } : la));
+                        }
+                    });
+
+                    return {
+                        shapes: newShapes,
+                        assets: newAssets,
+                        walls: newWalls,
+                        dimensions: newDimensions,
+                        textAnnotations: newTextAnnotations,
+                        labelArrows: newLabelArrows,
+                        hasUnsavedChanges: true,
+                    };
+                });
+            },
+
             // Dimension methods
             addDimension: (dimension, skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
@@ -1601,8 +1828,8 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
-            removeDimension: (id) => {
-                get().saveToHistory();
+            removeDimension: (id, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     dimensions: state.dimensions.filter((d) => d.id !== id),
                     hasUnsavedChanges: true,
@@ -1626,8 +1853,8 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
-            removeTextAnnotation: (id) => {
-                get().saveToHistory();
+            removeTextAnnotation: (id, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     textAnnotations: state.textAnnotations.filter((a) => a.id !== id),
                     hasUnsavedChanges: true,
@@ -1651,8 +1878,8 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
-            removeLabelArrow: (id) => {
-                get().saveToHistory();
+            removeLabelArrow: (id, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     labelArrows: state.labelArrows.filter((a) => a.id !== id),
                     hasUnsavedChanges: true,
@@ -1669,16 +1896,16 @@ export const useProjectStore = create<ProjectState>()(
                 }));
             },
 
-            updateComment: (id, updates) => {
-                get().saveToHistory();
+            updateComment: (id, updates, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     comments: state.comments.map((c) => (c.id === id ? { ...c, ...updates } : c)),
                     hasUnsavedChanges: true,
                 }));
             },
 
-            removeComment: (id) => {
-                get().saveToHistory();
+            removeComment: (id, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     comments: state.comments.filter((c) => c.id !== id),
                     hasUnsavedChanges: true,
@@ -1694,13 +1921,12 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             // Wall Junction methods
-            splitWallEdge: (wallId, edgeId, point) => {
+            splitWallEdge: (wallId, edgeId, point, skipHistory = false) => {
                 const wall = get().walls.find((w) => w.id === wallId);
                 if (!wall) {
                     console.error(`Wall ${wallId} not found`);
                     return null as any;
                 }
-
                 const edge = wall.edges.find((e) => e.id === edgeId);
                 if (!edge) {
                     console.error(`Edge ${edgeId} not found in wall ${wallId}`);
@@ -1727,7 +1953,7 @@ export const useProjectStore = create<ProjectState>()(
                     thickness: edge.thickness,
                 };
 
-                get().saveToHistory();
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.map((w) =>
                         w.id === wallId
@@ -1744,9 +1970,9 @@ export const useProjectStore = create<ProjectState>()(
                 return newNode;
             },
 
-            connectWallToEdge: (sourceWallId, sourceNodeId, targetWallId, targetEdgeId, point) => {
-                get().saveToHistory();
-                const newNode = get().splitWallEdge(targetWallId, targetEdgeId, point);
+            connectWallToEdge: (sourceWallId, sourceNodeId, targetWallId, targetEdgeId, point, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                const newNode = get().splitWallEdge(targetWallId, targetEdgeId, point, true);
                 if (!newNode) return;
 
                 set((state) => ({

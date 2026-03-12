@@ -20,6 +20,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const {
     shapes, assets, walls, textAnnotations, labelArrows, dimensions,
     updateShape, updateAsset, updateWall, updateTextAnnotation, updateLabelArrow, updateDimension,
+    updateShapeBatch, updateAssetBatch, updateWallBatch,
     isSaving, lastSaved, saveEvent, hasUnsavedChanges
   } = useProjectStore();
 
@@ -408,7 +409,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
-                      onChange={(e) => selectedShapes.forEach(s => updateShape(s.id, { fill: e.target.value, fillType: 'color' }))}
+                      onChange={(e) => {
+                        const ids = selectedShapes.map(s => s.id);
+                        updateShapeBatch(ids, { fill: e.target.value, fillType: 'color' });
+                      }}
                       className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
                     />
                   </div>
@@ -420,7 +424,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
-                      onChange={(e) => selectedShapes.forEach(s => updateShape(s.id, { stroke: e.target.value }))}
+                      onChange={(e) => {
+                        const ids = selectedShapes.map(s => s.id);
+                        updateShapeBatch(ids, { stroke: e.target.value });
+                      }}
                       className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
                     />
                   </div>
@@ -434,7 +441,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     placeholder="Mixed"
                     onChange={(e) => {
                       const val = Number(e.target.value);
-                      if (val >= 0) selectedShapes.forEach(s => updateShape(s.id, { strokeWidth: val }));
+                      if (val >= 0) {
+                        const ids = selectedShapes.map(s => s.id);
+                        updateShapeBatch(ids, { strokeWidth: val });
+                      }
                     }}
                     className="sidebar-input w-16 text-right"
                     min={0}

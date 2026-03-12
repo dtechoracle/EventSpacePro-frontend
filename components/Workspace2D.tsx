@@ -554,6 +554,7 @@ export default function Workspace2D({
           worldY <= asset.y + halfH
         ) {
           // Explode asset
+          /* // Explode asset logic - commented out for now
           if (asset.isExploded) {
             toast("Asset already exploded.");
             return;
@@ -563,37 +564,38 @@ export default function Workspace2D({
           convertAssetToShapes(asset).then((newShapes) => {
             if (newShapes.length > 0) {
               const store = useProjectStore.getState();
-              // Batch all shape additions in a single update
+
+              // Save history once for the entire explosion
+              store.saveToHistory();
+
               requestAnimationFrame(() => {
-                const batchSize = 50; // Process in batches to avoid blocking
+                const batchSize = 50;
                 let index = 0;
 
                 const addBatch = () => {
                   const end = Math.min(index + batchSize, newShapes.length);
                   for (let i = index; i < end; i++) {
-                    store.addShape(newShapes[i]);
+                    // Use skipHistory=true because we already saved once
+                    store.addShape(newShapes[i], true);
                   }
                   index = end;
 
                   if (index < newShapes.length) {
                     requestAnimationFrame(addBatch);
                   } else {
-                    // All shapes added, now create a group for them
                     const groupId = `group-${Date.now()}`;
                     const newGroup = {
                       id: groupId,
                       itemIds: newShapes.map((s) => s.id),
                       zIndex: asset.zIndex,
                     };
-                    store.addGroup(newGroup);
+                    store.addGroup(newGroup, true); // skipHistory=true
 
-                    // Update asset and selection
                     store.updateAsset(asset.id, {
                       isExploded: true,
                       childShapeIds: newShapes.map((s) => s.id),
-                    });
+                    }, true); // skipHistory=true
 
-                    // Select the group instead of individual shapes
                     setSelectedIds([groupId]);
                     toast.success("Asset exploded into a group!");
                   }
@@ -605,7 +607,8 @@ export default function Workspace2D({
               toast.error("Could not convert asset to shapes.");
             }
           });
-          return;
+          return; */
+          console.log("Asset double-clicked, explosion is currently disabled.");
         }
       }
 
@@ -917,7 +920,7 @@ export default function Workspace2D({
 
         // Normal Selection Logic
         // Normal Selection Logic
-        if (activeTool === 'select') {
+        if (activeTool === 'select' || activeTool === 'trim-to-blend') {
           let itemSelected = false;
 
           const handleItemSelection = (ids: string[], isShift: boolean) => {
@@ -961,15 +964,17 @@ export default function Workspace2D({
                 ].filter(Boolean) as any[];
 
                 if (shapesToBlend.length === 2) {
-                  shapesToBlend.sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0));
+                  // Do not sort by zIndex; respect selection order for subtraction logic
+                  // Tool = shapesToBlend[0], Target = shapesToBlend[1]
 
                   try {
                     const projectStore = useProjectStore.getState();
                     const blendedShape = trimToBlendShapes(shapesToBlend);
                     if (blendedShape) {
+                      // Save history once for the entire atomic operation
                       projectStore.saveToHistory();
-                      shapesToBlend.forEach(s => projectStore.removeShape(s.id));
-                      projectStore.addShape(blendedShape);
+                      shapesToBlend.forEach(s => projectStore.removeShape(s.id, true));
+                      projectStore.addShape(blendedShape, true);
                       setSelectedIds([blendedShape.id]);
                       toast.success("Shapes blended successfully!", { icon: '✨' });
                     } else {
@@ -1059,7 +1064,7 @@ export default function Workspace2D({
 
             if (dist <= hitRadius || distToText <= textHitRadius || distToStart <= extensionHitRadius || distToEnd <= extensionHitRadius) {
               const idsToSelect = resolveIdsWithGroups([dim.id]);
-              if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
+              if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
                 useProjectStore.getState().saveToHistory();
                 setIsDraggingItem(true);
                 setDraggedItemStart({ x: worldX, y: worldY });
@@ -1127,7 +1132,7 @@ export default function Workspace2D({
               }
 
               const idsToSelect = resolveIdsWithGroups([shape.id]);
-              if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
+              if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
                 useProjectStore.getState().saveToHistory();
                 setIsDraggingItem(true);
                 setDraggedItemStart({ x: worldX, y: worldY });
@@ -1149,7 +1154,7 @@ export default function Workspace2D({
               worldY <= shape.y + halfH
             ) {
               const idsToSelect = resolveIdsWithGroups([shape.id]);
-              if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
+              if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
                 useProjectStore.getState().saveToHistory();
                 setIsDraggingItem(true);
                 setDraggedItemStart({ x: worldX, y: worldY });
@@ -1175,7 +1180,7 @@ export default function Workspace2D({
               worldY <= asset.y + halfH
             ) {
               const idsToSelect = resolveIdsWithGroups([asset.id]);
-              if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
+              if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
                 useProjectStore.getState().saveToHistory();
                 setIsDraggingItem(true);
                 setDraggedItemStart({ x: worldX, y: worldY });
@@ -1207,7 +1212,7 @@ export default function Workspace2D({
 
               if (dist <= edge.thickness / 2 + 20) {
                 const idsToSelect = resolveIdsWithGroups([wall.id]);
-                if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
+                if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
                   useProjectStore.getState().saveToHistory();
                   setIsDraggingItem(true);
                   setDraggedItemStart({ x: worldX, y: worldY });
@@ -1232,7 +1237,7 @@ export default function Workspace2D({
             const dist = Math.hypot(worldX - annotation.x, worldY - annotation.y);
             if (dist <= hitRadius) {
               const idsToSelect = resolveIdsWithGroups([annotation.id]);
-              if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
+              if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
                 // Check if double-click for editing
                 const now = Date.now();
                 const lastClickTime = (window as any).__lastTextClickTime || 0;
@@ -1280,7 +1285,7 @@ export default function Workspace2D({
 
             if (dist <= thickness) {
               const idsToSelect = resolveIdsWithGroups([arrow.id]);
-              if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
+              if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
                 useProjectStore.getState().saveToHistory();
                 setIsDraggingItem(true);
                 setDraggedItemStart({ x: worldX, y: worldY });
@@ -1726,16 +1731,49 @@ export default function Workspace2D({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle shortcuts if user is typing in an input or textarea
+      const target = e.target as HTMLElement;
+      const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+
+      // Allow COPY/PASTE/UNDO/REDO in inputs, but skip OUR custom canvas logic
+      // Actually, standard Ctrl+C/V/Z/Y should probably bypass our canvas logic if in an input
+      if (isInput) return;
+
+      const ctrlKey = e.ctrlKey || e.metaKey;
+
+      // Reset / Clear selection (Esc)
+      if (e.key === 'Escape') {
+        clearSelection();
+        useEditorStore.getState().setSelectedEdgeId(null);
+        return;
+      }
+
+      // Undo (Ctrl+Z)
+      if (ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        console.log("[Workspace2D] Keyboard Shortcut: Undo (Ctrl+Z)");
+        useProjectStore.getState().undo();
+        return;
+      }
+
+      // Redo (Ctrl+Y or Ctrl+Shift+Z)
+      if ((ctrlKey && e.key.toLowerCase() === 'y') || (ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z')) {
+        e.preventDefault();
+        console.log("[Workspace2D] Keyboard Shortcut: Redo (Ctrl+Y/Shift+Z)");
+        useProjectStore.getState().redo();
+        return;
+      }
+
       // Zoom shortcuts
-      if ((e.ctrlKey || e.metaKey) && e.key === '=') {
+      if (ctrlKey && e.key === '=') {
         e.preventDefault();
         zoomIn();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+      } else if (ctrlKey && e.key === '-') {
         e.preventDefault();
         zoomOut();
       }
       // Copy (Ctrl+C)
-      else if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      else if (ctrlKey && e.key === 'c') {
         e.preventDefault();
         const { selectedIds } = useEditorStore.getState();
         if (selectedIds.length > 0) {
@@ -1744,7 +1782,7 @@ export default function Workspace2D({
         }
       }
       // Paste (Ctrl+V)
-      else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      else if (ctrlKey && e.key === 'v') {
         e.preventDefault();
         const newIds = useProjectStore.getState().pasteSelection();
         if (newIds.length > 0) {
@@ -1758,25 +1796,31 @@ export default function Workspace2D({
         const { selectedIds } = useEditorStore.getState();
         if (selectedIds.length > 0) {
           const store = useProjectStore.getState();
-          const { walls, shapes, assets, dimensions, labelArrows, textAnnotations, updateShape, updateWall, updateAsset, updateDimension, updateLabelArrow, updateTextAnnotation } = store;
+          const { walls, shapes, assets, dimensions, labelArrows, textAnnotations } = store;
           const allItems = [...walls, ...shapes, ...assets, ...dimensions, ...textAnnotations, ...labelArrows];
           const currentMaxZ = allItems.length ? Math.max(...allItems.map((i: any) => i.zIndex || 0)) : 0;
           let z = currentMaxZ + 1;
 
-          store.saveToHistory();
-          const applyZToId = (itemId: string) => {
-            if (shapes.find((s) => s.id === itemId)) updateShape(itemId, { zIndex: z++ }, true);
-            else if (walls.find((w) => w.id === itemId)) updateWall(itemId, { zIndex: z++ }, true);
-            else if (assets.find((a) => a.id === itemId)) updateAsset(itemId, { zIndex: z++ }, true);
-            else if (dimensions.find((d) => d.id === itemId)) updateDimension(itemId, { zIndex: z++ }, true);
-            else if (labelArrows.find((la) => la.id === itemId)) updateLabelArrow(itemId, { zIndex: z++ }, true);
-            else if (textAnnotations.find((t) => t.id === itemId)) updateTextAnnotation(itemId, { zIndex: z++ }, true);
+          const batchUpdates: any[] = [];
+
+          const collectUpdatesForId = (itemId: string) => {
+            if (shapes.find((s) => s.id === itemId)) batchUpdates.push({ id: itemId, type: 'shape', updates: { zIndex: z++ } });
+            else if (walls.find((w) => w.id === itemId)) batchUpdates.push({ id: itemId, type: 'wall', updates: { zIndex: z++ } });
+            else if (assets.find((a) => a.id === itemId)) batchUpdates.push({ id: itemId, type: 'asset', updates: { zIndex: z++ } });
+            else if (dimensions.find((d) => d.id === itemId)) batchUpdates.push({ id: itemId, type: 'dimension', updates: { zIndex: z++ } });
+            else if (labelArrows.find((la) => la.id === itemId)) batchUpdates.push({ id: itemId, type: 'labelArrow', updates: { zIndex: z++ } });
+            else if (textAnnotations.find((t) => t.id === itemId)) batchUpdates.push({ id: itemId, type: 'textAnnotation', updates: { zIndex: z++ } });
             else {
               const group = store.groups.find(g => g.id === itemId);
-              if (group) group.itemIds.forEach(applyZToId);
+              if (group) group.itemIds.forEach(collectUpdatesForId);
             }
           };
-          selectedIds.forEach(applyZToId);
+
+          selectedIds.forEach(collectUpdatesForId);
+
+          if (batchUpdates.length > 0) {
+            store.batchUpdateItems(batchUpdates);
+          }
         }
       }
       // Send to back (Shift + [)
@@ -1785,42 +1829,54 @@ export default function Workspace2D({
         const { selectedIds } = useEditorStore.getState();
         if (selectedIds.length > 0) {
           const store = useProjectStore.getState();
-          const { walls, shapes, assets, dimensions, labelArrows, textAnnotations, updateShape, updateWall, updateAsset, updateDimension, updateLabelArrow, updateTextAnnotation } = store;
+          const { walls, shapes, assets, dimensions, labelArrows, textAnnotations } = store;
           const allItems = [...walls, ...shapes, ...assets, ...dimensions, ...textAnnotations, ...labelArrows];
           const currentMinZ = allItems.length ? Math.min(...allItems.map((i: any) => i.zIndex || 0)) : 0;
           let z = currentMinZ - 1;
 
-          store.saveToHistory();
-          const applyZToId = (itemId: string) => {
-            if (shapes.find((s) => s.id === itemId)) updateShape(itemId, { zIndex: z-- }, true);
-            else if (walls.find((w) => w.id === itemId)) updateWall(itemId, { zIndex: z-- }, true);
-            else if (assets.find((a) => a.id === itemId)) updateAsset(itemId, { zIndex: z-- }, true);
-            else if (dimensions.find((d) => d.id === itemId)) updateDimension(itemId, { zIndex: z-- }, true);
-            else if (labelArrows.find((la) => la.id === itemId)) updateLabelArrow(itemId, { zIndex: z-- }, true);
-            else if (textAnnotations.find((t) => t.id === itemId)) updateTextAnnotation(itemId, { zIndex: z-- }, true);
+          const batchUpdates: any[] = [];
+
+          const collectUpdatesForId = (itemId: string) => {
+            if (shapes.find((s) => s.id === itemId)) batchUpdates.push({ id: itemId, type: 'shape', updates: { zIndex: z-- } });
+            else if (walls.find((w) => w.id === itemId)) batchUpdates.push({ id: itemId, type: 'wall', updates: { zIndex: z-- } });
+            else if (assets.find((a) => a.id === itemId)) batchUpdates.push({ id: itemId, type: 'asset', updates: { zIndex: z-- } });
+            else if (dimensions.find((d) => d.id === itemId)) batchUpdates.push({ id: itemId, type: 'dimension', updates: { zIndex: z-- } });
+            else if (labelArrows.find((la) => la.id === itemId)) batchUpdates.push({ id: itemId, type: 'labelArrow', updates: { zIndex: z-- } });
+            else if (textAnnotations.find((t) => t.id === itemId)) batchUpdates.push({ id: itemId, type: 'textAnnotation', updates: { zIndex: z-- } });
             else {
               const group = store.groups.find(g => g.id === itemId);
-              if (group) group.itemIds.forEach(applyZToId);
+              if (group) group.itemIds.forEach(collectUpdatesForId);
             }
           };
-          selectedIds.forEach(applyZToId);
+
+          selectedIds.forEach(collectUpdatesForId);
+
+          if (batchUpdates.length > 0) {
+            store.batchUpdateItems(batchUpdates);
+          }
         }
       }
       // Duplicate (Ctrl+D)
-      else if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+      else if (ctrlKey && e.key === 'd') {
         e.preventDefault();
         const { selectedIds, setSelectedIds } = useEditorStore.getState();
-        const { shapes, walls, assets, addShape, addWall, addAsset } = useProjectStore.getState();
+        const projectStore = useProjectStore.getState();
+        const { shapes, walls, assets } = projectStore;
 
         const newSelectedIds: string[] = [];
         const offset = 20; // 20mm offset
+
+        // Collect all new items first
+        const newShapes: any[] = [];
+        const newAssets: any[] = [];
+        const newWalls: any[] = [];
 
         selectedIds.forEach(id => {
           // Try shape
           const shape = shapes.find(s => s.id === id);
           if (shape) {
             const newShape = { ...shape, id: crypto.randomUUID(), x: shape.x + offset, y: shape.y + offset };
-            addShape(newShape);
+            newShapes.push(newShape);
             newSelectedIds.push(newShape.id);
             return;
           }
@@ -1829,7 +1885,7 @@ export default function Workspace2D({
           const asset = assets.find(a => a.id === id);
           if (asset) {
             const newAsset = { ...asset, id: crypto.randomUUID(), x: asset.x + offset, y: asset.y + offset };
-            addAsset(newAsset);
+            newAssets.push(newAsset);
             newSelectedIds.push(newAsset.id);
             return;
           }
@@ -1852,30 +1908,32 @@ export default function Workspace2D({
             }));
 
             const newWall = { ...wall, id: crypto.randomUUID(), nodes: newWallNodes, edges: newEdges };
-            addWall(newWall);
+            newWalls.push(newWall);
             newSelectedIds.push(newWall.id);
           }
         });
 
         if (newSelectedIds.length > 0) {
+          // Save history once
+          projectStore.saveToHistory();
+
+          // Add items without saving history for each
+          if (newShapes.length > 0) projectStore.addShapeBatch(newShapes, true);
+          if (newAssets.length > 0) projectStore.addAssetBatch(newAssets, true);
+          if (newWalls.length > 0) projectStore.addWallBatch(newWalls, true);
+
           setSelectedIds(newSelectedIds);
         }
       }
       // Delete key (global delete for selected items)
       else if (e.key === 'Delete' || e.key === 'Backspace') {
-        // Don't handle delete if user is typing in an input
-        const target = e.target as HTMLElement;
-        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
-          return;
-        }
-
         const active = useEditorStore.getState().activeTool;
         // If user is typing in text tool, let TextAnnotationTool handle it
         if (active === 'text-annotation') return;
 
         e.preventDefault();
         const { selectedIds, selectedEdgeId, setSelectedEdgeId } = useEditorStore.getState();
-        const { removeWall, removeShape, removeAsset, removeWallEdge, removeDimension, removeLabelArrow, removeTextAnnotation, walls } = useProjectStore.getState();
+        const { removeWall, removeShape, removeAsset, removeWallEdge, removeDimension, removeLabelArrow, removeTextAnnotation, walls, shapes, assets, dimensions, labelArrows, textAnnotations } = useProjectStore.getState();
 
         // Delete selected edge
         if (selectedEdgeId) {
@@ -1887,32 +1945,7 @@ export default function Workspace2D({
         }
         // Delete selected items
         else if (selectedIds.length > 0) {
-          selectedIds.forEach(id => {
-            // Try to remove as wall
-            if (walls.find(w => w.id === id)) {
-              removeWall(id);
-            }
-            // Try to remove as shape
-            else if (shapes.find(s => s.id === id)) {
-              removeShape(id);
-            }
-            // Try to remove as asset
-            else if (assets.find(a => a.id === id)) {
-              removeAsset(id);
-            }
-            // Try to remove as dimension
-            else if (dimensions.find(d => d.id === id)) {
-              removeDimension(id);
-            }
-            // Try to remove as label arrow
-            else if (labelArrows.find(la => la.id === id)) {
-              removeLabelArrow(id);
-            }
-            // Try to remove as text annotation
-            else if (textAnnotations.find(ta => ta.id === id)) {
-              removeTextAnnotation(id);
-            }
-          });
+          useProjectStore.getState().removeItemsBatch(selectedIds);
           clearSelection();
         }
       }
@@ -1920,35 +1953,16 @@ export default function Workspace2D({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [zoomIn, zoomOut, clearSelection, walls, shapes, assets, dimensions, labelArrows, textAnnotations]);
-
-  // Undo/Redo Keyboard Shortcuts
-  useEffect(() => {
-    const handleUndoRedo = (e: KeyboardEvent) => {
-      // Undo (Ctrl+Z)
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        useProjectStore.getState().undo();
-      }
-      // Redo (Ctrl+Y or Ctrl+Shift+Z)
-      else if (
-        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')
-      ) {
-        e.preventDefault();
-        useProjectStore.getState().redo();
-      }
-    };
-
-    window.addEventListener('keydown', handleUndoRedo);
-    return () => window.removeEventListener('keydown', handleUndoRedo);
-  }, []);
+  }, [zoomIn, zoomOut, clearSelection]);
 
 
 
   const alignSelection = (mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => {
     const selectedIds = useEditorStore.getState().selectedIds;
     if (selectedIds.length < 2) return;
+
+    // Save history once before modifying multiple items
+    useProjectStore.getState().saveToHistory();
 
     // Gather all selected items with bounds
     const items: Array<{
@@ -3108,7 +3122,7 @@ export default function Workspace2D({
               fill="rgba(59, 130, 246, 0.1)"
               stroke="#3b82f6"
               strokeWidth={1}
-              strokeDasharray="4,4"
+              strokeDasharray={`${4 / zoom},${4 / zoom}`}
               vectorEffect="non-scaling-stroke"
               pointerEvents="none"
             />
@@ -3122,18 +3136,33 @@ export default function Workspace2D({
             if (!shape) return null;
             return (
               <g key={id} transform={`translate(${shape.x}, ${shape.y}) rotate(${shape.rotation || 0})`}>
-                <rect
-                  x={-shape.width / 2}
-                  y={-shape.height / 2}
-                  width={shape.width}
-                  height={shape.height}
-                  fill="rgba(34, 197, 94, 0.1)"
-                  stroke="#22c55e"
-                  strokeWidth={2}
-                  strokeDasharray="6,4"
-                  vectorEffect="non-scaling-stroke"
-                  pointerEvents="none"
-                />
+                {shape.type === 'ellipse' ? (
+                  <ellipse
+                    cx={0}
+                    cy={0}
+                    rx={shape.width / 2}
+                    ry={shape.height / 2}
+                    fill="rgba(34, 197, 94, 0.1)"
+                    stroke="#22c55e"
+                    strokeWidth={2}
+                    strokeDasharray={`${6 / zoom},${4 / zoom}`}
+                    vectorEffect="non-scaling-stroke"
+                    pointerEvents="none"
+                  />
+                ) : (
+                  <rect
+                    x={-shape.width / 2}
+                    y={-shape.height / 2}
+                    width={shape.width}
+                    height={shape.height}
+                    fill="rgba(34, 197, 94, 0.1)"
+                    stroke="#22c55e"
+                    strokeWidth={2}
+                    strokeDasharray={`${6 / zoom},${4 / zoom}`}
+                    vectorEffect="non-scaling-stroke"
+                    pointerEvents="none"
+                  />
+                )}
               </g>
             );
           })}

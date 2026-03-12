@@ -409,7 +409,8 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                     newNodeId,
                     junction.wallId,
                     junction.edgeId,
-                    junction.point
+                    junction.point,
+                    true // skipHistory since updateWall already saved it
                 );
             }
         }

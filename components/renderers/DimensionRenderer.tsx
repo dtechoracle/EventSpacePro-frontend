@@ -166,7 +166,7 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                         y2={p2y + py * (strokeWidth * 0.75)}
                         stroke={color}
                         strokeWidth={strokeWidth * 0.5}
-                        strokeDasharray="10 10"
+                        strokeDasharray={`${10 / zoom} ${10 / zoom}`}
                     />
                     <line
                         x1={p1x - px * (strokeWidth * 0.75)}
@@ -175,7 +175,7 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                         y2={p2y - py * (strokeWidth * 0.75)}
                         stroke={color}
                         strokeWidth={strokeWidth * 0.5}
-                        strokeDasharray="10 10"
+                        strokeDasharray={`${10 / zoom} ${10 / zoom}`}
                     />
                 </>
             ) : (
@@ -188,8 +188,8 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                     strokeWidth={strokeWidth}
                     vectorEffect="non-scaling-stroke"
                     strokeDasharray={
-                        dimension.lineStyle === 'dotted' ? '4 4' :
-                            dimension.lineStyle === 'dashed' ? '15 10' :
+                        dimension.lineStyle === 'dotted' ? `${4 / zoom} ${4 / zoom}` :
+                            dimension.lineStyle === 'dashed' ? `${15 / zoom} ${10 / zoom}` :
                                 undefined
                     }
                 />

@@ -50,8 +50,8 @@ const shapeToPaperPath = (shape: Shape): paper.Path | paper.CompoundPath | null 
         path.closed = true;
     } else if (shape.type === 'path' && shape.svgPath) {
         path = new paper.CompoundPath(shape.svgPath);
-        // Note: IF the svgPath is absolute, we don't need to move it.
-        // If svg path was generated from paper.js, paper.js outputs absolute world coordinates.
+        // Important: reposition to world center
+        path.position = center;
     } else if (shape.type === 'line' || shape.type === 'arrow' || shape.type === 'freehand') {
         // If they have points relative to center
         if (shape.points) {
@@ -67,66 +67,90 @@ const shapeToPaperPath = (shape: Shape): paper.Path | paper.CompoundPath | null 
     }
 
     if (path) {
-        // Apply rotation if any
+        // Bake rotation and position immediately into the path geometry
+        path.applyMatrix = true;
         if (shape.rotation !== undefined && shape.rotation !== 0) {
             path.rotate(shape.rotation, center);
         }
+        // Boolean operations require shapes to be closed and ideally filled
+        path.fillColor = new paper.Color('black');
+        path.closed = true;
+        // Standardize winding for boolean union
+        if (path instanceof paper.Path) path.reorient(true, true);
     }
 
     return path;
 };
 
 export const trimToBlendShapes = (shapes: Shape[]): Shape | null => {
-    // Only blend exactly 2 shapes when calling this specific feature, to avoid chaos from mass-selection
-    if (shapes.length !== 2) return null;
+    if (shapes.length < 2) return null;
     initPaper();
 
-    const paths = shapes.map(s => shapeToPaperPath(s)).filter(p => p !== null) as (paper.Path | paper.CompoundPath)[];
+    // Create a temporary project for the blending operation
+    const project = new paper.Project(new paper.Size(10000, 10000));
+    project.activate();
 
-    if (paths.length !== 2) return null;
+    try {
+        const paths = shapes.map(s => {
+            const p = shapeToPaperPath(s);
+            if (p) {
+                // Ensure all transforms are applied directly to the geometry
+                p.applyMatrix = true;
+                p.closed = true;
+                // Standardize orientation for boolean consistency
+                if (p instanceof paper.Path) p.reorient(true, true);
+            }
+            return p;
+        }).filter(p => p !== null) as paper.PathItem[];
 
-    let resultPath: paper.PathItem = paths[0];
+        if (paths.length < 2) return null;
 
-    // Boolean Unite all paths
-    for (let i = 1; i < paths.length; i++) {
-        // `unite` creates a new path representing the union
-        const newPath = resultPath.unite(paths[i]) as paper.PathItem;
-        resultPath = newPath;
+        // "Move it on top of it": Align all shapes to the center of the primary shape (first selected)
+        const primaryCenter = paths[0].position.clone();
+        for (let i = 1; i < paths.length; i++) {
+            paths[i].position = primaryCenter;
+        }
+
+        // Sequence through all selected shapes to perform a union
+        let resultPath: paper.PathItem = paths[0];
+        for (let i = 1; i < paths.length; i++) {
+            const next = resultPath.unite(paths[i]);
+            resultPath = next;
+        }
+
+        // We specifically do NOT call simplify() here anymore to avoid distorting rectangles/circles
+        // resultPath.simplify() was the cause of the "pill" shape distortion.
+
+        const bounds = resultPath.bounds;
+        const centerX = bounds.center.x;
+        const centerY = bounds.center.y;
+
+        // Re-center the geometry for relative path storage in our Shape state
+        resultPath.position = new paper.Point(0, 0);
+
+        const svgD = resultPath.pathData;
+        const baseShape = shapes[0];
+
+        const mergedShape: Shape = {
+            ...baseShape,
+            id: `shape-blended-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            type: 'path',
+            x: centerX,
+            y: centerY,
+            width: Math.max(1, bounds.width),
+            height: Math.max(1, bounds.height),
+            rotation: 0,
+            svgPath: svgD,
+            points: undefined,
+            polygonSides: undefined,
+        };
+
+        return mergedShape;
+    } catch (error) {
+        console.error("[shapeBoolean] Blending error:", error);
+        return null;
+    } finally {
+        // Always destroy the temporary project
+        project.remove();
     }
-
-    // We want to create a new "composite" shape
-    // Let's take the properties of the first shape (colors, etc.)
-    const baseShape = shapes[0];
-
-    // Let's calculate its absolute bounding box to determine X & Y bounds on the canvas.
-    const bounds = resultPath.bounds;
-    const centerX = bounds.center.x;
-    const centerY = bounds.center.y;
-
-    // Shift path geometry backwards so its center is perfectly at 0,0
-    // This allows it to align with <g transform="translate(x, y)"> in ShapeRenderer
-    // and correctly registers with standard hover/click boundary logic.
-    resultPath.position = new paper.Point(0, 0);
-
-    // Export the relative result to SVG path string
-    const svgD = resultPath.pathData;
-
-    const mergedShape: Shape = {
-        ...baseShape, // inherit fill/stroke
-        id: `shape-blended-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        type: 'path',
-        x: centerX,
-        y: centerY,
-        width: bounds.width,
-        height: bounds.height,
-        rotation: 0, // Path data already incorporates original rotations!
-        svgPath: svgD,
-        points: undefined,
-        polygonSides: undefined,
-    };
-
-    // Clean up paperjs active layer memory
-    paper.project?.activeLayer.removeChildren();
-
-    return mergedShape;
 };

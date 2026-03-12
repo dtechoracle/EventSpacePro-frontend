@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, useRef } from "react";
 import { FiSearch, FiRefreshCw } from "react-icons/fi";
@@ -51,6 +51,12 @@ export default function AiTrigger() {
   const updateProjectWall = useProjectStore((s) => s.updateWall);
   const deleteWorkspaceAsset = useProjectStore((s) => s.removeAsset);
   const deleteProjectWall = useProjectStore((s) => s.removeWall);
+  const addGroup = useProjectStore((s) => s.addGroup);
+  const removeGroup = useProjectStore((s) => s.removeGroup);
+  const removeItemsBatch = useProjectStore((s) => s.removeItemsBatch);
+  const copySelection = useProjectStore((s) => s.copySelection);
+  const pasteSelection = useProjectStore((s) => s.pasteSelection);
+  const batchUpdateItems = useProjectStore((s) => s.batchUpdateItems);
   const updateAsset = useSceneStore((s) => s.updateAsset);
   const canvas = projectCanvas || useSceneStore((s) => s.canvas);
   const existingAssets = [...workspaceAssets, ...useSceneStore((s) => s.assets)];
@@ -329,22 +335,48 @@ export default function AiTrigger() {
 
     // Generate wall
     if (Array.isArray(plan.walls) && plan.walls.length > 0) {
-      const nIds = ['rn-0', 'rn-1', 'rn-2', 'rn-3'];
-      generatedWalls.push({
-        id: 'wall-room',
-        nodes: [
-          { id: nIds[0], x: wallMinX, y: wallMinY },
-          { id: nIds[1], x: wallMaxX, y: wallMinY },
-          { id: nIds[2], x: wallMaxX, y: wallMaxY },
-          { id: nIds[3], x: wallMinX, y: wallMaxY },
-        ],
-        edges: [
-          { id: 're-0', nodeA: nIds[0], nodeB: nIds[1], thickness: WALL_THICKNESS },
-          { id: 're-1', nodeA: nIds[1], nodeB: nIds[2], thickness: WALL_THICKNESS },
-          { id: 're-2', nodeA: nIds[2], nodeB: nIds[3], thickness: WALL_THICKNESS },
-          { id: 're-3', nodeA: nIds[3], nodeB: nIds[0], thickness: WALL_THICKNESS },
-        ],
-        zIndex: 0, isClosed: true
+      plan.walls.forEach((wallDef: any, wIndex: number) => {
+        // If the AI explicitly provided nodes and edges, use them!
+        if (wallDef.nodes && wallDef.edges) {
+          const shiftX = roomCX - wallDef.centerX || 0;
+          const shiftY = roomCY - wallDef.centerY || 0;
+          generatedWalls.push({
+            id: `wall-room-${wIndex}`,
+            nodes: wallDef.nodes.map((n: any, i: number) => ({
+              id: `rn-${wIndex}-${i}`,
+              x: wallMinX + (n.xMm ?? n.x ?? 0),
+              y: wallMinY + (n.yMm ?? n.y ?? 0)
+            })),
+            edges: wallDef.edges.map((e: any, i: number) => ({
+              id: `re-${wIndex}-${i}`,
+              nodeA: `rn-${wIndex}-${e.a ?? e.nodeA}`,
+              nodeB: `rn-${wIndex}-${e.b ?? e.nodeB}`,
+              thickness: e.thickness || wallDef.thicknessPx || WALL_THICKNESS
+            })),
+            zIndex: 0, 
+            isClosed: wallDef.isClosed !== false
+          });
+        }
+        // Otherwise, generate a bounding rectangle
+        else if (wIndex === 0) {
+          const nIds = ['rn-0', 'rn-1', 'rn-2', 'rn-3'];
+          generatedWalls.push({
+            id: 'wall-room',
+            nodes: [
+              { id: nIds[0], x: wallMinX, y: wallMinY },
+              { id: nIds[1], x: wallMaxX, y: wallMinY },
+              { id: nIds[2], x: wallMaxX, y: wallMaxY },
+              { id: nIds[3], x: wallMinX, y: wallMaxY },
+            ],
+            edges: [
+              { id: 're-0', nodeA: nIds[0], nodeB: nIds[1], thickness: WALL_THICKNESS },
+              { id: 're-1', nodeA: nIds[1], nodeB: nIds[2], thickness: WALL_THICKNESS },
+              { id: 're-2', nodeA: nIds[2], nodeB: nIds[3], thickness: WALL_THICKNESS },
+              { id: 're-3', nodeA: nIds[3], nodeB: nIds[0], thickness: WALL_THICKNESS },
+            ],
+            zIndex: 0, isClosed: true
+          });
+        }
       });
     }
 
@@ -737,15 +769,65 @@ export default function AiTrigger() {
       });
     }
 
-    // ─── 6. Text Annotations (room-level labels from AI) ─────────────────────
+    // ─── 5.5 Primitive Shapes ────────────────────────────────────────────────
+    if (Array.isArray(plan.shapes)) {
+      plan.shapes.forEach((s: any, idx: number) => {
+        let sx = roomCX;
+        let sy = roomCY;
+        if (typeof s.xMm === 'number') sx = wallMinX + s.xMm;
+        else if (typeof s.x === 'number') sx = wallMinX + s.x;
+        
+        if (typeof s.yMm === 'number') sy = wallMinY + s.yMm;
+        else if (typeof s.y === 'number') sy = wallMinY + s.y;
+
+        generatedShapes.push({
+          id: `ai-shape-${idx}`,
+          type: s.type || 'rectangle',
+          x: sx, y: sy,
+          width: s.widthMm ?? s.width ?? 1000,
+          height: s.heightMm ?? s.height ?? 1000,
+          fill: s.fillColor || s.fill || '#e5e7eb',
+          stroke: s.strokeColor || s.stroke || '#000000',
+          strokeWidth: s.strokeWidth ?? 5,
+          rotation: s.rotation ?? 0,
+          zIndex: 2,
+        });
+      });
+    }
+
+    // ─── 6. Text Annotations & Dimensions ────────────────────────────────────
     if (Array.isArray(plan.annotations)) {
       plan.annotations.forEach((a: any, idx: number) => {
-        generatedTextAnnotations.push({
-          id: `ann-${idx}`, text: a.text || '',
-          x: roomCX, y: wallMaxY - 600,
-          fontSize: Number(a.fontSize || 400),
-          color: '#333', type: 'text', zIndex: 150
-        });
+        let sx = roomCX;
+        let sy = wallMaxY - 600;
+        if (typeof a.xMm === 'number') sx = wallMinX + a.xMm;
+        else if (typeof a.x === 'number') sx = wallMinX + a.x;
+        
+        if (typeof a.yMm === 'number') sy = wallMinY + a.yMm;
+        else if (typeof a.y === 'number') sy = wallMinY + a.y;
+
+        if (a.type === 'dimension') {
+          generatedShapes.push({
+            id: `ai-dimension-${idx}`,
+            type: 'line',
+            x: sx, y: sy,
+            width: a.widthMm ?? a.width ?? 1000,
+            height: 10,
+            stroke: a.strokeColor || '#000000',
+            strokeWidth: 2,
+            showDimensions: true,
+            dimensionType: 'linear',
+            rotation: a.rotation ?? 0,
+            zIndex: 150
+          });
+        } else {
+          generatedTextAnnotations.push({
+            id: `ann-${idx}`, text: a.text || '',
+            x: sx, y: sy,
+            fontSize: Number(a.fontSize || 400),
+            color: '#333', type: 'text', zIndex: 150
+          });
+        }
       });
     }
 
@@ -813,20 +895,63 @@ export default function AiTrigger() {
       }
     }
 
-    // 3. Process Operations (Delete, Align, etc.)
+    // 3. Process Operations (Delete, Align, Duplicate, Group, etc.)
     if (plan.operation) {
       const op = plan.operation;
       let opMessage = "";
+      
       if (op.type === "delete") {
-        if (op.deleteSelected) {
-          const selected = getResolvedSelection().map((a: any) => a.asset.id);
-          selected.forEach((id: string) => deleteWorkspaceAsset(id));
-          opMessage = `Deleted ${selected.length} selected items`;
-        } else if (op.assetIds) {
-          op.assetIds.forEach((id: string) => deleteWorkspaceAsset(id));
-          opMessage = `Deleted ${op.assetIds.length} items`;
+        const idsToDelete = op.deleteSelected 
+          ? getResolvedSelection().map((a: any) => a.asset.id)
+          : (op.assetIds || []);
+        
+        if (idsToDelete.length > 0) {
+          removeItemsBatch(idsToDelete);
+          opMessage = `Deleted ${idsToDelete.length} items`;
+        }
+      } 
+      else if (op.type === "duplicate") {
+        const selectedIds = getResolvedSelection().map((a: any) => a.asset.id);
+        if (selectedIds.length > 0) {
+          const count = op.count || 1;
+          copySelection(selectedIds);
+          let newIds: string[] = [];
+          for (let i = 0; i < count; i++) {
+            const pasted = pasteSelection();
+            newIds.push(...(Array.isArray(pasted) ? pasted : []));
+          }
+          if (newIds.length > 0) setEditorSelectedIds(newIds);
+          opMessage = `Duplicated items ${count} time(s)`;
         }
       }
+      else if (op.type === "group") {
+        const selectedIds = getResolvedSelection().map((a: any) => a.asset.id);
+        if (selectedIds.length > 1) {
+          const groupId = `group-${Date.now()}`;
+          addGroup({ id: groupId, itemIds: selectedIds, zIndex: 100 });
+          setEditorSelectedIds([groupId]);
+          opMessage = `Grouped ${selectedIds.length} items`;
+        }
+      }
+      else if (op.type === "ungroup") {
+        const resolved = getResolvedSelection();
+        let ungroupedCount = 0;
+        let childrenToSelect: string[] = [];
+        resolved.forEach((r: any) => {
+           if (r.asset.isGroup) {
+             removeGroup(r.asset.id);
+             ungroupedCount++;
+             if (r.asset.groupAssets) {
+               childrenToSelect.push(...r.asset.groupAssets.map((c: any) => c.id));
+             }
+           }
+        });
+        if (ungroupedCount > 0) {
+          setEditorSelectedIds(childrenToSelect);
+          opMessage = `Ungrouped ${ungroupedCount} group(s)`;
+        }
+      }
+
       if (opMessage) {
         setMessages((m: any) => [...m, { role: 'assistant', content: `✅ ${opMessage}` }]);
       }

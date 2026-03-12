@@ -611,28 +611,28 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
 
                         // Horizontal handles
                         if (dragHandle.includes('e')) {
-                            halfW = Math.max(5, halfW + localDx);
-                            offsetLocalX = localDx / 2;
+                            halfW = Math.max(5, halfW + localDx / 2);
+                            offsetLocalX = (halfW - initialShape.width / 2); // localDx / 2 if not clamped
                         }
                         if (dragHandle.includes('w')) {
-                            halfW = Math.max(5, halfW - localDx);
-                            offsetLocalX = localDx / 2;
+                            halfW = Math.max(5, halfW - localDx / 2);
+                            offsetLocalX = (initialShape.width / 2 - halfW); // localDx / 2 if not clamped
                         }
 
                         // Vertical handles
                         if (dragHandle.includes('s')) {
-                            halfH = Math.max(5, halfH + localDy);
-                            offsetLocalY = localDy / 2;
+                            halfH = Math.max(5, halfH + localDy / 2);
+                            offsetLocalY = (halfH - initialShape.height / 2);
                         }
                         if (dragHandle.includes('n')) {
-                            halfH = Math.max(5, halfH - localDy);
-                            offsetLocalY = localDy / 2;
+                            halfH = Math.max(5, halfH - localDy / 2);
+                            offsetLocalY = (initialShape.height / 2 - halfH);
                         }
 
                         const newWidth = halfW * 2;
                         const newHeight = halfH * 2;
 
-                        // Convert local offset back to world
+                        // Convert local offset back to world space
                         const offsetWorldX = offsetLocalX * cosR - offsetLocalY * sinR;
                         const offsetWorldY = offsetLocalX * sinR + offsetLocalY * cosR;
 
@@ -646,11 +646,11 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                             height: newHeight,
                         };
 
-                        // Scale polyline points if present (rotated shapes only)
+                        // Scale points if it's a polyline/polygon
                         if (initialShape.points && initialShape.points.length > 0) {
                             const scaleX = newWidth / initialShape.width;
                             const scaleY = newHeight / initialShape.height;
-                            updates.points = initialShape.points.map(p => ({
+                            updates.points = initialShape.points.map((p) => ({
                                 x: p.x * scaleX,
                                 y: p.y * scaleY,
                             }));
@@ -759,25 +759,23 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
 
                     // Horizontal handles
                     if (dragHandle.includes('e')) {
-                        halfW = Math.max(5, halfW + localDx / 2); // Add half delta to half width
-                        offsetLocalX = localDx / 2;
+                        halfW = Math.max(5, halfW + localDx / 2);
+                        offsetLocalX = (halfW - initialWidth / 2);
                     }
                     if (dragHandle.includes('w')) {
                         halfW = Math.max(5, halfW - localDx / 2);
-                        offsetLocalX = localDx / 2;
+                        offsetLocalX = (initialWidth / 2 - halfW);
                     }
 
                     // Vertical handles
                     if (dragHandle.includes('s')) {
                         halfH = Math.max(5, halfH + localDy / 2);
-                        offsetLocalY = localDy / 2;
+                        offsetLocalY = (halfH - initialHeight / 2);
                     }
                     if (dragHandle.includes('n')) {
                         halfH = Math.max(5, halfH - localDy / 2);
-                        offsetLocalY = localDy / 2;
+                        offsetLocalY = (initialHeight / 2 - halfH);
                     }
-
-                    // Corner handles (already covered by combining above checks)
 
                     const newWidth = halfW * 2;
                     const newHeight = halfH * 2;

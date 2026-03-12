@@ -443,18 +443,18 @@ export const useSceneStore = create<SceneState>()(
         // Default properties for shapes
         const shapeDefaults: Partial<AssetInstance> =
           type === "square" || type === "circle"
-            ? { width: 50, height: 50, strokeWidth: 1.5, backgroundColor: defaultBackgroundColor }
+            ? { width: 50, height: 50, strokeWidth: 1, backgroundColor: defaultBackgroundColor }
             : type === "line"
-              ? { width: 100, height: 2, strokeWidth: 1.5, strokeColor: "#000000", backgroundColor: defaultBackgroundColor }
+              ? { width: 100, height: 2, strokeWidth: 1, strokeColor: "#000000", backgroundColor: defaultBackgroundColor }
               : type === "double-line"
                 ? { width: 2, height: 100, strokeWidth: 1, strokeColor: "#000000", lineGap: 8, lineColor: "#000000", backgroundColor: defaultBackgroundColor }
                 : type === "drawn-line"
-                  ? { strokeWidth: 1.5, strokeColor: "#000000", backgroundColor: defaultBackgroundColor }
+                  ? { strokeWidth: 1, strokeColor: "#000000", backgroundColor: defaultBackgroundColor }
                   : type === "wall-segments"
                     ? { wallThickness: get().getCurrentWallThickness(), wallGap: 8, lineColor: "#000000", backgroundColor: defaultBackgroundColor }
                     : type === "text"
                       ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: defaultBackgroundColor }
-                      : { width: finalWidth, height: finalHeight, strokeWidth: 1, strokeColor: "#000000", fillColor: "transparent", backgroundColor: defaultBackgroundColor }; // Reduced default strokeWidths
+                      : { width: finalWidth, height: finalHeight, strokeWidth: 0.5, strokeColor: "#000000", fillColor: "transparent", backgroundColor: defaultBackgroundColor }; // Reduced default strokeWidths
 
         set({
           assets: [

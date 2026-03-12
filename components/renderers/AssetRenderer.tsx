@@ -169,7 +169,7 @@ export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRen
 
         const currentFill = asset.fillColor || 'none';
         const currentStroke = asset.strokeColor || '#000000';
-        const currentStrokeWidth = asset.strokeWidth || 1;
+        const currentStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : 0.5;
 
         // Strip any stale width/height/x/y/fill/stroke from existing attrs to avoid conflicts,
         // then inject our precise pixel values so centering works correctly.
@@ -182,7 +182,7 @@ export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRen
                 .replace(/\s+fill\s*=\s*["'][^"']*["']/gi, '')
                 .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '');
 
-            return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="${asset.width || 100}" height="${asset.height || 100}" x="${-(asset.width || 0) / 2}" y="${-(asset.height || 0) / 2}" preserveAspectRatio="xMidYMid meet" style="overflow: visible; pointer-events: none;">`;
+            return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="${asset.width || 100}" height="${asset.height || 100}" x="${-(asset.width || 0) / 2}" y="${-(asset.height || 0) / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none;">`;
         });
     }, [baseSvg, asset.fillColor, asset.strokeColor, asset.strokeWidth, asset.width, asset.height]);
 

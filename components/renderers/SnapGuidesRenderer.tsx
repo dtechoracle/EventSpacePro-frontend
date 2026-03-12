@@ -17,7 +17,7 @@ export default function SnapGuidesRenderer({ zoom = 1 }: { zoom?: number }) {
                     y2={guide.y2}
                     stroke={guide.type === 'horizontal' ? '#22c55e' : '#ef4444'} // Horizontal = Green, Vertical = Red
                     strokeWidth={1}
-                    strokeDasharray="4 4"
+                    strokeDasharray={`${4 / zoom} ${4 / zoom}`}
                     vectorEffect="non-scaling-stroke"
                 />
             ))}

@@ -206,7 +206,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             fillType: 'solid',
             // Default black stroke for better visibility
             stroke: '#000000',
-            strokeWidth: 5,
+            strokeWidth: 1,
             zIndex: getNextZIndex(),
         };
 
@@ -274,7 +274,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 fill: 'transparent',
                 // Black default stroke for single lines/arrows
                 stroke: '#000000',
-                strokeWidth: 5,
+                strokeWidth: 1,
                 zIndex: getNextZIndex(),
             };
 
@@ -325,7 +325,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 fillType: 'solid',
                 // Black default stroke for multi‑segment lines/arrows
                 stroke: '#000000',
-                strokeWidth: 5,
+                strokeWidth: 1,
                 points: relativePoints,
                 zIndex: getNextZIndex(),
             };
@@ -627,7 +627,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                                         stroke="#ef4444"
                                         strokeWidth={1}
                                         opacity={0.7}
-                                        strokeDasharray="4,4"
+                                        strokeDasharray={`${4 / zoom},${4 / zoom}`}
                                         vectorEffect="non-scaling-stroke"
                                     />
                                     {/* Vertical guide (green) from last point */}
@@ -639,7 +639,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                                         stroke="#22c55e"
                                         strokeWidth={1}
                                         opacity={0.7}
-                                        strokeDasharray="4,4"
+                                        strokeDasharray={`${4 / zoom},${4 / zoom}`}
                                         vectorEffect="non-scaling-stroke"
                                     />
                                     {/* Horizontal guide (red) from current point */}
@@ -651,7 +651,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                                         stroke="#ef4444"
                                         strokeWidth={1}
                                         opacity={0.7}
-                                        strokeDasharray="4,4"
+                                        strokeDasharray={`${4 / zoom},${4 / zoom}`}
                                         vectorEffect="non-scaling-stroke"
                                     />
                                     {/* Vertical guide (green) from current point */}
@@ -663,7 +663,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                                         stroke="#22c55e"
                                         strokeWidth={1}
                                         opacity={0.7}
-                                        strokeDasharray="4,4"
+                                        strokeDasharray={`${4 / zoom},${4 / zoom}`}
                                         vectorEffect="non-scaling-stroke"
                                     />
                                 </>
@@ -828,7 +828,6 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                         fill="transparent"
                         stroke="#3b82f6"
                         strokeWidth={2}
-                        strokeDasharray="5,5"
                         opacity={0.7}
                         vectorEffect="non-scaling-stroke"
                     />
@@ -843,7 +842,6 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                         fill="transparent"
                         stroke="#3b82f6"
                         strokeWidth={2}
-                        strokeDasharray="5,5"
                         opacity={0.7}
                         vectorEffect="non-scaling-stroke"
                     />
@@ -866,7 +864,6 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                         fill="transparent"
                         stroke="#3b82f6"
                         strokeWidth={2}
-                        strokeDasharray="5,5"
                         opacity={0.7}
                         vectorEffect="non-scaling-stroke"
                     />
@@ -880,7 +877,6 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                         y2={endPoint.y}
                         stroke="#3b82f6"
                         strokeWidth={2}
-                        strokeDasharray="5,5"
                         opacity={0.7}
                         vectorEffect="non-scaling-stroke"
                     />

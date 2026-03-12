@@ -538,7 +538,7 @@ export default function TrimTool({ isActive, isTrimToObject }: TrimToolProps) {
                 y2={currentPoint.y}
                 stroke="#ff0000"
                 strokeWidth={3}
-                strokeDasharray="10,5"
+                strokeDasharray={`${10 / zoom},${5 / zoom}`}
                 opacity={0.8}
                 vectorEffect="non-scaling-stroke"
             />

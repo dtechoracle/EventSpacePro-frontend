@@ -217,7 +217,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
 
             case "trim-to-blend": {
                 deactivateAllTools();
-                setEditorTool("select"); // Use select tool first to pick boundaries
+                setEditorTool("trim-to-blend"); // Use trim-to-blend tool directly
                 setActiveTool("trim-to-blend"); // But keep state as trim-to-blend
                 useEditorStore.getState().setSelectedIds([]);
                 toast("Trim to Blend: Use Pointer to select the 1st shape, then the 2nd.", { duration: 5000, icon: '✨' });
