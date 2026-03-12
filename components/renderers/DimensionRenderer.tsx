@@ -97,21 +97,24 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                 />
 
                 {/* Text Label */}
-                <g transform={`translate(${midX}, ${midY}) rotate(${angle})`}>
+                <g transform={`translate(${midX}, ${midY}) scale(${1 / zoom}) rotate(${angle})`}>
                     <rect
-                        x="-40"
-                        y="-15"
-                        width="80"
-                        height="30"
+                        x="-30"
+                        y="-10"
+                        width="60"
+                        height="20"
                         fill="white"
-                        opacity="0.8"
+                        rx="4"
+                        opacity="0.9"
+                        style={{ filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.1))' }}
                     />
                     <text
                         x="0"
-                        y="0"
+                        y="1"
                         textAnchor="middle"
                         dominantBaseline="middle"
-                        fontSize={worldFontSize}
+                        fontSize="11"
+                        fontWeight="600"
                         fill={color}
                         fontFamily="sans-serif"
                     >
@@ -139,6 +142,7 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                 stroke={color}
                 strokeWidth={strokeWidth * 0.5}
                 opacity={0.5}
+                vectorEffect="non-scaling-stroke"
             />
             <line
                 x1={endPoint.x}
@@ -182,6 +186,7 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                     y2={p2y}
                     stroke={color}
                     strokeWidth={strokeWidth}
+                    vectorEffect="non-scaling-stroke"
                     strokeDasharray={
                         dimension.lineStyle === 'dotted' ? '4 4' :
                             dimension.lineStyle === 'dashed' ? '15 10' :
@@ -204,25 +209,28 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                 stroke={color}
                 strokeWidth={strokeWidth}
                 fill="none"
+                vectorEffect="non-scaling-stroke"
             />
 
             {/* Text Label */}
-            {/* We use a white background rect for readability */}
-            <g transform={`translate(${midX}, ${midY}) rotate(${angle})`}>
+            <g transform={`translate(${midX}, ${midY}) scale(${1 / zoom}) rotate(${angle})`}>
                 <rect
-                    x="-40"
-                    y="-15"
-                    width="80"
-                    height="30"
+                    x="-30"
+                    y="-10"
+                    width="60"
+                    height="20"
                     fill="white"
-                    opacity="0.8"
+                    rx="4"
+                    opacity="0.9"
+                    style={{ filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.1))' }}
                 />
                 <text
                     x="0"
-                    y="0"
+                    y="1"
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    fontSize={worldFontSize}
+                    fontSize="11"
+                    fontWeight="600"
                     fill={color}
                     fontFamily="sans-serif"
                 >

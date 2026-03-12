@@ -15,7 +15,7 @@ export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererPr
     const angle = Math.atan2(dy, dx) * (180 / Math.PI);
 
     // Arrow head
-    const arrowHeadSize = (arrow.strokeWidth || 2) * 5;
+    const arrowHeadSize = ((arrow.strokeWidth || 2) * 5) / zoom;
     const arrowAngle = angle * (Math.PI / 180);
     const arrowX = arrow.endPoint.x - Math.cos(arrowAngle) * arrowHeadSize;
     const arrowY = arrow.endPoint.y - Math.sin(arrowAngle) * arrowHeadSize;
@@ -28,7 +28,7 @@ export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererPr
     // Position text directly on the line at midpoint
     const labelX = midX;
     const labelY = midY;
-    
+
     // Keep text readable (not upside down) - same logic as dimension
     let textAngle = angle;
     if (textAngle > 90 || textAngle < -90) {
@@ -46,6 +46,7 @@ export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererPr
                 stroke={arrow.color || '#000000'}
                 strokeWidth={arrow.strokeWidth || 2}
                 strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
             />
             {/* Arrow head */}
             <polygon
@@ -54,22 +55,27 @@ export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererPr
                 stroke={arrow.color || '#000000'}
             />
             {/* Label text with white background for readability (like dimension) */}
-            <g transform={`translate(${labelX}, ${labelY}) rotate(${textAngle})`}>
+            {/* Label text with white background for readability (like dimension) */}
+            <g transform={`translate(${labelX}, ${labelY}) scale(${1 / zoom}) rotate(${textAngle})`}>
                 <rect
-                    x={-(arrow.label.length * 4)}
+                    x={-(arrow.label.length * 4) - 4}
                     y={-10}
-                    width={arrow.label.length * 8}
+                    width={arrow.label.length * 8 + 8}
                     height={20}
-                    fill="white"
-                    opacity="0.8"
+                    fill="#ffffff"
+                    rx="4"
+                    opacity="0.9"
+                    style={{ filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.1))' }}
                 />
                 <text
                     x="0"
-                    y="0"
-                    fontSize={arrow.fontSize || 14}
+                    y="1"
+                    fontSize={12}
+                    fontWeight="600"
                     fill={arrow.color || '#000000'}
                     dominantBaseline="middle"
                     textAnchor="middle"
+                    fontFamily="sans-serif"
                 >
                     {arrow.label}
                 </text>

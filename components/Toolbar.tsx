@@ -10,9 +10,23 @@ interface ToolbarProps {
 }
 
 export default function Toolbar({ className = '' }: ToolbarProps) {
-    const { activeTool, setActiveTool, showGrid, toggleGrid, snapToGrid, toggleSnapToGrid, zoomIn, zoomOut, resetZoom, zoom } = useEditorStore();
+    const { activeTool, setActiveTool, zoomIn, zoomOut, resetZoom, zoom, snapToObjects, toggleSnapToObjects } = useEditorStore();
     const { undo, redo, history } = useProjectStore();
-    const { setRectangularSelectionMode, toggleSnapToGrid: toggleSceneSnap } = useSceneStore();
+    const { setRectangularSelectionMode, snapToGridEnabled, showGrid } = useSceneStore();
+
+    const handleGridToggle = () => {
+        useSceneStore.getState().toggleGrid();
+    };
+
+    const handleSnapToggle = () => {
+        const nextState = !snapToGridEnabled;
+        useEditorStore.getState().setSnapToGrid(nextState);
+        useSceneStore.getState().setSnapToGridEnabled(nextState);
+    };
+
+    const handleObjectSnapToggle = () => {
+        toggleSnapToObjects();
+    };
 
     const tools: { id: Tool; label: string; icon: string }[] = [
         { id: 'select', label: 'Select', icon: '⬚' },
@@ -58,7 +72,7 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
                 {/* Middle: View Controls */}
                 <div className="flex items-center gap-2">
                     <button
-                        onClick={toggleGrid}
+                        onClick={handleGridToggle}
                         className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${showGrid
                             ? 'bg-blue-500 text-white'
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -69,14 +83,25 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
                     </button>
 
                     <button
-                        onClick={toggleSnapToGrid}
-                        className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${!snapToGrid
+                        onClick={handleSnapToggle}
+                        className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${snapToGridEnabled
                             ? 'bg-blue-500 text-white'
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
-                        title="Toggle Smart Snap"
+                        title="Toggle Snap to Grid"
                     >
-                        Smart Snap
+                        Snap to Grid
+                    </button>
+
+                    <button
+                        onClick={handleObjectSnapToggle}
+                        className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${snapToObjects
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                        title="Toggle Snap to Objects"
+                    >
+                        Snap Objects
                     </button>
 
                     <div className="flex items-center gap-1 ml-2">

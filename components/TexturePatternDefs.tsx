@@ -4,18 +4,16 @@ import { useProjectStore } from '@/store/projectStore';
 
 /**
  * TexturePatternDefs component
- * Renders SVG pattern definitions for texture fills
- * Supports dynamic scaling based on usage in the scene
+ * Renders SVG pattern definitions for texture fills using image-based assets.
+ * Optimized for performance by using appropriate tiling and cache-friendly definitions.
  */
 export default function TexturePatternDefs() {
     const { shapes, walls } = useProjectStore();
 
-    // 1. Identify all unique scales used for each pattern ID in the scene
-    // 1. Identify all unique scales used for each pattern ID in the scene
+    // Identify all unique scales used for each pattern ID in the scene
     const usedScales = useMemo(() => {
         const scales = new Map<string, Set<{ scale: number; thickness: number }>>();
 
-        // Helper
         const addParams = (textureId: string | undefined, scale: number | undefined, thickness: number | undefined) => {
             if (!textureId) return;
             if (!scales.has(textureId)) scales.set(textureId, new Set());
@@ -24,7 +22,6 @@ export default function TexturePatternDefs() {
             const s = scale || 1;
             const t = thickness || 1;
 
-            // Check existence to avoid dupe objects (Set checks ref equality)
             let exists = false;
             set.forEach(item => {
                 if (item.scale === s && item.thickness === t) exists = true;
@@ -35,57 +32,72 @@ export default function TexturePatternDefs() {
 
         // Check shapes
         shapes.forEach(shape => {
-            if (shape.fillType === 'texture' && shape.fillTexture) {
+            if ((shape.fillType === 'texture' || shape.fillType === 'hatch') && shape.fillTexture) {
                 addParams(shape.fillTexture, shape.fillTextureScale, shape.fillTextureThickness);
             }
         });
 
         // Check walls
         walls.forEach(wall => {
-            if (wall.fillType === 'texture' && wall.fillTexture) {
+            if ((wall.fillType === 'texture' || wall.fillType === 'hatch') && wall.fillTexture) {
                 addParams(wall.fillTexture, wall.fillTextureScale, wall.fillTextureThickness);
             }
         });
 
-        // Ensure default 1,1 is always available for all patterns (for palette previews etc)
+        // Ensure default 1,1 available
         texturePatterns.forEach(p => addParams(p.id, 1, 1));
 
         return scales;
     }, [shapes, walls]);
 
-
-    // 2. Generate pattern variants
+    // Generate pattern variants
     const patternVariants = useMemo(() => {
         const variants: React.ReactNode[] = [];
 
         texturePatterns.forEach(pattern => {
-            const patternScales = usedScales.get(pattern.id) || new Set([{ scale: 1, thickness: 1 }]);
+            const pScales = usedScales.get(pattern.id) || new Set([{ scale: 1, thickness: 1 }]);
 
-            patternScales.forEach(({ scale, thickness }) => {
+            pScales.forEach(({ scale, thickness }) => {
                 const scaledId = `${pattern.id}-scale-${scale}-thick-${thickness}`;
+                const baseTileSize = pattern.tileSize || 1024;
 
-                if (pattern.id === 'grass' || pattern.id === 'sand') {
-                    // Procedural handled below
-                } else {
+                if (pattern.isImage && pattern.path) {
+                    // Optimization: Use a fixed pattern size but scale via transform to maintain quality
+                    // 'image-rendering: crisp-edges' for textures can sometimes help, but 'auto' is usually better for photos.
+                    variants.push(
+                        <pattern
+                            key={scaledId}
+                            id={scaledId}
+                            patternUnits="userSpaceOnUse"
+                            width={baseTileSize}
+                            height={baseTileSize}
+                            patternTransform={`scale(${scale})`} // 1:1 scale by default
+                        >
+                            <image
+                                href={pattern.path}
+                                width={baseTileSize}
+                                height={baseTileSize}
+                                preserveAspectRatio="xMidYMid slice"
+                            // Loading lazy isn't fully supported in SVG <image> in all browsers, 
+                            // but we use standard href for caching.
+                            />
+                        </pattern>
+                    );
+                } else if (pattern.svg) {
+                    // Handle legacy SVG patterns like 'grid'
                     let svgStr = pattern.svg;
-                    // Replace ID
                     svgStr = svgStr.replace(/id="[^"]*"/, `id="${scaledId}"`);
 
-                    // Apply thickness scaling to stroke-width
-                    // This regex finds stroke-width="X" and multiplies X by thickness
                     if (thickness !== 1) {
                         svgStr = svgStr.replace(/stroke-width="([\d.]+)"/g, (match, p1) => {
                             return `stroke-width="${parseFloat(p1) * thickness}"`;
                         });
-                        // Also scale circle radius for dots/etc if needed, though stroke-width is main target
-                        // If patterns use circles for "dots", they might use 'r' attribute
                         svgStr = svgStr.replace(/r="([\d.]+)"/g, (match, p1) => {
                             return `r="${parseFloat(p1) * thickness}"`;
                         });
                     }
 
-                    // Add/Replace patternTransform
-                    const finalScale = scale * 0.5;
+                    const finalScale = scale;
                     if (svgStr.includes('patternTransform=')) {
                         svgStr = svgStr.replace(/patternTransform="[^"]*"/, `patternTransform="scale(${finalScale})"`);
                     } else {
@@ -102,52 +114,31 @@ export default function TexturePatternDefs() {
         return variants;
     }, [usedScales]);
 
-    // Scales for procedural patterns (grass/sand)
-    const grassParams = Array.from(usedScales.get('grass') || [{ scale: 1, thickness: 1 }]);
-    const sandParams = Array.from(usedScales.get('sand') || [{ scale: 1, thickness: 1 }]);
-
     return (
         <defs>
-            {/* Standard Patterns (Scaled) */}
             {patternVariants}
 
-            {/* Procedural Grass Pattern variants */}
-            {/* Procedural Grass Pattern variants - Now using External SVG Asset */}
-            {grassParams.map(({ scale, thickness }) => (
-                <pattern
-                    key={`grass-${scale}-${thickness}`}
-                    id={`grass-scale-${scale}-thick-${thickness}`}
-                    patternUnits="userSpaceOnUse"
-                    width="512"
-                    height="512"
-                    patternTransform={`scale(${scale})`}
-                >
-                    <image
-                        href="/assets/grass-texture.svg"
-                        width="512"
-                        height="512"
-                        preserveAspectRatio="none"
-                    />
-                </pattern>
-            ))}
-
-            {/* Procedural Sand Pattern variants */}
-            {sandParams.map(({ scale, thickness }) => (
-                <pattern key={`sand-${scale}-${thickness}`} id={`sand-scale-${scale}-thick-${thickness}`} patternUnits="userSpaceOnUse" width="128" height="128" patternTransform={`scale(${scale})`}>
-                    <rect width="128" height="128" fill="#e6c288" />
-                    <filter id={`sandNoise-${scale}-${thickness}`}>
-                        <feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="4" stitchTiles="stitch" />
-                        <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 3 -1" />
-                    </filter>
-                    <rect width="128" height="128" filter={`url(#sandNoise-${scale}-${thickness})`} opacity="0.35" />
-                    {/* Larger, more visible particles */}
-                    <circle cx="25" cy="25" r={3 * thickness} fill="#d4a76a" opacity="0.6" />
-                    <circle cx="75" cy="45" r={4 * thickness} fill="#c69c6d" opacity="0.5" />
-                    <circle cx="100" cy="100" r={3 * thickness} fill="#d4a76a" opacity="0.6" />
-                    <circle cx="40" cy="90" r={2.5 * thickness} fill="#8b5e3c" opacity="0.4" />
-                    <circle cx="110" cy="20" r={2.5 * thickness} fill="#8b5e3c" opacity="0.4" />
-                </pattern>
-            ))}
+            {/* Hash Patterns */}
+            <pattern id="hash-45" patternUnits="userSpaceOnUse" width="10" height="10">
+                <rect width="10" height="10" fill="none" />
+                <path d="M-1,1 l2,-2 M0,10 l10,-10 M9,11 l2,-2" stroke="#000000" strokeWidth="1" />
+            </pattern>
+            <pattern id="hash-135" patternUnits="userSpaceOnUse" width="10" height="10">
+                <rect width="10" height="10" fill="none" />
+                <path d="M-1,9 l2,2 M0,0 l10,10 M9,-1 l2,2" stroke="#000000" strokeWidth="1" />
+            </pattern>
+            <pattern id="hash-horizontal" patternUnits="userSpaceOnUse" width="10" height="5">
+                <rect width="10" height="5" fill="none" />
+                <path d="M0,2.5 h10" stroke="#000000" strokeWidth="1" />
+            </pattern>
+            <pattern id="hash-vertical" patternUnits="userSpaceOnUse" width="5" height="10">
+                <rect width="5" height="10" fill="none" />
+                <path d="M2.5,0 v10" stroke="#000000" strokeWidth="1" />
+            </pattern>
+            <pattern id="hash-cross" patternUnits="userSpaceOnUse" width="10" height="10">
+                <rect width="10" height="10" fill="none" />
+                <path d="M0,5 h10 M5,0 v10" stroke="#000000" strokeWidth="1" />
+            </pattern>
         </defs>
     );
 }

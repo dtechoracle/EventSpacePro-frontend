@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Shape } from '@/store/projectStore';
+import { useEditorStore } from '@/store/editorStore';
 
 interface ShapeRendererProps {
     shape: Shape;
@@ -10,13 +11,14 @@ interface ShapeRendererProps {
 }
 
 export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRendererProps) {
+    const { zoom } = useEditorStore();
     // Default pure black stroke so new shapes/lines pop clearly
     const strokeColor = shape.stroke || '#000000';
     const fillColor = shape.fill || 'transparent';
     // Ensure strokeWidth is always a valid number, defaulting to 3 if undefined/null/0
     const strokeWidth = (shape.strokeWidth !== undefined && shape.strokeWidth !== null && shape.strokeWidth > 0)
         ? shape.strokeWidth
-        : 3;
+        : 1;
 
     const highlightColor = '#3b82f6';
     const showHighlight = isHovered || isSelected;
@@ -34,11 +36,9 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
 
         if (fillType === 'gradient') {
             return `url(#${gradientId})`;
-        } else if (fillType === 'hatch') {
-            return `url(#${hatchId})`;
         } else if (fillType === 'none') {
             return 'transparent';
-        } else if (fillType === 'texture') {
+        } else if (fillType === 'hatch' || fillType === 'texture') {
             const scale = shape.fillTextureScale || 1;
             const thickness = shape.fillTextureThickness || 1;
             return shape.fillTexture ? `url(#${shape.fillTexture}-scale-${scale}-thick-${thickness})` : fillColor;
@@ -66,6 +66,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
             strokeWidth: isHighlight ? strokeWidth + 4 : strokeWidth,
             opacity: isHighlight ? 0.8 : 1,
             strokeDasharray: shape.lineType !== 'double' ? dashArray : undefined,
+            vectorEffect: 'non-scaling-stroke',
             style: { pointerEvents: shape.id === 'background-texture' ? 'none' : 'auto' } as React.CSSProperties,
             ...overrideProps
         };
@@ -122,10 +123,10 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                             key={i}
                             cx={p.x}
                             cy={p.y}
-                            r={4}
+                            r={4 / zoom}
                             fill="#ffffff"
                             stroke="#3b82f6"
-                            strokeWidth={1.5}
+                            strokeWidth={1.5 / zoom}
                             className="cursor-move"
                         />
                     ))}
@@ -189,10 +190,10 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                                     key={i}
                                     cx={p.x}
                                     cy={p.y}
-                                    r={4}
+                                    r={4 / zoom}
                                     fill="#ffffff"
                                     stroke="#3b82f6"
-                                    strokeWidth={1.5}
+                                    strokeWidth={1.5 / zoom}
                                     className="cursor-move"
                                 />
                             ))}
@@ -218,10 +219,10 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                                 key={i}
                                 cx={p.x}
                                 cy={p.y}
-                                r={4}
+                                r={4 / zoom}
                                 fill="#ffffff"
                                 stroke="#3b82f6"
-                                strokeWidth={1.5}
+                                strokeWidth={1.5 / zoom}
                                 className="cursor-move"
                             />
                         ))}
@@ -246,19 +247,19 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                             <circle
                                 cx={-shape.width / 2}
                                 cy={0}
-                                r={4}
+                                r={4 / zoom}
                                 fill="#ffffff"
                                 stroke="#3b82f6"
-                                strokeWidth={1.5}
+                                strokeWidth={1.5 / zoom}
                                 className="cursor-move"
                             />
                             <circle
                                 cx={shape.width / 2}
                                 cy={0}
-                                r={4}
+                                r={4 / zoom}
                                 fill="#ffffff"
                                 stroke="#3b82f6"
-                                strokeWidth={1.5}
+                                strokeWidth={1.5 / zoom}
                                 className="cursor-move"
                             />
                         </>
@@ -512,10 +513,10 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                         {!isHighlight && isSelected && pts.map((p, i) => (
                             <circle
                                 key={i}
-                                cx={p.x} cy={p.y} r={4}
+                                cx={p.x} cy={p.y} r={4 / zoom}
                                 fill={i % 2 === 0 ? '#ffffff' : '#fbbf24'}
                                 stroke={i % 2 === 0 ? '#3b82f6' : '#f59e0b'}
-                                strokeWidth={1.5}
+                                strokeWidth={1.5 / zoom}
                                 className="cursor-move"
                             />
                         ))}
@@ -539,10 +540,10 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                     {!isHighlight && isSelected && shape.points.map((p, i) => (
                         <circle
                             key={i}
-                            cx={p.x} cy={p.y} r={4}
+                            cx={p.x} cy={p.y} r={4 / zoom}
                             fill={i === 2 ? '#fbbf24' : '#ffffff'}
                             stroke={i === 2 ? '#f59e0b' : '#3b82f6'}
-                            strokeWidth={1.5}
+                            strokeWidth={1.5 / zoom}
                             className="cursor-move"
                         />
                     ))}
@@ -560,6 +561,15 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                     {...commonProps}
                     strokeLinecap="round"
                     strokeLinejoin="round"
+                />
+            );
+        }
+
+        if (shape.type === 'path' && shape.svgPath) {
+            return (
+                <path
+                    d={shape.svgPath}
+                    {...commonProps}
                 />
             );
         }

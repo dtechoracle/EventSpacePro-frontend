@@ -7,6 +7,7 @@ import Workspace2D from "@/components/Workspace2D"; // NEW WORKSPACE
 import Scene3D from "@/components/Scene3D";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import AiTrigger from "@/pages/(components)/AiTrigger";
+import InlineSvg from "@/components/tools/InlineSvg";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/router";
@@ -36,8 +37,8 @@ type EventData = BaseEventData & {
 
 // Lightweight pane listing all elements on the workspace (walls, shapes, assets)
 function ElementsPane() {
-  const { walls, shapes, assets, textAnnotations, dimensions, labelArrows } = useProjectStore();
-  const { setSelectedIds, zoom, setPan } = useEditorStore();
+  const { walls, shapes, assets, textAnnotations, dimensions, labelArrows, groups } = useProjectStore();
+  const { selectedIds, setSelectedIds, zoom, setPan } = useEditorStore();
   const [expandedAssets, setExpandedAssets] = React.useState<Record<string, boolean>>({});
 
   // Group shapes by exploded asset (sourceAssetId)
@@ -58,8 +59,8 @@ function ElementsPane() {
   });
 
   const items = [
-    // Walls: compute a rough center from their nodes
-    ...walls.map((w) => {
+    // Filter out items that belong to a group
+    ...walls.filter(w => !w.groupId).map((w) => {
       if (!w.nodes || w.nodes.length === 0) {
         return { id: w.id, label: "Wall", type: "Wall" as const, x: 0, y: 0 };
       }
@@ -69,8 +70,7 @@ function ElementsPane() {
       const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
       return { id: w.id, label: "Wall", type: "Wall" as const, x: centerX, y: centerY };
     }),
-    // Standalone shapes already have x/y at their center
-    ...independentShapes.map((s) => ({
+    ...independentShapes.filter(s => !s.groupId).map((s) => ({
       id: s.id,
       label: s.type,
       type: "Shape" as const,
@@ -78,8 +78,7 @@ function ElementsPane() {
       y: s.y,
       shape: s,
     })),
-    // Assets have x/y at their center; attach exploded child shapes if any
-    ...assets.map((a) => ({
+    ...assets.filter(a => !a.groupId).map((a) => ({
       id: a.id,
       label: (a.metadata as any)?.label || a.type || "Asset",
       type: "Asset" as const,
@@ -88,8 +87,7 @@ function ElementsPane() {
       asset: a,
       childShapes: assetChildrenMap[a.id] || [],
     })),
-    // Text annotations
-    ...textAnnotations.map((t) => ({
+    ...textAnnotations.filter(t => !t.groupId).map((t) => ({
       id: t.id,
       label: t.text || "Text",
       type: "Text" as const,
@@ -97,8 +95,7 @@ function ElementsPane() {
       y: t.y,
       text: t,
     })),
-    // Dimensions
-    ...dimensions.map((d) => ({
+    ...dimensions.filter(d => !d.groupId).map((d) => ({
       id: d.id,
       label: (d.type as string) === "wall" ? "Wall Dimension" : "Dimension",
       type: "Dimension" as const,
@@ -106,8 +103,7 @@ function ElementsPane() {
       y: (d.startPoint.y + d.endPoint.y) / 2,
       dimension: d,
     })),
-    // Label arrows
-    ...labelArrows.map((la) => ({
+    ...labelArrows.filter(la => !la.groupId).map((la) => ({
       id: la.id,
       label: la.label || "Label",
       type: "Label" as const,
@@ -115,11 +111,67 @@ function ElementsPane() {
       y: (la.startPoint.y + la.endPoint.y) / 2,
       labelArrow: la,
     })),
+    // Groups
+    ...groups.map(g => {
+      // Find children to compute center
+      const children = [
+        ...shapes.filter(s => g.itemIds.includes(s.id)),
+        ...assets.filter(a => g.itemIds.includes(a.id)),
+        ...walls.filter(w => g.itemIds.includes(w.id)),
+        ...textAnnotations.filter(t => g.itemIds.includes(t.id)),
+        ...dimensions.filter(d => g.itemIds.includes(d.id)),
+        ...labelArrows.filter(la => g.itemIds.includes(la.id)),
+      ];
+
+      const getCenter = (item: any) => {
+        if (item.nodes) { // Wall
+          const xs = item.nodes.map((n: any) => n.x);
+          const ys = item.nodes.map((n: any) => n.y);
+          return {
+            x: (Math.min(...xs) + Math.max(...xs)) / 2,
+            y: (Math.min(...ys) + Math.max(...ys)) / 2
+          };
+        }
+        if (item.startPoint && item.endPoint) { // Dimension, Label
+          return {
+            x: (item.startPoint.x + item.endPoint.x) / 2,
+            y: (item.startPoint.y + item.endPoint.y) / 2
+          };
+        }
+        return { x: item.x || 0, y: item.y || 0 };
+      };
+
+      const centers = children.map(c => getCenter(c));
+      const avgX = centers.length > 0 ? centers.reduce((sum, c) => sum + c.x, 0) / centers.length : 0;
+      const avgY = centers.length > 0 ? centers.reduce((sum, c) => sum + c.y, 0) / centers.length : 0;
+
+      return {
+        id: g.id,
+        label: `Group (${g.itemIds.length} items)`,
+        type: "Group" as const,
+        x: avgX,
+        y: avgY,
+        childIds: g.itemIds,
+      };
+    }),
   ];
 
-  const handleSelect = (item: { id: string; x: number; y: number; childIds?: string[] }) => {
+  const handleSelect = (item: { id: string; x: number; y: number; childIds?: string[] }, e?: React.MouseEvent) => {
     const idsToSelect = item.childIds && item.childIds.length > 0 ? item.childIds : [item.id];
-    setSelectedIds(idsToSelect);
+
+    if (e?.shiftKey) {
+      const currentSelected = new Set(useEditorStore.getState().selectedIds);
+      const allInGroupAlreadySelected = idsToSelect.every(id => currentSelected.has(id));
+
+      if (allInGroupAlreadySelected) {
+        idsToSelect.forEach(id => currentSelected.delete(id));
+      } else {
+        idsToSelect.forEach(id => currentSelected.add(id));
+      }
+      setSelectedIds(Array.from(currentSelected));
+    } else {
+      setSelectedIds(idsToSelect);
+    }
 
     // Pan the workspace so that the selected element is roughly centered
     if (typeof window !== "undefined" && zoom > 0) {
@@ -162,31 +214,39 @@ function ElementsPane() {
           const hasChildren = isAsset && childShapes && childShapes.length > 0;
           const isExpanded = isAsset && expandedAssets[item.id];
 
+          const itemChildIds = (item as any).childIds as string[] | undefined;
+          const isSelected = itemChildIds
+            ? itemChildIds.length > 0 && itemChildIds.every(cid => selectedIds.includes(cid))
+            : selectedIds.includes(item.id);
+
           return (
-            <div key={item.id}>
+            <div key={item.id} className={isSelected ? "bg-blue-50" : ""}>
               <button
-                onClick={() =>
+                onClick={(e) =>
                   isAsset && hasChildren
                     ? setExpandedAssets(prev => ({ ...prev, [item.id]: !prev[item.id] }))
                     : handleSelect({
                       id: item.id,
                       x: item.x,
                       y: item.y,
-                      childIds: hasChildren ? childShapes.map(s => s.id) : undefined,
-                    })
+                      childIds: (item as any).childIds || (hasChildren ? childShapes.map(s => s.id) : undefined),
+                    }, e)
                 }
-                className="w-full flex items-center gap-1 px-1.5 py-1.5 text-[11px] hover:bg-gray-100 border-b border-gray-100"
+                className={`w-full flex items-center gap-1 px-1.5 py-1.5 text-[11px] hover:bg-blue-100 border-b border-gray-100 transition-colors ${isSelected ? "text-blue-700 bg-blue-50 font-medium" : "text-gray-700 hover:bg-gray-100"}`}
               >
-                {/* Mini preview - approximate but shape-accurate */}
+                {/* Mini preview */}
                 <div className="w-7 h-7 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
                   {item.type === "Asset" && item.asset && (
                     assetDef?.path ? (
-                      <img
-                        src={assetDef.path}
-                        alt={assetDef.label}
-                        className="w-full h-full object-contain"
-                        style={{ maxWidth: '100%', maxHeight: '100%' }}
-                      />
+                      <div className="w-full h-full p-0.5">
+                        <InlineSvg
+                          src={assetDef.path}
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          category={assetDef.category}
+                        />
+                      </div>
                     ) : (
                       <div className="text-[8px] text-gray-400 text-center px-1">
                         {item.asset.type}
@@ -255,6 +315,12 @@ function ElementsPane() {
                           strokeLinejoin="round"
                         />
                       )}
+                    </svg>
+                  )}
+                  {item.type === "Group" && (
+                    <svg width={24} height={24} viewBox="0 0 24 24">
+                      <path d="M3 7h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" fill="none" stroke="#3b82f6" strokeWidth={2} />
+                      <path d="M7 4h10a1 1 0 0 1 1 1v2H6V5a1 1 0 0 1 1-1z" fill="none" stroke="#3b82f6" strokeWidth={2} />
                     </svg>
                   )}
                   {item.type === "Wall" && (
@@ -388,7 +454,7 @@ function ElementsPane() {
                   {childShapes!.map((s) => (
                     <button
                       key={s.id}
-                      onClick={() => handleSelect({ id: s.id, x: s.x, y: s.y })}
+                      onClick={(e) => handleSelect({ id: s.id, x: s.x, y: s.y }, e)}
                       className="w-full flex items-center gap-1 px-1.5 py-1 text-[10px] hover:bg-gray-50 border-b border-gray-100"
                     >
                       <div className="w-5 h-5 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">

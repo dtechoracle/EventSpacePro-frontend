@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useEditorStore } from '@/store/editorStore';
+import { useSceneStore } from '@/store/sceneStore';
 import { useProjectStore, Shape } from '@/store/projectStore';
 import ShapeRenderer from '../renderers/ShapeRenderer';
 import { findSnapPointInShapes } from '@/utils/snapToDrawing';
@@ -16,7 +17,8 @@ interface ArcSegment {
 }
 
 export default function ArchTool({ isActive }: ArchToolProps) {
-    const { canvasOffset, zoom, panX, panY, snapToGrid, gridSize, archWaveMode, snapToObjects } = useEditorStore();
+    const { canvasOffset, zoom, panX, panY, archWaveMode, snapToObjects } = useEditorStore();
+    const { snapToGridEnabled, gridSize } = useSceneStore();
     const { addShape, getNextZIndex, shapes, walls, assets } = useProjectStore();
 
     // Drawing step: 0 = idle, 1 = chord (set end), 2 = control (set bulge)
@@ -43,12 +45,12 @@ export default function ArchTool({ isActive }: ArchToolProps) {
             const snapResult = findSnapPointInShapes(pos, allElements, 20 / zoom);
             if (snapResult) return { x: snapResult.x, y: snapResult.y };
         }
-        if (!snapToGrid) return pos;
+        if (!snapToGridEnabled) return pos;
         return {
             x: Math.round(pos.x / gridSize) * gridSize,
             y: Math.round(pos.y / gridSize) * gridSize,
         };
-    }, [snapToGrid, gridSize, snapToObjects, shapes, walls, assets, zoom]);
+    }, [snapToGridEnabled, gridSize, snapToObjects, shapes, walls, assets, zoom]);
 
     // Quadratic bezier path string from start→control→end
     // Uses the "pass-through" formula so the curve actually touches the control point

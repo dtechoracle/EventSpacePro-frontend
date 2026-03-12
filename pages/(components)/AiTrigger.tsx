@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useRef } from "react";
-import { FiSearch } from "react-icons/fi";
+import { FiSearch, FiRefreshCw } from "react-icons/fi";
 import { FaArrowUp } from "react-icons/fa";
 import { GoPaperclip } from "react-icons/go";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,24 +10,38 @@ import { useSceneStore, AssetInstance } from "@/store/sceneStore";
 import { useProjectStore, Asset as ProjectAsset, Shape, Wall } from "@/store/projectStore";
 import { useEditorStore } from "@/store/editorStore";
 import PlanPreview from "./dashboard/PlanPreview";
+import { ASSET_LIBRARY } from "@/lib/assets";
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  assetSelection?: {
+    category: string;
+    message: string;
+    options: { id: string; name: string; category: string; path: string }[];
+  };
+  previewData?: any[]; // Array of combined assets for PlanPreview
+  planData?: any;
+  rawPlan?: any;
+}
 
 export default function AiTrigger() {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const user = useUserStore((s) => s.user);
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const user = useUserStore((s: any) => s.user);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesRef = useRef<HTMLDivElement | null>(null);
 
   // Workspace (Workspace2D) state - declare these first
-  const workspaceAssets = useProjectStore((s) => s.assets);
+  const workspaceAssets = useProjectStore((s: any) => s.assets);
   const workspaceShapes = useProjectStore((s) => s.shapes);
   const workspaceWalls = useProjectStore((s) => s.walls);
   const projectCanvas = useProjectStore((s) => s.canvas);
   const updateWorkspaceAsset = useProjectStore((s) => s.updateAsset);
   const updateWorkspaceShape = useProjectStore((s) => s.updateShape);
-  const editorSelectedIds = useEditorStore((s) => s.selectedIds);
+  const editorSelectedIds = useEditorStore((s: any) => s.selectedIds);
   const setEditorSelectedIds = useEditorStore((s) => s.setSelectedIds);
 
   // Workspace actions for applying AI plans - use projectStore for Workspace2D
@@ -83,7 +97,7 @@ export default function AiTrigger() {
 
     const results: ResolvedSelection[] = [];
 
-    baseIds.forEach((id) => {
+    baseIds.forEach((id: string) => {
       // 1) Workspace2D assets (check FIRST before scene)
       const projAsset = workspaceAssets.find((a: ProjectAsset) => a.id === id);
       if (projAsset) {
@@ -124,7 +138,7 @@ export default function AiTrigger() {
       }
 
       // 3) Scene assets (check LAST)
-      const sceneAsset = existingAssets.find((a) => a.id === id);
+      const sceneAsset = existingAssets.find((a: any) => a.id === id);
       if (sceneAsset) {
         results.push({ asset: sceneAsset, source: "scene" });
         return;
@@ -164,7 +178,7 @@ export default function AiTrigger() {
     return results;
   };
 
-  const getCurrentSelectedAssets = () => getResolvedSelection().map((r) => r.asset);
+  const getCurrentSelectedAssets = () => getResolvedSelection().map((r: any) => r.asset);
 
   // Handle keyboard shortcut (Ctrl + K) and external "open AI" events / helpers
   useEffect(() => {
@@ -229,7 +243,12 @@ export default function AiTrigger() {
       // Clear selection in scene store
       const scene = useSceneStore.getState();
       scene.selectAsset(null);
-      scene.selectedAssetIds = [];
+      scene.clearSelection();
+
+      // Clear selection in editor store
+      const editor = useEditorStore.getState();
+      editor.clearSelection();
+
       setIsOpen(true);
       setTimeout(() => inputRef.current?.focus(), 0);
     } catch (e) {
@@ -238,1228 +257,589 @@ export default function AiTrigger() {
     }
   };
 
-  const setPlacementMode = useEditorStore((s) => s.setPlacementMode);
+  const setPlacementMode = useEditorStore((s: any) => s.setPlacementMode);
 
-  // Manual clearSelection function
-  // ...
-
-  const applyPlan = (plan: any) => {
-
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LAYOUT ENGINE — Calculates positions from first principles.
+  // We do NOT trust AI coordinates. We compute them from room size + counts.
+  // ═══════════════════════════════════════════════════════════════════════════
+  const processPlan = (plan: any, canvasRef: any) => {
     const generatedWalls: any[] = [];
     const generatedAssets: any[] = [];
     const generatedShapes: any[] = [];
     const generatedTextAnnotations: any[] = [];
 
-    // Simple grid position calculator
-    const calculateGridPositions = (
-      itemCount: number,
-      itemWidth: number,
-      itemHeight: number,
-      wallBounds: { minX: number; minY: number; maxX: number; maxY: number },
-      cols: number,
-      rows: number
-    ) => {
-      const wallWidth = wallBounds.maxX - wallBounds.minX;
-      const wallHeight = wallBounds.maxY - wallBounds.minY;
+    const canvasCenter = canvasRef?.width
+      ? { x: canvasRef.width / 2, y: canvasRef.height / 2 }
+      : { x: 5000, y: 5000 };
 
-      // Total space taken by all items
-      const totalItemsWidth = cols * itemWidth;
-      const totalItemsHeight = rows * itemHeight;
+    // Helper: resolve loose name → { id, width, height } using ASSET_LIBRARY as source of truth
+    const resolveAsset = (raw: string): { id: string; width: number; height: number } => {
+      const r = (raw || '').toLowerCase();
 
-      // Remaining space to distribute
-      const remainingWidth = wallWidth - totalItemsWidth;
-      const remainingHeight = wallHeight - totalItemsHeight;
+      // Try direct library match first (exact id)
+      const direct = ASSET_LIBRARY.find(a => a.id === raw);
+      if (direct) return { id: direct.id, width: direct.width || 823, height: direct.height || 1018 };
 
-      // Gap between items (divide remaining space by gaps)
-      const gapX = cols > 1 ? remainingWidth / (cols + 1) : remainingWidth / 2;
-      const gapY = rows > 1 ? remainingHeight / (rows + 1) : remainingHeight / 2;
+      // Fuzzy match by checking includes
+      let id = raw;
+      if (r.includes('stage')) id = '1m-x-1m-modular-stage-2';
+      else if (r.includes('6-seater') || r === '6-seater-rectangular-table-6') id = '6-seater-rectangular-table-6';
+      else if (r.includes('10-seater') && r.includes('rect')) id = '10-seater-rectangular-table-6';
+      else if (r.includes('round') && r.includes('6')) id = '6-seater-round-table';
+      else if (r.includes('round') && r.includes('10')) id = '10-seater-round-table';
+      else if (r.includes('round') && r.includes('12')) id = '12-seater-round-table';
+      else if (r.includes('round') && r.includes('8')) id = '8-seater-round-table-1550mm-table';
+      else if (r.includes('cocktail') && r.includes('4')) id = '4-seater-cocktail-table';
+      else if (r.includes('cocktail')) id = '1000mm-cocktail-table';
+      else if (r.includes('6ft') || r.includes('rectangular')) id = '6ft-x-3ft-rectangular-table-corrected';
+      else if (r.includes('rect') || r.includes('seater')) id = '6-seater-rectangular-table-6';
+      else if (r.includes('event-chair') || r.includes('event chair')) id = 'event-chair';
+      else if (r.includes('padded')) id = 'padded-chair';
+      else if (r.includes('office')) id = 'office-chair';
+      else if (r.includes('stool')) id = 'cocktail-stool';
+      else if (r.includes('chair') || r.includes('seat')) id = 'normal-chair';
 
-      // Calculate positions
-      const positions = [];
-      for (let i = 0; i < itemCount; i++) {
-        const row = Math.floor(i / cols);
-        const col = i % cols;
-
-        // Center of each item
-        const x = wallBounds.minX + gapX + (col * (itemWidth + gapX)) + itemWidth / 2;
-        const y = wallBounds.minY + gapY + (row * (itemHeight + gapY)) + itemHeight / 2;
-
-        positions.push({ x, y });
-      }
-
-
-      // Debug output
-      setMessages((m) => [...m, {
-        role: 'assistant',
-        content: `🔍 Grid: Wall=${Math.round(wallWidth)}x${Math.round(wallHeight)}mm, Items=${itemWidth}x${itemHeight}mm, ${cols}x${rows} grid, Gaps=${Math.round(gapX)}x${Math.round(gapY)}mm`
-      }]);
-      return positions;
+      const def = ASSET_LIBRARY.find(a => a.id === id);
+      return { id, width: def?.width || 600, height: def?.height || 600 };
     };
 
-    console.log('📋 Applying plan:', plan);
+    // Thin wrapper for just the id (backwards compat)
+    const resolveType = (raw: string) => resolveAsset(raw).id;
 
+    // ─── 1. Parse Room ────────────────────────────────────────────────────────
+    const WALL_THICKNESS = 150;
+    const WALL_MARGIN = 700; // min clearance from inner wall face to any asset
 
-    const createdAssetIds: string[] = []; // DEBUG
-    console.log('Plan object:', JSON.stringify(plan, null, 2)); // DEBUG
+    let roomW = 10000, roomH = 10000;
+    if (Array.isArray(plan.walls) && plan.walls[0]) {
+      let w = Number(plan.walls[0].widthMm || 10000);
+      let h = Number(plan.walls[0].heightMm || 10000);
+      if (w < 200) w *= 1000; // meters → mm
+      if (h < 200) h *= 1000;
+      roomW = w; roomH = h;
+    }
 
-    if (!plan) return;
-    const createdAssetsInBatch: AssetInstance[] = []; // Track assets created in this batch
+    const roomCX = canvasCenter.x;
+    const roomCY = canvasCenter.y;
+    const wallMinX = roomCX - roomW / 2;
+    const wallMinY = roomCY - roomH / 2;
+    const wallMaxX = roomCX + roomW / 2;
+    const wallMaxY = roomCY + roomH / 2;
 
-    // Get canvas center - use actual canvas center or default to (0, 0) for safety
-    const getCanvasCenter = () => {
-      if (canvas?.width && canvas?.height) {
-        return { x: canvas.width / 2, y: canvas.height / 2 };
-      }
-      // Default to origin if no canvas - viewport will show this
-      return { x: 0, y: 0 };
-    };
-    const canvasCenter = getCanvasCenter();
-
-    // Find empty space on canvas (Keep existing logic for now, though it might be less relevant for placement mode)
-    // ... (Keep the findEmptySpace function as is)
-    const findEmptySpace = (requiredWidth: number, requiredHeight: number, margin = 100): { x: number; y: number } | null => {
-      // ... (Same implementation as before)
-      const edgeMargin = 1000; // Keep assets away from canvas edges
-
-      if (existingAssets.length === 0 && createdAssetsInBatch.length === 0) {
-        // No existing assets, use canvas center (but ensure it's away from edges)
-        if (canvas?.width && canvas?.height) {
-          const safeCenterX = Math.max(edgeMargin + requiredWidth / 2,
-            Math.min(canvas.width - edgeMargin - requiredWidth / 2, canvas.width / 2));
-          const safeCenterY = Math.max(edgeMargin + requiredHeight / 2,
-            Math.min(canvas.height - edgeMargin - requiredHeight / 2, canvas.height / 2));
-          return { x: safeCenterX, y: safeCenterY };
-        }
-        return canvasCenter;
-      }
-
-      // Get bounding boxes of all existing assets + newly created assets in this batch
-      const occupiedAreas: Array<{ minX: number; minY: number; maxX: number; maxY: number }> = [];
-      [...existingAssets, ...createdAssetsInBatch].forEach(asset => {
-        if (asset.type === 'wall-segments' && (asset as any).wallNodes) {
-          // For walls, use wallNodes to calculate bounds
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          (asset as any).wallNodes.forEach((node: any) => {
-            minX = Math.min(minX, node.x);
-            minY = Math.min(minY, node.y);
-            maxX = Math.max(maxX, node.x);
-            maxY = Math.max(maxY, node.y);
-          });
-          if (isFinite(minX)) {
-            occupiedAreas.push({ minX, minY, maxX, maxY });
-          }
-        } else {
-          // For other assets, use x, y, width, height
-          const w = (asset.width || 50) * (asset.scale || 1);
-          const h = (asset.height || 50) * (asset.scale || 1);
-          occupiedAreas.push({
-            minX: asset.x - w / 2,
-            minY: asset.y - h / 2,
-            maxX: asset.x + w / 2,
-            maxY: asset.y + h / 2,
-          });
-        }
-      });
-
-      // Try to find empty space - start from top-left, scan grid-like
-      const canvasWidth = canvas?.width || 10000;
-      const canvasHeight = canvas?.height || 10000;
-      const stepSize = 500; // mm - grid step for searching
-      const halfW = requiredWidth / 2 + margin;
-      const halfH = requiredHeight / 2 + margin;
-
-      // Start from top-left corner, but keep away from edges
-      const startY = edgeMargin;
-      const endY = canvasHeight - edgeMargin;
-      const startX = edgeMargin;
-      const endX = canvasWidth - edgeMargin;
-
-      for (let y = startY; y < endY; y += stepSize) {
-        for (let x = startX; x < endX; x += stepSize) {
-          const testX = x;
-          const testY = y;
-
-          // Ensure position is away from edges
-          if (testX - halfW < edgeMargin || testX + halfW > canvasWidth - edgeMargin ||
-            testY - halfH < edgeMargin || testY + halfH > canvasHeight - edgeMargin) {
-            continue;
-          }
-
-          // Check if this position overlaps with any existing asset
-          const overlaps = occupiedAreas.some(area => {
-            return !(testX + halfW < area.minX - margin ||
-              testX - halfW > area.maxX + margin ||
-              testY + halfH < area.minY - margin ||
-              testY - halfH > area.maxY + margin);
-          });
-
-          if (!overlaps) {
-            return { x: testX, y: testY };
-          }
-        }
-      }
-
-      // If no empty space found, place at safe center (away from edges)
-      if (canvas?.width && canvas?.height) {
-        const safeCenterX = Math.max(edgeMargin + requiredWidth / 2,
-          Math.min(canvas.width - edgeMargin - requiredWidth / 2, canvas.width / 2));
-        const safeCenterY = Math.max(edgeMargin + requiredHeight / 2,
-          Math.min(canvas.height - edgeMargin - requiredHeight / 2, canvas.height / 2));
-        return { x: safeCenterX, y: safeCenterY };
-      }
-      return canvasCenter;
-    };
-
-    // Derive a primary wall bounding box if available (first rectangular wall)
-    let wallBounds: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
+    // Generate wall
     if (Array.isArray(plan.walls) && plan.walls.length > 0) {
-      const w = plan.walls[0];
-      const width = Number(w.widthMm || 0);
-      const height = Number(w.heightMm || 0);
+      const nIds = ['rn-0', 'rn-1', 'rn-2', 'rn-3'];
+      generatedWalls.push({
+        id: 'wall-room',
+        nodes: [
+          { id: nIds[0], x: wallMinX, y: wallMinY },
+          { id: nIds[1], x: wallMaxX, y: wallMinY },
+          { id: nIds[2], x: wallMaxX, y: wallMaxY },
+          { id: nIds[3], x: wallMinX, y: wallMaxY },
+        ],
+        edges: [
+          { id: 're-0', nodeA: nIds[0], nodeB: nIds[1], thickness: WALL_THICKNESS },
+          { id: 're-1', nodeA: nIds[1], nodeB: nIds[2], thickness: WALL_THICKNESS },
+          { id: 're-2', nodeA: nIds[2], nodeB: nIds[3], thickness: WALL_THICKNESS },
+          { id: 're-3', nodeA: nIds[3], nodeB: nIds[0], thickness: WALL_THICKNESS },
+        ],
+        zIndex: 0, isClosed: true
+      });
+    }
 
-      // Find empty space for the wall
-      let cx = Number(w.centerX);
-      let cy = Number(w.centerY);
+    // ─── 2. Define Usable Rect (shrinks as we place fixed elements) ───────────
+    let usableMinX = wallMinX + WALL_MARGIN;
+    let usableMaxX = wallMaxX - WALL_MARGIN;
+    let usableMinY = wallMinY + WALL_MARGIN;
+    let usableMaxY = wallMaxY - WALL_MARGIN;
 
-      // If position not provided or invalid, find empty space
-      if (!cx || !cy || !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
-        const emptySpace = findEmptySpace(width, height, 200);
-        if (emptySpace) {
-          cx = emptySpace.x;
-          cy = emptySpace.y;
-        } else {
-          // Use safe center away from edges
-          const edgeMargin = 1000;
-          if (canvas?.width && canvas?.height) {
-            cx = Math.max(edgeMargin + width / 2,
-              Math.min(canvas.width - edgeMargin - width / 2, canvas.width / 2));
-            cy = Math.max(edgeMargin + height / 2,
-              Math.min(canvas.height - edgeMargin - height / 2, canvas.height / 2));
-          } else {
-            cx = canvasCenter.x;
-            cy = canvasCenter.y;
-          }
-        }
+    // ─── 3. Place Fixed Elements (Stage, etc.) First ─────────────────────────
+    const STAGE_GAP = 1500; // clearance between stage and nearest table
+
+    const assetList: any[] = Array.isArray(plan.assets) ? plan.assets : [];
+    const chairsAroundList: any[] = Array.isArray(plan.chairsAround) ? plan.chairsAround : [];
+
+    // Identify stages from assets
+    const stageItems = assetList.filter((a: any) =>
+      (a.assetType || a.assetName || '').toLowerCase().includes('stage')
+    );
+    const nonStageItems = assetList.filter((a: any) =>
+      !(a.assetType || a.assetName || '').toLowerCase().includes('stage')
+    );
+
+    stageItems.forEach((a: any, idx: number) => {
+      let sw = Number(a.widthMm || 6000);
+      let sh = Number(a.heightMm || 3000);
+      if (sw < 100) sw *= 1000;
+      if (sh < 100) sh *= 1000;
+
+      // ── Cap stage size: max 40% of room dimension so tables always have space
+      const maxStageW = roomW * 0.4;
+      const maxStageH = roomH * 0.7;
+      if (sw > maxStageW) sw = maxStageW;
+      if (sh > maxStageH) sh = maxStageH;
+
+      const wallHint = (a.wall || a.position || '').toLowerCase();
+      let sx = roomCX, sy = roomCY;
+
+      if (typeof a.xMm === 'number' && typeof a.yMm === 'number') {
+        let rawX = wallMinX + a.xMm;
+        let rawY = wallMinY + a.yMm;
+        sx = Math.max(wallMinX + sw / 2 + 100, Math.min(wallMaxX - sw / 2 - 100, rawX));
+        sy = Math.max(wallMinY + sh / 2 + 100, Math.min(wallMaxY - sh / 2 - 100, rawY));
+      } else if (wallHint.includes('left')) {
+        sx = wallMinX + WALL_MARGIN + sw / 2;
+        sy = roomCY;
+        usableMinX = sx + sw / 2 + STAGE_GAP;
+      } else if (wallHint.includes('right')) {
+        sx = wallMaxX - WALL_MARGIN - sw / 2;
+        sy = roomCY;
+        usableMaxX = sx - sw / 2 - STAGE_GAP;
+      } else if (wallHint.includes('top')) {
+        sx = roomCX;
+        sy = wallMinY + WALL_MARGIN + sh / 2;
+        usableMinY = sy + sh / 2 + STAGE_GAP;
+      } else if (wallHint.includes('bottom')) {
+        sx = roomCX;
+        sy = wallMaxY - WALL_MARGIN - sh / 2;
+        usableMaxY = sy - sh / 2 - STAGE_GAP;
+      } else if (wallHint.includes('center') || wallHint.includes('middle')) {
+        sx = roomCX;
+        sy = roomCY;
+      } else {
+        // Default: right wall (only if no coordinates AND no clear hint provided)
+        sx = wallMaxX - WALL_MARGIN - sw / 2;
+        sy = roomCY;
+        usableMaxX = sx - sw / 2 - STAGE_GAP;
       }
 
-      const halfW = width / 2;
-      const halfH = height / 2;
-      wallBounds = { minX: cx - halfW, minY: cy - halfH, maxX: cx + halfW, maxY: cy + halfH };
-    }
-    // Clamp position to reasonable bounds - if position is way too large, use safe center away from edges
-    const validatePosition = (x: number, y: number, width = 0, height = 0): { x: number; y: number } => {
-      const edgeMargin = 1000;
-      // If position is NaN, Infinity, or way too large (likely error), use safe center
-      if (!isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
-        if (canvas?.width && canvas?.height) {
-          const safeX = Math.max(edgeMargin + width / 2,
-            Math.min(canvas.width - edgeMargin - width / 2, canvas.width / 2));
-          const safeY = Math.max(edgeMargin + height / 2,
-            Math.min(canvas.height - edgeMargin - height / 2, canvas.height / 2));
-          return { x: safeX, y: safeY };
-        }
-        return canvasCenter;
-      }
-      // Ensure position is away from edges
-      if (canvas?.width && canvas?.height) {
-        const halfW = width / 2;
-        const halfH = height / 2;
-        x = Math.max(edgeMargin + halfW, Math.min(canvas.width - edgeMargin - halfW, x));
-        y = Math.max(edgeMargin + halfH, Math.min(canvas.height - edgeMargin - halfH, y));
-      }
-      return { x, y };
-    };
-
-    const clampInWall = (x: number, y: number, margin = 50, width = 0, height = 0) => {
-      const valid = validatePosition(x, y, width, height);
-      if (!wallBounds) return valid;
-      const cx = Math.max(wallBounds.minX + margin, Math.min(wallBounds.maxX - margin, valid.x));
-      const cy = Math.max(wallBounds.minY + margin, Math.min(wallBounds.maxY - margin, valid.y));
-      return { x: cx, y: cy };
-    };
-    // Walls: rectangle defined by widthMm/heightMm, center optional
-    if (Array.isArray(plan.walls)) {
-      plan.walls.forEach((w: any, idx: number) => {
-        const width = Number(w.widthMm || 0);
-        const height = Number(w.heightMm || 0);
-        let cx: number;
-        let cy: number;
-
-        if (idx === 0 && wallBounds) {
-          // First wall uses the calculated position from wallBounds
-          cx = (wallBounds.minX + wallBounds.maxX) / 2;
-          cy = (wallBounds.minY + wallBounds.maxY) / 2;
-        } else {
-          // For additional walls, find empty space
-          let providedCx = Number(w.centerX);
-          let providedCy = Number(w.centerY);
-          if (!providedCx || !providedCy || !isFinite(providedCx) || !isFinite(providedCy) ||
-            Math.abs(providedCx) > 100000 || Math.abs(providedCy) > 100000) {
-            const emptySpace = findEmptySpace(width, height, 200);
-            if (emptySpace) {
-              cx = emptySpace.x;
-              cy = emptySpace.y;
-            } else {
-              cx = canvasCenter.x;
-              cy = canvasCenter.y;
-            }
-          } else {
-            cx = providedCx;
-            cy = providedCy;
-          }
-        }
-        const halfW = width / 2;
-        const halfH = height / 2;
-        const nodeIds = [
-          `node-${Date.now()}-0`,
-          `node-${Date.now()}-1`,
-          `node-${Date.now()}-2`,
-          `node-${Date.now()}-3`,
-        ];
-        const nodes = [
-          { id: nodeIds[0], x: cx - halfW, y: cy - halfH },
-          { id: nodeIds[1], x: cx + halfW, y: cy - halfH },
-          { id: nodeIds[2], x: cx + halfW, y: cy + halfH },
-          { id: nodeIds[3], x: cx - halfW, y: cy + halfH },
-        ];
-        const thickness = w.thicknessPx ?? 100;
-        const edges = [
-          { id: `edge-${Date.now()}-0`, nodeA: nodeIds[0], nodeB: nodeIds[1], thickness },
-          { id: `edge-${Date.now()}-1`, nodeA: nodeIds[1], nodeB: nodeIds[2], thickness },
-          { id: `edge-${Date.now()}-2`, nodeA: nodeIds[2], nodeB: nodeIds[3], thickness },
-          { id: `edge-${Date.now()}-3`, nodeA: nodeIds[3], nodeB: nodeIds[0], thickness },
-        ];
-        const wall = {
-          id: `wall-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          nodes,
-          edges,
-          zIndex: 0,
-          isClosed: true,
-        };
-        // addProjectWall(wall); // REPLACED
-        generatedWalls.push(wall);
-        createdAssetIds.push(wall.id);
-        createdAssetsInBatch.push(wall as any); // Track for empty space detection
+      generatedAssets.push({
+        id: `stage-${idx}`,
+        type: resolveType(a.assetType || a.assetName || 'stage'),
+        x: sx, y: sy,
+        width: a.widthMm || sw,
+        height: a.heightMm || sh,
+        strokeWidth: a.strokeWidth || 5, // AI provided or natural 5
+        strokeColor: a.strokeColor || '#1a1a1a',
+        fillColor: a.fillColor || '#e8e4d0',   // slightly darker cream for stage
+        scale: 1, zIndex: 3
       });
+
+      const stageName = a.tableName || a.name || a.label || 'Stage';
+      generatedTextAnnotations.push({
+        id: `label-stage-${idx}`, text: stageName,
+        x: sx, y: sy, fontSize: 700,
+        color: '#111111', backgroundColor: '#ffffff',
+        type: 'text', zIndex: 200
+      });
+    });
+
+    // ─── 4. Collect Table Specs ───────────────────────────────────────────────
+    interface TableSpec {
+      name?: string;
+      chairCount: number;
+      tableW: number;
+      tableH: number;
+      tableType: string;
+      isRound: boolean;
     }
 
-    // Assets - process assets from plan (newer format)
-    if (Array.isArray(plan.assets) && plan.assets.length > 0) {
-      setMessages((m) => [...m, { role: 'assistant', content: `🔧 Processing ${plan.assets.length} assets. GridLayout: ${JSON.stringify(plan.gridLayout)}` }]);
-      plan.assets.forEach((asset: any, idx: number) => {
-        const width = Number(asset.widthMm || 700);
-        const height = Number(asset.heightMm || asset.widthMm || 700);
-        let x = Number(asset.xMm);
-        let y = Number(asset.yMm);
+    const tableSpecs: TableSpec[] = [];
+    const CHAIR_SIZE = 450;
+    const CHAIR_GAP = 180; // gap from table edge to chair edge
 
-        // Auto-calculate position if missing or invalid
-        if (idx === 0) setMessages((m) => [...m, { role: 'assistant', content: `🐛 Asset coords: xMm=${asset.xMm}, yMm=${asset.yMm}, hasWallBounds=${!!wallBounds}, hasGridLayout=${!!(plan.gridLayout?.columns && plan.gridLayout?.rows)}` }]);
-        if (asset.xMm === undefined || asset.yMm === undefined ||
-          !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
-          if (wallBounds && plan.gridLayout?.columns && plan.gridLayout?.rows) {
-            // Use simple grid calculator
-            const positions = calculateGridPositions(
-              plan.assets.length,
-              width,
-              height,
-              wallBounds,
-              plan.gridLayout.columns,
-              plan.gridLayout.rows
-            );
-            const pos = positions[idx];
-            x = pos.x;
-            y = pos.y;
+    // From assets
+    nonStageItems.forEach((a: any, idx: number) => {
+      const rawType = (a.assetType || a.assetName || '').toLowerCase();
+      const resolved = resolveAsset(a.assetType || a.assetName || '6-seater-rectangular-table-6');
+      const libDef = ASSET_LIBRARY.find(x => x.id === resolved.id);
+      const tw = libDef?.width || 823;
+      const th = libDef?.height || 1018;
+      const isRound = resolved.id.includes('round');
 
-            if (idx === 0) {
-              setMessages((m) => [...m, {
-                role: 'assistant',
-                content: `🎯 Grid: ${plan.gridLayout.columns}x${plan.gridLayout.rows}, First pos: (${Math.round(x)}, ${Math.round(y)})`
-              }]);
-            }
-          } else {
-            // No grid layout, use default positioning
-            x = canvasCenter.x + (idx % 3 - 1) * 200;
-            y = canvasCenter.y + Math.floor(idx / 3) * 200;
-          }
+      if (typeof a.xMm === 'number' && typeof a.yMm === 'number') {
+        // AI explicit dimensions take precedence over library defaults
+        const w = a.widthMm ?? libDef?.width ?? tw;
+        const h = a.heightMm ?? libDef?.height ?? th;
+
+        let rawX = wallMinX + a.xMm;
+        let rawY = wallMinY + a.yMm;
+        let safeX = rawX;
+        let safeY = rawY;
+
+        // Don't clamp doors/windows strictly inside, they belong on the wall edge or slightly intersecting!
+        const isDoorWindow = rawType.includes('door') || rawType.includes('window');
+        if (!isDoorWindow) {
+          const margin = 200; // Keep tables/sofas at least 200mm from the wall inner edge
+          safeX = Math.max(wallMinX + w / 2 + margin, Math.min(wallMaxX - w / 2 - margin, safeX));
+          safeY = Math.max(wallMinY + h / 2 + margin, Math.min(wallMaxY - h / 2 - margin, safeY));
         }
 
-        // Don't clamp grid-positioned assets - they're already calculated to fit
-        const pos = (asset.xMm === undefined || asset.yMm === undefined) && wallBounds
-          ? { x, y }  // Grid-positioned, use exact coordinates
-          : clampInWall(x, y, 50, width, height);  // User-provided, clamp to wall with small margin
-        const a = {
-          id: `asset-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          type: asset.assetName || asset.assetType || "rectangular-table",
-          x: pos.x,
-          y: pos.y,
-          width: width,
-          height: height,
+        generatedAssets.push({
+          id: `ai-explicit-asset-${idx}`,
+          type: resolved.id,
+          x: safeX,
+          y: safeY,
+          width: w,
+          height: h,
+          rotation: a.rotation || 0,
+          strokeWidth: a.strokeWidth || 5, // Respect AI request
           scale: 1,
-          rotation: Number(asset.rotation || 0),
-          fillColor: asset.fillColor,
-          strokeColor: asset.strokeColor,
-          zIndex: 1,
-        };
-        if (idx === 0 && wallBounds) setMessages((m) => [...m, { role: 'assistant', content: `📍 First table at: (${Math.round(a.x)}, ${Math.round(a.y)}) in wall bounds: (${Math.round(wallBounds.minX)}, ${Math.round(wallBounds.minY)}) to (${Math.round(wallBounds.maxX)}, ${Math.round(wallBounds.maxY)})` }]);
-        // addProjectAsset(a); // REPLACED
-        generatedAssets.push(a);
-        createdAssetIds.push(a.id);
-        createdAssetsInBatch.push(a as any);
-      });
-    }
+          zIndex: rawType.includes('rug') || rawType.includes('carpet') ? 2 : 5
+        });
 
-    // Shapes
-    if (Array.isArray(plan.shapes) && plan.shapes.length > 0) {
-      setMessages((m) => [...m, { role: 'assistant', content: `📐 Adding ${plan.shapes.length} shapes` }]);
-      plan.shapes.forEach((shape: any) => {
-        // Normalise type: AI may return 'rect', 'circle', 'rectangle', 'ellipse'
-        let shapeType = shape.type || 'rectangle';
-        if (shapeType === 'rect') shapeType = 'rectangle';
-        if (shapeType === 'circle') shapeType = 'ellipse';
-
-        const s: any = {
-          id: `shape-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          type: shapeType,
-          x: Number(shape.xMm ?? shape.x ?? 0),
-          y: Number(shape.yMm ?? shape.y ?? 0),
-          width: Number(shape.widthMm ?? shape.width ?? 100),
-          height: Number(shape.heightMm ?? shape.height ?? shape.widthMm ?? shape.width ?? 100),
-          rotation: Number(shape.rotation ?? 0),
-          fill: shape.fillColor ?? shape.fill ?? '#cccccc',
-          stroke: shape.strokeColor ?? shape.stroke ?? '#000000',
-          strokeWidth: Number(shape.strokeWidth ?? 2),
-          zIndex: 1,
-        };
-        // addProjectShape(s); // REPLACED by placement mode
-        generatedShapes.push(s);
-      });
-    }
-
-    // Chairs
-    if (Array.isArray(plan.chairs)) {
-      setMessages((m) => [...m, { role: 'assistant', content: `🪑 Adding ${plan.chairs.length} chairs` }]);
-      plan.chairs.forEach((c: any, idx: number) => {
-        const size = Number(c.widthMm || c.sizePx || 24);
-        let x = Number(c.xMm);
-        let y = Number(c.yMm);
-        // Validate and auto-calculate position if missing or invalid
-        if (c.xMm === undefined || c.xMm === null || c.yMm === undefined || c.yMm === null ||
-          !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
-          if (wallBounds) {
-            const cols = Math.ceil(Math.sqrt(plan.chairs.length));
-            const row = Math.floor(idx / cols);
-            const col = idx % cols;
-            x = wallBounds.minX + (col + 0.5) * (wallBounds.maxX - wallBounds.minX) / cols;
-            y = wallBounds.minY + (row + 0.5) * (wallBounds.maxY - wallBounds.minY) / cols;
-          } else {
-            x = canvasCenter.x + (idx % 5 - 2) * 100;
-            y = canvasCenter.y + Math.floor(idx / 5) * 100;
-          }
-        }
-        const pos = clampInWall(x, y, size / 2 + 10, size, size);
-        const a = {
-          id: `chair-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          type: c.assetType || "normal-chair",
-          x: pos.x,
-          y: pos.y,
-          scale: 1,
-          rotation: Number(c.rotation || 0),
-          zIndex: 1,
-          width: size,
-          height: size,
-          backgroundColor: c.fillColor || "transparent",
-        };
-        // addProjectAsset(a);
-        generatedAssets.push(a);
-        createdAssetIds.push(a.id);
-        createdAssetsInBatch.push(a as any); // Track for empty space detection
-      });
-    }
-
-    // Chairs around: place chairs in a circle around a center and optionally drop a table at center
-    if (Array.isArray(plan.chairsAround)) {
-      setMessages((m) => [...m, { role: 'assistant', content: `Creating ${plan.chairsAround.length} chair groups` }]);
-      plan.chairsAround.forEach((spec: any, idx: number) => {
-        let cx = Number(spec.centerX);
-        let cy = Number(spec.centerY);
-        // Validate and auto-calculate center if missing or invalid
-        if (spec.centerX === undefined || spec.centerX === null || spec.centerY === undefined || spec.centerY === null ||
-          !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
-          if (wallBounds) {
-            const cols = Math.ceil(Math.sqrt(plan.chairsAround.length));
-            const row = Math.floor(idx / cols);
-            const col = idx % cols;
-            cx = wallBounds.minX + (col + 0.5) * (wallBounds.maxX - wallBounds.minX) / cols;
-            cy = wallBounds.minY + (row + 0.5) * (wallBounds.maxY - wallBounds.minY) / cols;
-          } else {
-            cx = canvasCenter.x + (idx % 3 - 1) * 300;
-            cy = canvasCenter.y + Math.floor(idx / 3) * 300;
-          }
-        }
-        const chairSize = Number(spec.chairSizePx || 24);
-        const tableSize = Number(spec.tableSizePx || 24);
-        const minRadius = Math.ceil((tableSize / 2) + chairSize + 10);
-        const r = Math.max(minRadius, Number(spec.radiusMm || minRadius));
-        const count = Math.max(1, Number(spec.count || 1));
-
-        // Ensure center position is away from canvas edges
-        const edgeMargin = 1000;
-        const totalRadius = r + chairSize; // Maximum extent from center
-        if (canvas?.width && canvas?.height) {
-          cx = Math.max(edgeMargin + totalRadius,
-            Math.min(canvas.width - edgeMargin - totalRadius, cx));
-          cy = Math.max(edgeMargin + totalRadius,
-            Math.min(canvas.height - edgeMargin - totalRadius, cy));
-        }
-        if (spec.tableAsset) {
-          const table = {
-            id: `table-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            type: spec.tableAsset,
-            x: cx,
-            y: cy,
-            scale: 1,
-            rotation: 0,
-            zIndex: 1,
-            width: tableSize,
-            height: tableSize,
-            fillColor: spec.fillColor,
-            strokeColor: spec.strokeColor,
-            strokeWidth: spec.strokeWidth,
-            backgroundColor: spec.fillColor || 'transparent',
-          };
-          // addProjectAsset(table);
-          generatedAssets.push(table);
-          createdAssetIds.push(table.id);
-          createdAssetsInBatch.push(table as any); // Track for empty space detection
-        }
-        for (let i = 0; i < count; i++) {
-          const angle = (i / count) * Math.PI * 2;
-          const x = cx + Math.cos(angle) * r;
-          const y = cy + Math.sin(angle) * r;
-          const chair = {
-            id: `chair-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 5)}`,
-            type: spec.chairAsset || 'normal-chair',
-            x: x,
-            y: y,
-            scale: 1,
-            rotation: (angle * 180 / Math.PI) + 90, // Valid rotation
-            zIndex: 1,
-            width: chairSize,
-            height: chairSize,
-            fillColor: spec.fillColor,
-            strokeColor: spec.strokeColor,
-            strokeWidth: spec.strokeWidth,
-            backgroundColor: spec.fillColor || 'transparent',
-          };
-          // addProjectAsset(chair);
-          generatedAssets.push(chair);
-          createdAssetIds.push(chair.id);
-          createdAssetsInBatch.push(chair as any);
-        }
-      });
-    }
-
-    // Generic Assets
-    if (Array.isArray(plan.assets)) {
-      setMessages((m) => [...m, { role: 'assistant', content: `Adding ${plan.assets.length} assets` }]);
-      plan.assets.forEach((assetSpec: any, idx: number) => {
-        const assetType = assetSpec.assetType || assetSpec.assetName;
-        const width = Number(assetSpec.widthMm || assetSpec.width || 500);
-        const height = Number(assetSpec.heightMm || assetSpec.height || 500);
-        let x = Number(assetSpec.xMm || assetSpec.x);
-        let y = Number(assetSpec.yMm || assetSpec.y);
-
-        // Validate and auto-calculate position if missing or invalid
-        if (!isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
-          const emptySpace = findEmptySpace(width, height, 100);
-          if (emptySpace) {
-            x = emptySpace.x;
-            y = emptySpace.y;
-          } else {
-            x = canvasCenter.x;
-            y = canvasCenter.y;
-          }
-        }
-
-        const pos = validatePosition(x, y, width, height);
-        const asset: AssetInstance = {
-          id: `asset-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
-          type: assetType,
-          x: pos.x,
-          y: pos.y,
-          scale: 1,
-          rotation: Number(assetSpec.rotation || 0),
-          zIndex: 1,
-          width,
-          height,
-          fillColor: assetSpec.fillColor,
-          strokeColor: assetSpec.strokeColor,
-          strokeWidth: assetSpec.strokeWidth,
-          backgroundColor: assetSpec.fillColor || 'transparent',
-        } as any;
-        // addProjectAsset(asset);
-        generatedAssets.push(asset);
-        createdAssetIds.push(asset.id);
-        createdAssetsInBatch.push(asset);
-      });
-    }
-
-    // Annotations
-    if (Array.isArray(plan.annotations)) {
-      setMessages((m) => [...m, { role: 'assistant', content: `Adding ${plan.annotations.length} text annotations` }]);
-      plan.annotations.forEach((annotation: any, idx: number) => {
-        const x = Number(annotation.x ?? annotation.xMm ?? canvasCenter.x);
-        const y = Number(annotation.y ?? annotation.yMm ?? canvasCenter.y);
-        const pos = clampInWall(x, y);
-
-        if (annotation.type === 'text' || annotation.type === 'label') {
+        const name = a.tableName || a.name || a.label;
+        if (name) {
           generatedTextAnnotations.push({
-            id: `text-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
-            type: 'text',
-            x: pos.x,
-            y: pos.y,
-            text: annotation.text || 'Label',
-            fontSize: annotation.fontSize || 16,
-            textColor: annotation.textColor || '#000000',
-            fontFamily: 'Arial',
-            rotation: annotation.rotation || 0,
+            id: `label-ai-explicit-${idx}`,
+            text: name,
+            x: a.xMm, y: a.yMm,
+            fontSize: 250,
+            color: '#111111', backgroundColor: '#ffffff',
+            type: 'text', zIndex: 200
           });
         }
+        return; // Skip adding to grid engine
+      }
+
+      // 2. If NO X/Y was provided, fall back to grid generator.
+      // But skip standalone chairs without coordinates, since grid only does tables.
+      const isChair = rawType.includes('chair') || rawType.includes('stool');
+      if (isChair) return;
+
+      tableSpecs.push({
+        name: a.tableName || a.name || a.label,
+        chairCount: Number(a.chairCount || a.chairs || 4),
+        tableW: tw,
+        tableH: isRound ? tw : th,
+        tableType: resolved.id,
+        isRound,
+      });
+    });
+
+    // From chairsAround
+    chairsAroundList.forEach((spec: any, idx: number) => {
+      const resolved = resolveAsset(spec.tableAsset || '6-seater-rectangular-table-6');
+      const libDef = ASSET_LIBRARY.find(x => x.id === resolved.id);
+      const tw = libDef?.width || 823;
+      const th = libDef?.height || 1018;
+      const isRound = resolved.id.includes('round');
+
+      // If AI explicitly provided X/Y, build the exact circle right away, no grid
+      if (typeof spec.centerX === 'number' && typeof spec.centerY === 'number') {
+        const radius = spec.radiusMm || (tw / 2 + CHAIR_GAP + CHAIR_SIZE / 2);
+        const margin = 200;
+        const outR = radius + CHAIR_SIZE / 2; // the entire footprint including chairs
+
+        let cx = wallMinX + spec.centerX;
+        let cy = wallMinY + spec.centerY;
+
+        // Clamp to ensure chairs don't go through the walls
+        cx = Math.max(wallMinX + outR + margin, Math.min(wallMaxX - outR - margin, cx));
+        cy = Math.max(wallMinY + outR + margin, Math.min(wallMaxY - outR - margin, cy));
+
+        // Add table
+        generatedAssets.push({
+          id: `ai-explicit-roundtable-${idx}`,
+          type: resolved.id,
+          x: cx, y: cy,
+          width: tw, height: th,
+          scale: 1, zIndex: 5
+        });
+
+        // Add chairs
+        const cCount = Number(spec.count || 4);
+
+        for (let ci = 0; ci < cCount; ci++) {
+          const angle = (ci / cCount) * Math.PI * 2 - Math.PI / 2;
+          generatedAssets.push({
+            id: `ai-explicit-roundchair-${idx}-${ci}`,
+            type: 'normal-chair',
+            x: cx + Math.cos(angle) * radius,
+            y: cy + Math.sin(angle) * radius,
+            rotation: (angle * 180 / Math.PI) + 90,
+            width: CHAIR_SIZE, height: CHAIR_SIZE,
+            scale: 1, zIndex: 15
+          });
+        }
+
+        const name = spec.tableName || spec.name;
+        if (name) {
+          generatedTextAnnotations.push({
+            id: `label-ai-explicit-table-${idx}`,
+            text: name,
+            x: cx, y: cy, fontSize: 250,
+            color: '#111111', backgroundColor: '#ffffff',
+            type: 'text', zIndex: 200
+          });
+        }
+        return; // Skip grid
+      }
+
+      tableSpecs.push({
+        name: spec.tableName || spec.name,
+        chairCount: Number(spec.count || 4),
+        tableW: tw,
+        tableH: isRound ? tw : th,
+        tableType: resolved.id,
+        isRound,
+      });
+    });
+
+    // ─── 5. Calculate Grid Layout in Usable Area ─────────────────────────────
+    let layoutWarning = '';
+    if (tableSpecs.length > 0) {
+      const N = tableSpecs.length;
+      const gridCols = plan.gridLayout?.columns || Math.ceil(Math.sqrt(N));
+      const gridRows = Math.ceil(N / gridCols);
+
+      const TABLE_GAP = 900;
+
+      const usableW = Math.max(1, usableMaxX - usableMinX);
+      const usableH = Math.max(1, usableMaxY - usableMinY);
+
+      // Compute natural (unscaled) cell dimensions
+      // cellW = chairs-left + table + chairs-right + gap-to-next-cell
+      const repTW0 = tableSpecs[0].tableW;
+      const repTH0 = tableSpecs[0].tableH;
+      const cellW0 = repTW0 + 2 * (CHAIR_SIZE + CHAIR_GAP) + TABLE_GAP;
+      const cellH0 = repTH0 + 2 * (CHAIR_SIZE + CHAIR_GAP) + TABLE_GAP;
+      // Total footprint = cols*cellW (each cell already contains the trailing gap)
+      // But the LAST cell's trailing gap is excess, so subtract one TABLE_GAP
+      const gridW0 = gridCols * cellW0 - TABLE_GAP;
+      const gridH0 = gridRows * cellH0 - TABLE_GAP;
+
+      // ── Auto-scale: shrink everything proportionally so it always fits
+      const scaleX = gridW0 > usableW ? usableW / gridW0 : 1;
+      const scaleY = gridH0 > usableH ? usableH / gridH0 : 1;
+      const scaleFactor = Math.min(scaleX, scaleY) * 0.95; // 5% safety margin
+
+      if (scaleFactor < 1) {
+        if (scaleFactor < 0.7) {
+          layoutWarning = `⚠️ The room is quite small for ${N} tables. Layout scaled to ${Math.round(scaleFactor * 100)}% to fit.`;
+        } else {
+          layoutWarning = `ℹ️ Layout scaled to ${Math.round(scaleFactor * 100)}% to fit within the room.`;
+        }
+      }
+
+      // Effective (scaled) sizes
+      const effChairSize = Math.round(CHAIR_SIZE * scaleFactor);
+      const effChairGap = Math.round(CHAIR_GAP * scaleFactor);
+      const effTableGap = Math.round(TABLE_GAP * scaleFactor);
+
+      // Recompute cell and grid sizes at effective scale
+      const repTW = Math.round(repTW0 * scaleFactor);
+      const repTH = Math.round(repTH0 * scaleFactor);
+      const cellW = repTW + 2 * (effChairSize + effChairGap) + effTableGap;
+      const cellH = repTH + 2 * (effChairSize + effChairGap) + effTableGap;
+      const gridW = gridCols * cellW - effTableGap;
+      const gridH = gridRows * cellH - effTableGap;
+
+      // Center the grid in the usable space
+      const gridOriginX = usableMinX + (usableW - gridW) / 2;
+      const gridOriginY = usableMinY + (usableH - gridH) / 2;
+
+      tableSpecs.forEach((spec, i) => {
+        const col = i % gridCols;
+        const row = Math.floor(i / gridCols);
+
+        // Scale this table's individual dimensions
+        const tw = Math.round(spec.tableW * scaleFactor);
+        const th = Math.round(spec.tableH * scaleFactor);
+
+        // The cell starts at gridOriginX + col*cellW.
+        // Inside the cell, the table center is at: chairs-on-left + table/2
+        const tableCX = gridOriginX + col * cellW + (effChairSize + effChairGap) + tw / 2;
+        const tableCY = gridOriginY + row * cellH + (effChairSize + effChairGap) + th / 2;
+
+        // Place table — use EXACT library dimensions, same as drag-and-drop
+        const libDef = ASSET_LIBRARY.find(x => x.id === spec.tableType);
+        const renderW = libDef?.width ?? tw;
+        const renderH = libDef?.height ?? th;
+        generatedAssets.push({
+          id: `table-${i}`,
+          type: spec.tableType,
+          x: tableCX, y: tableCY,
+          width: renderW, height: renderH,
+          strokeWidth: 5, // Natural mode default
+          strokeColor: '#1a1a1a',
+          scale: 1, zIndex: 5
+        });
+
+        // Label
+        if (spec.name) {
+          generatedTextAnnotations.push({
+            id: `label-table-${i}`,
+            text: spec.name,
+            x: tableCX, y: tableCY,
+            fontSize: Math.max(200, Math.round(380 * Math.min(scaleFactor, 1))),
+            color: '#111111', backgroundColor: '#ffffff',
+            type: 'text', zIndex: 200
+          });
+        }
+
+        // ─── Chairs ──────────────────────────────────────────────────────────
+        const cCount = spec.chairCount;
+        const topChairY = tableCY - th / 2 - effChairGap - effChairSize / 2;
+        const botChairY = tableCY + th / 2 + effChairGap + effChairSize / 2;
+        const leftChairX = tableCX - tw / 2 - effChairGap - effChairSize / 2;
+        const rightChairX = tableCX + tw / 2 + effChairGap + effChairSize / 2;
+
+        if (spec.isRound) {
+          const radius = tw / 2 + effChairGap + effChairSize / 2;
+          for (let ci = 0; ci < cCount; ci++) {
+            const angle = (ci / cCount) * Math.PI * 2 - Math.PI / 2;
+            generatedAssets.push({
+              id: `chair-${i}-${ci}`, type: 'normal-chair',
+              x: tableCX + Math.cos(angle) * radius,
+              y: tableCY + Math.sin(angle) * radius,
+              rotation: (angle * 180 / Math.PI) + 90,
+              width: effChairSize, height: effChairSize,
+              strokeWidth: 5, scale: 1, zIndex: 15
+            });
+          }
+        } else {
+          const perimeter = 2 * (tw + th);
+          const topCount = Math.max(1, Math.round(cCount * tw / perimeter));
+          const botCount = Math.max(1, Math.round(cCount * tw / perimeter));
+          const leftCount = Math.max(0, Math.round(cCount * th / perimeter));
+          const rightCount = Math.max(0, cCount - topCount - botCount - leftCount);
+
+          const addRow = (count: number, y: number, rot: number) => {
+            for (let ci = 0; ci < count; ci++) {
+              const x = tableCX - tw / 2 + (tw / (count + 1)) * (ci + 1);
+              generatedAssets.push({
+                id: `chair-${i}-r-${ci}-${rot}`, type: 'normal-chair',
+                x, y, rotation: rot,
+                width: effChairSize, height: effChairSize,
+                strokeWidth: 5, scale: 1, zIndex: 15
+              });
+            }
+          };
+          const addCol = (count: number, x: number, rot: number) => {
+            for (let ci = 0; ci < count; ci++) {
+              const y = tableCY - th / 2 + (th / (count + 1)) * (ci + 1);
+              generatedAssets.push({
+                id: `chair-${i}-c-${ci}-${rot}`, type: 'normal-chair',
+                x, y, rotation: rot,
+                width: effChairSize, height: effChairSize,
+                strokeWidth: 5, scale: 1, zIndex: 15
+              });
+            }
+          };
+
+          addRow(topCount, topChairY, 180);
+          addRow(botCount, botChairY, 0);
+          if (leftCount > 0) addCol(leftCount, leftChairX, 90);
+          if (rightCount > 0) addCol(rightCount, rightChairX, 270);
+        }
       });
     }
 
-    // Check if we have generated content to place
-    if (generatedWalls.length > 0 || generatedAssets.length > 0 || generatedShapes.length > 0 || generatedTextAnnotations.length > 0) {
+    // ─── 6. Text Annotations (room-level labels from AI) ─────────────────────
+    if (Array.isArray(plan.annotations)) {
+      plan.annotations.forEach((a: any, idx: number) => {
+        generatedTextAnnotations.push({
+          id: `ann-${idx}`, text: a.text || '',
+          x: roomCX, y: wallMaxY - 600,
+          fontSize: Number(a.fontSize || 400),
+          color: '#333', type: 'text', zIndex: 150
+        });
+      });
+    }
+
+    return {
+      walls: generatedWalls,
+      assets: generatedAssets,
+      shapes: generatedShapes,
+      textAnnotations: generatedTextAnnotations,
+      combined: [...generatedWalls, ...generatedAssets, ...generatedShapes, ...generatedTextAnnotations],
+      warning: layoutWarning || undefined
+    };
+  };
+
+
+
+  const applyPlan = (plan: any) => {
+    if (!plan) return;
+    const result = processPlan(plan, canvas);
+
+    if (result.combined.length > 0) {
       setPlacementMode({
         active: true,
         data: {
-          walls: generatedWalls,
-          assets: generatedAssets,
-          shapes: generatedShapes,
-          textAnnotations: generatedTextAnnotations
+          walls: result.walls,
+          assets: result.assets,
+          shapes: result.shapes,
+          textAnnotations: result.textAnnotations
         }
       });
+      const parts: string[] = [];
+      if (result.assets.length > 0) parts.push(`${result.assets.length} items`);
+      if (result.walls.length > 0) parts.push(`${result.walls.length} walls`);
+      if (result.shapes.length > 0) parts.push(`${result.shapes.length} shapes`);
+
+      const successMsg = `✅ Layout processed. Click anywhere on the workspace to place the ${parts.join(', ')}.`;
+      const msgs: any[] = [{ role: 'assistant', content: successMsg }];
+      if ((result as any).warning) {
+        msgs.push({ role: 'assistant', content: (result as any).warning });
+      }
+      setMessages((m: any) => [...m, ...msgs]);
       setIsOpen(false);
       setInputValue("");
       return;
     }
 
-    // Modifications - update existing assets and walls
-    // (Keep modification logic as is, if any)
-
-    if (Array.isArray(plan.modifications) && plan.modifications.length > 0) {
-      let assetCount = 0;
-      let wallCount = 0;
-
-      plan.modifications.forEach((mod: any) => {
-        if (mod.wallId) {
-          // Wall modification
-          const wallUpdates: any = {};
-          if (mod.wallThickness !== undefined) wallUpdates.thickness = mod.wallThickness;
-          if (mod.wallType !== undefined) wallUpdates.wallType = mod.wallType;
-          if (mod.wallWidth !== undefined) wallUpdates.width = mod.wallWidth;
-          if (mod.wallHeight !== undefined) wallUpdates.height = mod.wallHeight;
-          if (mod.wallFillColor !== undefined) wallUpdates.fillColor = mod.wallFillColor;
-          if (mod.wallStrokeColor !== undefined) wallUpdates.strokeColor = mod.wallStrokeColor;
-
-          if (Object.keys(wallUpdates).length > 0) {
-            updateProjectWall(mod.wallId, wallUpdates);
-            wallCount++;
-          }
-        } else if (mod.assetId) {
-          // Asset modification
+    // 2. Process Modifications
+    const mods = plan.modifications || plan.modification;
+    if (Array.isArray(mods) && mods.length > 0) {
+      let modCount = 0;
+      mods.forEach((mod: any) => {
+        const asset = workspaceAssets.find((a: any) => a.id === mod.assetId);
+        if (asset) {
           const updates: any = {};
           if (mod.xMm !== undefined) updates.x = mod.xMm;
           if (mod.yMm !== undefined) updates.y = mod.yMm;
-          if (mod.widthMm !== undefined) updates.width = mod.widthMm;
-          if (mod.heightMm !== undefined) updates.height = mod.heightMm;
           if (mod.rotation !== undefined) updates.rotation = mod.rotation;
           if (mod.scale !== undefined) updates.scale = mod.scale;
           if (mod.fillColor !== undefined) updates.fillColor = mod.fillColor;
-          if (mod.strokeColor !== undefined) updates.strokeColor = mod.strokeColor;
-          // Layer operations
-          if (mod.zIndex !== undefined) updates.zIndex = mod.zIndex;
-          if (mod.bringToFront) updates.zIndex = 9999;
-          if (mod.sendToBack) updates.zIndex = 0;
-          if (mod.bringForward) {
-            // We need current asset zIndex, which we don't have direct access to here easily without looking it up
-            // Assuming simple increment for now or handled by store
-            updates.zIndex_increment = 1; // Special flag for store to handle
-          }
-          if (mod.sendBackward) {
-            updates.zIndex_increment = -1; // Special flag
-          }
-
-          if (Object.keys(updates).length > 0) {
-            updateWorkspaceAsset(mod.assetId, updates);
-            assetCount++;
-          }
+          updateWorkspaceAsset(mod.assetId, updates);
+          modCount++;
         }
       });
-
-      const message: string[] = [];
-      if (assetCount > 0) message.push(`${assetCount} asset${assetCount > 1 ? 's' : ''}`);
-      if (wallCount > 0) message.push(`${wallCount} wall${wallCount > 1 ? 's' : ''}`);
-
-      setMessages((m) => [...m, {
-        role: 'assistant',
-        content: `✅ Updated ${message.join(' and ')}`
-      }]);
+      if (modCount > 0) {
+        setMessages((m: any) => [...m, { role: 'assistant', content: `✅ Updated ${modCount} items.` }]);
+      }
     }
 
-    // Operations: Delete, Align, Distribute, Duplicate, etc.
+    // 3. Process Operations (Delete, Align, etc.)
     if (plan.operation) {
       const op = plan.operation;
       let opMessage = "";
-
-      // 1. Deletion
       if (op.type === "delete") {
-        if (op.deleteAll) {
-          // Needs a store action for clearing all
-          // For now, implementation might need to be added to store
-          opMessage = "Cleared canvas";
-        } else if (op.deleteSelected) {
+        if (op.deleteSelected) {
           const selected = getResolvedSelection().map((a: any) => a.asset.id);
           selected.forEach((id: string) => deleteWorkspaceAsset(id));
           opMessage = `Deleted ${selected.length} selected items`;
-        } else {
-          let count = 0;
-          if (op.assetIds) {
-            op.assetIds.forEach((id: string) => { deleteWorkspaceAsset(id); count++; });
-          }
-          if (op.wallIds) {
-            op.wallIds.forEach((id: string) => { deleteProjectWall(id); count++; });
-          }
-          opMessage = `Deleted ${count} items`;
+        } else if (op.assetIds) {
+          op.assetIds.forEach((id: string) => deleteWorkspaceAsset(id));
+          opMessage = `Deleted ${op.assetIds.length} items`;
         }
       }
-
-      // 2. Alignment
-      else if (op.type === "align" && op.alignment && op.assetIds && op.assetIds.length > 0) {
-        // Concrete Alignment Logic
-        const targetAssets = workspaceAssets.filter(a => op.assetIds.includes(a.id));
-        if (targetAssets.length > 0) {
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          targetAssets.forEach(a => {
-            minX = Math.min(minX, a.x);
-            minY = Math.min(minY, a.y);
-            maxX = Math.max(maxX, a.x + a.width);
-            maxY = Math.max(maxY, a.y + a.height);
-          });
-          const midX = minX + (maxX - minX) / 2;
-          const midY = minY + (maxY - minY) / 2;
-
-          targetAssets.forEach(a => {
-            const updates: any = {};
-            if (op.alignment === "left") updates.x = minX;
-            else if (op.alignment === "right") updates.x = maxX - a.width;
-            else if (op.alignment === "center") updates.x = midX - a.width / 2;
-            else if (op.alignment === "top") updates.y = minY;
-            else if (op.alignment === "bottom") updates.y = maxY - a.height;
-            else if (op.alignment === "middle") updates.y = midY - a.height / 2;
-
-            if (Object.keys(updates).length > 0) updateWorkspaceAsset(a.id, updates);
-          });
-          opMessage = `Aligned ${targetAssets.length} items to ${op.alignment}`;
-        } else {
-          opMessage = `Could not find selected assets to align`;
-        }
-      }
-
-      // 3. Distribution
-      else if (op.type === "distribute" && op.direction && op.assetIds) {
-        // Concrete Distribution Logic
-        const targetAssets = workspaceAssets.filter(a => op.assetIds.includes(a.id));
-        if (targetAssets.length > 1) {
-          if (op.direction === "horizontal") {
-            // Sort by X
-            targetAssets.sort((a, b) => a.x - b.x);
-            const startX = targetAssets[0].x;
-            const endX = targetAssets[targetAssets.length - 1].x + targetAssets[targetAssets.length - 1].width;
-            const totalWidth = endX - startX;
-            const totalAssetWidth = targetAssets.reduce((sum, a) => sum + a.width, 0);
-            const gap = (totalWidth - totalAssetWidth) / (targetAssets.length - 1);
-
-            let currentX = startX;
-            targetAssets.forEach((a, idx) => {
-              if (idx > 0) { // First item stays put
-                updateWorkspaceAsset(a.id, { x: currentX });
-              }
-              currentX += a.width + gap;
-            });
-          } else if (op.direction === "vertical") {
-            // Sort by Y
-            targetAssets.sort((a, b) => a.y - b.y);
-            const startY = targetAssets[0].y;
-            const endY = targetAssets[targetAssets.length - 1].y + targetAssets[targetAssets.length - 1].height;
-            const totalHeight = endY - startY;
-            const totalAssetHeight = targetAssets.reduce((sum, a) => sum + a.height, 0);
-            const gap = (totalHeight - totalAssetHeight) / (targetAssets.length - 1);
-
-            let currentY = startY;
-            targetAssets.forEach((a, idx) => {
-              if (idx > 0) {
-                updateWorkspaceAsset(a.id, { y: currentY });
-              }
-              currentY += a.height + gap;
-            });
-          }
-          opMessage = `Distributed ${targetAssets.length} items ${op.direction}`;
-        }
-
-        // 4. Duplication
-        else if (op.type === "duplicate" && op.count && op.count > 0 && op.assetIds) {
-          const targetAssets = workspaceAssets.filter(a => op.assetIds.includes(a.id));
-          let createdCount = 0;
-          targetAssets.forEach(original => {
-            for (let i = 0; i < (op.count || 1); i++) {
-              const newAsset = { ...original };
-              newAsset.id = crypto.randomUUID();
-              newAsset.x += (op.offsetX || 500) * (i + 1);
-              newAsset.y += (op.offsetY || 0) * (i + 1);
-              addProjectAsset(newAsset);
-              createdCount++;
-            }
-          });
-          opMessage = `Duplicated ${targetAssets.length} items ${op.count} times`;
-        }
-
-        // 5. Selection
-        else if (op.type === "select") {
-          if (op.deselectAll) {
-            setEditorSelectedIds([]);
-            opMessage = "Deselected all items";
-          } else if (op.selectAll) {
-            setEditorSelectedIds(workspaceAssets.map(a => a.id));
-            opMessage = `Selected all ${workspaceAssets.length} items`;
-          } else if (op.criteria) {
-            const criteria = op.criteria;
-            const toSelect = workspaceAssets.filter(a => {
-              let match = true;
-              if (criteria.assetType && !a.type?.toLowerCase().includes(criteria.assetType.toLowerCase())) match = false;
-              if (criteria.color && a.fillColor !== criteria.color) match = false;
-              return match;
-            }).map(a => a.id);
-            setEditorSelectedIds(toSelect);
-            opMessage = `Selected ${toSelect.length} items matching criteria`;
-          }
-        }
-      }
-
       if (opMessage) {
-        setMessages((m) => [...m, {
-          role: 'assistant',
-          content: `✅ ${opMessage}`
-        }]);
+        setMessages((m: any) => [...m, { role: 'assistant', content: `✅ ${opMessage}` }]);
       }
-    }
-
-
-
-    // DEPRECATED: // Tables - auto-calculate positions if missing
-    // DEPRECATED: if (plan.tables && plan.tables.length > 0) setMessages((m) => [...m, { role: 'assistant', content: `⚠️ AI provided ${plan.tables.length} items in deprecated tables array! This should not happen.` }]);
-    // DEPRECATED: if (Array.isArray(plan.tables) && (!plan.assets || plan.assets.length === 0)) {
-    // DEPRECATED: setMessages((m) => [...m, { role: 'assistant', content: `⚠️ Using legacy tables array (${plan.tables.length} tables)` }]);
-    // DEPRECATED: const tableSpacing = 200; // mm between tables
-    // DEPRECATED: plan.tables.forEach((t: any, idx: number) => {
-    // DEPRECATED: const width = Number(t.widthMm || t.sizePx || 100);
-    // DEPRECATED: const height = Number(t.heightMm || t.sizePx || width);
-    // DEPRECATED: let x = Number(t.xMm);
-    // DEPRECATED: let y = Number(t.yMm);
-    // DEPRECATED: // Validate and auto-calculate position if missing or invalid
-    // DEPRECATED: // Check if x/y are undefined/null or invalid (NaN, Infinity, or way too large)
-    // DEPRECATED: if (t.xMm === undefined || t.xMm === null || t.yMm === undefined || t.yMm === null ||
-    // DEPRECATED: !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
-    // DEPRECATED: if (wallBounds) {
-    // DEPRECATED: // Smart grid layout with even distribution
-    // DEPRECATED: const padding = 200; // mm from walls
-    // DEPRECATED: const availableWidth = (wallBounds.maxX - wallBounds.minX) - (2 * padding);
-    // DEPRECATED: const availableHeight = (wallBounds.maxY - wallBounds.minY) - (2 * padding);
-
-    // DEPRECATED: // Use explicit grid layout from plan, or auto-calculate
-    // DEPRECATED: let cols, rows;
-    // DEPRECATED: if (plan.gridLayout?.columns && plan.gridLayout?.rows) {
-    // DEPRECATED: cols = plan.gridLayout.columns;
-    // DEPRECATED: rows = plan.gridLayout.rows;
-    // DEPRECATED: } else {
-    // DEPRECATED: // Auto-calculate grid layout (prefer more columns than rows for landscape rooms)
-    // DEPRECATED: cols = Math.ceil(Math.sqrt(plan.tables.length * (availableWidth / availableHeight)));
-    // DEPRECATED: rows = Math.ceil(plan.tables.length / cols);
-    // DEPRECATED: }
-
-    // DEPRECATED: const row = Math.floor(idx / cols);
-    // DEPRECATED: const col = idx % cols;
-
-    // DEPRECATED: // Calculate total grid size
-    // DEPRECATED: const totalGridWidth = cols * width;
-    // DEPRECATED: const totalGridHeight = rows * height;
-
-    // DEPRECATED: // Calculate spacing between items
-    // DEPRECATED: const horizontalGap = cols > 1 ? (availableWidth - totalGridWidth) / (cols - 1) : 0;
-    // DEPRECATED: const verticalGap = rows > 1 ? (availableHeight - totalGridHeight) / (rows - 1) : 0;
-
-    // DEPRECATED: // Calculate starting position to center the grid
-    // DEPRECATED: const startX = wallBounds.minX + padding + (availableWidth - totalGridWidth - (cols - 1) * horizontalGap) / 2;
-    // DEPRECATED: const startY = wallBounds.minY + padding + (availableHeight - totalGridHeight - (rows - 1) * verticalGap) / 2;
-
-    // DEPRECATED: // Position with even distribution and centering
-    // DEPRECATED: x = startX + (col * (width + horizontalGap)) + width / 2;
-    // DEPRECATED: y = startY + (row * (height + verticalGap)) + height / 2;
-    // DEPRECATED: } else {
-    // DEPRECATED: x = canvasCenter.x + (idx % 3 - 1) * tableSpacing;
-    // DEPRECATED: y = canvasCenter.y + Math.floor(idx / 3) * tableSpacing;
-    // DEPRECATED: }
-    // DEPRECATED: }
-    // DEPRECATED: const pos = clampInWall(x, y, Math.max(width, height) / 2 + 20, width, height);
-    // DEPRECATED: const a = {
-    // DEPRECATED: id: `table-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    // DEPRECATED: type: t.assetType || "rectangular-table",
-    // DEPRECATED: x: pos.x,
-    // DEPRECATED: y: pos.y,
-    // DEPRECATED: width: width,
-    // DEPRECATED: height: height,
-    // DEPRECATED: scale: 1,
-    // DEPRECATED: rotation: Number(t.rotation || 0),
-    // DEPRECATED: zIndex: 1,
-    // DEPRECATED: };
-    // DEPRECATED: addProjectAsset(a);
-    // DEPRECATED: createdAssetIds.push(a.id);
-    // DEPRECATED: createdAssetsInBatch.push(a as any); // Track for empty space detection
-    // DEPRECATED: });
-    // DEPRECATED: }
-    // Chairs
-    if (Array.isArray(plan.chairs)) {
-      plan.chairs.forEach((c: any, idx: number) => {
-        const size = Number(c.widthMm || c.sizePx || 24);
-        let x = Number(c.xMm);
-        let y = Number(c.yMm);
-        // Validate and auto-calculate position if missing or invalid
-        if (c.xMm === undefined || c.xMm === null || c.yMm === undefined || c.yMm === null ||
-          !isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
-          if (wallBounds) {
-            const cols = Math.ceil(Math.sqrt(plan.chairs.length));
-            const row = Math.floor(idx / cols);
-            const col = idx % cols;
-            x = wallBounds.minX + (col + 0.5) * (wallBounds.maxX - wallBounds.minX) / cols;
-            y = wallBounds.minY + (row + 0.5) * (wallBounds.maxY - wallBounds.minY) / cols;
-          } else {
-            x = canvasCenter.x + (idx % 5 - 2) * 100;
-            y = canvasCenter.y + Math.floor(idx / 5) * 100;
-          }
-        }
-        const pos = clampInWall(x, y, size / 2 + 10, size, size);
-        const a = {
-          id: `chair-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          type: c.assetType || "normal-chair",
-          x: pos.x,
-          y: pos.y,
-          scale: 1,
-          rotation: Number(c.rotation || 0),
-          zIndex: 1,
-          width: size,
-          height: size,
-          backgroundColor: "transparent",
-        } as any;
-        addProjectAsset(a);
-        createdAssetIds.push(a.id);
-        createdAssetsInBatch.push(a); // Track for empty space detection
-      });
-    }
-    // Chairs around: place chairs in a circle around a center and optionally drop a table at center
-    if (Array.isArray(plan.chairsAround)) {
-      plan.chairsAround.forEach((spec: any, idx: number) => {
-        let cx = Number(spec.centerX);
-        let cy = Number(spec.centerY);
-        // Validate and auto-calculate center if missing or invalid
-        if (spec.centerX === undefined || spec.centerX === null || spec.centerY === undefined || spec.centerY === null ||
-          !isFinite(cx) || !isFinite(cy) || Math.abs(cx) > 100000 || Math.abs(cy) > 100000) {
-          if (wallBounds) {
-            const cols = Math.ceil(Math.sqrt(plan.chairsAround.length));
-            const row = Math.floor(idx / cols);
-            const col = idx % cols;
-            cx = wallBounds.minX + (col + 0.5) * (wallBounds.maxX - wallBounds.minX) / cols;
-            cy = wallBounds.minY + (row + 0.5) * (wallBounds.maxY - wallBounds.minY) / cols;
-          } else {
-            cx = canvasCenter.x + (idx % 3 - 1) * 300;
-            cy = canvasCenter.y + Math.floor(idx / 3) * 300;
-          }
-        }
-        const chairSize = Number(spec.chairSizePx || 24);
-        const tableSize = Number(spec.tableSizePx || 24);
-        const minRadius = Math.ceil((tableSize / 2) + chairSize + 10);
-        const r = Math.max(minRadius, Number(spec.radiusMm || minRadius));
-        const count = Math.max(1, Number(spec.count || 1));
-
-        // Ensure center position is away from canvas edges
-        const edgeMargin = 1000;
-        const totalRadius = r + chairSize; // Maximum extent from center
-        if (canvas?.width && canvas?.height) {
-          cx = Math.max(edgeMargin + totalRadius,
-            Math.min(canvas.width - edgeMargin - totalRadius, cx));
-          cy = Math.max(edgeMargin + totalRadius,
-            Math.min(canvas.height - edgeMargin - totalRadius, cy));
-        }
-        if (spec.tableAsset) {
-          const table: AssetInstance = {
-            id: `table-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            type: spec.tableAsset,
-            x: cx,
-            y: cy,
-            scale: 1,
-            rotation: 0,
-            zIndex: 1,
-            width: tableSize,
-            height: tableSize,
-            backgroundColor: 'transparent',
-          } as any;
-          addProjectAsset(table as any as ProjectAsset);
-          createdAssetIds.push(table.id);
-          createdAssetsInBatch.push(table); // Track for empty space detection
-        }
-        for (let i = 0; i < count; i++) {
-          const angle = (i / count) * Math.PI * 2;
-          const x = cx + Math.cos(angle) * r;
-          const y = cy + Math.sin(angle) * r;
-          const chair: AssetInstance = {
-            id: `chair-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 5)}`,
-            type: spec.chairAsset || 'normal-chair',
-            x,
-            y,
-            scale: 1,
-            rotation: (angle * 180) / Math.PI + 90,
-            zIndex: 1,
-            width: chairSize,
-            height: chairSize,
-            backgroundColor: 'transparent',
-          } as any;
-          addProjectAsset(chair as any as ProjectAsset);
-          createdAssetIds.push(chair.id);
-          createdAssetsInBatch.push(chair); // Track for empty space detection
-        }
-      });
-    }
-
-    // Assets - new comprehensive asset placement by name
-    if (Array.isArray(plan.assets)) {
-      plan.assets.forEach((assetSpec: any, idx: number) => {
-        const assetType = assetSpec.assetType || assetSpec.assetName;
-        const width = Number(assetSpec.widthMm || assetSpec.width || 500);
-        const height = Number(assetSpec.heightMm || assetSpec.height || 500);
-        let x = Number(assetSpec.xMm || assetSpec.x);
-        let y = Number(assetSpec.yMm || assetSpec.y);
-
-        // Validate and auto-calculate position if missing or invalid
-        if (!isFinite(x) || !isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) {
-          const emptySpace = findEmptySpace(width, height, 100);
-          if (emptySpace) {
-            x = emptySpace.x;
-            y = emptySpace.y;
-          } else {
-            x = canvasCenter.x;
-            y = canvasCenter.y;
-          }
-        }
-
-        const pos = validatePosition(x, y, width, height);
-        const asset: AssetInstance = {
-          id: `asset-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
-          type: assetType,
-          x: pos.x,
-          y: pos.y,
-          scale: 1,
-          rotation: Number(assetSpec.rotation || 0),
-          zIndex: 1,
-          width,
-          height,
-          fillColor: assetSpec.fillColor,
-          strokeColor: assetSpec.strokeColor,
-          backgroundColor: assetSpec.fillColor || 'transparent',
-        } as any;
-        addProjectAsset(asset as any as ProjectAsset);
-        createdAssetIds.push(asset.id);
-        createdAssetsInBatch.push(asset);
-      });
-    }
-
-    // Shapes - rectangles, circles, lines
-    if (Array.isArray(plan.shapes)) {
-      plan.shapes.forEach((shape: any, idx: number) => {
-        let x = Number(shape.x);
-        let y = Number(shape.y);
-        const width = Number(shape.width || 100);
-        const height = Number(shape.height || 100);
-
-        if (!isFinite(x) || !isFinite(y)) {
-          const emptySpace = findEmptySpace(width, height, 50);
-          if (emptySpace) {
-            x = emptySpace.x;
-            y = emptySpace.y;
-          } else {
-            x = canvasCenter.x;
-            y = canvasCenter.y;
-          }
-        }
-
-        const pos = validatePosition(x, y, width, height);
-        const shapeAsset: AssetInstance = {
-          id: `shape-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
-          type: shape.type === 'circle' ? 'ellipse' : shape.type,
-          x: pos.x,
-          y: pos.y,
-          scale: 1,
-          rotation: 0,
-          zIndex: 1,
-          width,
-          height,
-          fillColor: shape.fillColor || '#3b82f6',
-          strokeColor: shape.strokeColor || '#000000',
-          strokeWidth: shape.strokeWidth || 2,
-          backgroundColor: shape.fillColor || 'transparent',
-        } as any;
-        addProjectAsset(shapeAsset as any as ProjectAsset);
-        createdAssetIds.push(shapeAsset.id);
-        createdAssetsInBatch.push(shapeAsset);
-      });
-    }
-
-    // Annotations - dimensions, labels, arrows, text
-    if (Array.isArray(plan.annotations)) {
-      plan.annotations.forEach((annotation: any, idx: number) => {
-        const x = Number(annotation.x || canvasCenter.x);
-        const y = Number(annotation.y || canvasCenter.y);
-        const pos = validatePosition(x, y, 200, 50);
-
-        if (annotation.type === 'text' || annotation.type === 'label') {
-          const textAsset: AssetInstance = {
-            id: `text-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
-            type: 'text',
-            x: pos.x,
-            y: pos.y,
-            scale: 1,
-            rotation: 0,
-            zIndex: 10,
-            width: 200,
-            height: 50,
-            text: annotation.text || 'Label',
-            fontSize: annotation.fontSize || 16,
-            textColor: '#000000',
-            fontFamily: 'Arial',
-            backgroundColor: 'transparent',
-          } as any;
-          addProjectAsset(textAsset as any as ProjectAsset);
-          createdAssetIds.push(textAsset.id);
-          createdAssetsInBatch.push(textAsset);
-        }
-
-        // For arrows and dimensions, we'll add them as line shapes with text
-        if (annotation.type === 'arrow' && annotation.targetX && annotation.targetY) {
-          const arrowAsset: AssetInstance = {
-            id: `arrow-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
-            type: 'line',
-            x: (pos.x + annotation.targetX) / 2,
-            y: (pos.y + annotation.targetY) / 2,
-            scale: 1,
-            rotation: Math.atan2(annotation.targetY - pos.y, annotation.targetX - pos.x) * 180 / Math.PI,
-            zIndex: 10,
-            width: Math.hypot(annotation.targetX - pos.x, annotation.targetY - pos.y),
-            height: 2,
-            strokeColor: '#000000',
-            strokeWidth: 2,
-            backgroundColor: 'transparent',
-          } as any;
-          addProjectAsset(arrowAsset as any as ProjectAsset);
-          createdAssetIds.push(arrowAsset.id);
-          createdAssetsInBatch.push(arrowAsset);
-        }
-      });
-    }
-
-    // Auto-center viewport on newly created assets
-    if (createdAssetIds.length > 0) {
-      setTimeout(() => {
-        const assets = useSceneStore.getState().assets;
-        const createdAssets = assets.filter(a => createdAssetIds.includes(a.id));
-        if (createdAssets.length === 0) return;
-
-        // Calculate bounding box of all created assets
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        createdAssets.forEach(asset => {
-          if (asset.type === 'wall-segments' && asset.wallNodes) {
-            asset.wallNodes.forEach(node => {
-              minX = Math.min(minX, node.x);
-              minY = Math.min(minY, node.y);
-              maxX = Math.max(maxX, node.x);
-              maxY = Math.max(maxY, node.y);
-            });
-          } else {
-            const w = (asset.width || 0) * (asset.scale || 1);
-            const h = (asset.height || 0) * (asset.scale || 1);
-            minX = Math.min(minX, asset.x - w / 2);
-            minY = Math.min(minY, asset.y - h / 2);
-            maxX = Math.max(maxX, asset.x + w / 2);
-            maxY = Math.max(maxY, asset.y + h / 2);
-          }
-        });
-
-        if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY)) {
-          // Select the first created asset to trigger auto-center in Canvas.tsx
-          // The Canvas component will automatically center on the selected asset
-          useSceneStore.getState().selectMultipleAssets([createdAssetIds[0]]);
-        }
-      }, 150); // Slightly longer delay to ensure assets are fully added
-    }
-
-
-
-    // Modifications - apply changes to selected assets or shapes
-    if (Array.isArray(plan.modifications)) {
-      plan.modifications.forEach((mod: any) => {
-        const asset = workspaceAssets.find((a: any) => a.id === mod.assetId);
-        const shape = !asset ? workspaceShapes.find((s: any) => s.id === mod.assetId) : null;
-
-        if (asset) {
-          // For assets: update scale property (assets render as width*scale x height*scale)
-          const updates: any = {};
-          if (mod.widthMm !== undefined && mod.heightMm !== undefined) {
-            const scaleX = mod.widthMm / asset.width;
-            const scaleY = mod.heightMm / asset.height;
-            updates.scale = (scaleX + scaleY) / 2;
-          } else if (mod.scale !== undefined) {
-            updates.scale = (asset.scale || 1) * mod.scale;
-          }
-          if (mod.rotation !== undefined) updates.rotation = mod.rotation;
-          if (mod.xMm !== undefined) updates.x = mod.xMm;
-          if (mod.yMm !== undefined) updates.y = mod.yMm;
-          if (mod.fillColor !== undefined) updates.fillColor = mod.fillColor;
-          if (mod.strokeColor !== undefined) updates.strokeColor = mod.strokeColor;
-          updateWorkspaceAsset(mod.assetId, updates);
-        } else if (shape) {
-          // For shapes: update width/height directly
-          const updates: any = {};
-          if (mod.widthMm !== undefined) updates.width = mod.widthMm;
-          if (mod.heightMm !== undefined) updates.height = mod.heightMm;
-          if (mod.scale !== undefined) {
-            updates.width = shape.width * mod.scale;
-            updates.height = shape.height * mod.scale;
-          }
-          if (mod.rotation !== undefined) updates.rotation = mod.rotation;
-          if (mod.xMm !== undefined) updates.x = mod.xMm;
-          if (mod.yMm !== undefined) updates.y = mod.yMm;
-          if (mod.fillColor !== undefined) updates.fill = mod.fillColor;
-          if (mod.strokeColor !== undefined) updates.stroke = mod.strokeColor;
-          updateWorkspaceShape(mod.assetId, updates);
-        }
-      });
     }
   };
 
   // Handle interactive commands (resize, move, etc.)
   const handleInteractiveCommand = async (prompt: string) => {
     const resolved = getResolvedSelection();
-    const selectedAssets = resolved.map((r) => r.asset);
+    const selectedAssets = resolved.map((r: any) => r.asset);
 
     if (selectedAssets.length === 0) {
-      setMessages((m) => [...m, {
+      setMessages((m: any) => [...m, {
         role: 'assistant',
         content: 'Please select an asset first. Click on a shape, table, or other item to select it.'
       }]);
@@ -1467,25 +847,25 @@ export default function AiTrigger() {
     }
 
     // Check if selected asset is a group
-    const groupAsset = selectedAssets.find(a => a.isGroup && a.groupAssets);
+    const groupAsset = selectedAssets.find((a: any) => a.isGroup && a.groupAssets);
     let groupContext = undefined;
 
     if (groupAsset && groupAsset.groupAssets) {
       // Calculate group bounds from child assets
       const childAssets = groupAsset.groupAssets;
-      const minX = Math.min(...childAssets.map(a => {
+      const minX = Math.min(...childAssets.map((a: any) => {
         const w = (a.width || 0) * (a.scale || 1);
         return (a.x || 0) - w / 2;
       }));
-      const maxX = Math.max(...childAssets.map(a => {
+      const maxX = Math.max(...childAssets.map((a: any) => {
         const w = (a.width || 0) * (a.scale || 1);
         return (a.x || 0) + w / 2;
       }));
-      const minY = Math.min(...childAssets.map(a => {
+      const minY = Math.min(...childAssets.map((a: any) => {
         const h = (a.height || 0) * (a.scale || 1);
         return (a.y || 0) - h / 2;
       }));
-      const maxY = Math.max(...childAssets.map(a => {
+      const maxY = Math.max(...childAssets.map((a: any) => {
         const h = (a.height || 0) * (a.scale || 1);
         return (a.y || 0) + h / 2;
       }));
@@ -1500,7 +880,7 @@ export default function AiTrigger() {
           width: maxX - minX,
           height: maxY - minY,
         },
-        childAssets: childAssets.map(a => ({
+        childAssets: childAssets.map((a: any) => ({
           id: a.id,
           type: a.type || 'unknown',
           x: a.x || 0,
@@ -1522,7 +902,7 @@ export default function AiTrigger() {
       console.log('Group context created:', {
         groupId: groupAsset.id,
         childCount: childAssets.length,
-        children: childAssets.map(a => ({
+        children: childAssets.map((a: any) => ({
           id: a.id,
           type: a.type,
           fillColor: a.fillColor,
@@ -1537,7 +917,7 @@ export default function AiTrigger() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
-          selectedAssets: selectedAssets.map(a => ({
+          selectedAssets: selectedAssets.map((a: any) => ({
             id: a.id,
             type: a.type,
             x: a.x,
@@ -1550,7 +930,7 @@ export default function AiTrigger() {
             stroke: a.strokeColor,
             strokeWidth: a.strokeWidth,
             isGroup: a.isGroup,
-            groupAssets: a.groupAssets?.map(ga => ({
+            groupAssets: a.groupAssets?.map((ga: any) => ({
               id: ga.id,
               type: ga.type || 'unknown',
               x: ga.x || 0,
@@ -1599,7 +979,7 @@ export default function AiTrigger() {
               const scaleFactor = data.action.scaleFactor ?? 1;
 
               // DEBUG: Show in chat what's happening
-              setMessages((m) => [...m, {
+              setMessages((m: any) => [...m, {
                 role: 'assistant',
                 content: `🔧 DEBUG: Resize triggered\nSource: ${source}\nAsset: ${asset.id}\nScaleFactor: ${scaleFactor}\nCurrentScale: ${asset.scale}`
               }]);
@@ -1611,7 +991,7 @@ export default function AiTrigger() {
                 const nextScale = data.action.scale ?? (asset.scale || 1) * scaleFactor;
                 console.log('📦 Updating ASSET scale:', { assetId: asset.id, nextScale });
                 updateWorkspaceAsset(asset.id, { scale: nextScale });
-                setMessages((m) => [...m, { role: 'assistant', content: `📦 Updated asset scale to ${nextScale}` }]);
+                setMessages((m: any) => [...m, { role: 'assistant', content: `📦 Updated asset scale to ${nextScale}` }]);
               } else if (source === 'project-shape') {
                 const nextWidth = data.action.width ?? (asset.width || 0) * scaleFactor;
                 const nextHeight = data.action.height ?? (asset.height || 0) * scaleFactor;
@@ -1768,7 +1148,7 @@ export default function AiTrigger() {
                     fillColor: ca.fillColor
                   }))
                 });
-                setMessages((m) => [...m, {
+                setMessages((m: any) => [...m, {
                   role: 'assistant',
                   content: `Could not find the item you mentioned. Available items in the group: ${groupAssets.map((ca: any) => ca.type || 'unknown').join(', ')}`
                 }]);
@@ -2026,7 +1406,7 @@ export default function AiTrigger() {
           }
         });
 
-        setMessages((m) => [...m, {
+        setMessages((m: any) => [...m, {
           role: 'assistant',
           content: data.message || 'Action completed successfully.'
         }]);
@@ -2035,9 +1415,9 @@ export default function AiTrigger() {
         if (data.error.includes('plan generation') || data.error.includes('not applicable')) {
           throw new Error(data.error);
         }
-        setMessages((m) => [...m, { role: 'assistant', content: `Error: ${data.error}` }]);
+        setMessages((m: any) => [...m, { role: 'assistant', content: `Error: ${data.error}` }]);
       } else if (data?.message) {
-        setMessages((m) => [...m, { role: 'assistant', content: data.message }]);
+        setMessages((m: any) => [...m, { role: 'assistant', content: data.message }]);
       } else {
         // No action and no error - AI couldn't understand as a command
         // Throw to fall back to plan generation
@@ -2049,15 +1429,15 @@ export default function AiTrigger() {
         throw e; // Re-throw to trigger fallback in handleSubmit
       }
       console.error(e);
-      setMessages((m) => [...m, { role: 'assistant', content: 'Sorry, I could not process that command.' }]);
+      setMessages((m: any) => [...m, { role: 'assistant', content: 'Sorry, I could not process that command.' }]);
       throw e; // Re-throw to trigger fallback
     }
   };
 
-  const handleSubmit = async () => {
-    if (!inputValue.trim()) return;
-    const prompt = inputValue.trim();
-    setMessages((m) => [...m, { role: 'user', content: prompt }]);
+  const handleSubmit = async (overridePrompt?: string) => {
+    if (!inputValue.trim() && !overridePrompt) return;
+    const prompt = overridePrompt || inputValue.trim();
+    setMessages((m: any) => [...m, { role: 'user', content: prompt }]);
     setIsLoading(true);
 
     const selectedAssets = getCurrentSelectedAssets();
@@ -2087,14 +1467,36 @@ export default function AiTrigger() {
         }
       }
 
-      // Fallback to plan generation for general queries or when no assets selected
+      // Identify non-selected assets as obstacles for spatial awareness
+      const obstacles = workspaceAssets
+        .filter((wa: any) => !selectedAssets.some((sa: any) => sa.id === wa.id))
+        .map((o: any) => ({
+          id: o.id,
+          type: o.type,
+          x: o.x,
+          y: o.y,
+          width: o.width,
+          height: o.height
+        }));
+
+      // Pass the conversation history (user/assistant only) to the server
+      // Send the rawAssistantMessage if available to preserve JSON structure from previous turns
+      const conversationHistory = messages
+        .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+        .map((m: any) => ({
+          role: m.role,
+          content: m.role === 'assistant' && m.rawAssistantMessage ? m.rawAssistantMessage : m.content
+        }));
+
       const res = await fetch("/api/ai/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [...messages, { role: 'user', content: prompt }],
+          messages: conversationHistory,
+          prompt,
           canvas,
-          selectedAssets: selectedAssets.length > 0 ? selectedAssets.map(a => ({
+          obstacles: obstacles.length > 0 ? obstacles : undefined,
+          selectedAssets: selectedAssets.length > 0 ? selectedAssets.map((a: any) => ({
             id: a.id,
             type: a.type,
             x: a.x,
@@ -2105,21 +1507,58 @@ export default function AiTrigger() {
         }),
       });
       const data = await res.json();
-      if (data?.message) {
-        // General question/answer
-        setMessages((m) => [...m, { role: 'assistant', content: data.message }]);
-      } else if (data?.followUp) {
-        setMessages((m) => [...m, { role: 'assistant', content: data.followUp }]);
-      } else if (data?.plan) {
-        applyPlan(data.plan);
-        setMessages((m) => [...m, { role: 'assistant', content: 'Plan generated and applied to canvas.' }]);
+
+      let previewData: any[] | undefined;
+      let planData: any | undefined;
+      let rawPlan: any | undefined;
+      let assetSelection: any | undefined;
+
+      if (data?.assetSelection) {
+        assetSelection = data.assetSelection;
+      }
+
+      if (data?.plan) {
+        planData = processPlan(data.plan, canvas);
+        rawPlan = data.plan;
+      }
+
+      if (data?.preview) {
+        try {
+          const processed = processPlan(data.preview, canvas);
+          previewData = processed.combined;
+        } catch (e) {
+          console.error("Preview processing failed", e);
+        }
+      }
+
+      // Handle followUp (AI asking a clarifying question)
+      const followUpText = data.followUp || null;
+
+      if (assetSelection || planData || previewData || data.message || followUpText) {
+        let content = '';
+        if (data.message) content = data.message;
+        else if (followUpText) content = followUpText;
+        else if (planData) content = 'I have generated your plan draft. Click "Apply to Canvas" to use it.';
+        else if (assetSelection) content = assetSelection.message || 'Please select an asset type:';
+        else content = 'Done!';
+
+        setMessages((m: any) => [...m, {
+          role: 'assistant',
+          content,
+          assetSelection,
+          planData,
+          rawPlan,
+          previewData,
+          rawAssistantMessage: JSON.stringify(data)
+        }]);
+      } else if (data.error) {
+        setMessages((m: any) => [...m, { role: 'assistant', content: `Error: ${data.error}` }]);
       } else {
-        // Fallback for errors or unexpected responses
-        setMessages((m) => [...m, { role: 'assistant', content: data?.error || 'I can help you with that. Could you provide more details?' }]);
+        setMessages((m: any) => [...m, { role: 'assistant', content: 'I did not understand that request. Could you rephrase it?' }]);
       }
     } catch (e) {
       console.error(e);
-      setMessages((m) => [...m, { role: 'assistant', content: 'Sorry, I could not process that request.' }]);
+      setMessages((m: any) => [...m, { role: 'assistant', content: 'Sorry, I could not process that request.' }]);
     } finally {
       setInputValue("");
       setIsLoading(false);
@@ -2165,14 +1604,42 @@ export default function AiTrigger() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="w-[80vw] h-[90vh] bg-white shadow-xl rounded-lg p-6 flex flex-col items-center text-center relative"
+              className="w-[80vw] h-[90vh] bg-white shadow-xl rounded-lg p-6 flex flex-col items-center relative"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex-1 flex flex-col items-stretch justify-start w-full max-w-3xl min-h-0 overflow-hidden">
                 <div className="flex flex-col gap-3 mb-4 flex-shrink-0 items-stretch">
-                  <h2 className="text-2xl font-bold">
-                    Hello, {user?.firstName || user?.email || "there"}.
-                  </h2>
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-2xl font-bold">
+                      Hello, {user?.firstName || user?.email || "there"}.
+                    </h2>
+                    <button
+                      onClick={() => {
+                        // 1. Clear Chat History
+                        setMessages([]);
+                        setInputValue("");
+
+                        // 2. Clear Scene Store Selection (Legacy Editor)
+                        const scene = useSceneStore.getState();
+                        scene.selectAsset(null);
+                        scene.clearSelection();
+
+                        // 3. Clear Editor Store Selection (New Workspace)
+                        const editor = useEditorStore.getState();
+                        editor.clearSelection();
+
+                        // 4. Clear Global AI Selection Context
+                        try { (window as any).__ESP_AI_SELECTED_IDS__ = undefined; } catch { }
+
+                        console.log('✅ AI session and all selections cleared.');
+                      }}
+                      title="Clear chat and selection"
+                      className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-2"
+                    >
+                      <FiRefreshCw className="w-4 h-4" />
+                      New Chat
+                    </button>
+                  </div>
                   {/* Selected assets preview for AI context */}
                   {(() => {
                     const selectedAssets = getCurrentSelectedAssets();
@@ -2233,12 +1700,12 @@ export default function AiTrigger() {
                               if (selectedAssets.length === 1) {
                                 if (primary.type === "wall-segments") {
                                   // Calculate wall bounding box from nodes
-                                  const nodes = (primary as any).wallNodes as { x: number; y: number }[] | undefined;
+                                  const nodes = (primary as any).nodes || (primary as any).wallNodes;
                                   const thickness = (primary as any).wallThickness || 150;
 
                                   if (nodes && nodes.length > 0) {
-                                    const xs = nodes.map(n => n.x);
-                                    const ys = nodes.map(n => n.y);
+                                    const xs = nodes.map((n: any) => n.x);
+                                    const ys = nodes.map((n: any) => n.y);
                                     const width = Math.round(Math.max(...xs) - Math.min(...xs));
                                     const height = Math.round(Math.max(...ys) - Math.min(...ys));
 
@@ -2304,7 +1771,7 @@ export default function AiTrigger() {
                 <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain rounded-lg p-4 space-y-3 min-h-0">
                   {messages.length === 0 ? (
                     <div className="space-y-2 flex flex-col items-center justify-center h-full">
-                      <p className="text-gray-700 text-lg font-semibold mb-2">Ask anything</p>
+                      <p className="text-gray-700 text-lg font-semibold mb-2 text-center">Ask anything</p>
                       <p className="text-gray-500 text-sm text-center max-w-md">
                         Ask me anything about your workspace, or select an element and ask me to manipulate it.
                       </p>
@@ -2327,8 +1794,75 @@ export default function AiTrigger() {
                     </div>
                   ) : (
                     messages.map((m, i) => (
-                      <div key={i} className={`${m.role === 'user' ? 'text-right' : 'text-left'}`}>
-                        <span className={`inline-block px-3 py-2 rounded-lg text-sm ${m.role === 'user' ? 'bg-[var(--accent)] text-white' : 'bg-white border'}`}>{m.content}</span>
+                      <div key={i} className={`flex flex-col gap-2 ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+                        <div className={`inline-block px-3 py-2 rounded-lg text-sm max-w-[85%] text-left ${m.role === 'user' ? 'bg-[var(--accent)] text-white' : 'bg-white border text-gray-800'}`}>
+                          {m.content}
+                        </div>
+
+                        {/* Layout Preview */}
+                        {m.planData && (
+                          <div className="w-full mt-2 rounded-xl border border-slate-200 overflow-hidden bg-slate-50 relative group shadow-sm">
+                            <div className="p-2 bg-white border-b border-slate-100 flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Draft Preview</span>
+                              <button
+                                onClick={() => applyPlan(m.rawPlan)}
+                                className="bg-[var(--accent)] text-white px-3 py-1 rounded-md text-[10px] font-bold hover:brightness-110 transition-all shadow-sm"
+                              >
+                                Apply to Canvas
+                              </button>
+                            </div>
+                            <div className="aspect-video relative">
+                              <PlanPreview
+                                assets={m.planData.assets}
+                                walls={m.planData.walls}
+                                shapes={m.planData.shapes}
+                                textAnnotations={m.planData.textAnnotations}
+                                width={600}
+                                height={300}
+                                className="w-full h-full"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {m.previewData && (
+                          <div className="w-full mt-2 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 aspect-video relative group">
+                            <PlanPreview
+                              assets={m.previewData}
+                              width={600}
+                              height={300}
+                              className="w-full h-full"
+                            />
+                            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <span className="bg-white/90 px-3 py-1.5 rounded-full text-xs font-medium shadow-sm border">Draft Preview</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Asset Selection Grid */}
+                        {m.assetSelection && (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full max-w-lg mt-1">
+                            {m.assetSelection.options.map((option: { id: string; name: string; category: string; path: string }) => (
+                              <button
+                                key={option.id}
+                                onClick={() => {
+                                  handleSubmit(`I want to use the ${option.name}`);
+                                }}
+                                className="flex flex-col items-center p-2 rounded-md border border-gray-200 bg-white hover:border-[var(--accent)] hover:bg-blue-50 transition-all text-left"
+                              >
+                                <div className="w-full h-16 bg-white rounded mb-2 overflow-hidden flex items-center justify-center p-2 border border-gray-100 shadow-sm group-hover:bg-blue-50 transition-colors">
+                                  <img
+                                    src={option.path}
+                                    alt={option.name}
+                                    className="max-w-full max-h-full object-contain"
+                                  />
+                                </div>
+                                <span className="text-[10px] font-medium text-gray-700 line-clamp-1 w-full">{option.name}</span>
+                                <span className="text-[8px] text-gray-400 uppercase tracking-tighter w-full">{option.category}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))
                   )}
@@ -2373,7 +1907,7 @@ export default function AiTrigger() {
 
                 {inputValue ? (
                   <button
-                    onClick={handleSubmit}
+                    onClick={() => handleSubmit()}
                     className="absolute right-2 top-1/2 -translate-y-1/2 bg-[var(--accent)] text-white rounded-full p-2 hover:bg-[var(--accent)] transition"
                   >
                     <FaArrowUp className="w-3 h-3" />
@@ -2391,5 +1925,4 @@ export default function AiTrigger() {
     </>
   );
 }
-
 

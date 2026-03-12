@@ -558,6 +558,14 @@ export function useCanvasMouseHandlers({
             snappedY = gridSnapped.y;
           }
 
+          // Always apply grid snap to the final result if enabled, 
+          // but only if it wasn't already object-snapped (or if grid snap is preferred)
+          if (snapToGridEnabled && !guides.length) {
+            const finalGrid = snapToGrid(snappedX, snappedY);
+            snappedX = finalGrid.x;
+            snappedY = finalGrid.y;
+          }
+
           // Update guides in store
           useSceneStore.getState().setSnapGuides(guides);
 

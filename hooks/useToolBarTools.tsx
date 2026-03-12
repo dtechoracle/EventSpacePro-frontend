@@ -21,6 +21,7 @@ import {
   FaAlignLeft,
   FaTh,
   FaArrowDown,
+  FaArrowUp,
   FaRuler,
   FaFont,
   FaToggleOn,
@@ -96,9 +97,12 @@ export function useToolbarTools(): Tool[] {
       label: "Modify",
       options: [
         { id: "trim", label: "Trim", icon: <FaCut size={14} /> },
+        { id: "trim-to-blend", label: "Trim to Blend", icon: <FaCrosshairs size={14} /> },
         { id: "move", label: "Move", icon: <FaArrowsAlt size={14} /> },
         { id: "copy", label: "Copy", icon: <FaCopy size={14} /> },
         { id: "rotate", label: "Rotate", icon: <FaRedo size={14} /> },
+        { id: "bring-to-front", label: "Bring to Front", icon: <FaArrowUp size={14} /> },
+        { id: "send-to-back", label: "Send to Back", icon: <FaArrowDown size={14} /> },
       ],
     },
     // 6) Annotations (unchanged)

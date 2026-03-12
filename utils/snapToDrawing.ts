@@ -13,6 +13,22 @@ type SnapTarget = Shape | Wall | Asset;
  * Find the closest snap point on a target element
  */
 /**
+ * Rotate a point around a center
+ */
+function rotatePoint(x: number, y: number, cx: number, cy: number, angleDeg: number) {
+    if (angleDeg === 0) return { x, y };
+    const angleRad = (angleDeg * Math.PI) / 180;
+    const cos = Math.cos(angleRad);
+    const sin = Math.sin(angleRad);
+    const dx = x - cx;
+    const dy = y - cy;
+    return {
+        x: cx + dx * cos - dy * sin,
+        y: cy + dx * sin + dy * cos
+    };
+}
+
+/**
  * Get all potential snap points for an element
  */
 export function getSnapPoints(element: SnapTarget): SnapPoint[] {
@@ -23,30 +39,36 @@ export function getSnapPoints(element: SnapTarget): SnapPoint[] {
         const shape = element as Shape;
         const halfW = shape.width / 2;
         const halfH = shape.height / 2;
+        const rot = shape.rotation || 0;
 
-        snapPoints.push(
-            { x: shape.x - halfW, y: shape.y - halfH, type: 'corner', elementId: shape.id },
-            { x: shape.x + halfW, y: shape.y - halfH, type: 'corner', elementId: shape.id },
-            { x: shape.x + halfW, y: shape.y + halfH, type: 'corner', elementId: shape.id },
-            { x: shape.x - halfW, y: shape.y + halfH, type: 'corner', elementId: shape.id }
-        );
+        const rawPoints = [
+            { x: shape.x - halfW, y: shape.y - halfH, type: 'corner' as const },
+            { x: shape.x + halfW, y: shape.y - halfH, type: 'corner' as const },
+            { x: shape.x + halfW, y: shape.y + halfH, type: 'corner' as const },
+            { x: shape.x - halfW, y: shape.y + halfH, type: 'corner' as const },
+            { x: shape.x, y: shape.y - halfH, type: 'midpoint' as const },
+            { x: shape.x + halfW, y: shape.y, type: 'midpoint' as const },
+            { x: shape.x, y: shape.y + halfH, type: 'midpoint' as const },
+            { x: shape.x - halfW, y: shape.y, type: 'midpoint' as const },
+            { x: shape.x, y: shape.y, type: 'center' as const }
+        ];
 
-        snapPoints.push(
-            { x: shape.x, y: shape.y - halfH, type: 'midpoint', elementId: shape.id },
-            { x: shape.x + halfW, y: shape.y, type: 'midpoint', elementId: shape.id },
-            { x: shape.x, y: shape.y + halfH, type: 'midpoint', elementId: shape.id },
-            { x: shape.x - halfW, y: shape.y, type: 'midpoint', elementId: shape.id }
-        );
-
-        snapPoints.push({ x: shape.x, y: shape.y, type: 'center', elementId: shape.id });
+        rawPoints.forEach(p => {
+            const rotated = rotatePoint(p.x, p.y, shape.x, shape.y, rot);
+            snapPoints.push({ ...rotated, type: p.type, elementId: shape.id });
+        });
     }
     // Handle Lines/Polygons
     else if ('points' in element && element.points && element.points.length > 0) {
         const shape = element as Shape;
+        const rot = shape.rotation || 0;
+
         shape.points!.forEach((point, index) => {
+            const absPoint = { x: shape.x + point.x, y: shape.y + point.y };
+            const rotated = rotatePoint(absPoint.x, absPoint.y, shape.x, shape.y, rot);
+
             snapPoints.push({
-                x: shape.x + point.x,
-                y: shape.y + point.y,
+                ...rotated,
                 type: 'corner',
                 elementId: shape.id
             });
@@ -55,9 +77,13 @@ export function getSnapPoints(element: SnapTarget): SnapPoint[] {
             const nextPoint = shape.points![nextIndex];
 
             if (shape.type === 'polygon' || index < shape.points!.length - 1) {
-                snapPoints.push({
+                const absMid = {
                     x: shape.x + (point.x + nextPoint.x) / 2,
-                    y: shape.y + (point.y + nextPoint.y) / 2,
+                    y: shape.y + (point.y + nextPoint.y) / 2
+                };
+                const rotatedMid = rotatePoint(absMid.x, absMid.y, shape.x, shape.y, rot);
+                snapPoints.push({
+                    ...rotatedMid,
                     type: 'midpoint',
                     elementId: shape.id
                 });
@@ -67,32 +93,36 @@ export function getSnapPoints(element: SnapTarget): SnapPoint[] {
         // Center
         const centerX = shape.points!.reduce((sum, p) => sum + p.x, 0) / shape.points!.length;
         const centerY = shape.points!.reduce((sum, p) => sum + p.y, 0) / shape.points!.length;
-        snapPoints.push({ x: shape.x + centerX, y: shape.y + centerY, type: 'center', elementId: shape.id });
+        const absCenter = { x: shape.x + centerX, y: shape.y + centerY };
+        const rotatedCenter = rotatePoint(absCenter.x, absCenter.y, shape.x, shape.y, rot);
+        snapPoints.push({ ...rotatedCenter, type: 'center', elementId: shape.id });
     }
     // Handle Assets
-    else if ('src' in element) { // Asset has src
+    else if ('type' in element && !('nodes' in element)) { // Asset check
         const asset = element as Asset;
         // Use scaled dimensions
         const width = asset.width * (asset.scale || 1);
         const height = asset.height * (asset.scale || 1);
         const halfW = width / 2;
         const halfH = height / 2;
+        const rot = asset.rotation || 0;
 
-        snapPoints.push(
-            { x: asset.x - halfW, y: asset.y - halfH, type: 'corner', elementId: asset.id },
-            { x: asset.x + halfW, y: asset.y - halfH, type: 'corner', elementId: asset.id },
-            { x: asset.x + halfW, y: asset.y + halfH, type: 'corner', elementId: asset.id },
-            { x: asset.x - halfW, y: asset.y + halfH, type: 'corner', elementId: asset.id }
-        );
+        const rawPoints = [
+            { x: asset.x - halfW, y: asset.y - halfH, type: 'corner' as const },
+            { x: asset.x + halfW, y: asset.y - halfH, type: 'corner' as const },
+            { x: asset.x + halfW, y: asset.y + halfH, type: 'corner' as const },
+            { x: asset.x - halfW, y: asset.y + halfH, type: 'corner' as const },
+            { x: asset.x, y: asset.y - halfH, type: 'midpoint' as const },
+            { x: asset.x + halfW, y: asset.y, type: 'midpoint' as const },
+            { x: asset.x, y: asset.y + halfH, type: 'midpoint' as const },
+            { x: asset.x - halfW, y: asset.y, type: 'midpoint' as const },
+            { x: asset.x, y: asset.y, type: 'center' as const }
+        ];
 
-        snapPoints.push(
-            { x: asset.x, y: asset.y - halfH, type: 'midpoint', elementId: asset.id },
-            { x: asset.x + halfW, y: asset.y, type: 'midpoint', elementId: asset.id },
-            { x: asset.x, y: asset.y + halfH, type: 'midpoint', elementId: asset.id },
-            { x: asset.x - halfW, y: asset.y, type: 'midpoint', elementId: asset.id }
-        );
-
-        snapPoints.push({ x: asset.x, y: asset.y, type: 'center', elementId: asset.id });
+        rawPoints.forEach(p => {
+            const rotated = rotatePoint(p.x, p.y, asset.x, asset.y, rot);
+            snapPoints.push({ ...rotated, type: p.type, elementId: asset.id });
+        });
     }
     // Handle Walls
     else if ('nodes' in element && 'edges' in element) {

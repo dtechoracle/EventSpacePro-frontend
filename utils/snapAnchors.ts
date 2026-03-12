@@ -19,59 +19,75 @@ export interface AnchorPoint {
 }
 
 /**
+ * Rotate a point around a center
+ */
+function rotatePoint(x: number, y: number, cx: number, cy: number, angleDeg: number) {
+    if (angleDeg === 0) return { x, y };
+    const angleRad = (angleDeg * Math.PI) / 180;
+    const cos = Math.cos(angleRad);
+    const sin = Math.sin(angleRad);
+    const dx = x - cx;
+    const dy = y - cy;
+    return {
+        x: cx + dx * cos - dy * sin,
+        y: cy + dx * sin + dy * cos
+    };
+}
+
+/**
  * Calculate all anchor points for a shape
  */
 export function calculateShapeAnchors(shape: Shape): AnchorPoint[] {
     const halfW = shape.width / 2;
     const halfH = shape.height / 2;
+    const rot = shape.rotation || 0;
 
-    // For rotated shapes, we need to calculate rotated corners
-    // For now, using axis-aligned bounding box
-    const left = shape.x - halfW;
-    const right = shape.x + halfW;
-    const top = shape.y - halfH;
-    const bottom = shape.y + halfH;
-    const centerX = shape.x;
-    const centerY = shape.y;
-
-    return [
-        { id: 'top-left', label: 'Top-Left Corner', x: left, y: top },
-        { id: 'top-center', label: 'Top Center', x: centerX, y: top },
-        { id: 'top-right', label: 'Top-Right Corner', x: right, y: top },
-        { id: 'left-center', label: 'Left Center', x: left, y: centerY },
-        { id: 'center', label: 'Center', x: centerX, y: centerY },
-        { id: 'right-center', label: 'Right Center', x: right, y: centerY },
-        { id: 'bottom-left', label: 'Bottom-Left Corner', x: left, y: bottom },
-        { id: 'bottom-center', label: 'Bottom Center', x: centerX, y: bottom },
-        { id: 'bottom-right', label: 'Bottom-Right Corner', x: right, y: bottom },
+    const anchors: { id: AnchorType; label: string; x: number; y: number }[] = [
+        { id: 'top-left', label: 'Top-Left Corner', x: shape.x - halfW, y: shape.y - halfH },
+        { id: 'top-center', label: 'Top Center', x: shape.x, y: shape.y - halfH },
+        { id: 'top-right', label: 'Top-Right Corner', x: shape.x + halfW, y: shape.y - halfH },
+        { id: 'left-center', label: 'Left Center', x: shape.x - halfW, y: shape.y },
+        { id: 'center', label: 'Center', x: shape.x, y: shape.y },
+        { id: 'right-center', label: 'Right Center', x: shape.x + halfW, y: shape.y },
+        { id: 'bottom-left', label: 'Bottom-Left Corner', x: shape.x - halfW, y: shape.y + halfH },
+        { id: 'bottom-center', label: 'Bottom Center', x: shape.x, y: shape.y + halfH },
+        { id: 'bottom-right', label: 'Bottom-Right Corner', x: shape.x + halfW, y: shape.y + halfH },
     ];
+
+    if (rot === 0) return anchors;
+
+    return anchors.map(a => {
+        const rotated = rotatePoint(a.x, a.y, shape.x, shape.y, rot);
+        return { ...a, x: rotated.x, y: rotated.y };
+    });
 }
 
 /**
  * Calculate all anchor points for an asset
  */
 export function calculateAssetAnchors(asset: Asset): AnchorPoint[] {
-    const halfW = (asset.width * asset.scale) / 2;
-    const halfH = (asset.height * asset.scale) / 2;
+    const halfW = (asset.width * (asset.scale || 1)) / 2;
+    const halfH = (asset.height * (asset.scale || 1)) / 2;
+    const rot = asset.rotation || 0;
 
-    const left = asset.x - halfW;
-    const right = asset.x + halfW;
-    const top = asset.y - halfH;
-    const bottom = asset.y + halfH;
-    const centerX = asset.x;
-    const centerY = asset.y;
-
-    return [
-        { id: 'top-left', label: 'Top-Left Corner', x: left, y: top },
-        { id: 'top-center', label: 'Top Center', x: centerX, y: top },
-        { id: 'top-right', label: 'Top-Right Corner', x: right, y: top },
-        { id: 'left-center', label: 'Left Center', x: left, y: centerY },
-        { id: 'center', label: 'Center', x: centerX, y: centerY },
-        { id: 'right-center', label: 'Right Center', x: right, y: centerY },
-        { id: 'bottom-left', label: 'Bottom-Left Corner', x: left, y: bottom },
-        { id: 'bottom-center', label: 'Bottom Center', x: centerX, y: bottom },
-        { id: 'bottom-right', label: 'Bottom-Right Corner', x: right, y: bottom },
+    const anchors: { id: AnchorType; label: string; x: number; y: number }[] = [
+        { id: 'top-left', label: 'Top-Left Corner', x: asset.x - halfW, y: asset.y - halfH },
+        { id: 'top-center', label: 'Top Center', x: asset.x, y: asset.y - halfH },
+        { id: 'top-right', label: 'Top-Right Corner', x: asset.x + halfW, y: asset.y - halfH },
+        { id: 'left-center', label: 'Left Center', x: asset.x - halfW, y: asset.y },
+        { id: 'center', label: 'Center', x: asset.x, y: asset.y },
+        { id: 'right-center', label: 'Right Center', x: asset.x + halfW, y: asset.y },
+        { id: 'bottom-left', label: 'Bottom-Left Corner', x: asset.x - halfW, y: asset.y + halfH },
+        { id: 'bottom-center', label: 'Bottom Center', x: asset.x, y: asset.y + halfH },
+        { id: 'bottom-right', label: 'Bottom-Right Corner', x: asset.x + halfW, y: asset.y + halfH },
     ];
+
+    if (rot === 0) return anchors;
+
+    return anchors.map(a => {
+        const rotated = rotatePoint(a.x, a.y, asset.x, asset.y, rot);
+        return { ...a, x: rotated.x, y: rotated.y };
+    });
 }
 
 /**
@@ -107,13 +123,16 @@ export function calculateWallAnchors(wall: Wall): AnchorPoint[] {
  * Check if a point is inside a shape's bounding box
  */
 export function isPointInShape(point: { x: number; y: number }, shape: Shape): boolean {
+    const rot = shape.rotation || 0;
+    const p = rot === 0 ? point : rotatePoint(point.x, point.y, shape.x, shape.y, -rot);
+
     const halfW = shape.width / 2;
     const halfH = shape.height / 2;
     return (
-        point.x >= shape.x - halfW &&
-        point.x <= shape.x + halfW &&
-        point.y >= shape.y - halfH &&
-        point.y <= shape.y + halfH
+        p.x >= shape.x - halfW &&
+        p.x <= shape.x + halfW &&
+        p.y >= shape.y - halfH &&
+        p.y <= shape.y + halfH
     );
 }
 
@@ -121,13 +140,16 @@ export function isPointInShape(point: { x: number; y: number }, shape: Shape): b
  * Check if a point is inside an asset's bounding box
  */
 export function isPointInAsset(point: { x: number; y: number }, asset: Asset): boolean {
-    const halfW = (asset.width * asset.scale) / 2;
-    const halfH = (asset.height * asset.scale) / 2;
+    const rot = asset.rotation || 0;
+    const p = rot === 0 ? point : rotatePoint(point.x, point.y, asset.x, asset.y, -rot);
+
+    const halfW = (asset.width * (asset.scale || 1)) / 2;
+    const halfH = (asset.height * (asset.scale || 1)) / 2;
     return (
-        point.x >= asset.x - halfW &&
-        point.x <= asset.x + halfW &&
-        point.y >= asset.y - halfH &&
-        point.y <= asset.y + halfH
+        p.x >= asset.x - halfW &&
+        p.x <= asset.x + halfW &&
+        p.y >= asset.y - halfH &&
+        p.y <= asset.y + halfH
     );
 }
 

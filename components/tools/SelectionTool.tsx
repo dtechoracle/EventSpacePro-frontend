@@ -2,7 +2,7 @@ import { useSceneStore } from '@/store/sceneStore';
 import { calculateSmartSnap, Bounds } from '@/utils/smartSnapping';
 import React, { useState, useCallback, useEffect } from 'react';
 import { useEditorStore } from '@/store/editorStore';
-import { useProjectStore, Shape, Wall, Asset, Dimension, TextAnnotation } from '@/store/projectStore';
+import { useProjectStore, Shape, Wall, Asset, Dimension, TextAnnotation, LabelArrow } from '@/store/projectStore';
 import { ASSET_LIBRARY } from '@/lib/assets';
 
 interface SelectionToolProps {
@@ -10,15 +10,16 @@ interface SelectionToolProps {
 }
 
 export default function SelectionTool({ isActive }: SelectionToolProps) {
-    const { selectedIds, screenToWorld, gridSize, snapToGrid, zoom, worldToScreen, panX, panY, canvasOffset } = useEditorStore();
-    const { shapes, walls, assets, dimensions, textAnnotations, updateShape, updateWall, updateAsset, updateDimension, updateTextAnnotation } = useProjectStore();
+    const { selectedIds, screenToWorld, zoom, worldToScreen, panX, panY, canvasOffset, activeTool } = useEditorStore();
+    const { snapToGridEnabled, gridSize } = useSceneStore();
+    const { shapes, walls, assets, dimensions, textAnnotations, labelArrows, updateShape, updateWall, updateAsset, updateDimension, updateTextAnnotation, updateLabelArrow } = useProjectStore();
 
     const [dragHandle, setDragHandle] = useState<string | null>(null);
     const [initialState, setInitialState] = useState<{
         items: Array<{
-            type: 'shape' | 'wall' | 'asset' | 'dimension' | 'textAnnotation';
+            type: 'shape' | 'wall' | 'asset' | 'dimension' | 'textAnnotation' | 'labelArrow';
             id: string;
-            object: Shape | Wall | Asset | Dimension | TextAnnotation;
+            object: Shape | Wall | Asset | Dimension | TextAnnotation | LabelArrow;
             initialBounds?: { x: number, y: number, width: number, height: number }; // For walls/assets
         }>;
         startX: number;
@@ -28,7 +29,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
 
     // Calculate group bounding box
     let groupBounds = { x: 0, y: 0, width: 0, height: 0, rotation: 0 };
-    const selectedItems: Array<{ type: 'shape' | 'wall' | 'asset' | 'dimension' | 'textAnnotation'; object: Shape | Wall | Asset | Dimension | TextAnnotation }> = [];
+    const selectedItems: Array<{ type: 'shape' | 'wall' | 'asset' | 'dimension' | 'textAnnotation' | 'labelArrow'; object: Shape | Wall | Asset | Dimension | TextAnnotation | LabelArrow }> = [];
 
     if (selectedIds.length > 0) {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -158,6 +159,16 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                 }
                 return;
             }
+
+            const labelArrow = labelArrows?.find((la: any) => la.id === id);
+            if (labelArrow) {
+                selectedItems.push({ type: 'labelArrow' as any, object: labelArrow });
+                const start = labelArrow.startPoint;
+                const end = labelArrow.endPoint;
+                addPoint(start.x, start.y);
+                addPoint(end.x, end.y);
+                return;
+            }
         });
 
         if (minX !== Infinity) {
@@ -174,15 +185,21 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                     height,
                     rotation: asset.rotation || 0,
                 };
-            } else if (selectedItems.length === 1 && selectedItems[0].type === 'shape') {
-                // For single shape selection, use actual shape dimensions and rotation
-                const shape = selectedItems[0].object as Shape;
+            } else if (selectedItems.length === 1 && (selectedItems[0].type === 'shape' || selectedItems[0].type === 'textAnnotation')) {
+                // For single shape or text selection, use actual item dimensions and rotation
+                const item = selectedItems[0].object as (Shape | TextAnnotation);
+                const isText = selectedItems[0].type === 'textAnnotation';
+                const fontSize = (item as any).fontSize || 14;
+                const textLength = (item as any).text?.length || 1;
+                const width = isText ? textLength * fontSize * 0.6 : (item as Shape).width;
+                const height = isText ? fontSize * 1.2 : (item as Shape).height;
+
                 groupBounds = {
-                    x: shape.x,
-                    y: shape.y,
-                    width: shape.width,
-                    height: shape.height,
-                    rotation: shape.rotation || 0,
+                    x: item.x,
+                    y: item.y,
+                    width: width,
+                    height: height,
+                    rotation: item.rotation || 0,
                 };
             } else {
                 // For multi-selection or other types, use axis-aligned bounding box
@@ -205,11 +222,14 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
         e.stopPropagation();
         const worldPos = screenToWorld(e.clientX, e.clientY);
 
+        // Call saveToHistory once before starting a manipulation
+        useProjectStore.getState().saveToHistory();
+
         setDragHandle(handle);
         setInitialState({
             items: selectedItems.map(item => ({
-                type: item.type,
-                id: item.object.id,
+                type: item.type as any,
+                id: (item.object as any).id,
                 object: JSON.parse(JSON.stringify(item.object)), // Deep copy
                 initialBounds: (item.type === 'wall' || item.type === 'textAnnotation') ? { ...groupBounds } : undefined
             })),
@@ -228,13 +248,12 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
 
         const { snapToObjects } = useEditorStore.getState();
         const { setSnapGuides } = useSceneStore.getState();
-        // Detect a pure-shape group so we can scale the whole group uniformly
-        const shapeGroupInfo = (() => {
+        // Detect a multi-item selection for group operations
+        const groupInfo = (() => {
             if (!initialState || initialState.items.length <= 1) return null;
-            const allShapes = initialState.items.every((it) => it.type === 'shape');
-            if (!allShapes) return null;
             return {
                 groupBounds: initialState.groupBounds,
+                isAllShapes: initialState.items.every((it) => it.type === 'shape'),
             };
         })();
 
@@ -252,13 +271,13 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                     (initialShape.type === 'line' || initialShape.type === 'arrow') &&
                     !initialShape.points;
 
-                if (shapeGroupInfo && dragHandle !== 'rotate') {
+                if (groupInfo && groupInfo.isAllShapes && dragHandle !== 'rotate') {
                     // Multiple shapes: scale the whole group around the shared bounding box center,
                     // but respect the dragged axis:
                     // - dragging E/W changes width only
                     // - dragging N/S changes height only
                     // - dragging a corner changes both.
-                    const initialGroup = shapeGroupInfo.groupBounds;
+                    const initialGroup = groupInfo.groupBounds;
                     const rotation = initialGroup.rotation || 0;
                     const rotRad = rotation * (Math.PI / 180);
                     const cosR = Math.cos(rotRad);
@@ -392,36 +411,80 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                         }));
                     }
 
-                    updateShape(shape.id, groupUpdates);
+                    updateShape(shape.id, groupUpdates, true);
                     return;
                 }
 
-                // Handle rotation for groups
-                if (shapeGroupInfo && dragHandle === 'rotate') {
-                    const initialGroup = shapeGroupInfo.groupBounds;
+                // Handle rotation for multi-selection (any item types)
+                if (groupInfo && dragHandle === 'rotate') {
+                    const initialGroup = groupInfo.groupBounds;
                     const centerX = initialGroup.x;
                     const centerY = initialGroup.y;
-                    const angle = Math.atan2(worldPos.y - centerY, worldPos.x - centerX);
+                    const dx = worldPos.x - centerX;
+                    const dy = worldPos.y - centerY;
+
+                    // Add 90 degrees offset to match handle position (top)
+                    const angle = Math.atan2(dy, dx);
                     const initialAngle = Math.atan2(initialState.startY - centerY, initialState.startX - centerX);
                     const rotationDelta = angle - initialAngle;
-                    const newRotation = (initialGroup.rotation || 0) + (rotationDelta * 180 / Math.PI);
+                    const rotationDeltaDeg = rotationDelta * (180 / Math.PI);
 
-                    // Rotate each shape around the group center
+                    const cosR = Math.cos(rotationDelta);
+                    const sinR = Math.sin(rotationDelta);
+
+                    // Rotate each item around the group center
                     initialState.items.forEach(item => {
+                        const it = item.object as any;
+                        const relX = it.x - centerX;
+                        const relY = it.y - centerY;
+
+                        // New position
+                        const newX = centerX + relX * cosR - relY * sinR;
+                        const newY = centerY + relX * sinR + relY * cosR;
+
                         if (item.type === 'shape') {
-                            const shape = item.object as Shape;
-                            const relX = shape.x - centerX;
-                            const relY = shape.y - centerY;
-                            const cosR = Math.cos(rotationDelta);
-                            const sinR = Math.sin(rotationDelta);
-                            const newX = centerX + relX * cosR - relY * sinR;
-                            const newY = centerY + relX * sinR + relY * cosR;
-                            const shapeRotation = (shape.rotation || 0) + (rotationDelta * 180 / Math.PI);
-                            updateShape(shape.id, {
-                                x: newX,
-                                y: newY,
-                                rotation: shapeRotation,
+                            const newRot = (it.rotation || 0) + rotationDeltaDeg;
+                            updateShape(item.id, { x: newX, y: newY, rotation: newRot }, true);
+                        } else if (item.type === 'asset') {
+                            const newRot = (it.rotation || 0) + rotationDeltaDeg;
+                            updateAsset(item.id, { x: newX, y: newY, rotation: newRot }, true);
+                        } else if (item.type === 'wall') {
+                            const wall = item.object as Wall;
+                            const newNodes = wall.nodes.map(node => {
+                                const nodeRelX = node.x - centerX;
+                                const nodeRelY = node.y - centerY;
+                                return {
+                                    ...node,
+                                    x: centerX + nodeRelX * cosR - nodeRelY * sinR,
+                                    y: centerY + nodeRelX * sinR + nodeRelY * cosR
+                                };
                             });
+                            updateWall(item.id, { nodes: newNodes }, true);
+                        } else if (item.type === 'textAnnotation') {
+                            const newRot = (it.rotation || 0) + rotationDeltaDeg;
+                            updateTextAnnotation(item.id, { x: newX, y: newY, rotation: newRot }, true);
+                        } else if (item.type === 'dimension') {
+                            const dim = it;
+                            const newStart = {
+                                x: centerX + (dim.startPoint.x - centerX) * cosR - (dim.startPoint.y - centerY) * sinR,
+                                y: centerY + (dim.startPoint.x - centerX) * sinR + (dim.startPoint.y - centerY) * cosR
+                            };
+                            const newEnd = {
+                                x: centerX + (dim.endPoint.x - centerX) * cosR - (dim.endPoint.y - centerY) * sinR,
+                                y: centerY + (dim.endPoint.x - centerX) * sinR + (dim.endPoint.y - centerY) * cosR
+                            };
+                            updateDimension(item.id, { startPoint: newStart, endPoint: newEnd }, true);
+                        } else if (item.type as string === 'labelArrow') {
+                            const la = it;
+                            const newStart = {
+                                x: centerX + (la.startPoint.x - centerX) * cosR - (la.startPoint.y - centerY) * sinR,
+                                y: centerY + (la.startPoint.x - centerX) * sinR + (la.startPoint.y - centerY) * cosR
+                            };
+                            const newEnd = {
+                                x: centerX + (la.endPoint.x - centerX) * cosR - (la.endPoint.y - centerY) * sinR,
+                                y: centerY + (la.endPoint.x - centerX) * sinR + (la.endPoint.y - centerY) * cosR
+                            };
+                            updateLabelArrow(item.id, { startPoint: newStart, endPoint: newEnd }, true);
                         }
                     });
                     return;
@@ -490,22 +553,26 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
 
                         // Horizontal handles
                         if (dragHandle.includes('e')) {
-                            halfW = Math.max(5, halfW + dx);
-                            centerX = initialShape.x + dx;
+                            const newW = Math.max(5, initialShape.width + dx);
+                            centerX = initialShape.x + (newW - initialShape.width) / 2;
+                            halfW = newW / 2;
                         }
                         if (dragHandle.includes('w')) {
-                            halfW = Math.max(5, halfW - dx);
-                            centerX = initialShape.x + dx;
+                            const newW = Math.max(5, initialShape.width - dx);
+                            centerX = initialShape.x + (dx / 2);
+                            halfW = newW / 2;
                         }
 
                         // Vertical handles
                         if (dragHandle.includes('s')) {
-                            halfH = Math.max(5, halfH + dy);
-                            centerY = initialShape.y + dy;
+                            const newH = Math.max(5, initialShape.height + dy);
+                            centerY = initialShape.y + (newH - initialShape.height) / 2;
+                            halfH = newH / 2;
                         }
                         if (dragHandle.includes('n')) {
-                            halfH = Math.max(5, halfH - dy);
-                            centerY = initialShape.y + dy;
+                            const newH = Math.max(5, initialShape.height - dy);
+                            centerY = initialShape.y + (dy / 2);
+                            halfH = newH / 2;
                         }
 
                         const newWidth = halfW * 2;
@@ -591,7 +658,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                     } // end else (rotated)
 
                     if (Object.keys(updates).length > 0) {
-                        updateShape(shape.id, updates);
+                        updateShape(shape.id, updates, true);
                     }
                 } // end else (resize)
             } else if (item.type === 'wall') { // chained else if
@@ -654,7 +721,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                         y: newMinY + (node.y - (initY - initH / 2)) * scaleY
                     }));
 
-                    updateWall(wall.id, { nodes: newNodes });
+                    updateWall(wall.id, { nodes: newNodes }, true);
                 }
             } else if (item.type === 'asset') {
                 // Asset manipulation logic - uniform scaling only (maintain aspect ratio)
@@ -732,7 +799,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                 }
 
                 if (Object.keys(updates).length > 0) {
-                    updateAsset(asset.id, updates);
+                    updateAsset(asset.id, updates, true);
                 }
             } else if (item.type === 'dimension') {
                 // Dimension manipulation
@@ -748,7 +815,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                             x: initialDimension.startPoint.x + dx,
                             y: initialDimension.startPoint.y + dy,
                         },
-                    });
+                    }, true);
                 } else if (dragHandle === 'e') {
                     // Move end point (bottom)
                     updateDimension(dimension.id, {
@@ -756,7 +823,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                             x: initialDimension.endPoint.x + dx,
                             y: initialDimension.endPoint.y + dy,
                         },
-                    });
+                    }, true);
                 } else {
                     // Move entire dimension
                     updateDimension(dimension.id, {
@@ -768,7 +835,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                             x: initialDimension.endPoint.x + dx,
                             y: initialDimension.endPoint.y + dy,
                         },
-                    });
+                    }, true);
                 }
             } else if (item.type === 'textAnnotation') {
                 // Text annotation manipulation
@@ -790,7 +857,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                     const deg = angle * (180 / Math.PI) + 90;
                     updateTextAnnotation(textAnnotation.id, {
                         rotation: deg,
-                    });
+                    }, true);
                 } else {
                     // Handle resize and move
                     if (initialRotation === 0) {
@@ -803,22 +870,26 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
 
                         // Horizontal handles
                         if (dragHandle.includes('e')) {
-                            halfW = Math.max(initialFontSize * 0.3, halfW + dx);
-                            centerX = initialText.x + dx;
+                            const newW = Math.max(initialFontSize * 0.3, initialWidth + dx);
+                            centerX = initialText.x + (newW - initialWidth) / 2;
+                            halfW = newW / 2;
                         }
                         if (dragHandle.includes('w')) {
-                            halfW = Math.max(initialFontSize * 0.3, halfW - dx);
-                            centerX = initialText.x + dx;
+                            const newW = Math.max(initialFontSize * 0.3, initialWidth - dx);
+                            centerX = initialText.x + (dx / 2);
+                            halfW = newW / 2;
                         }
 
                         // Vertical handles
                         if (dragHandle.includes('s')) {
-                            halfH = Math.max(initialFontSize * 0.6, halfH + dy);
-                            centerY = initialText.y + dy;
+                            const newH = Math.max(initialFontSize * 0.6, initialHeight + dy);
+                            centerY = initialText.y + (newH - initialHeight) / 2;
+                            halfH = newH / 2;
                         }
                         if (dragHandle.includes('n')) {
-                            halfH = Math.max(initialFontSize * 0.6, halfH - dy);
-                            centerY = initialText.y + dy;
+                            const newH = Math.max(initialFontSize * 0.6, initialHeight - dy);
+                            centerY = initialText.y + (dy / 2);
+                            halfH = newH / 2;
                         }
 
                         const newWidth = halfW * 2;
@@ -843,7 +914,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                             x: centerX,
                             y: centerY,
                             fontSize: newFontSize,
-                        });
+                        }, true);
                     } else {
                         // Rotated text: use local-space resize similar to rotated shapes
                         const rot = initialRotation * (Math.PI / 180);
@@ -909,7 +980,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                             x: newCenterX,
                             y: newCenterY,
                             fontSize: newFontSize,
-                        });
+                        }, true);
                     }
                 }
             }

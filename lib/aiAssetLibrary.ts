@@ -20,26 +20,23 @@ export const AI_ASSET_KNOWLEDGE: AIAssetKnowledge[] = ASSET_LIBRARY.map((asset) 
 
     // Extract common patterns and create aliases
     if (name.includes('table')) {
-        tags.push('table', 'furniture', 'seating');
+        tags.push('table', 'furniture', 'tables');
         if (name.includes('round')) aliases.push('circular table', 'round table');
         if (name.includes('rectangular')) aliases.push('rect table', 'rectangle table');
         if (name.includes('cocktail')) aliases.push('standing table', 'high table');
         if (name.includes('coffee')) aliases.push('low table', 'lounge table');
     }
 
-    if (name.includes('chair')) {
-        tags.push('chair', 'seating', 'furniture');
+    if (name.includes('chair') || name.includes('stool') || name.includes('sofa') || name.includes('seating')) {
+        tags.push('chair', 'seating', 'furniture', 'seat', 'sitting');
         if (name.includes('office')) aliases.push('desk chair', 'work chair');
         if (name.includes('event')) aliases.push('banquet chair', 'conference chair');
+        if (name.includes('stool')) aliases.push('high chair', 'bar stool');
+        if (name.includes('sofa')) aliases.push('couch', 'lounge seating');
     }
 
-    if (name.includes('sofa') || name.includes('couch')) {
-        tags.push('sofa', 'couch', 'lounge', 'furniture', 'seating');
-        aliases.push('couch', 'settee');
-    }
-
-    if (name.includes('stage')) {
-        tags.push('stage', 'platform', 'layout');
+    if (name.includes('stage') || name.includes('platform')) {
+        tags.push('stage', 'platform', 'structural', 'riser');
         aliases.push('platform', 'riser');
     }
 
@@ -49,14 +46,24 @@ export const AI_ASSET_KNOWLEDGE: AIAssetKnowledge[] = ASSET_LIBRARY.map((asset) 
     }
 
     if (name.includes('window')) {
-        tags.push('window', 'opening', 'architectural');
+        tags.push('window', 'opening', 'wall item');
     }
 
-    // Seating style patterns (now all under 'test')
-    if (name.includes('boardroom') || name.includes('auditorium') || name.includes('classroom') || name.includes('banquet')) {
-        tags.push('layout', 'arrangement', 'seating style', 'configuration');
+    if (name.includes('door')) {
+        tags.push('door', 'entrance', 'exit', 'wall item');
+    }
+
+    // Seating style patterns (now all under 'Layouts')
+    if (name.includes('boardroom') || name.includes('auditorium') || name.includes('classroom') || name.includes('banquet') || name.includes('layout')) {
+        tags.push('layout', 'arrangement', 'seating style', 'configuration', 'layouts');
         aliases.push(`${asset.label} arrangement`, `${asset.label} layout`, `${asset.label} setup`);
     }
+
+    // Add category-specific matches
+    if (asset.category === 'Sitting_Styles') tags.push('chair', 'seating', 'seat', 'furniture', 'sitting');
+    if (asset.category === 'Furniture') tags.push('table', 'desk', 'surface', 'furniture');
+    if (asset.category === 'Layout') tags.push('arrangement', 'layout', 'seating style', 'configuration');
+    if (asset.category === 'Space_Elements') tags.push('door', 'window', 'wall', 'opening', 'entrance', 'exit');
 
     return {
         id: asset.id,
@@ -66,7 +73,7 @@ export const AI_ASSET_KNOWLEDGE: AIAssetKnowledge[] = ASSET_LIBRARY.map((asset) 
         description: `${asset.label} from ${asset.category} category`,
         defaultWidth: asset.width || 500,
         defaultHeight: asset.height || 500,
-        tags,
+        tags: Array.from(new Set(tags)),
     };
 });
 
@@ -131,17 +138,17 @@ export function getAssetSuggestions(context: {
     if (context.eventType) {
         const type = context.eventType.toLowerCase();
         if (type.includes('wedding') || type.includes('banquet')) {
-            suggestions.push(...getAssetsByCategory('test').filter(a =>
+            suggestions.push(...getAssetsByCategory('Layout').filter(a =>
                 a.label.includes('Banquet') || a.label.includes('Crescent')
             ));
         }
         if (type.includes('conference') || type.includes('meeting')) {
-            suggestions.push(...getAssetsByCategory('test').filter(a =>
+            suggestions.push(...getAssetsByCategory('Layout').filter(a =>
                 a.label.includes('Boardroom') || a.label.includes('Classroom')
             ));
         }
         if (type.includes('theater') || type.includes('presentation')) {
-            suggestions.push(...getAssetsByCategory('test').filter(a =>
+            suggestions.push(...getAssetsByCategory('Layout').filter(a =>
                 a.label.includes('Theatre') || a.label.includes('Seminar')
             ));
         }
@@ -168,10 +175,13 @@ export function getAIAssetContext(): string {
 }
 
 // Get compact asset list for AI (just names and IDs)
-export function getCompactAssetList(): { id: string; name: string; category: string }[] {
+export function getCompactAssetList(): { id: string; name: string; category: string; path: string; width: number; height: number }[] {
     return ASSET_LIBRARY.map((a) => ({
         id: a.id,
         name: a.label,
         category: a.category,
+        path: a.path,
+        width: a.width || 500,
+        height: a.height || 500,
     }));
 }

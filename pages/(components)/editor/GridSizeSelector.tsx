@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, Grid3X3 } from "lucide-react";
 import { useSceneStore } from "@/store/sceneStore";
+import { useEditorStore } from "@/store/editorStore";
 
 interface GridSizeSelectorProps {
   className?: string;
@@ -22,6 +23,14 @@ export default function GridSizeSelector({ className = "" }: GridSizeSelectorPro
     unitSystem,
     setUnitSystem,
   } = useSceneStore();
+
+  const editorToggleSnapToGrid = useEditorStore((s: any) => s.toggleSnapToGrid);
+
+  const handleToggleSnapToGrid = () => {
+    const nextState = !snapToGridEnabled;
+    useEditorStore.getState().setSnapToGrid(nextState);
+    useSceneStore.getState().setSnapToGridEnabled(nextState);
+  };
 
   // Fallback grid sizes if store doesn't have them
   const defaultGridSizes = [5, 10, 25, 50, 100];
@@ -51,8 +60,8 @@ export default function GridSizeSelector({ className = "" }: GridSizeSelectorPro
         <button
           onClick={toggleGrid}
           className={`w-8 h-8 border-2 flex items-center justify-center rounded-md transition-colors ${showGrid
-              ? "border-green-600 text-green-600 bg-green-50"
-              : "border-gray-300 text-gray-500 hover:border-gray-400"
+            ? "border-green-600 text-green-600 bg-green-50"
+            : "border-gray-300 text-gray-500 hover:border-gray-400"
             }`}
           title={`${showGrid ? 'Hide' : 'Show'} Grid`}
         >
@@ -106,8 +115,8 @@ export default function GridSizeSelector({ className = "" }: GridSizeSelectorPro
                         setIsOpen(false);
                       }}
                       className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${index === selectedGridSizeIndex
-                          ? "bg-blue-50 text-blue-700 font-medium"
-                          : "text-gray-700"
+                        ? "bg-blue-50 text-blue-700 font-medium"
+                        : "text-gray-700"
                         }`}
                     >
                       <div className="flex items-center justify-between">
@@ -123,17 +132,17 @@ export default function GridSizeSelector({ className = "" }: GridSizeSelectorPro
                   <div className="border-t border-gray-100 mt-1 pt-1">
                     <button
                       onClick={() => {
-                        toggleSnapToGrid();
+                        handleToggleSnapToGrid();
                         setIsOpen(false);
                       }}
-                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${!snapToGridEnabled
-                          ? "bg-green-50 text-green-700 font-medium"
-                          : "text-gray-700"
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${snapToGridEnabled
+                        ? "bg-green-50 text-green-700 font-medium"
+                        : "text-gray-700"
                         }`}
                     >
                       <div className="flex items-center justify-between">
                         <span>Smart Snap</span>
-                        {!snapToGridEnabled && (
+                        {snapToGridEnabled && (
                           <div className="w-2 h-2 bg-green-600 rounded-full"></div>
                         )}
                       </div>

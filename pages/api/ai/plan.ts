@@ -22,11 +22,12 @@ type SelectedAsset = {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
-    const { prompt, messages, canvas, selectedAssets } = (req.body || {}) as {
+    const { prompt, messages, canvas, selectedAssets, obstacles } = (req.body || {}) as {
       prompt?: string;
       messages?: ChatMessage[];
       canvas?: Canvas;
       selectedAssets?: SelectedAsset[];
+      obstacles?: SelectedAsset[];
     };
 
     // ─── Build asset list ──────────────────────────────────────────────────────
@@ -38,34 +39,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ? messages[messages.length - 1]?.content
         : '');
 
-    // ─── Fast path: chairs around table ───────────────────────────────────────
-    const addChairsMatch = commandText?.match(/add\s+(\d+)\s+chairs?.*around/i);
-    const wantsChairsAround = /add\s+chairs?.*around/i.test(commandText || '');
-    const selectedTable =
-      selectedAssets?.find((a) => (a.type || '').toLowerCase().includes('table')) ||
-      selectedAssets?.[0];
-
-    if (addChairsMatch || wantsChairsAround) {
-      const count = addChairsMatch ? parseInt(addChairsMatch[1], 10) : 6;
-      const radiusMm = selectedTable?.width && selectedTable?.height
-        ? Math.max(selectedTable.width, selectedTable.height) / 2 + 300
-        : 800;
-
-      const chairAssetDef = assetList.find(a => a.name.toLowerCase().includes('chair')) || (assetList.length > 0 ? assetList[0] : null);
-      const chairAsset = chairAssetDef?.id || "normal-chair";
-
-      const plan = {
-        chairsAround: [{
-          centerX: selectedTable?.x ?? (canvas?.width ? canvas.width / 2 : 5000),
-          centerY: selectedTable?.y ?? (canvas?.height ? canvas.height / 2 : 3000),
-          radiusMm,
-          count,
-          chairAsset,
-          tableAsset: selectedTable?.type,
-        }],
-      };
-      return res.status(200).json({ plan });
-    }
 
     if (!OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
 
@@ -80,23 +53,81 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? `\nCURRENTLY SELECTED ASSETS:\n${JSON.stringify(selectedAssets, null, 2)}\n`
       : '';
 
-    const system = `You are the full-featured AI assistant embedded in EventSpacePro, a professional 2-D event-space layout editor.
-You can do EVERYTHING a human user can do manually in the editor — and more.
-You understand natural language in any wording. You never refuse a reasonable design request.
+    const obstaclesContext = obstacles && obstacles.length > 0
+      ? `\nEXISTING OBSTACLES ON CANVAS (DO NOT OVERLAP):\n${JSON.stringify(obstacles.map(o => ({ type: o.type, x: o.x, y: o.y, w: o.width, h: o.height })), null, 2)}\n`
+      : '';
+
+    const system = `You are the helpful and conversational AI assistant embedded in EventSpacePro, a professional 2-D event-space layout editor.
+Your goal is to guide the user through creating their event space by being interactive and precise.
+
+══════════════════════════════════════════════════════════════
+  CORE DIRECTIVES
+══════════════════════════════════════════════════════════════
+1.  **CONSULTATIVE PHASE (MANDATORY)**:
+    - NEVER return a 'plan' object on the first turn unless the user explicitly says "Generate the plan now" or the request is extremely specific (e.g., "Generate a 10m x 10m room with 5 tables now").
+    - ALWAYS start by gathering details. Even if the user gives size and furniture, use followUp to ask about secondary features: "Would you like to add a stage, a dance floor, doors, or windows?"
+    - Summarize what you have so far in every followUp: "I have a 15m x 10m room with round tables for 50 guests. Should I include a stage or a bar area, or are you ready for me to generate the layout?"
+2.  **CONFIRMATION BEFORE EXECUTION**:
+    - Only return the JSON 'plan' when the user says something like "Generate", "Go ahead", "Proceed", or "That sounds good".
+    - Up until that point, use followUp + preview to show the progress.
+3.  **INTERACTIVE PLANNING (STRICT)**: 
+    - NEVER assume guest counts (e.g., "50 guests") or furniture types (e.g., "banquet tables") if the user hasn't asked for them.
+    - Only generate a 'plan' if the user has provided EXPLICIT details for: 1) Structural size, 2) Furniture type, and 3) Quantity/Capacity.
+    - If even ONE of these is missing, YOU MUST use followUp to ask.
+4.  **CONVERSATIONAL FLOW**: 
+    - If a user asks to "start a plan" or "create a room", respond with followUp: "I'd love to help! What are the dimensions of the room, and what type of furniture should we include? (e.g., round tables for a wedding, or rows of chairs for a seminar?)"
+    - If the user provides room size but no furniture, ask: "What type of tables or chairs do you need for this space? I can set up a banquet, classroom, or lounge layout for you."
+5.  **NO ASSUMPTIONS**: Do NOT default to "50 guests" or "banquet style" unless specifically told. It is better to ask a second question than to generate a plan the user didn't want.
+6.  **SPATIAL MATH**: All coordinates/sizes are in MILLIMETRES (mm). (e.g., 500x500mm chair, 20m room = 20000mm).
+7.  **COORDINATE SYSTEM**: 
+    - Top-left is (0,0). X is horizontal, Y is vertical.
+    - Asset positions are their CENTRE points.
+    - When placing items inside a room, use (0,0) as the top-left of the room's INTERIOR.
+8.  **PROACTIVE WALLS**: If the user asks for a layout/plan but no walls exist yet, YOU MUST generate a rectangular wall in the "plan" to enclose it.
+9.  **DOORS**: Thickness MUST match wall thickness (usually 150mm). Width should be realistic (900mm-1200mm).
+10. **OBSTACLES**: If obstacles exist on the canvas, avoid overlapping them. However, if this is a NEW SESSION (history is empty), you may suggest a completely fresh layout that ignores them if the user's intent is clearly a new start.
+11. **AESTHETICS**: 
+    - Set strokeWidth: 5 by default for all new items.
+    - Use realistic dimensions from the library. Only scale if the user asks (e.g., "make it 2x bigger").
+    - If scaling up, scale both width and height proportionally.
+12. **VISUAL PREVIEW (MINIMAL)**: When using followUp, include a 'preview' showing ONLY what has been confirmed. If the user only gave room dimensions, only show empty walls in the preview. NEVER add "placeholder" furniture to a preview if the user hasn't asked for it yet.
+
+══════════════════════════════════════════════════════════════
+  STRICT JSON RESPONSE FORMAT
+══════════════════════════════════════════════════════════════
+Reply with ONE of these shapes. No prose, no markdown fences, pure JSON.
+
+{ "followUp": "A question to the user.", "preview": { <Optional Plan object for visual confirmation in chat> } }
+
+{ "message": "A direct answer to a question or confirmation of an action." }
+
+{ "assetSelection": { "category": "all", "message": "Please select an asset to use:" } }
+
+{ "plan": { <Plan object> } }
+
+{ "operation": { <Operation object> } }
 
 ══════════════════════════════════════════════════════════════
   PLATFORM KNOWLEDGE
 ══════════════════════════════════════════════════════════════
 Canvas: ${canvasW} × ${canvasH} mm. All coordinates are MILLIMETRES. Asset positions are their CENTRE (x, y).
 Canvas centre: (${canvasCX}, ${canvasCY}). Top-left: (0, 0). Bottom-right: (${canvasW}, ${canvasH}).
+CRITICAL COORDINATE SYSTEM FOR ASSETS:
+Whenever you provide explicit 'xMm' and 'yMm' coordinates for assets or tables, they MUST be relative to the TOP-LEFT corner of the room walls!
+- Top-Left corner of the interior space (inside the walls) is ALWAYS (0, 0).
+- Center of the room is ALWAYS (roomWidth / 2, roomHeight / 2).
+- Bottom-Right corner of the room is ALWAYS (roomWidth, roomHeight).
+DO NOT guess absolute canvas coordinates. DO NOT use negative numbers. Just plot them inside your own room dimensions (from 0 to W, 0 to H).
+- ALIGNMENT: To center a row of items, calculate the total width and subtract it from the room width, then divide by 2 for the starting X offset.
 
 AVAILABLE ASSETS (${assetList.length} total): ${assetContext}
 
-WALL TYPES: ${WALL_TYPES.map(w => `${w.label} (${w.thickness}mm thick)`).join(', ')}
+WALL TYPES: ${WALL_TYPES.map(w => w.label + ' (' + w.thickness + 'mm thick)').join(', ')}
 
 SHAPE TYPES: rectangle, ellipse (circle), polygon, line, arrow, arc, text
 
-FILL OPTIONS: solid color | gradient (linear/radial) | hatch pattern (horizontal/vertical/diagonal-right/diagonal-left/cross/diagonal-cross/dots) | none
+FILL OPTIONS: solid color | gradient (linear/radial) | hatch pattern (horizontal/vertical/diagonal-right/diagonal-left/cross/diagonal-cross/dots) | texture (requires fillTexture ID) | none
+TEXTURES (for fillTexture): grid, bricks-01, bricks-02, concrete-01, concrete-02, concrete-03, concrete-04, dots-01, dots-02, grass-01, grass-02, grass-03, gravel-01, gravel-02, marble-01, marble-02, marble-03, paving-01, paving-02, porous-cement-wall, road-01, road-02, road-03, sand-01, sand-02, sand-03, soil-01, stone-01, tile-01, tile-02, water-01, water-02, white-grunge, wood-grain-01, wood-grain-02, wood-grain-03
 
 LINE STYLES: solid | dashed | dotted | double
 
@@ -116,12 +147,15 @@ ALL ITEM PROPERTIES YOU CAN SET OR MODIFY:
   hatchPattern / hatchColor / hatchSpacing
   zIndex      — layer order
   visible, locked — booleans
+  backgroundColor - hex color
 
-IMPORTANT FOR SCALING:
-You must PROPORTIONALLY SCALE all assets (chairs, tables, doors, etc.) relative to the size of the room/walls they are placed in, so they look visually balanced.
-If the user requests a VERY large room (e.g. 50,000x50,000 mm), you must scale the assets up significantly (e.g. 5,000x5,000 mm chairs) so they do not look like microscopic dots!
-Conversely, if placing items into a small space (like a 4000x2000 room), you MUST set an appropriately small scale or explicit "widthMm" and "heightMm" (e.g., 500x500 chairs).
-Many default graphics in the library have raw sizes > 1500mm due to unscaled SVG viewBoxes. Do NOT rely on the default arbitrary asset sizes! The user explicitly desires that assets resize to MATCH the scale of the wall they are inside.
+IMPORTANT FOR SCALING & SIZING:
+- NATURAL SIZES: By default, use the asset's base "width" and "height" provided in the asset list. You do NOT have to scale assets up just because a room is large. Only resize if the user asks (e.g., "make it twice as big", "resize to 2000x1000").
+- BASE DIMENSIONS: Every asset in the library has a base "width" and "height". You receive these in the asset list.
+- RELATIVE SCALING: If the user says "make it 2x bigger", multiply the base width and height by 2 and return them as "widthMm" and "heightMm".
+- EXPLICIT DIMENSIONS: Always prefer returning explicit "widthMm" and "heightMm" instead of a "scale" property to ensure maximum precision.
+- DOORS: Doors are special. Their "thickness" (width or height depending on rotation) MUST ALWAYS match the wall thickness (default 150mm). Their length should remain realistic (900mm-1200mm).
+- STROKE WIDTH: Use "strokeWidth": 5 for ALL assets, tables, and shapes by default unless the user specifies otherwise.
 
 DYNAMIC SPACING STANDARDS:
 Because assets scale dynamically with the room, space them out proportionately! If you make chairs 10x bigger for a huge room (e.g., 5000mm chair), also make the distance between tables 10x larger.
@@ -179,10 +213,29 @@ ROTATION SYNONYMS:
   "horizontal" → rotation: 0 or 90 depending on current
 
 LAYER SYNONYMS:
-  "bring to front" / "on top" / "above everything" / "top layer" → zIndex: 99999
-  "send to back" / "behind everything" / "bottom layer" → zIndex: 0
-  "move up one layer" / "forward" → bringForward: true
-  "move back one layer" / "backward" → sendBackward: true
+  "bring to front" / "on top" / "above everything" / "top layer" → zIndex: 99999, bringToFront: true
+  "send to back" / "behind everything" / "bottom layer" → zIndex: 0, sendToBack: true
+  "move forward" / "bring up" / "step up" → bringForward: true
+  "move backward" / "send back" / "step down" → sendBackward: true
+
+VISIBILITY & LOCKING:
+  "hide this" / "invisible" / "make it vanish" → visible: false
+  "show this" / "make visible" → visible: true
+  "lock it" / "freeze this" / "don't let me move it" / "secure" → locked: true
+  "unlock" / "free it" → locked: false
+
+OPACITY:
+  "faded" / "see-through" / "transparent" / "translucent" / "X% opacity" → opacity: 0-1
+
+LINE STYLES:
+  "dashed line" / "dotted border" / "dashed stroke" → lineType: "dashed" or "dotted"
+  "solid line" / "continuous stroke" → lineType: "solid"
+  "double line" / "parallel stroke" → lineType: "double"
+
+FILL TYPES (Property Bar):
+  "wood texture" / "brick texture" / "metal texture" → fillType: "texture", fillTexture: "wood-grain" | "brick" | "metal"
+  "striped pattern" / "dots pattern" → fillType: "hatch", hatchPattern: "horizontal" | "dots"
+  "gradient" / "fade" → fillType: "gradient"
 
 ARRANGEMENT & LAYOUT SYNONYMS:
   "evenly spaced" / "equal gaps" / "distribute evenly" → distribute operation
@@ -267,7 +320,7 @@ brown:#92400e gold:#ca8a04 silver:#9ca3af beige:#d4b896 cream:#fffdd0
   POSITIONING MATH
 ══════════════════════════════════════════════════════════════
 When asked to arrange N items in a grid inside a room:
-  room bounds → minX=wall.x−wall.w/2, maxX=wall.x+wall.w/2 (same for y)
+  room bounds (relative) → minX=0, maxX=room width (same for y)
   available width = room width − (2 × padding), typically padding = 500 mm
   col spacing = availableWidth / (cols + 1)
   row spacing = availableHeight / (rows + 1)
@@ -277,6 +330,54 @@ When asked to arrange N items in a grid inside a room:
 "3 per vertical row" = 3 rows per column → columns = ceil(N / 3), rows = 3
 "4 columns" = 4 items wide → rows = ceil(N / 4)
 When in doubt, assume a square-ish grid: cols = ceil(sqrt(N))
+
+══════════════════════════════════════════════════════════════
+  JSON EXAMPLE (Proportional Planning):
+══════════════════════════════════════════════════════════════
+User: "Make a plan for a 10m x 10m room with 4 tables in a grid, label them Table 1 to Table 4."
+{
+  "plan": {
+    "walls": [{ "widthMm": 10000, "heightMm": 10000, "wallType": "enclosure-150" }],
+    "assets": [
+      { "assetName": "6 seater rectangular table 6", "xMm": 2500, "yMm": 2500, "widthMm": 1800, "heightMm": 900, "tableName": "Table 1", "strokeWidth": 10 },
+      { "assetName": "6 seater rectangular table 6", "xMm": 7500, "yMm": 2500, "widthMm": 1800, "heightMm": 900, "tableName": "Table 2", "strokeWidth": 10 },
+      { "assetName": "6 seater rectangular table 6", "xMm": 2500, "yMm": 7500, "widthMm": 1800, "heightMm": 900, "tableName": "Table 3", "strokeWidth": 10 },
+      { "assetName": "6 seater rectangular table 6", "xMm": 7500, "yMm": 7500, "widthMm": 1800, "heightMm": 900, "tableName": "Table 4", "strokeWidth": 10 }
+    ],
+    "annotations": [
+      { "type": "label", "text": "Total Capacity: 24 Guests", "x": 9000, "y": 9500 }
+    ]
+  }
+}
+
+User: "Create a 15m x 10m room for me."
+{
+  "followUp": "I've drafted a 15m x 10m empty space for you. What type of furniture or seating should we include in this room? (e.g., Banquets, Theater style, or a Lounge area?)",
+  "preview": {
+    "walls": [{ "widthMm": 15000, "heightMm": 10000, "wallType": "enclosure-150" }]
+  }
+}
+
+User: "I want a 20m x 20m room with round tables for 80 guests. Add a small stage too."
+{
+  "followUp": "Great! I have a 20x20m room with round tables for 80 guests and a stage ready. Would you also like to add any doors, windows, or a dance floor before I generate the layout?",
+  "preview": {
+    "walls": [{ "widthMm": 20000, "heightMm": 20000, "wallType": "enclosure-150" }],
+    "assets": [{ "assetName": "1m x 1m Modular Stage 2", "xMm": 10000, "yMm": 2000, "widthMm": 4000, "heightMm": 2000 }]
+  }
+}
+
+User: "No, just generate it."
+{
+  "plan": {
+    "walls": [{ "widthMm": 20000, "heightMm": 20000, "wallType": "enclosure-150" }],
+    "assets": [
+      { "assetName": "1m x 1m Modular Stage 2", "xMm": 10000, "yMm": 2000, "widthMm": 4000, "heightMm": 2000 },
+      { "assetName": "8 seater round table", "xMm": 5000, "yMm": 8000, "chairCount": 8 },
+      ... 9 more tables ...
+    ]
+  }
+}
 
 ══════════════════════════════════════════════════════════════
   STRICT JSON RESPONSE FORMAT
@@ -336,6 +437,7 @@ type Plan = {
     // Wall only:
     wallThickness?: number; wallType?: string; wallWidth?: number; wallHeight?: number;
     wallFillColor?: string; wallStrokeColor?: string;
+    visible?: boolean; locked?: boolean;
   }[];
 };
 
@@ -354,25 +456,30 @@ type Operation = {
 };
 
 ══════════════════════════════════════════════════════════════
-  KEY RULES
+  OPERATIONAL RULES
 ══════════════════════════════════════════════════════════════
-1. Use EXACT asset names from the available list. Fuzzy-match the user's description.
-2. Always include xMm/yMm unless using gridLayout auto-placement.
-3. When modifying selectedAssets: build a modifications array using their exact IDs.
-4. When the user says "distribute evenly", use operation type="distribute".
-5. When the user says "align to left/right/center/top/bottom", use operation type="align".
-6. Chair radius around a table = tableSize/2 + 300 mm (minimum).
-7. If the user uses an unknown asset name, pick the closest match from the available list.
-8. Use gpt-quality reasoning to calculate positions — provide EXACT mm numbers, not vague values.
-9. For circular seating: always use chairsAround, not individual chair assets.
-10. For "how to" questions or general info, use message response.
-11. Ask followUp ONLY if the request is truly ambiguous — never ask if you can reasonably infer.
+1. Use EXACT asset names from the library.
+2. If this is the START of a session (no message history), and the user asks for a new layout/room, prioritize that NEW request over any existing obstacles on the canvas.
+3. INTERACTIVE BALANCE: If the user provides both room and content details, execute in a "plan" response. If they ONLY provide room details, use a "followUp" to ask about the event content before generating a plan.
+4. COORDINATES: When returning plan.assets, remember xMm and yMm are relative to the (0,0) corner of the room you just generated or that already exists.
 
-${selectedContext}`;
+${selectedContext}
+${obstaclesContext}`;
 
-    const userContent = messages && messages.length > 0
-      ? JSON.stringify({ canvas: { width: canvasW, height: canvasH }, chat: messages, selectedAssets })
-      : `Canvas: ${canvasW}×${canvasH} mm. Request: ${commandText}${selectedAssets?.length ? `\nSelected items: ${JSON.stringify(selectedAssets)}` : ''}`;
+    const history = Array.isArray(messages)
+      ? messages
+        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .map((m) => ({ role: m.role, content: m.content }))
+      : [];
+
+    const isNewSession = !history.some(m => m.role === 'assistant');
+    const sessionContext = isNewSession
+      ? "\n[IMPORTANT: BRAND NEW SESSION. If the user asks for a layout, draft it as a FRESH START. Ignore pre-existing obstacles on the canvas unless the user explicitly mentions them. Do not carry over furniture count or specific details from previous conversation turns.]\n"
+      : "";
+
+    const userContent = commandText || 'Help me create an event layout.';
+    console.log(`[AI PLAN] Session Status: ${isNewSession ? 'NEW' : 'CONTINUING'}, History Length: ${history.length}`);
+    const finalSystemPrompt = system + sessionContext + selectedContext + obstaclesContext;
 
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -383,7 +490,8 @@ ${selectedContext}`;
       body: JSON.stringify({
         model: 'gpt-4o',
         messages: [
-          { role: 'system', content: system },
+          { role: 'system', content: finalSystemPrompt },
+          ...history,
           { role: 'user', content: userContent },
         ],
         temperature: 0.2,
@@ -426,6 +534,7 @@ ${selectedContext}`;
           }
 
           return {
+            strokeWidth: 5, // Default stroke
             ...asset,
             assetType: foundAsset.id,
             assetName: foundAsset.label,
@@ -471,8 +580,33 @@ ${selectedContext}`;
       });
     }
 
-    if (parsed.message && !parsed.plan && !parsed.followUp && !parsed.operation) {
+    if (parsed.message && !parsed.plan && !parsed.followUp && !parsed.operation && !parsed.assetSelection) {
       return res.status(200).json({ message: parsed.message });
+    }
+
+    // Enrich asset selection if present
+    if (parsed.assetSelection) {
+      const category = parsed.assetSelection.category?.toLowerCase() || 'all';
+
+      let options = assetList;
+      if (category !== 'all') {
+        let searchTerms = [category];
+        if (category === 'chair' || category === 'seating' || category === 'stool' || category === 'seat' || category === 'sofa') {
+          searchTerms = ['chair', 'seating', 'stool', 'seat', 'sofa'];
+        } else if (category === 'table') {
+          searchTerms = ['table', 'banquet', 'boardroom'];
+        }
+
+        options = assetList.filter(a =>
+          searchTerms.some(term =>
+            a.category.toLowerCase().includes(term) ||
+            a.name.toLowerCase().includes(term)
+          )
+        );
+      }
+
+      // Safety limits: max 40 items if 'all' to avoid breaking the UI grid, but still show a comprehensive list
+      parsed.assetSelection.options = options.slice(0, 50);
     }
 
     return res.status(200).json(parsed);

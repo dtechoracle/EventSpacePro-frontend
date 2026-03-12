@@ -55,8 +55,8 @@ export default function GridRenderer({ gridSize, viewportSize, zoom, panX, panY,
 
     return (
         <g className="grid-layer">
-            {/* Grid lines with reduced visibility */}
-            <g opacity={0.3}>
+            {/* Grid lines with high visibility */}
+            <g opacity={0.8}>
                 {/* Vertical lines */}
                 {verticalLines.map((x) => (
                     <line
@@ -65,8 +65,9 @@ export default function GridRenderer({ gridSize, viewportSize, zoom, panX, panY,
                         y1={startY}
                         x2={x}
                         y2={endY}
-                        stroke="#64748b" // Darker slate color for better visibility
-                        strokeWidth={(x % (gridSize * 5) === 0 ? 2 : 1) / zoom}
+                        stroke="#cbd5e1" // Subtle slate-300
+                        strokeWidth={x % (gridSize * 5) === 0 ? 0.4 : 0.15}
+                        vectorEffect="non-scaling-stroke"
                     />
                 ))}
 
@@ -78,8 +79,9 @@ export default function GridRenderer({ gridSize, viewportSize, zoom, panX, panY,
                         y1={y}
                         x2={endX}
                         y2={y}
-                        stroke="#64748b" // Darker slate color for better visibility
-                        strokeWidth={(y % (gridSize * 5) === 0 ? 2 : 1) / zoom}
+                        stroke="#cbd5e1" // Subtle slate-300
+                        strokeWidth={y % (gridSize * 5) === 0 ? 0.4 : 0.15}
+                        vectorEffect="non-scaling-stroke"
                     />
                 ))}
             </g>
@@ -93,8 +95,7 @@ export default function GridRenderer({ gridSize, viewportSize, zoom, panX, panY,
                     width={80 / zoom}
                     height={25 / zoom}
                     fill="rgba(255, 255, 255, 0.9)"
-                    stroke="#3b82f6"
-                    strokeWidth={1 / zoom}
+                    stroke="none"
                     rx={4 / zoom}
                 />
                 {/* Label text */}

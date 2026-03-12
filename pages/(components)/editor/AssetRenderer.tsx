@@ -688,6 +688,7 @@ export default function AssetRenderer({
             fill={asset.fillColor}
             stroke={asset.strokeColor}
             strokeWidth={asset.strokeWidth}
+            category={def.category}
           />
         </div>
 

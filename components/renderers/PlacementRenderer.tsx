@@ -2,9 +2,12 @@
 
 import React, { useMemo } from 'react';
 import { useEditorStore } from '@/store/editorStore';
-import { AssetInstance } from '@/store/sceneStore';
 import { ASSET_LIBRARY } from '@/lib/assets';
-import { InlineSvg } from '@/components/tools/InlineSvg';
+import WallRenderer from './WallRenderer';
+import ShapeRenderer from './ShapeRenderer';
+import AssetRenderer from './AssetRenderer';
+import TextAnnotationRenderer from './TextAnnotationRenderer';
+
 
 interface PlacementRendererProps {
     mouseWorldPos: { x: number; y: number };
@@ -78,7 +81,8 @@ export const PlacementRenderer = ({ mouseWorldPos }: PlacementRendererProps) => 
 
     if (!placementMode.active || !previewContent) return null;
 
-    const { walls, assets, shapes, scale, centerX, centerY } = previewContent;
+    const { walls, assets, shapes, textAnnotations, scale, centerX, centerY } = previewContent;
+    const zoom = useEditorStore((s) => s.zoom);
 
     return (
         <g
@@ -87,108 +91,41 @@ export const PlacementRenderer = ({ mouseWorldPos }: PlacementRendererProps) => 
         >
             {/* Render Walls */}
             {walls?.map((wall: any) => (
-                <g key={wall.id}>
-                    {wall.edges?.map((edge: any, i: number) => {
-                        const nA = wall.nodes.find((n: any) => n.id === edge.nodeA);
-                        const nB = wall.nodes.find((n: any) => n.id === edge.nodeB);
-                        if (!nA || !nB) return null;
-                        return (
-                            <line
-                                key={i}
-                                x1={nA.x} y1={nA.y}
-                                x2={nB.x} y2={nB.y}
-                                stroke="#000"
-                                strokeWidth={edge.thickness || wall.thickness || 150}
-                                strokeLinecap="square"
-                                fill="none"
-                            />
-                        );
-                    })}
-                </g>
+                <WallRenderer
+                    key={wall.id}
+                    wall={wall}
+                    isSelected={false}
+                    isHovered={false}
+                />
             ))}
 
             {/* Render Shapes */}
-            {shapes?.map((shape: any) => {
-                // Normalise field names — AI may return xMm/yMm/widthMm/heightMm
-                const sx = shape.x ?? shape.xMm ?? 0;
-                const sy = shape.y ?? shape.yMm ?? 0;
-                const sw = shape.width ?? shape.widthMm ?? 100;
-                const sh = shape.height ?? shape.heightMm ?? sw;
-                const fill = shape.fillColor ?? shape.fill ?? '#cccccc';
-                const stroke = shape.strokeColor ?? shape.stroke ?? '#000000';
-                const strokeW = shape.strokeWidth ?? 2;
-                const t = shape.type;
-                const isRect = t === 'rectangle' || t === 'rect';
-                const isEllipse = t === 'ellipse' || t === 'circle';
-                return (
-                    <React.Fragment key={shape.id}>
-                        {isRect && (
-                            <rect
-                                x={sx - sw / 2} y={sy - sh / 2}
-                                width={sw} height={sh}
-                                fill={fill} stroke={stroke} strokeWidth={strokeW}
-                            />
-                        )}
-                        {isEllipse && (
-                            <ellipse
-                                cx={sx} cy={sy}
-                                rx={sw / 2} ry={sh / 2}
-                                fill={fill} stroke={stroke} strokeWidth={strokeW}
-                            />
-                        )}
-                        {!isRect && !isEllipse && (
-                            // Generic fallback — render as dashed rectangle placeholder
-                            <rect
-                                x={sx - sw / 2} y={sy - sh / 2}
-                                width={sw} height={sh}
-                                fill={fill} stroke={stroke} strokeWidth={strokeW}
-                                strokeDasharray="8 4"
-                            />
-                        )}
-                    </React.Fragment>
-                );
-            })}
+            {shapes?.map((shape: any) => (
+                <ShapeRenderer
+                    key={shape.id}
+                    shape={shape}
+                    isSelected={false}
+                    isHovered={false}
+                />
+            ))}
 
             {/* Render Assets */}
-            {assets?.map((asset: any) => {
-                const def = ASSET_LIBRARY.find(a => a.id === asset.type);
-                const w = (asset.width || 50) * (asset.scale || 1);
-                const h = (asset.height || 50) * (asset.scale || 1);
-
-                return (
-                    <g key={asset.id} transform={`translate(${asset.x}, ${asset.y}) rotate(${asset.rotation || 0})`}>
-                        <rect x={-w / 2} y={-h / 2} width={w} height={h} fill="none" stroke="#666" strokeDasharray="4 4" />
-                        {def?.path && (
-                            <foreignObject x={-w / 2} y={-h / 2} width={w} height={h}>
-                                <div className="w-full h-full flex items-center justify-center">
-                                    <InlineSvg
-                                        src={def.path}
-                                        fill={asset.fillColor}
-                                        stroke={asset.strokeColor}
-                                        strokeWidth={asset.strokeWidth}
-                                    />
-                                </div>
-                            </foreignObject>
-                        )}
-                    </g>
-                );
-            })}
+            {assets?.map((asset: any) => (
+                <AssetRenderer
+                    key={asset.id}
+                    asset={asset}
+                    isSelected={false}
+                    isHovered={false}
+                />
+            ))}
 
             {/* Render Text Annotations */}
-            {previewContent.textAnnotations?.map((t: any) => (
-                <text
+            {textAnnotations?.map((t: any) => (
+                <TextAnnotationRenderer
                     key={t.id}
-                    x={t.x}
-                    y={t.y}
-                    fontSize={t.fontSize || 16}
-                    fill={t.textColor || "#000000"}
-                    textAnchor="start"
-                    dominantBaseline="middle"
-                    style={{ fontFamily: t.fontFamily || "Arial", fontWeight: t.fontWeight || "normal" }}
-                    transform={`translate(${t.x}, ${t.y}) rotate(${t.rotation || 0}) translate(${-t.x}, ${-t.y})`}
-                >
-                    {t.text}
-                </text>
+                    annotation={t}
+                    zoom={zoom}
+                />
             ))}
 
             {/* Bounds Visualizer (Optional) */}

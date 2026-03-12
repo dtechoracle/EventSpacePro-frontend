@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditorStore } from '@/store/editorStore';
+import { useSceneStore } from '@/store/sceneStore';
 import { useProjectStore, Shape } from '@/store/projectStore';
 import { snapTo90Degrees } from '@/lib/wallGeometry';
 import { findSnapPointInShapes, SnapPoint } from '@/utils/snapToDrawing';
@@ -13,7 +14,8 @@ interface ShapeToolProps {
 }
 
 export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
-    const { screenToWorld, snapToGrid, gridSize, setSelectedIds, setActiveTool, zoom } = useEditorStore();
+    const { screenToWorld, setSelectedIds, setActiveTool, zoom } = useEditorStore();
+    const { snapToGridEnabled, gridSize } = useSceneStore();
     const { addShape, getNextZIndex, shapes } = useProjectStore();
 
     // Multi-segment state for lines/arrows
@@ -100,7 +102,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         const worldPos = screenToWorld(e.clientX, e.clientY);
         const { snapToObjects, zoom } = useEditorStore.getState();
 
-        let snapped = snapToGrid
+        let snapped = snapToGridEnabled
             ? { x: Math.round(worldPos.x / gridSize) * gridSize, y: Math.round(worldPos.y / gridSize) * gridSize }
             : worldPos;
 
@@ -117,7 +119,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         setStartPoint(snapped);
         setEndPoint(snapped);
         setIsDrawing(true);
-    }, [isActive, isLineMode, screenToWorld, snapToGrid, gridSize]);
+    }, [isActive, isLineMode, screenToWorld, snapToGridEnabled, gridSize]);
 
     // Handle mouse move
     const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -125,7 +127,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         const worldPos = screenToWorld(e.clientX, e.clientY);
         const { zoom, snapToObjects } = useEditorStore.getState();
 
-        let snapped = snapToGrid
+        let snapped = snapToGridEnabled
             ? { x: Math.round(worldPos.x / gridSize) * gridSize, y: Math.round(worldPos.y / gridSize) * gridSize }
             : worldPos;
 
@@ -171,7 +173,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             if (!isDrawing || !startPoint) return;
             setEndPoint(snapped);
         }
-    }, [isActive, isDrawing, isLineMode, lastPoint, existingEndpoints, screenToWorld, snapToGrid, gridSize, segments, shapes]);
+    }, [isActive, isDrawing, isLineMode, lastPoint, existingEndpoints, screenToWorld, snapToGridEnabled, gridSize, segments, shapes]);
 
     // Handle mouse up (rect/ellipse/polygon only)
     const handleMouseUp = useCallback(() => {
@@ -201,6 +203,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             height: finalHeight,
             rotation: 0,
             fill: 'transparent',
+            fillType: 'solid',
             // Default black stroke for better visibility
             stroke: '#000000',
             strokeWidth: 5,
@@ -319,6 +322,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 height,
                 rotation: 0,
                 fill: 'transparent', // Ready for fill
+                fillType: 'solid',
                 // Black default stroke for multi‑segment lines/arrows
                 stroke: '#000000',
                 strokeWidth: 5,
@@ -346,7 +350,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         if (!target || !target.closest('svg[data-workspace-root="true"]')) return;
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
-        let snapped = snapToGrid
+        let snapped = snapToGridEnabled
             ? { x: Math.round(worldPos.x / gridSize) * gridSize, y: Math.round(worldPos.y / gridSize) * gridSize }
             : worldPos;
 
@@ -418,7 +422,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 }
             }
         }
-    }, [isActive, isLineMode, isPolygon, showPolygonModal, screenToWorld, snapToGrid, gridSize, isDrawing, existingEndpoints, segments, lastPoint, shapes]);
+    }, [isActive, isLineMode, isPolygon, showPolygonModal, screenToWorld, snapToGridEnabled, gridSize, isDrawing, existingEndpoints, segments, lastPoint, shapes]);
 
     const handleLineMouseUp = useCallback((e: MouseEvent) => {
         if (!isDrawing) return;
@@ -426,7 +430,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         if (isLineDragging && dragStartPos.current && lastPoint) {
             const worldPos = screenToWorld(e.clientX, e.clientY);
             // Re-calculate snap
-            let snapped = snapToGrid
+            let snapped = snapToGridEnabled
                 ? { x: Math.round(worldPos.x / gridSize) * gridSize, y: Math.round(worldPos.y / gridSize) * gridSize }
                 : worldPos;
 
@@ -512,7 +516,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         }
         setIsLineDragging(false);
         dragStartPos.current = null;
-    }, [isDrawing, isLineDragging, lastPoint, segments, screenToWorld, snapToGrid, gridSize, existingEndpoints]);
+    }, [isDrawing, isLineDragging, lastPoint, segments, screenToWorld, snapToGridEnabled, gridSize, existingEndpoints]);
 
     // Attach event listeners
     useEffect(() => {

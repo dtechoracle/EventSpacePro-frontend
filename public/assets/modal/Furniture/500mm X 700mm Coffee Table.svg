@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="500mm" height="700mm" viewBox="0 0 500 700" version="1.1" xmlns="http://www.w3.org/2000/svg" style="stroke-linecap:round;stroke-linejoin:round;">
+    <!-- 500mm x 700mm Coffee Table -->
+    <!-- Top-down view: table surface + 4 legs -->
+
+    <!-- Main table top (fillable) -->
+    <rect id="auto-fill" x="0" y="0" width="500" height="700" rx="10" ry="10" style="stroke:#000000;stroke-width:4;"/>
+
+    <!-- Leg: top-left -->
+    <rect x="15" y="15" width="70" height="70" rx="4" ry="4" style="stroke:#000000;stroke-width:3;"/>
+    <!-- Leg: top-right -->
+    <rect x="415" y="15" width="70" height="70" rx="4" ry="4" style="stroke:#000000;stroke-width:3;"/>
+    <!-- Leg: bottom-left -->
+    <rect x="15" y="615" width="70" height="70" rx="4" ry="4" style="stroke:#000000;stroke-width:3;"/>
+    <!-- Leg: bottom-right -->
+    <rect x="415" y="615" width="70" height="70" rx="4" ry="4" style="stroke:#000000;stroke-width:3;"/>
+</svg>

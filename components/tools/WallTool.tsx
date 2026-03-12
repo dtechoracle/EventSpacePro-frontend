@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useEditorStore } from '@/store/editorStore';
+import { useSceneStore } from '@/store/sceneStore';
 import { useProjectStore, WallNode, WallEdge, Wall } from '@/store/projectStore';
 import { snapTo90Degrees } from '@/lib/wallGeometry';
 import { calculateNodeJunctions, Point } from '@/utils/geometry';
@@ -15,7 +16,8 @@ interface WallToolProps {
 }
 
 export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
-    const { canvasOffset, zoom, panX, panY, snapToGrid, gridSize, setSelectedIds, setActiveTool } = useEditorStore();
+    const { canvasOffset, zoom, panX, panY, setSelectedIds, setActiveTool } = useEditorStore();
+    const { snapToGridEnabled, gridSize } = useSceneStore();
     const { addWall, updateWall, getNextZIndex, walls, connectWallToEdge, splitWallEdge } = useProjectStore();
 
     // Screen to world conversion
@@ -58,7 +60,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
         const worldPos = screenToWorld(e.clientX, e.clientY);
 
         // Base snapping: Grid or Raw
-        let snapped = snapToGrid
+        let snapped = snapToGridEnabled
             ? {
                 x: Math.round(worldPos.x / gridSize) * gridSize,
                 y: Math.round(worldPos.y / gridSize) * gridSize
@@ -80,7 +82,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
 
         // 1. ALIGNMENT SNAPPING (Inference) - Priority over grid
         // Only apply if NOT snapping to grid (avoid fighting)
-        if (!snapToGrid) {
+        if (!snapToGridEnabled) {
             // Find interesting X and Y coordinates from other walls
             // We only align to start/end nodes of other walls to avoid noise
             const interestingX: number[] = [];
@@ -189,7 +191,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
 
         // Update preview point for preview line
         setPreviewPoint(snapped);
-    }, [isActive, isDrawing, lastNode, screenToWorld, snapToGrid, gridSize, walls, currentWallId, JUNCTION_SNAP_THRESHOLD, currentWall, zoom]);
+    }, [isActive, isDrawing, lastNode, screenToWorld, snapToGridEnabled, gridSize, walls, currentWallId, JUNCTION_SNAP_THRESHOLD, currentWall, zoom]);
 
     // Handle click to add node
     const handleClick = useCallback((e: MouseEvent) => {
@@ -208,7 +210,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
         const worldPos = screenToWorld(e.clientX, e.clientY);
         const { snapToObjects, zoom } = useEditorStore.getState();
 
-        let snapped = snapToGrid
+        let snapped = snapToGridEnabled
             ? {
                 x: Math.round(worldPos.x / gridSize) * gridSize,
                 y: Math.round(worldPos.y / gridSize) * gridSize
@@ -411,7 +413,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                 );
             }
         }
-    }, [isActive, currentWallId, currentWall, lastNode, lastNodeId, screenToWorld, snapToGrid, gridSize, lastClickTime, walls, JUNCTION_SNAP_THRESHOLD, SNAP_DISTANCE, thickness, addWall, updateWall, getNextZIndex, connectWallToEdge]);
+    }, [isActive, currentWallId, currentWall, lastNode, lastNodeId, screenToWorld, snapToGridEnabled, gridSize, lastClickTime, walls, JUNCTION_SNAP_THRESHOLD, SNAP_DISTANCE, thickness, addWall, updateWall, getNextZIndex, connectWallToEdge]);
 
     const finishWall = useCallback((closed: boolean = false) => {
         if (!currentWallId) {
@@ -480,10 +482,10 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                     <circle
                         cx={first.x}
                         cy={first.y}
-                        r={8 / zoom}
+                        r={6 / zoom}
                         fill="rgba(16,185,129,0.15)"
                         stroke="#10b981"
-                        strokeWidth={2 / zoom}
+                        strokeWidth={1 / zoom}
                     />
                 );
             })()}
@@ -657,24 +659,24 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                 const textAngle = angle < -90 || angle > 90 ? angle + 180 : angle;
 
                 return (
-                    <g transform={`translate(${dimensionX}, ${dimensionY}) rotate(${textAngle})`}>
+                    <g transform={`translate(${dimensionX}, ${dimensionY}) scale(${1 / zoom}) rotate(${textAngle})`}>
                         <rect
-                            x={-dimensionText.length * 3 - 4}
-                            y={-8}
-                            width={dimensionText.length * 6 + 8}
-                            height={16}
-                            fill="white"
+                            x={-dimensionText.length * 4 - 6}
+                            y={-10}
+                            width={dimensionText.length * 8 + 12}
+                            height={20}
+                            fill="#ffffff"
                             stroke="#3b82f6"
-                            strokeWidth={1 / zoom}
-                            rx={2 / zoom}
-                            opacity={0.95}
-                            vectorEffect="non-scaling-stroke"
+                            strokeWidth={1.5}
+                            rx={4}
+                            opacity={0.9}
+                            style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.1))' }}
                         />
                         <text
                             x={0}
-                            y={4 / zoom}
+                            y={1}
                             fill="#1f2937"
-                            fontSize={11 / zoom}
+                            fontSize={12}
                             fontWeight="600"
                             textAnchor="middle"
                             dominantBaseline="middle"
@@ -690,10 +692,10 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                 <circle
                     cx={junctionTarget.point.x}
                     cy={junctionTarget.point.y}
-                    r={8 / zoom}
+                    r={6 / zoom}
                     fill="none"
                     stroke="#10b981"
-                    strokeWidth={2 / zoom}
+                    strokeWidth={1 / zoom}
                 />
             )}
 
@@ -702,10 +704,10 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                 <circle
                     cx={junctionTarget.point.x}
                     cy={junctionTarget.point.y}
-                    r={12 / zoom}
+                    r={10 / zoom}
                     fill="none"
                     stroke="#10b981"
-                    strokeWidth={2 / zoom}
+                    strokeWidth={1 / zoom}
                     strokeDasharray={`${4 / zoom},${4 / zoom}`}
                 />
             )}

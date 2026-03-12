@@ -76,7 +76,7 @@ export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRen
             return;
         }
 
-        fetch(definition.path)
+        fetch(encodeURI(definition.path))
             .then(res => res.text())
             .then(text => {
                 svgCache[definition.path] = text;
@@ -85,88 +85,111 @@ export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRen
             .catch(err => console.error("Failed to load SVG", err));
     }, [definition?.path, asset.id, asset.width, asset.height, updateAsset]);
 
-    // Process SVG content
-    const processedSvg = React.useMemo(() => {
-        if (!svgContent) return null;
-        let svg = svgContent;
+    // 1. Base SVG processing (Heavy - runs once per unique SVG content)
+    // Tags each element with CSS classes based on STRUCTURAL properties only.
+    // Color decisions happen in stage 2 via CSS inheritance from the root fill.
+    const baseSvg = React.useMemo(() => {
+        if (!svgContent || typeof window === 'undefined') return null;
 
-        // 1. Strip XML declaration and comments
-        svg = svg.replace(/<\?xml.*?\?>/gi, '');
-        svg = svg.replace(/<!--[\s\S]*?-->/g, '');
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(svgContent, "image/svg+xml");
+            const svg = doc.querySelector("svg");
+            if (!svg) return svgContent;
 
-        // 2. Strip hardcoded styles from ALL inner elements (and original root)
-        // We do this BEFORE injecting our new root styles so we don't accidentally strip our own injections.
-        svg = svg.replace(/style="([^"]*)"/gi, (match, styleContent) => {
-            let newStyle = styleContent;
-
-            // Only strip specific properties if the asset has an override for them
-            if (asset.fillColor) {
-                newStyle = newStyle.replace(/fill\s*:[^;"]+;?/gi, '');
-            }
-            if (asset.strokeColor) {
-                newStyle = newStyle.replace(/stroke\s*:[^;"]+;?/gi, '');
-                newStyle = newStyle.replace(/color\s*:[^;"]+;?/gi, '');
-            }
-            if (asset.strokeWidth) {
-                newStyle = newStyle.replace(/stroke-width\s*:[^;"]+;?/gi, '');
+            // Inject CSS that handles inheritance and vector-effect in one pass
+            const styleId = "dynamic-asset-style";
+            if (!doc.getElementById(styleId)) {
+                const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
+                styleEl.setAttribute("id", styleId);
+                styleEl.textContent = `* { vector-effect: non-scaling-stroke !important; } .fill-none-el { fill: none !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; }`;
+                svg.prepend(styleEl);
             }
 
-            return `style="${newStyle}"`;
-        });
+            const allElements = Array.from(doc.querySelectorAll('*'));
+            allElements.forEach(el => {
+                const tag = el.tagName.toLowerCase();
+                if (tag === 'svg' || tag === 'style') return;
 
-        // 3. Inject attributes into the root svg tag
-        const uniqueId = `asset-svg-${asset.id}`;
-        svg = svg.replace(/<svg([^>]*)>/, (match, attrs) => {
-            // Remove existing attributes we intend to override/control
-            // Note: We remove 'style' here, so whatever happened to the original root style in Step 2 is now discarded.
-            let newAttrs = attrs.replace(/\s(width|height|x|y|id|style)=["'][^"']*["']/gi, '');
+                const fillAttr = el.getAttribute("fill");
+                const styleAttr = el.getAttribute("style");
+                const dAttr = el.getAttribute("d") || "";
 
-            // Build new, clean style string
-            let style = "overflow: visible;";
-            if (asset.fillColor) style += ` fill: ${asset.fillColor};`;
-            if (asset.strokeColor) style += ` stroke: ${asset.strokeColor}; color: ${asset.strokeColor};`;
-            if (asset.strokeWidth) style += ` stroke-width: ${asset.strokeWidth};`;
+                // Structural classification - does NOT depend on current fill color
+                const wasExplicitlyNone = fillAttr === 'none' || (styleAttr && /fill\s*:\s*none/i.test(styleAttr));
+                const isLineElement = tag === 'line' || tag === 'polyline';
+                const hasFillRule = el.hasAttribute("fill-rule") || (styleAttr && /fill-rule/i.test(styleAttr));
+                const isClosed = dAttr.toLowerCase().includes('z');
+                const isOpenPath = tag === 'path' && !isClosed;
+                const isAutoFill = el.getAttribute("id") === "auto-fill";
 
-            let injectedAttrs = ` id="${uniqueId}" style="${style}"`;
-
-            // Only inject width/height if they are defined
-            if (asset.width && asset.height) {
-                injectedAttrs += ` width="${asset.width}" height="${asset.height}" x="${-asset.width / 2}" y="${-asset.height / 2}" preserveAspectRatio="none"`;
-            }
-
-            return `<svg${newAttrs}${injectedAttrs}>`;
-        });
-
-        // 4. Force attribute overrides (for legacy non-style attributes)
-        if (asset.fillColor) {
-            // Updated logic: Always apply user-selected fill color, even if original was 'none' or 'white'
-            // This ensures assets that are outlines by default can be filled by the user.
-            svg = svg.replace(/fill="([^"]*)"/gi, `fill="${asset.fillColor}"`);
-            svg = svg.replace(/fill='([^']*)'/gi, `fill='${asset.fillColor}'`);
-        }
-        if (asset.strokeColor) {
-            svg = svg.replace(/stroke="([^"]*)"/gi, (match, value) => value === 'none' ? match : `stroke="${asset.strokeColor}"`);
-            svg = svg.replace(/stroke='([^']*)'/gi, (match, value) => value === 'none' ? match : `stroke='${asset.strokeColor}'`);
-        }
-        if (asset.strokeWidth) {
-            // Apply strokeWidth to all vector shapes forcefully
-            svg = svg.replace(/<(path|rect|circle|ellipse|line|polygon|polyline)[^>]*>/gi, (match) => {
-                let newMatch = match;
-                if (/stroke-width=['"][^'"]*['"]/i.test(newMatch)) {
-                    newMatch = newMatch.replace(/stroke-width=['"][^'"]*['"]/gi, `stroke-width="${asset.strokeWidth}"`);
-                } else {
-                    // Inject stroke-width if it's missing entirely on the shape
-                    newMatch = newMatch.replace(/\/?>/, ` stroke-width="${asset.strokeWidth}"$&`);
+                // Strip hardcoded colors so CSS can take over
+                if (styleAttr) {
+                    const cleaned = styleAttr
+                        .replace(/fill\s*:[^;]+;?/gi, "")
+                        .replace(/stroke\s*:[^;]+;?/gi, "")
+                        .replace(/stroke-width\s*:[^;]+;?/gi, "");
+                    if (cleaned.trim()) el.setAttribute("style", cleaned);
+                    else el.removeAttribute("style");
                 }
-                return newMatch;
-            });
-        }
+                el.removeAttribute("fill");
+                el.removeAttribute("stroke");
+                el.removeAttribute("stroke-width");
 
-        return svg;
-    }, [svgContent, asset.width, asset.height, asset.fillColor, asset.strokeColor, asset.strokeWidth, asset.id]);
+                // Class assignment based on STRUCTURE only. 
+                // Transparent root fill + fill-inherit-el = correct transparent element.
+                // Colored root fill + fill-inherit-el = correctly colored element.
+                if ((wasExplicitlyNone || isLineElement || isOpenPath) && !hasFillRule && !isAutoFill) {
+                    el.classList.add("fill-none-el");
+                } else {
+                    el.classList.add("fill-inherit-el");
+                }
+            });
+
+            // Strip all paint from root SVG so stage 2 has full control
+            svg.removeAttribute("style");
+            svg.removeAttribute("fill");
+            svg.removeAttribute("stroke");
+            svg.removeAttribute("stroke-width");
+            svg.removeAttribute("width");
+            svg.removeAttribute("height");
+
+            return new XMLSerializer().serializeToString(doc);
+        } catch (e) {
+            console.error("Error processing base SVG in AssetRenderer", e);
+            return svgContent;
+        }
+    }, [svgContent]);
+
+    // 2. Dynamic SVG processing (Light - string manipulation only)
+    // Injects fill/stroke/dimensions directly into the root <svg> tag.
+    // Since all child elements use fill:inherit, color changes are O(1).
+    const processedSvg = React.useMemo(() => {
+        if (!baseSvg) return null;
+
+        const currentFill = asset.fillColor || 'none';
+        const currentStroke = asset.strokeColor || '#000000';
+        const currentStrokeWidth = asset.strokeWidth || 1;
+
+        // Strip any stale width/height/x/y/fill/stroke from existing attrs to avoid conflicts,
+        // then inject our precise pixel values so centering works correctly.
+        return baseSvg.replace(/<svg([^>]*)>/i, (_match, attrs) => {
+            const cleanAttrs = attrs
+                .replace(/\s+width\s*=\s*["'][^"']*["']/gi, '')
+                .replace(/\s+height\s*=\s*["'][^"']*["']/gi, '')
+                .replace(/\s+x\s*=\s*["'][^"']*["']/gi, '')
+                .replace(/\s+y\s*=\s*["'][^"']*["']/gi, '')
+                .replace(/\s+fill\s*=\s*["'][^"']*["']/gi, '')
+                .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '');
+
+            return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="${asset.width || 100}" height="${asset.height || 100}" x="${-(asset.width || 0) / 2}" y="${-(asset.height || 0) / 2}" preserveAspectRatio="xMidYMid meet" style="overflow: visible; pointer-events: none;">`;
+        });
+    }, [baseSvg, asset.fillColor, asset.strokeColor, asset.strokeWidth, asset.width, asset.height]);
 
     if (asset.isExploded) return null;
-    const transform = `translate(${asset.x}, ${asset.y}) rotate(${asset.rotation}) scale(${asset.scale})`;
+    const rotation = asset.rotation || 0;
+    const scale = asset.scale !== undefined ? asset.scale : 1;
+    const transform = `translate(${asset.x}, ${asset.y}) rotate(${rotation}) scale(${scale})`;
 
     return (
         <g transform={transform} style={{ cursor: 'pointer' }}>

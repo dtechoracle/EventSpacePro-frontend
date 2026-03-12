@@ -18,7 +18,7 @@ export default function TextAnnotationRenderer({ annotation, zoom }: TextAnnotat
     const padding = fontSize * 0.2;
     const bgWidth = approxWidth + padding * 2;
     const bgHeight = fontSize * 1.2 + padding * 2;
-    const bgX = -padding;
+    const bgX = -bgWidth / 2;
     const bgY = -bgHeight / 2;
 
     return (
@@ -43,7 +43,7 @@ export default function TextAnnotationRenderer({ annotation, zoom }: TextAnnotat
                 fontStyle={annotation.fontStyle || 'normal'}
                 textDecoration={annotation.textDecoration || 'none'}
                 dominantBaseline="middle"
-                textAnchor="start"
+                textAnchor="middle"
                 style={{ cursor: 'pointer', pointerEvents: 'all' }}
             >
                 {annotation.text}

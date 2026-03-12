@@ -28,6 +28,7 @@ export default function FreehandRenderer({ shape, isSelected, isHovered }: Freeh
                 strokeWidth={shape.strokeWidth || 2}
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
                 opacity={1}
             />
 

@@ -4,6 +4,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useEditorStore } from '@/store/editorStore';
 import { useProjectStore } from '@/store/projectStore';
+import { useUserStore } from '@/store/userStore';
 import type { Shape, Asset, Wall } from '@/store/projectStore';
 import { useSceneStore } from '@/store/sceneStore';
 import WallRenderer from './renderers/WallRenderer';
@@ -46,10 +47,11 @@ const generateId = (): string => {
 import { ASSET_LIBRARY } from '@/lib/assets';
 import { CursorOverlay } from './ui/CursorOverlay';
 import type { RemoteCursor } from '@/hooks/useMultiplayer';
-import { findSnapPoint } from '@/utils/wallSnapping';
+import { findSnapPoint, findWallSnapPoint } from '@/utils/wallSnapping';
 import { convertAssetToShapes } from '@/utils/assetUtils';
 import { texturePatterns } from '@/utils/texturePatterns';
 import { calculateSmartSnap } from '@/utils/smartSnapping'; // Added import
+import { trimToBlendShapes } from '@/utils/shapeBoolean';
 
 interface Workspace2DProps {
   width?: number;
@@ -103,7 +105,6 @@ export default function Workspace2D({
     selectedIds,
     hoveredId,
     isPanning,
-    snapToGrid,
     gridSize,
     canvasOffset,
     setZoom,
@@ -130,7 +131,8 @@ export default function Workspace2D({
     walls, shapes, assets, dimensions, comments, textAnnotations, labelArrows, groups,
     updateShape, updateAsset, updateWall, updateDimension, updateTextAnnotation, updateGroup,
     addAsset, addDimension, removeDimension, addGroup,
-    addComment, updateComment, removeComment, resolveComment
+    addComment, updateComment, removeComment, resolveComment,
+    resolveIdsWithGroups
   } = useProjectStore();
 
   const sceneStore = useSceneStore();
@@ -139,6 +141,8 @@ export default function Workspace2D({
   const availableGridSizes = sceneStore.availableGridSizes || [];
   const selectedGridSizeIndex = sceneStore.selectedGridSizeIndex || 0;
   const currentGridSizeValue = availableGridSizes[selectedGridSizeIndex] || sceneStore.gridSize || 1000;
+  const snapToGridEnabled = sceneStore.snapToGridEnabled;
+  const { user } = useUserStore();
   const unitSystem = sceneStore.unitSystem || 'metric';
   const setUnitSystem = sceneStore.setUnitSystem;
   const initialGridHudSkip = useRef(true);
@@ -171,13 +175,13 @@ export default function Workspace2D({
 
   const snapToGridFn = useCallback(
     (pos: { x: number; y: number }) => {
-      if (!snapToGrid) return pos;
+      if (!snapToGridEnabled) return pos;
       return {
         x: Math.round(pos.x / gridSize) * gridSize,
         y: Math.round(pos.y / gridSize) * gridSize,
       };
     },
-    [snapToGrid, gridSize]
+    [snapToGridEnabled, gridSize]
   );
 
   // Use ResizeObserver to track layout changes (size AND position shifts)
@@ -310,8 +314,32 @@ export default function Workspace2D({
         let finalX = worldX;
         let finalY = worldY;
         let guides: any[] = [];
+        let finalRotation: number | null = null;
 
-        if (snapToObjectsEnabled && selectedIds.length === 1) {
+        // Specific checks for Space Elements (Doors/Windows)
+        const isSpaceElement = selectedIds.length === 1 &&
+          assets.find(a => a.id === selectedIds[0] &&
+            ASSET_LIBRARY.find(al => al.id.toLowerCase() === (a.type || a.id).toLowerCase())?.category === 'Space_Elements');
+
+        if (isSpaceElement && walls.length > 0) {
+          const wallSnap = findWallSnapPoint({ x: worldX, y: worldY }, walls, 50); // Larger distance for snapping doors
+          if (wallSnap.snapped && wallSnap.wallId && wallSnap.edgeId) {
+            finalX = wallSnap.x;
+            finalY = wallSnap.y;
+            // Match rotation to wall edge
+            const wall = walls.find(w => w.id === wallSnap.wallId);
+            if (wall) {
+              const edge = wall.edges.find(e => e.id === wallSnap.edgeId);
+              if (edge) {
+                const nodeA = wall.nodes.find(n => n.id === edge.nodeA);
+                const nodeB = wall.nodes.find(n => n.id === edge.nodeB);
+                if (nodeA && nodeB) {
+                  finalRotation = Math.atan2(nodeB.y - nodeA.y, nodeB.x - nodeA.x) * (180 / Math.PI);
+                }
+              }
+            }
+          }
+        } else if (snapToObjectsEnabled && selectedIds.length === 1) {
           const id = selectedIds[0];
           let itemBounds: any = null;
 
@@ -383,8 +411,14 @@ export default function Workspace2D({
 
             finalX = worldX + result.dx;
             finalY = worldY + result.dy;
-
             guides = result.guides;
+
+            // Fallback to grid snap if no object snap was found
+            if (guides.length === 0 && snapToGridEnabled) {
+              const gridSnapped = snapToGridFn({ x: worldX, y: worldY });
+              finalX = gridSnapped.x;
+              finalY = gridSnapped.y;
+            }
           }
 
         } else {
@@ -398,7 +432,7 @@ export default function Workspace2D({
             const wallSnap = findSnapPoint(
               { x: worldX, y: worldY },
               walls,
-              snapToGrid,
+              snapToGridEnabled,
               gridSize,
               15
             );
@@ -415,6 +449,9 @@ export default function Workspace2D({
         const snappedDx = finalX - draggedItemStart.x;
         const snappedDy = finalY - draggedItemStart.y;
 
+        // CRITICAL: Update draggedItemStart so next frame dx/dy is a delta, not cumulative
+        setDraggedItemStart({ x: finalX, y: finalY });
+
         selectedIds.forEach((id) => {
           const shape = shapes.find((s) => s.id === id);
           if (shape) {
@@ -429,6 +466,7 @@ export default function Workspace2D({
             updateAsset(id, {
               x: asset.x + snappedDx,
               y: asset.y + snappedDy,
+              ...(finalRotation !== null && finalRotation !== undefined ? { rotation: finalRotation } : {})
             }, true);
           }
 
@@ -447,7 +485,7 @@ export default function Workspace2D({
             useProjectStore.getState().updateTextAnnotation(id, {
               x: textAnnotation.x + snappedDx,
               y: textAnnotation.y + snappedDy,
-            });
+            }, true);
           }
 
           const labelArrow = labelArrows.find((l) => l.id === id);
@@ -461,7 +499,7 @@ export default function Workspace2D({
                 x: labelArrow.endPoint.x + snappedDx,
                 y: labelArrow.endPoint.y + snappedDy,
               },
-            });
+            }, true);
           }
 
           const dimension = dimensions.find((d) => d.id === id);
@@ -475,7 +513,7 @@ export default function Workspace2D({
                 x: dimension.endPoint.x + snappedDx,
                 y: dimension.endPoint.y + snappedDy,
               },
-            });
+            }, true);
           }
         });
 
@@ -676,7 +714,7 @@ export default function Workspace2D({
       const worldX = (x - panX) / zoom;
       const worldY = (y - panY) / zoom;
 
-      if (e.button === 1 || (e.button === 0 && (e.shiftKey || activeTool === 'pan'))) {
+      if (e.button === 1 || (e.button === 0 && activeTool === 'pan')) {
         setPanning(true);
         // Use clientX/clientY to match handleMouseMove coordinate system
         setDragStart({ x: e.clientX, y: e.clientY });
@@ -878,8 +916,95 @@ export default function Workspace2D({
         }
 
         // Normal Selection Logic
+        // Normal Selection Logic
         if (activeTool === 'select') {
           let itemSelected = false;
+
+          const handleItemSelection = (ids: string[], isShift: boolean) => {
+            const expandedIds = resolveIdsWithGroups(ids);
+
+            if ((activeTool as string) === 'trim-to-blend') {
+              const validShapeIds = expandedIds.filter(id => shapes.some(s => s.id === id));
+              if (validShapeIds.length === 0) {
+                toast.error("Please select a valid shape.");
+                return;
+              }
+
+              const currentSelected = new Set(selectedIds);
+
+              if (isShift) {
+                validShapeIds.forEach(id => {
+                  if (currentSelected.has(id)) currentSelected.delete(id);
+                  else currentSelected.add(id);
+                });
+              } else {
+                if (currentSelected.size === 0) {
+                  validShapeIds.forEach(id => currentSelected.add(id));
+                } else if (currentSelected.size === 1) {
+                  if (currentSelected.has(validShapeIds[0])) currentSelected.clear();
+                  else validShapeIds.forEach(id => currentSelected.add(id));
+                } else {
+                  currentSelected.clear();
+                  validShapeIds.forEach(id => currentSelected.add(id));
+                }
+              }
+
+              const newSelection = Array.from(currentSelected);
+              setSelectedIds(newSelection);
+
+              if (newSelection.length === 1) {
+                toast("Now select the second object to be trimmed relative to the first.", { icon: '✨', duration: 4000 });
+              } else if (newSelection.length === 2) {
+                const shapesToBlend = [
+                  shapes.find(s => s.id === newSelection[0]),
+                  shapes.find(s => s.id === newSelection[1])
+                ].filter(Boolean) as any[];
+
+                if (shapesToBlend.length === 2) {
+                  shapesToBlend.sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0));
+
+                  try {
+                    const projectStore = useProjectStore.getState();
+                    const blendedShape = trimToBlendShapes(shapesToBlend);
+                    if (blendedShape) {
+                      projectStore.saveToHistory();
+                      shapesToBlend.forEach(s => projectStore.removeShape(s.id));
+                      projectStore.addShape(blendedShape);
+                      setSelectedIds([blendedShape.id]);
+                      toast.success("Shapes blended successfully!", { icon: '✨' });
+                    } else {
+                      toast.error("Failed to blend shapes. Ensure they intersect cleanly.");
+                      setSelectedIds([]);
+                    }
+                  } catch (e) {
+                    console.error("Blending error:", e);
+                    toast.error("Failed to blend geometric shapes.");
+                    setSelectedIds([]);
+                  }
+
+                  // Revert to select tool
+                  useEditorStore.getState().setActiveTool("select");
+                }
+              }
+              return;
+            }
+
+            if (isShift) {
+              const current = new Set(selectedIds);
+              const allSelected = expandedIds.every(id => current.has(id));
+              if (allSelected) {
+                expandedIds.forEach(id => current.delete(id));
+              } else {
+                expandedIds.forEach(id => current.add(id));
+              }
+              const newSelection = Array.from(current);
+              setSelectedIds(newSelection);
+              sceneStore.selectMultipleAssets(newSelection);
+            } else {
+              setSelectedIds(expandedIds);
+              sceneStore.selectMultipleAssets(expandedIds);
+            }
+          };
 
           // Check dimensions FIRST (before shapes/assets) so they're easier to select
           for (let i = dimensions.length - 1; i >= 0; i--) {
@@ -933,13 +1058,13 @@ export default function Workspace2D({
             const extensionHitRadius = 30; // For extension lines
 
             if (dist <= hitRadius || distToText <= textHitRadius || distToStart <= extensionHitRadius || distToEnd <= extensionHitRadius) {
-              if (selectedIds.includes(dim.id)) {
+              const idsToSelect = resolveIdsWithGroups([dim.id]);
+              if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
                 useProjectStore.getState().saveToHistory();
                 setIsDraggingItem(true);
                 setDraggedItemStart({ x: worldX, y: worldY });
               } else {
-                setSelectedIds([dim.id]);
-                sceneStore.selectMultipleAssets([dim.id]);
+                handleItemSelection([dim.id], e.shiftKey);
               }
               itemSelected = true;
               return;
@@ -950,8 +1075,7 @@ export default function Workspace2D({
           for (let i = shapes.length - 1; i >= 0; i--) {
             const shape = shapes[i];
 
-            // Improved hit-test for lines/arrows so you can click anywhere on the visible stroke,
-            // not just inside the tiny bounding box.
+            // Improved hit-test for lines/arrows
             if (shape.type === 'line' || shape.type === 'arrow') {
               const thickness = (shape.strokeWidth ?? 20) / 2 + 10; // extra padding
 
@@ -980,9 +1104,7 @@ export default function Workspace2D({
                   }
                 }
 
-                if (!hit) {
-                  continue;
-                }
+                if (!hit) continue;
               } else {
                 // Legacy straight line/arrow defined by width + rotation
                 const rot = (shape.rotation || 0) * (Math.PI / 180);
@@ -1001,29 +1123,22 @@ export default function Workspace2D({
                 const projX = ax + t * dx;
                 const projY = ay + t * dy;
                 const dist = Math.hypot(worldX - projX, worldY - projY);
-                if (dist > thickness) {
-                  continue;
-                }
+                if (dist > thickness) continue;
               }
 
-              const store = useProjectStore.getState();
-              const idsToSelect = shape.groupId
-                ? (store.groups.find(g => g.id === shape.groupId)?.itemIds || [shape.id])
-                : [shape.id];
-
-              if (idsToSelect.some(id => selectedIds.includes(id))) {
-                store.saveToHistory();
+              const idsToSelect = resolveIdsWithGroups([shape.id]);
+              if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
+                useProjectStore.getState().saveToHistory();
                 setIsDraggingItem(true);
                 setDraggedItemStart({ x: worldX, y: worldY });
               } else {
-                setSelectedIds(idsToSelect);
-                sceneStore.selectMultipleAssets(idsToSelect);
+                handleItemSelection([shape.id], e.shiftKey);
               }
               itemSelected = true;
               return;
             }
 
-            // Default hit-test for rectangles / ellipses / other shapes: axis-aligned bounds
+            // Default hit-test for rectangles / ellipses / other shapes
             const halfW = shape.width / 2;
             const halfH = shape.height / 2;
 
@@ -1033,18 +1148,13 @@ export default function Workspace2D({
               worldY >= shape.y - halfH &&
               worldY <= shape.y + halfH
             ) {
-              const store = useProjectStore.getState();
-              const idsToSelect = shape.groupId
-                ? (store.groups.find(g => g.id === shape.groupId)?.itemIds || [shape.id])
-                : [shape.id];
-
-              if (idsToSelect.some(id => selectedIds.includes(id))) {
-                store.saveToHistory();
+              const idsToSelect = resolveIdsWithGroups([shape.id]);
+              if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
+                useProjectStore.getState().saveToHistory();
                 setIsDraggingItem(true);
                 setDraggedItemStart({ x: worldX, y: worldY });
               } else {
-                setSelectedIds(idsToSelect);
-                sceneStore.selectMultipleAssets(idsToSelect);
+                handleItemSelection([shape.id], e.shiftKey);
               }
               itemSelected = true;
               return;
@@ -1064,18 +1174,13 @@ export default function Workspace2D({
               worldY >= asset.y - halfH &&
               worldY <= asset.y + halfH
             ) {
-              const store = useProjectStore.getState();
-              const idsToSelect = asset.groupId
-                ? (store.groups.find(g => g.id === asset.groupId)?.itemIds || [asset.id])
-                : [asset.id];
-
-              if (idsToSelect.some(id => selectedIds.includes(id))) {
-                store.saveToHistory();
+              const idsToSelect = resolveIdsWithGroups([asset.id]);
+              if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
+                useProjectStore.getState().saveToHistory();
                 setIsDraggingItem(true);
                 setDraggedItemStart({ x: worldX, y: worldY });
               } else {
-                setSelectedIds(idsToSelect);
-                sceneStore.selectMultipleAssets(idsToSelect);
+                handleItemSelection([asset.id], e.shiftKey);
               }
               itemSelected = true;
               return;
@@ -1095,31 +1200,19 @@ export default function Workspace2D({
               const lengthSquared = dx * dx + dy * dy;
               if (lengthSquared === 0) continue;
 
-              const t = Math.max(
-                0,
-                Math.min(
-                  1,
-                  ((worldX - nodeA.x) * dx + (worldY - nodeA.y) * dy) / lengthSquared
-                )
-              );
-
+              const t = Math.max(0, Math.min(1, ((worldX - nodeA.x) * dx + (worldY - nodeA.y) * dy) / lengthSquared));
               const projX = nodeA.x + t * dx;
               const projY = nodeA.y + t * dy;
               const dist = Math.sqrt((worldX - projX) ** 2 + (worldY - projY) ** 2);
 
               if (dist <= edge.thickness / 2 + 20) {
-                const store = useProjectStore.getState();
-                const idsToSelect = wall.groupId
-                  ? (store.groups.find(g => g.id === wall.groupId)?.itemIds || [wall.id])
-                  : [wall.id];
-
-                if (idsToSelect.some(id => selectedIds.includes(id))) {
+                const idsToSelect = resolveIdsWithGroups([wall.id]);
+                if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
                   useProjectStore.getState().saveToHistory();
                   setIsDraggingItem(true);
                   setDraggedItemStart({ x: worldX, y: worldY });
                 } else {
-                  setSelectedIds(idsToSelect);
-                  sceneStore.selectMultipleAssets(idsToSelect);
+                  handleItemSelection([wall.id], e.shiftKey);
                 }
                 itemSelected = true;
                 return;
@@ -1138,13 +1231,9 @@ export default function Workspace2D({
 
             const dist = Math.hypot(worldX - annotation.x, worldY - annotation.y);
             if (dist <= hitRadius) {
-              const store = useProjectStore.getState();
-              const idsToSelect = annotation.groupId
-                ? (store.groups.find(g => g.id === annotation.groupId)?.itemIds || [annotation.id])
-                : [annotation.id];
-
-              if (idsToSelect.some(id => selectedIds.includes(id))) {
-                // Check if double-click for editing (only if single item selected or explicitly double-clicked)
+              const idsToSelect = resolveIdsWithGroups([annotation.id]);
+              if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
+                // Check if double-click for editing
                 const now = Date.now();
                 const lastClickTime = (window as any).__lastTextClickTime || 0;
                 const lastClickId = (window as any).__lastTextClickId;
@@ -1152,7 +1241,7 @@ export default function Workspace2D({
                 if (now - lastClickTime < 300 && lastClickId === annotation.id) {
                   (window as any).__lastTextClickTime = 0;
                   (window as any).__lastTextClickId = null;
-                  setSelectedIds([annotation.id]); // Select only this for editing
+                  setSelectedIds([annotation.id]); // Just this one for editing
                   sceneStore.selectMultipleAssets([annotation.id]);
                 } else {
                   useProjectStore.getState().saveToHistory();
@@ -1162,8 +1251,7 @@ export default function Workspace2D({
                 (window as any).__lastTextClickTime = now;
                 (window as any).__lastTextClickId = annotation.id;
               } else {
-                setSelectedIds(idsToSelect);
-                sceneStore.selectMultipleAssets(idsToSelect);
+                handleItemSelection([annotation.id], e.shiftKey);
                 (window as any).__lastTextClickTime = Date.now();
                 (window as any).__lastTextClickId = annotation.id;
               }
@@ -1175,11 +1263,10 @@ export default function Workspace2D({
           // Check label arrows
           for (let i = labelArrows.length - 1; i >= 0; i--) {
             const arrow = labelArrows[i];
-            // Hit test logic for arrow (line segment)
             const dx = arrow.endPoint.x - arrow.startPoint.x;
             const dy = arrow.endPoint.y - arrow.startPoint.y;
             const lengthSquared = dx * dx + dy * dy;
-            const thickness = (arrow.strokeWidth || 2) + 20; // Hit tolerance
+            const thickness = (arrow.strokeWidth || 2) + 20;
 
             let dist = Infinity;
             if (lengthSquared === 0) {
@@ -1192,18 +1279,13 @@ export default function Workspace2D({
             }
 
             if (dist <= thickness) {
-              const store = useProjectStore.getState();
-              const idsToSelect = arrow.groupId
-                ? (store.groups.find(g => g.id === arrow.groupId)?.itemIds || [arrow.id])
-                : [arrow.id];
-
-              if (idsToSelect.some(id => selectedIds.includes(id))) {
+              const idsToSelect = resolveIdsWithGroups([arrow.id]);
+              if (!e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
                 useProjectStore.getState().saveToHistory();
                 setIsDraggingItem(true);
                 setDraggedItemStart({ x: worldX, y: worldY });
               } else {
-                setSelectedIds(idsToSelect);
-                sceneStore.selectMultipleAssets(idsToSelect);
+                handleItemSelection([arrow.id], e.shiftKey);
               }
               itemSelected = true;
               return;
@@ -1244,7 +1326,7 @@ export default function Workspace2D({
         // For other tools (wall, shape-*, freehand, dimension), don't handle - let tool handle it
       }
     },
-    [activeTool, setPanning, panX, panY, zoom, shapes, assets, walls, setSelectedIds, clearSelection, selectedIds, setIsDraggingItem, setDraggedItemStart, sceneStore]
+    [activeTool, setPanning, panX, panY, zoom, shapes, assets, walls, setSelectedIds, clearSelection, selectedIds, setIsDraggingItem, setDraggedItemStart, sceneStore, snapToGridEnabled, gridSize, snapToGridFn, snapToObjectsEnabled]
   );
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
@@ -1343,7 +1425,15 @@ export default function Workspace2D({
       newAssets.forEach((a: any) => {
         const newId = generateId();
         placedIds.push(newId);
-        store.addAsset({ ...a, id: newId, x: a.x + dx, y: a.y + dy });
+        // Use addAsset for projectStore (which accepts the asset object)
+        store.addAsset({
+          ...a,
+          id: newId,
+          x: a.x + dx,
+          y: a.y + dy,
+          scale: a.scale !== undefined ? a.scale : 1,
+          rotation: a.rotation || 0
+        });
       });
 
       // Batch add shapes
@@ -1449,8 +1539,10 @@ export default function Workspace2D({
       });
 
       if (selectedItems.length > 0) {
-        setSelectedIds(selectedItems);
-        sceneStore.selectMultipleAssets(selectedItems);
+        // Expand selection to include full groups
+        const expandedItems = resolveIdsWithGroups(selectedItems);
+        setSelectedIds(expandedItems);
+        sceneStore.selectMultipleAssets(expandedItems);
       } else {
         // Clear selection if no items found in rectangle
         clearSelection();
@@ -1498,6 +1590,32 @@ export default function Workspace2D({
         }
       }
 
+      let finalX = worldX;
+      let finalY = worldY;
+      let finalRotation = 0;
+
+      if (template?.category === 'Space_Elements') {
+        // Snap to nearest wall on drop if it's a door/window!
+        const snapDistance = 100; // Drop snap radius
+        const wallSnap = findWallSnapPoint({ x: worldX, y: worldY }, walls, snapDistance);
+        if (wallSnap.snapped && wallSnap.wallId && wallSnap.edgeId) {
+          finalX = wallSnap.x;
+          finalY = wallSnap.y;
+          // Attempt to align rotation with wall
+          const wall = walls.find(w => w.id === wallSnap.wallId);
+          if (wall) {
+            const edge = wall.edges.find(e => e.id === wallSnap.edgeId);
+            if (edge) {
+              const nodeA = wall.nodes.find(n => n.id === edge.nodeA);
+              const nodeB = wall.nodes.find(n => n.id === edge.nodeB);
+              if (nodeA && nodeB) {
+                finalRotation = Math.atan2(nodeB.y - nodeA.y, nodeB.x - nodeA.x) * (180 / Math.PI);
+              }
+            }
+          }
+        }
+      }
+
       const zCandidates = [
         ...walls.map((w) => w.zIndex || 0),
         ...shapes.map((s) => s.zIndex || 0),
@@ -1508,11 +1626,11 @@ export default function Workspace2D({
       const newAsset: Asset = {
         id: `${type}-${Date.now()}`,
         type,
-        x: worldX,
-        y: worldY,
+        x: finalX,
+        y: finalY,
         width,
         height,
-        rotation: 0,
+        rotation: finalRotation,
         scale: 1,
         zIndex: nextZIndex,
         metadata: template ? { label: template.label } : {},
@@ -1956,15 +2074,13 @@ export default function Workspace2D({
       const store = useProjectStore.getState();
       const { shapes, walls, assets, addShape, addWall, addAsset, getNextZIndex } = store;
       const newSelectedIds: string[] = [...selectedIds]; // Include originals
-      const offset = 20; // Base offset between duplicates
+      const offset = 20; // Base offset between duplicates (move to side)
 
-
-
-      useProjectStore.getState().saveToHistory();
+      // Save history once for the whole batch
+      store.saveToHistory();
 
       for (let i = 0; i < count; i++) {
         selectedIds.forEach(id => {
-
           // Try shape
           const shape = shapes.find(s => s.id === id);
           if (shape) {
@@ -1975,7 +2091,7 @@ export default function Workspace2D({
               y: shape.y + offset * (i + 1),
               zIndex: getNextZIndex()
             };
-            addShape(newShape);
+            addShape(newShape, true); // skipHistory
             newSelectedIds.push(newShape.id);
             return;
           }
@@ -1990,7 +2106,7 @@ export default function Workspace2D({
               y: asset.y + offset * (i + 1),
               zIndex: getNextZIndex()
             };
-            addAsset(newAsset);
+            addAsset(newAsset, true); // skipHistory
             newSelectedIds.push(newAsset.id);
             return;
           }
@@ -2019,7 +2135,7 @@ export default function Workspace2D({
               edges: newEdges,
               zIndex: getNextZIndex()
             };
-            addWall(newWall);
+            addWall(newWall, true); // skipHistory
             newSelectedIds.push(newWall.id);
             return;
           }
@@ -2035,27 +2151,24 @@ export default function Workspace2D({
               const shape = shapes.find(s => s.id === childId);
               if (shape) {
                 const newShape = { ...shape, id: generateId(), groupId: newGroupId, x: shape.x + offset * (i + 1), y: shape.y + offset * (i + 1), zIndex: getNextZIndex() };
-                addShape(newShape);
+                addShape(newShape, true);
                 newChildIds.push(newShape.id);
                 return;
               }
               const asset = assets.find(a => a.id === childId);
               if (asset) {
                 const newAsset = { ...asset, id: generateId(), groupId: newGroupId, x: asset.x + offset * (i + 1), y: asset.y + offset * (i + 1), zIndex: getNextZIndex() };
-                addAsset(newAsset);
+                addAsset(newAsset, true);
                 newChildIds.push(newAsset.id);
                 return;
               }
-              // Add other types if needed (walls in groups?)
             });
 
             const newGroup = { ...group, id: newGroupId, itemIds: newChildIds, zIndex: getNextZIndex() };
-            store.addGroup(newGroup);
+            store.addGroup(newGroup, true);
             newSelectedIds.push(newGroupId);
             return;
           }
-
-
         });
       }
 
@@ -2075,296 +2188,16 @@ export default function Workspace2D({
 
   const distributeSelection = (mode: 'horizontal' | 'vertical' | 'circular', spacing?: number, diameter?: number, overrideIds?: string[]) => {
     const selectedIds = overrideIds || useEditorStore.getState().selectedIds;
-    if (mode === 'circular' && selectedIds.length < 2) return;
-    if ((mode === 'horizontal' || mode === 'vertical') && selectedIds.length < 2) return;
-
-    // Get fresh values from store
-    const store = useProjectStore.getState();
-    const currentShapes = store.shapes;
-    const currentAssets = store.assets;
-    const currentWalls = store.walls;
-    const currentDimensions = store.dimensions;
-    const currentTextAnnotations = store.textAnnotations;
-
-    const items: Array<{ id: string; type: 'shape' | 'asset' | 'wall' | 'dimension' | 'textAnnotation' | 'group'; bounds: { x1: number; y1: number; x2: number; y2: number }; center: { x: number; y: number } }> = [];
-
-    const addItemBounds = (id: string) => {
-      const shape = currentShapes.find(s => s.id === id);
-      if (shape) {
-        const halfW = shape.width / 2;
-        const halfH = shape.height / 2;
-        items.push({ id, type: 'shape', bounds: { x1: shape.x - halfW, y1: shape.y - halfH, x2: shape.x + halfW, y2: shape.y + halfH }, center: { x: shape.x, y: shape.y } });
-        return;
-      }
-      const asset = currentAssets.find(a => a.id === id);
-      if (asset) {
-        const w = asset.width * asset.scale;
-        const h = asset.height * asset.scale;
-        items.push({ id, type: 'asset', bounds: { x1: asset.x - w / 2, y1: asset.y - h / 2, x2: asset.x + w / 2, y2: asset.y + h / 2 }, center: { x: asset.x, y: asset.y } });
-        return;
-      }
-      const wall = currentWalls.find(w => w.id === id);
-      if (wall && wall.nodes.length > 0) {
-        const xs = wall.nodes.map(n => n.x);
-        const ys = wall.nodes.map(n => n.y);
-        const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-        const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-        items.push({ id, type: 'wall', bounds: { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) }, center: { x: cx, y: cy } });
-        return;
-      }
-      const dimension = currentDimensions.find(d => d.id === id);
-      if (dimension) {
-        const pts = [
-          dimension.startPoint,
-          dimension.endPoint,
-        ];
-        const dx = dimension.endPoint.x - dimension.startPoint.x;
-        const dy = dimension.endPoint.y - dimension.startPoint.y;
-        const len = Math.sqrt(dx * dx + dy * dy);
-        if (len > 0 && dimension.offset !== undefined) {
-          const px = -dy / len;
-          const py = dx / len;
-          pts.push(
-            { x: dimension.startPoint.x + px * dimension.offset, y: dimension.startPoint.y + py * dimension.offset },
-            { x: dimension.endPoint.x + px * dimension.offset, y: dimension.endPoint.y + py * dimension.offset },
-          );
-        }
-        const xs = pts.map(p => p.x);
-        const ys = pts.map(p => p.y);
-        const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-        const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-        items.push({ id, type: 'dimension', bounds: { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) }, center: { x: cx, y: cy } });
-        return;
-      }
-      const text = currentTextAnnotations.find(t => t.id === id);
-      if (text) {
-        const fontSize = text.fontSize || 14;
-        const width = Math.max(10, (text.text?.length || 1) * (fontSize * 0.6));
-        const height = fontSize * 1.2;
-        items.push({ id, type: 'textAnnotation', bounds: { x1: text.x, y1: text.y - height / 2, x2: text.x + width, y2: text.y + height / 2 }, center: { x: text.x + width / 2, y: text.y } });
-        return;
-      }
-
-      const group = store.groups.find(g => g.id === id);
-      if (group) {
-        // Calculate group bounds from children
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        let hasChild = false;
-
-        group.itemIds.forEach(childId => {
-          const s = currentShapes.find(x => x.id === childId);
-          if (s) {
-            minX = Math.min(minX, s.x - s.width / 2);
-            maxX = Math.max(maxX, s.x + s.width / 2);
-            minY = Math.min(minY, s.y - s.height / 2);
-            maxY = Math.max(maxY, s.y + s.height / 2);
-            hasChild = true;
-          }
-          const a = currentAssets.find(a => a.id === childId);
-          if (a) {
-            const w = a.width * a.scale;
-            const h = a.height * a.scale;
-            minX = Math.min(minX, a.x - w / 2);
-            maxX = Math.max(maxX, a.x + w / 2);
-            minY = Math.min(minY, a.y - h / 2);
-            maxY = Math.max(maxY, a.y + h / 2);
-            hasChild = true;
-          }
-        });
-
-        if (hasChild) {
-          items.push({ id, type: 'group', bounds: { x1: minX, y1: minY, x2: maxX, y2: maxY }, center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 } });
-        }
-        return;
-      }
-    };
-
-    selectedIds.forEach(addItemBounds);
-    if (items.length < 3) return;
+    if (selectedIds.length < 2) return;
 
     if (mode === 'circular') {
-      // Distribute items evenly around a circle based on their centers
-      const centers = items.map(i => i.center);
-      const avgX = centers.reduce((s, c) => s + c.x, 0) / centers.length;
-      const avgY = centers.reduce((s, c) => s + c.y, 0) / centers.length;
-      // Use provided diameter or calculate from max distance
-      const radius = diameter ? diameter / 2 : (() => {
-        const maxDist = Math.max(
-          ...centers.map(c => Math.hypot(c.x - avgX, c.y - avgY))
-        ) || 1;
-        return maxDist * 1.2;
-      })();
-
-      items.forEach((item, idx) => {
-        const angle = (2 * Math.PI * idx) / items.length - Math.PI / 2; // start at top
-        const targetX = avgX + radius * Math.cos(angle);
-        const targetY = avgY + radius * Math.sin(angle);
-        const deltaX = targetX - item.center.x;
-        const deltaY = targetY - item.center.y;
-
-        if (item.type === 'shape') {
-          const shape = currentShapes.find(s => s.id === item.id);
-          if (shape) updateShape(item.id, { x: shape.x + deltaX, y: shape.y + deltaY });
-        } else if (item.type === 'asset') {
-          const asset = currentAssets.find(a => a.id === item.id);
-          if (asset) updateAsset(item.id, { x: asset.x + deltaX, y: asset.y + deltaY });
-        } else if (item.type === 'wall') {
-          const wall = currentWalls.find(w => w.id === item.id);
-          if (wall) updateWall(item.id, { nodes: wall.nodes.map(n => ({ ...n, x: n.x + deltaX, y: n.y + deltaY })) });
-        } else if (item.type === 'dimension') {
-          const dim = currentDimensions.find(d => d.id === item.id);
-          if (dim) {
-            updateDimension(item.id, {
-              startPoint: { x: dim.startPoint.x + deltaX, y: dim.startPoint.y + deltaY },
-              endPoint: { x: dim.endPoint.x + deltaX, y: dim.endPoint.y + deltaY },
-            });
-          }
-        } else if (item.type === 'textAnnotation') {
-          const t = currentTextAnnotations.find(tt => tt.id === item.id);
-          if (t) updateTextAnnotation(item.id, { x: t.x + deltaX, y: t.y + deltaY });
-        }
-      });
-    } else if (mode === 'horizontal') {
-      // Calculate average Y center to align all items on same horizontal line
-      const avgY = items.reduce((sum, item) => sum + item.center.y, 0) / items.length;
-
-      // Sort by X (left to right)
-      const sorted = items.slice().sort((a, b) => a.center.x - b.center.x);
-
-      // Calculate total width of all items combined (sum of widths)
-      const totalWidth = sorted.reduce((sum, item) => {
-        const width = item.bounds.x2 - item.bounds.x1;
-        return sum + width;
-      }, 0);
-
-      // Use provided spacing or calculate from average width
-      const minSpacing = spacing !== undefined ? spacing : (() => {
-        const avgWidth = totalWidth / sorted.length;
-        return avgWidth * 1.5;
-      })();
-
-      // Calculate distribution range: total width + spacing between items
-      const distributionWidth = totalWidth + (minSpacing * (sorted.length - 1));
-
-      // Start position: leftmost item's left edge minus some padding
-      const leftmostLeft = Math.min(...sorted.map(item => item.bounds.x1));
-      const startX = leftmostLeft - (distributionWidth - totalWidth) / 2;
-
-      // Calculate all target positions: align Y to avgY, distribute X evenly
-      const updates: Array<{ id: string; type: string; deltaX: number; deltaY: number }> = [];
-      let currentX = startX;
-
-      sorted.forEach((item, idx) => {
-        const itemWidth = item.bounds.x2 - item.bounds.x1;
-        // Position item's center at currentX + half its width
-        const targetX = currentX + itemWidth / 2;
-        const deltaX = targetX - item.center.x;
-        const deltaY = avgY - item.center.y;
-        updates.push({ id: item.id, type: item.type, deltaX, deltaY });
-        // Move to next position: current position + item width + spacing
-        currentX += itemWidth + minSpacing;
-      });
-
-      // Apply all updates
-      updates.forEach(({ id, type, deltaX, deltaY }) => {
-        if (type === 'shape') {
-          const shape = currentShapes.find(s => s.id === id);
-          if (shape) updateShape(id, { x: shape.x + deltaX, y: shape.y + deltaY });
-        } else if (type === 'asset') {
-          const asset = currentAssets.find(a => a.id === id);
-          if (asset) updateAsset(id, { x: asset.x + deltaX, y: asset.y + deltaY });
-        } else if (type === 'wall') {
-          const wall = currentWalls.find(w => w.id === id);
-          if (wall) updateWall(id, { nodes: wall.nodes.map(n => ({ ...n, x: n.x + deltaX, y: n.y + deltaY })) });
-        } else if (type === 'dimension') {
-          const dim = currentDimensions.find(d => d.id === id);
-          if (dim) {
-            updateDimension(id, {
-              startPoint: { x: dim.startPoint.x + deltaX, y: dim.startPoint.y + deltaY },
-              endPoint: { x: dim.endPoint.x + deltaX, y: dim.endPoint.y + deltaY },
-            });
-          }
-        } else if (type === 'textAnnotation') {
-          const t = currentTextAnnotations.find(tt => tt.id === id);
-          if (t) updateTextAnnotation(id, { x: t.x + deltaX, y: t.y + deltaY });
-        }
-      });
+      useProjectStore.getState().distributeRadial(diameter ? diameter / 2 : 500, 0, 360, selectedIds);
     } else {
-      // Vertical distribute: align all items on same vertical line, then distribute evenly
-      // Calculate average X center to align all items on same vertical line
-      const avgX = items.reduce((sum, item) => sum + item.center.x, 0) / items.length;
-
-      // Sort by Y center (top to bottom)
-      const sorted = items.slice().sort((a, b) => a.center.y - b.center.y);
-
-      // Calculate total height of all items combined (sum of heights)
-      const totalHeight = sorted.reduce((sum, item) => {
-        const height = item.bounds.y2 - item.bounds.y1;
-        return sum + height;
-      }, 0);
-
-      // Use provided spacing or calculate from average height
-      const minSpacing = spacing !== undefined ? spacing : (() => {
-        const avgHeight = totalHeight / sorted.length;
-        return avgHeight * 1.5;
-      })();
-
-      // Calculate distribution range: total height + spacing between items
-      const distributionHeight = totalHeight + (minSpacing * (sorted.length - 1));
-
-      // Start position: topmost item's top edge minus some padding
-      const topmostTop = Math.min(...sorted.map(item => item.bounds.y1));
-      const startY = topmostTop - (distributionHeight - totalHeight) / 2;
-
-      // Calculate all target positions: align X to avgX, distribute Y evenly
-      const updates: Array<{ id: string; type: string; deltaX: number; deltaY: number }> = [];
-      let currentY = startY;
-
-      sorted.forEach((item, idx) => {
-        const itemHeight = item.bounds.y2 - item.bounds.y1;
-        // Position item's center at currentY + half its height
-        const targetY = currentY + itemHeight / 2;
-        const deltaX = avgX - item.center.x;
-        const deltaY = targetY - item.center.y;
-        updates.push({ id: item.id, type: item.type, deltaX, deltaY });
-        // Move to next position: current position + item height + spacing
-        currentY += itemHeight + minSpacing;
-      });
-
-      // Apply all updates
-      updates.forEach(({ id, type, deltaX, deltaY }) => {
-        if (type === 'shape') {
-          const shape = currentShapes.find(s => s.id === id);
-          if (shape) updateShape(id, { x: shape.x + deltaX, y: shape.y + deltaY });
-        } else if (type === 'asset') {
-          const asset = currentAssets.find(a => a.id === id);
-          if (asset) updateAsset(id, { x: asset.x + deltaX, y: asset.y + deltaY });
-        } else if (type === 'wall') {
-          const wall = currentWalls.find(w => w.id === id);
-          if (wall) updateWall(id, { nodes: wall.nodes.map(n => ({ ...n, x: n.x + deltaX, y: n.y + deltaY })) });
-        } else if (type === 'dimension') {
-          const dim = currentDimensions.find(d => d.id === id);
-          if (dim) {
-            updateDimension(id, {
-              startPoint: { x: dim.startPoint.x + deltaX, y: dim.startPoint.y + deltaY },
-              endPoint: { x: dim.endPoint.x + deltaX, y: dim.endPoint.y + deltaY },
-            });
-          }
-        } else if (type === 'textAnnotation') {
-          const t = currentTextAnnotations.find(tt => tt.id === id);
-          if (t) updateTextAnnotation(id, { x: t.x + deltaX, y: t.y + deltaY });
-        } else if (type === 'group') {
-          const group = store.groups.find(g => g.id === id);
-          if (group) {
-            group.itemIds.forEach(childId => {
-              const s = currentShapes.find(x => x.id === childId);
-              if (s) { updateShape(childId, { x: s.x + deltaX, y: s.y + deltaY }); }
-              const a = currentAssets.find(x => x.id === childId);
-              if (a) { updateAsset(childId, { x: a.x + deltaX, y: a.y + deltaY }); }
-            });
-          }
-        }
-      });
+      useProjectStore.getState().distributeSelection(
+        mode === 'horizontal' ? 'horizontal' : 'vertical',
+        spacing || 100,
+        selectedIds
+      );
     }
   };
 
@@ -2550,7 +2383,7 @@ export default function Workspace2D({
             x: contextMenu?.worldX || 0,
             y: contextMenu?.worldY || 0,
             content: '',
-            author: 'User', // TODO: Get from user store
+            author: user ? (`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || 'User') : 'User',
             timestamp: Date.now(),
             resolved: false,
           });
@@ -3054,6 +2887,20 @@ export default function Workspace2D({
       )}
       {/* Grid unit / size control */}
       <div className="absolute top-3 right-3 z-50 flex items-center gap-3 bg-white/90 shadow-sm rounded-md px-3 py-2 text-xs sm:text-sm text-slate-700 border border-slate-200">
+        <label className="flex items-center gap-1 cursor-pointer" title="Snap to grid intersections">
+          <input
+            type="checkbox"
+            checked={snapToGridEnabled}
+            onChange={() => {
+              const next = !snapToGridEnabled;
+              useEditorStore.getState().setSnapToGrid(next);
+              useSceneStore.getState().setSnapToGridEnabled(next);
+            }}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span>Snap to Grid</span>
+        </label>
+        <div className="w-px h-4 bg-slate-300 mx-1"></div>
         <label className="flex items-center gap-1 cursor-pointer" title="Snap to drawing elements">
           <input
             type="checkbox"
@@ -3078,6 +2925,26 @@ export default function Workspace2D({
       {isSnapMode && snapSourceId && snapAnchor && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 px-3 py-1 rounded-md text-xs font-medium bg-blue-600 text-white shadow">
           Snap mode: click a target object to snap <span className="font-semibold">{snapAnchor}</span> of the selected item
+        </div>
+      )}
+      {/* Placement Mode HUD */}
+      {placementMode.active && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-2 rounded-lg bg-slate-900/90 text-white shadow-xl border border-white/20">
+          <div className="flex flex-col">
+            <span className="text-sm font-bold">AI Plan Preview</span>
+            <span className="text-[10px] text-slate-300">Move your mouse to position the layout, then click to place.</span>
+          </div>
+          <div className="h-8 w-px bg-white/20"></div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setPlacementMode({ active: false, data: null });
+              toast("AI Placement cancelled");
+            }}
+            className="px-3 py-1.5 rounded-md bg-red-500/20 hover:bg-red-500/40 text-red-200 text-xs font-semibold transition-colors border border-red-500/30"
+          >
+            Cancel
+          </button>
         </div>
       )}
       {/* Context Menu */}
@@ -3209,69 +3076,8 @@ export default function Workspace2D({
             />
           )}
 
-          {/* Snap Mode Source Highlight */}
-          {isSnapMode && snapSourceId && (() => {
-            const shape = shapes.find(s => s.id === snapSourceId);
-            if (shape) {
-              return (
-                <rect
-                  x={shape.x - shape.width / 2}
-                  y={shape.y - shape.height / 2}
-                  width={shape.width}
-                  height={shape.height}
-                  fill="none"
-                  stroke="#3B82F6" // Blue
-                  strokeWidth={3}
-                  strokeDasharray="6,3"
-                  vectorEffect="non-scaling-stroke"
-                  pointerEvents="none"
-                />
-              );
-            }
-            const asset = assets.find(a => a.id === snapSourceId);
-            if (asset) {
-              return (
-                <rect
-                  x={asset.x - (asset.width * asset.scale) / 2}
-                  y={asset.y - (asset.height * asset.scale) / 2}
-                  width={asset.width * asset.scale}
-                  height={asset.height * asset.scale}
-                  fill="none"
-                  stroke="#3B82F6"
-                  strokeWidth={3}
-                  strokeDasharray="6,3"
-                  vectorEffect="non-scaling-stroke"
-                  pointerEvents="none"
-                />
-              );
-            }
-            const wall = walls.find(w => w.id === snapSourceId);
-            if (wall) {
-              return (
-                <g pointerEvents="none">
-                  {wall.edges.map(edge => {
-                    const nodeA = wall.nodes.find(n => n.id === edge.nodeA);
-                    const nodeB = wall.nodes.find(n => n.id === edge.nodeB);
-                    if (!nodeA || !nodeB) return null;
-                    return (
-                      <line
-                        key={edge.id}
-                        x1={nodeA.x}
-                        y1={nodeA.y}
-                        x2={nodeB.x}
-                        y2={nodeB.y}
-                        stroke="#3B82F6"
-                        strokeWidth={Math.max(edge.thickness + 100, 200)}
-                        strokeOpacity={0.4}
-                        strokeLinecap="round"
-                      />
-                    );
-                  })}
-                </g>
-              );
-            }
-            return null;
-          })()}
+          {/* Snap Mode Source Highlight - Removed as redundant with SnapMarkers/AnchorHighlights */}
+          {/* ... Removed ... */}
 
           <WallTool
             isActive={activeTool === 'wall'}
@@ -3281,7 +3087,7 @@ export default function Workspace2D({
           <DimensionTool isActive={activeTool === 'dimension'} />
           <ArchTool isActive={activeTool === 'arch'} />
           <LabelArrowTool isActive={activeTool === 'label-arrow'} />
-          <TrimTool isActive={activeTool === 'trim'} />
+          <TrimTool isActive={activeTool === 'trim' || activeTool === 'trim-to-object'} isTrimToObject={activeTool === 'trim-to-object'} />
 
           {['shape-rectangle', 'shape-ellipse', 'shape-line', 'shape-arrow', 'shape-polygon'].includes(activeTool) && (
             <ShapeTool
@@ -3307,6 +3113,30 @@ export default function Workspace2D({
               pointerEvents="none"
             />
           )}
+
+
+
+          {/* Trim-to-blend individual highlights */}
+          {activeTool === 'trim-to-blend' && selectedIds.map(id => {
+            const shape = shapes.find(s => s.id === id);
+            if (!shape) return null;
+            return (
+              <g key={id} transform={`translate(${shape.x}, ${shape.y}) rotate(${shape.rotation || 0})`}>
+                <rect
+                  x={-shape.width / 2}
+                  y={-shape.height / 2}
+                  width={shape.width}
+                  height={shape.height}
+                  fill="rgba(34, 197, 94, 0.1)"
+                  stroke="#22c55e"
+                  strokeWidth={2}
+                  strokeDasharray="6,4"
+                  vectorEffect="non-scaling-stroke"
+                  pointerEvents="none"
+                />
+              </g>
+            );
+          })}
 
 
 

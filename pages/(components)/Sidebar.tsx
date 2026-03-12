@@ -110,9 +110,8 @@ const Sidebar = () => {
             {links.map((item, index) => (
               <div
                 key={index}
-                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${
-                  item.route === pathname ? "bg-black/5" : ""
-                }`}
+                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${item.route === pathname ? "bg-black/5" : ""
+                  }`}
                 onClick={() => router.push(item.route)}
               >
                 <Image src={item.icon} alt={item.text} width={20} height={20} />
@@ -136,9 +135,8 @@ const Sidebar = () => {
 
         <div className="w-full gap-2">
           <div
-            className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${
-              pathname === "dashboard/settings" ? "bg-black/5" : ""
-            }`}
+            className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${pathname === "dashboard/settings" ? "bg-black/5" : ""
+              }`}
           >
             <Image
               src={"/assets/sidebar/Gear.svg"}
@@ -185,12 +183,18 @@ const Sidebar = () => {
 
           <div className="bg-white rounded-full flex justify-between items-center p-2">
             <div className="flex gap-2 items-center">
-              <Image
-                src={"/assets/sidebar/sample-profile.svg"}
-                alt="Profile"
-                width={40}
-                height={40}
-              />
+              {user?.avatar ? (
+                <div className="w-10 h-10 rounded-full overflow-hidden shadow-sm flex-shrink-0 border-2 border-white">
+                  <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                </div>
+              ) : (
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-semibold shadow-sm flex-shrink-0 bg-blue-500"
+                  style={{ width: 40, height: 40 }}
+                >
+                  {user?.firstName?.[0]?.toUpperCase() || "U"}
+                </div>
+              )}
               <AnimatePresence>
                 {!isCollapsed && (
                   <motion.div
@@ -267,9 +271,8 @@ const Sidebar = () => {
                 {links.map((item, index) => (
                   <div
                     key={index}
-                    className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${
-                      item.route === pathname ? "bg-black/5" : ""
-                    }`}
+                    className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${item.route === pathname ? "bg-black/5" : ""
+                      }`}
                     onClick={() => {
                       router.push(item.route);
                       setOpen(false);
@@ -291,9 +294,8 @@ const Sidebar = () => {
 
             <div className="w-full gap-2">
               <div
-                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${
-                  pathname === "dashboard/settings" ? "bg-black/5" : ""
-                }`}
+                className={`flex items-center gap-2 hover:bg-black/5 group p-3 rounded-md cursor-pointer ${pathname === "dashboard/settings" ? "bg-black/5" : ""
+                  }`}
               >
                 <Image
                   src={"/assets/sidebar/Gear.svg"}
@@ -319,14 +321,20 @@ const Sidebar = () => {
               </div>
 
               <div className="bg-white rounded-full flex justify-between items-center p-2">
-                <div className="flex gap-2">
-                  <Image
-                    src={"/assets/sidebar/sample-profile.svg"}
-                    alt="Profile"
-                    width={40}
-                    height={40}
-                  />
-                  <div>
+                <div className="flex gap-2 items-center">
+                  {user?.avatar ? (
+                    <div className="w-10 h-10 rounded-full overflow-hidden shadow-sm flex-shrink-0 border-2 border-white">
+                      <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                    </div>
+                  ) : (
+                    <div
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-semibold shadow-sm flex-shrink-0 bg-blue-500"
+                      style={{ width: 40, height: 40 }}
+                    >
+                      {user?.firstName?.[0]?.toUpperCase() || "U"}
+                    </div>
+                  )}
+                  <div className="ml-1">
                     <h1 className="font-semibold text-sm">
                       {user?.firstName} {user?.lastName}
                     </h1>

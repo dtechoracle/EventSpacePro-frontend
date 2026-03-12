@@ -5,9 +5,10 @@ import toast from 'react-hot-toast';
 
 interface TrimToolProps {
     isActive: boolean;
+    isTrimToObject?: boolean;
 }
 
-export default function TrimTool({ isActive }: TrimToolProps) {
+export default function TrimTool({ isActive, isTrimToObject }: TrimToolProps) {
     const { canvasOffset, zoom, panX, panY } = useEditorStore();
     const { shapes, walls, updateShape, addShape, removeShape, saveToHistory, getNextZIndex } = useProjectStore();
 
@@ -53,8 +54,145 @@ export default function TrimTool({ isActive }: TrimToolProps) {
             return;
         }
 
-        // Find shapes that intersect with the cutting line
+        const dist = Math.hypot(currentPoint.x - startPoint.x, currentPoint.y - startPoint.y);
+        const isClick = dist < 5 / zoom;
+
         const cutLine = { start: startPoint, end: currentPoint };
+
+        if (isClick && walls.length > 0) {
+            if (isTrimToObject && useEditorStore.getState().selectedIds.length === 0) {
+                toast.error('Select boundary walls first using the Pointer tool, then choose Trim to Object.', { id: 'trim-err-sel' });
+                setStartPoint(null);
+                setCurrentPoint(null);
+                return;
+            }
+
+            // Auto-trim to object functionality (AutoCAD style quick-trim)
+            // 1. Find the clicked wall edge
+            let clickedEdge = null;
+            let clickedWall = null;
+            let minEdgeDist = Infinity;
+
+            for (const wall of walls) {
+                for (const edge of wall.edges) {
+                    const n1 = wall.nodes.find(n => n.id === edge.nodeA);
+                    const n2 = wall.nodes.find(n => n.id === edge.nodeB);
+                    if (!n1 || !n2) continue;
+
+                    // Point-to-line segment distance
+                    const l2 = Math.pow(n1.x - n2.x, 2) + Math.pow(n1.y - n2.y, 2);
+                    let t = 0;
+                    if (l2 !== 0) {
+                        t = Math.max(0, Math.min(1, ((startPoint.x - n1.x) * (n2.x - n1.x) + (startPoint.y - n1.y) * (n2.y - n1.y)) / l2));
+                    }
+                    const proj = { x: n1.x + t * (n2.x - n1.x), y: n1.y + t * (n2.y - n1.y) };
+                    const d = Math.hypot(startPoint.x - proj.x, startPoint.y - proj.y);
+
+                    // Threshold for clicking an edge (scaled by zoom)
+                    if (d < 10 / zoom && d < minEdgeDist) {
+                        minEdgeDist = d;
+                        clickedEdge = edge;
+                        clickedWall = wall;
+                    }
+                }
+            }
+
+            if (clickedWall && clickedEdge) {
+                const n1 = clickedWall.nodes.find(n => n.id === clickedEdge.nodeA)!;
+                const n2 = clickedWall.nodes.find(n => n.id === clickedEdge.nodeB)!;
+
+                // 2. Find all intersections of this edge with EVERY other edge in the scene
+                const intersections = [];
+                const selectedIds = useEditorStore.getState().selectedIds;
+                const boundaryWalls = isTrimToObject && selectedIds.length > 0
+                    ? walls.filter(w => selectedIds.includes(w.id))
+                    : walls;
+
+                for (const otherWall of boundaryWalls) {
+                    for (const otherEdge of otherWall.edges) {
+                        // Skip the clicked edge itself
+                        if (clickedWall.id === otherWall.id && clickedEdge.id === otherEdge.id) continue;
+
+                        const on1 = otherWall.nodes.find(n => n.id === otherEdge.nodeA);
+                        const on2 = otherWall.nodes.find(n => n.id === otherEdge.nodeB);
+                        if (!on1 || !on2) continue;
+
+                        const inter = getLineIntersection(n1, n2, on1, on2);
+                        if (inter) {
+                            // Only count true intersections, not just sharing an endpoint
+                            if (Math.hypot(inter.x - n1.x, inter.y - n1.y) > 0.01 && Math.hypot(inter.x - n2.x, inter.y - n2.y) > 0.01) {
+                                intersections.push(inter);
+                            }
+                        }
+                    }
+                }
+
+                if (intersections.length > 0) {
+                    saveToHistory();
+
+                    // Sort intersections along the edge from n1 to n2
+                    intersections.sort((a, b) => {
+                        const distA = Math.hypot(a.x - n1.x, a.y - n1.y);
+                        const distB = Math.hypot(b.x - n1.x, b.y - n1.y);
+                        return distA - distB;
+                    });
+
+                    // Determine which segment was clicked
+                    const clickDist = Math.hypot(startPoint.x - n1.x, startPoint.y - n1.y);
+
+                    let segmentStartIndex = -1; // -1 means starting from n1
+                    for (let i = 0; i < intersections.length; i++) {
+                        const intDist = Math.hypot(intersections[i].x - n1.x, intersections[i].y - n1.y);
+                        if (clickDist < intDist) {
+                            break;
+                        }
+                        segmentStartIndex = i;
+                    }
+
+                    // We are removing the segment between segmentStartIndex and segmentStartIndex + 1
+                    const startHole = segmentStartIndex === -1 ? n1 : intersections[segmentStartIndex];
+                    const endHole = segmentStartIndex === intersections.length - 1 ? n2 : intersections[segmentStartIndex + 1];
+
+                    // If we remove an end segment (attached to n1 or n2), we just shrink the edge
+                    if (segmentStartIndex === -1) {
+                        // Shrink n1 to endHole
+                        const updatedNodes = clickedWall.nodes.map(n => n.id === n1.id ? { ...n, x: endHole.x, y: endHole.y } : n);
+                        useProjectStore.getState().updateWall(clickedWall.id, { nodes: updatedNodes });
+                        toast.success('Trimmed to intersection point', { icon: '✂️' });
+                    } else if (segmentStartIndex === intersections.length - 1) {
+                        // Shrink n2 to startHole
+                        const updatedNodes = clickedWall.nodes.map(n => n.id === n2.id ? { ...n, x: startHole.x, y: startHole.y } : n);
+                        useProjectStore.getState().updateWall(clickedWall.id, { nodes: updatedNodes });
+                        toast.success('Trimmed to intersection point', { icon: '✂️' });
+                    } else {
+                        // Removed a middle segment: need to split the edge into two disconnected pieces!
+                        // That creates a new node for the startHole and a new node for the endHole.
+                        // Wait, creating disconnected pieces inside a single wall means replacing the edge A-B with A-startHole and endHole-B.
+
+                        const newNode1 = { id: `node-${Date.now()}-1`, x: startHole.x, y: startHole.y };
+                        const newNode2 = { id: `node-${Date.now()}-2`, x: endHole.x, y: endHole.y };
+
+                        const edge1 = { id: `edge-${Date.now()}-1`, nodeA: n1.id, nodeB: newNode1.id, thickness: clickedEdge.thickness };
+                        const edge2 = { id: `edge-${Date.now()}-2`, nodeA: newNode2.id, nodeB: n2.id, thickness: clickedEdge.thickness };
+
+                        const updatedNodes = [...clickedWall.nodes, newNode1, newNode2];
+                        const updatedEdges = clickedWall.edges.filter(e => e.id !== clickedEdge!.id).concat([edge1, edge2]);
+
+                        useProjectStore.getState().updateWall(clickedWall.id, { nodes: updatedNodes, edges: updatedEdges, isClosed: false });
+                        toast.success('Trimmed segment between intersections', { icon: '✂️' });
+                    }
+                } else {
+                    toast.error('No intersecting bounding objects to trim against', { id: 'trim-err' });
+                }
+            } else {
+                toast.error('Click a wall edge to trim, or drag to slice', { id: 'trim-err2' });
+            }
+
+            setStartPoint(null);
+            setCurrentPoint(null);
+            return;
+        }
+
         const shapesToCut = shapes.filter(shape => {
             // Check if shape intersects with cutting line
             return doesLineIntersectShape(cutLine, shape);

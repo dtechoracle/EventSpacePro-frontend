@@ -7,6 +7,7 @@ import { useEditorStore } from "@/store/editorStore"; // NEW STORE
 import { useProjectStore } from "@/store/projectStore";
 import { toast } from "react-hot-toast";
 import { mergeAllWallIntersections } from "@/utils/mergeWalls";
+import { trimToBlendShapes } from "@/utils/shapeBoolean";
 // import AssetsModal from "./AssetsModal";
 
 // Tooltip Component
@@ -211,7 +212,68 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 deactivateAllTools();
                 setEditorTool("trim");
                 setActiveTool("trim");
-                toast("Trim Tool Active: Drag across shapes to cut", { icon: '✂️' });
+                toast("Trim Tool Active: Click lines to trim, or drag to slice", { icon: '✂️', duration: 3000 });
+                break;
+
+            case "trim-to-blend": {
+                deactivateAllTools();
+                setEditorTool("select"); // Use select tool first to pick boundaries
+                setActiveTool("trim-to-blend"); // But keep state as trim-to-blend
+                useEditorStore.getState().setSelectedIds([]);
+                toast("Trim to Blend: Use Pointer to select the 1st shape, then the 2nd.", { duration: 5000, icon: '✨' });
+                break;
+            }
+
+            case "bring-to-front":
+            case "send-to-back":
+                {
+                    const selectedIds = useEditorStore.getState().selectedIds;
+                    if (selectedIds.length === 0) {
+                        toast.error(`No elements selected to ${option.id === 'bring-to-front' ? 'bring to front' : 'send to back'}`, { duration: 2000 });
+                        break;
+                    }
+
+                    const projectState = useProjectStore.getState();
+                    const { shapes, walls, assets, dimensions, labelArrows, textAnnotations, groups, updateShape, updateWall, updateAsset, updateDimension, updateLabelArrow, updateTextAnnotation } = projectState;
+                    const allItems = [
+                        ...walls,
+                        ...shapes,
+                        ...assets,
+                        ...dimensions,
+                        ...textAnnotations,
+                        ...labelArrows,
+                    ];
+
+                    const currentMaxZ = allItems.length ? Math.max(...allItems.map((i: any) => i.zIndex || 0)) : 0;
+                    const currentMinZ = allItems.length ? Math.min(...allItems.map((i: any) => i.zIndex || 0)) : 0;
+
+                    projectState.saveToHistory();
+
+                    let newZIndexCounter = option.id === 'bring-to-front' ? currentMaxZ + 1 : currentMinZ - selectedIds.length;
+
+                    const applyZToId = (itemId: string) => {
+                        const z = newZIndexCounter++;
+                        if (shapes.find((s) => s.id === itemId)) {
+                            updateShape(itemId, { zIndex: z }, true);
+                        } else if (walls.find((w) => w.id === itemId)) {
+                            updateWall(itemId, { zIndex: z }, true);
+                        } else if (assets.find((a) => a.id === itemId)) {
+                            updateAsset(itemId, { zIndex: z }, true);
+                        } else if (dimensions.find((d) => d.id === itemId)) {
+                            updateDimension(itemId, { zIndex: z }, true);
+                        } else if (labelArrows.find((la) => la.id === itemId)) {
+                            updateLabelArrow(itemId, { zIndex: z }, true);
+                        } else if (textAnnotations.find((t) => t.id === itemId)) {
+                            updateTextAnnotation(itemId, { zIndex: z } as any, true);
+                        } else {
+                            const group = groups.find(g => g.id === itemId);
+                            if (group) group.itemIds.forEach(applyZToId);
+                        }
+                    };
+
+                    selectedIds.forEach(applyZToId);
+                    toast.success(option.id === "bring-to-front" ? "Brought to front" : "Sent to back", { duration: 2000 });
+                }
                 break;
 
             case "move":

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 2 Seater Sofa 02 - Top-down plan view -->
+<svg width="1400mm" height="810mm" viewBox="0 0 1400 810" version="1.1" xmlns="http://www.w3.org/2000/svg"
+     style="stroke-linecap:round;stroke-linejoin:round;">
+
+    <path id="auto-fill" d="
+        M 180,0
+        L 1220,0
+        Q 1400,0 1400,180
+        L 1400,649
+        Q 1400,710 1365,750
+        L 1295,810
+        L 1205,810
+        L 1205,670
+        Q 1205,631 1178,613
+        Q 1151,595 1111,595
+        L 289,595
+        Q 249,595 222,613
+        Q 195,631 195,670
+        L 195,810
+        L 105,810
+        L 35,750
+        Q 0,710 0,649
+        L 0,180
+        Q 0,0 180,0
+        Z
+    " style="stroke-width:6;"/>
+
+    <path fill="none" d="
+        M 148,182
+        L 148,576
+        Q 148,603 176,618
+        Q 204,633 244,633
+        L 1156,633
+        Q 1196,633 1224,618
+        Q 1252,603 1252,576
+        L 1252,182
+    " style="stroke-width:5;"/>
+
+    <path fill="none" d="
+        M 148,182 Q 159,154 189,145 L 1211,145 Q 1241,154 1252,182
+    " style="stroke-width:4;"/>
+
+    <line fill="none" x1="148" y1="255" x2="1252" y2="255" style="stroke-width:4;"/>
+
+    <line fill="none" x1="700" y1="182" x2="700" y2="633" style="stroke-width:5;"/>
+
+    <path fill="none" d="M 195,633 Q 195,685 222,722 Q 249,759 289,778 L 697,778" style="stroke-width:4;"/>
+    <path fill="none" d="M 1205,633 Q 1205,685 1178,722 Q 1151,759 1111,778 L 703,778" style="stroke-width:4;"/>
+
+    <rect fill="none" x="99" y="730" width="96" height="74" rx="16" style="stroke-width:4;"/>
+    <rect fill="none" x="1205" y="730" width="96" height="74" rx="16" style="stroke-width:4;"/>
+</svg>

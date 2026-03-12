@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useEditorStore } from '@/store/editorStore';
+import { useSceneStore } from '@/store/sceneStore';
 import { useProjectStore, Dimension } from '@/store/projectStore';
 import { DimensionRenderer } from '../renderers/DimensionRenderer';
 import { findSnapPointInShapes } from '@/utils/snapToDrawing';
@@ -9,7 +10,8 @@ interface DimensionToolProps {
 }
 
 export default function DimensionTool({ isActive }: DimensionToolProps) {
-    const { canvasOffset, zoom, panX, panY, snapToGrid, gridSize, dimensionType } = useEditorStore();
+    const { canvasOffset, zoom, panX, panY, dimensionType } = useEditorStore();
+    const { snapToGridEnabled, gridSize } = useSceneStore();
     const { addDimension, getNextZIndex } = useProjectStore();
 
     const [step, setStep] = useState<0 | 1 | 2>(0);
@@ -53,12 +55,12 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
         }
 
         // 2. Grid Snapping
-        if (!snapToGrid) return pos;
+        if (!snapToGridEnabled) return pos;
         return {
             x: Math.round(pos.x / gridSize) * gridSize,
             y: Math.round(pos.y / gridSize) * gridSize,
         };
-    }, [snapToGrid, gridSize, zoom]);
+    }, [snapToGridEnabled, gridSize, zoom]);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!isActive) return;

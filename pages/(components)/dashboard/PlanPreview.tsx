@@ -4,34 +4,50 @@ import React, { useMemo } from "react";
 import { AssetInstance } from "@/store/sceneStore";
 import { ASSET_LIBRARY } from "@/lib/assets";
 import { InlineSvg } from "@/components/tools/InlineSvg";
+import { texturePatterns } from "@/utils/texturePatterns";
 
 interface PlanPreviewProps {
-  assets: AssetInstance[];
+  assets?: AssetInstance[];
+  walls?: any[];
+  shapes?: any[];
+  textAnnotations?: any[];
   width?: number;
   height?: number;
   className?: string;
 }
 
 export default function PlanPreview({
-  assets,
+  assets = [],
+  walls = [],
+  shapes = [],
+  textAnnotations = [],
   width = 300,
   height = 200,
   className = ""
 }: PlanPreviewProps) {
+  // Combine all items for rendering and bounds calculation
+  const allItems = useMemo(() => {
+    return [
+      ...walls,
+      ...assets,
+      ...shapes,
+      ...textAnnotations
+    ];
+  }, [walls, assets, shapes, textAnnotations]);
 
-  // Calculate bounding box of all assets to determine view scale and offset
+  // Use allItems for bounding box calculation
   const { minX, minY, contentWidth, contentHeight } = useMemo(() => {
-    if (!assets || !Array.isArray(assets) || assets.length === 0) {
+    if (allItems.length === 0) {
       return { minX: 0, minY: 0, contentWidth: 1000, contentHeight: 1000 };
     }
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     let hasValidBounds = false;
 
-    assets.forEach(asset => {
-      if (!asset) return;
+    allItems.forEach((item: any) => {
+      if (!item) return;
 
-      if (asset.type === 'wall-segments') {
+      if (item.type === 'wall-segments' || (item.nodes && item.edges)) {
         const checkNode = (x: number, y: number) => {
           if (isFinite(x) && isFinite(y)) {
             minX = Math.min(minX, x);
@@ -42,40 +58,42 @@ export default function PlanPreview({
           }
         };
 
-        if (asset.wallNodes && Array.isArray(asset.wallNodes) && asset.wallNodes.length > 0) {
-          asset.wallNodes.forEach(node => checkNode(node.x, node.y));
+        if (item.nodes && Array.isArray(item.nodes)) {
+          item.nodes.forEach((node: any) => checkNode(node.x, node.y));
         }
-        if (asset.wallSegments && Array.isArray(asset.wallSegments)) {
-          asset.wallSegments.forEach(seg => {
-            if (seg.start) checkNode(seg.start.x + (asset.x || 0), seg.start.y + (asset.y || 0));
-            if (seg.end) checkNode(seg.end.x + (asset.x || 0), seg.end.y + (asset.y || 0));
+        if (item.wallNodes && Array.isArray(item.wallNodes)) {
+          item.wallNodes.forEach((node: any) => checkNode(node.x, node.y));
+        }
+        // Support wall segments
+        if (item.type === 'wall-segments' && item.wallSegments) {
+          item.wallSegments.forEach((seg: any) => {
+            checkNode(seg.start.x, seg.start.y);
+            checkNode(seg.end.x, seg.end.y);
           });
         }
-      } else if (asset.type === 'freehand') {
-        const freehandAsset = asset as any;
-        if (freehandAsset.points && Array.isArray(freehandAsset.points)) {
-          freehandAsset.points.forEach((p: any) => {
-            const px = p.x + asset.x;
-            const py = p.y + asset.y;
-            if (isFinite(px) && isFinite(py)) {
-              minX = Math.min(minX, px);
-              minY = Math.min(minY, py);
-              maxX = Math.max(maxX, px);
-              maxY = Math.max(maxY, py);
-              hasValidBounds = true;
-            }
-          });
-        }
-      } else {
-        if (isFinite(asset.x) && isFinite(asset.y)) {
-          const w = (asset.width || 50) * (asset.scale || 1);
-          const h = (asset.height || 50) * (asset.scale || 1);
-          minX = Math.min(minX, asset.x - w / 2);
-          minY = Math.min(minY, asset.y - h / 2);
-          maxX = Math.max(maxX, asset.x + w / 2);
-          maxY = Math.max(maxY, asset.y + h / 2);
+      } else if (item.text !== undefined) {
+        // Text specific bounds
+        if (isFinite(item.x) && isFinite(item.y)) {
+          const fs = item.fontSize || 500;
+          const tw = (item.text.length || 1) * fs * 0.6;
+          const th = fs * 1.2;
+          minX = Math.min(minX, item.x - tw / 2);
+          maxX = Math.max(maxX, item.x + tw / 2);
+          minY = Math.min(minY, item.y - th / 2);
+          maxY = Math.max(maxY, item.y + th / 2);
           hasValidBounds = true;
         }
+      } else if (isFinite(item.x) && isFinite(item.y)) {
+        // Resolve actual dimensions
+        const def = ASSET_LIBRARY.find(a => a.id === item.type);
+        const w = (item.width ?? def?.width ?? 500) * (item.scale || 1);
+        const h = (item.height ?? def?.height ?? 500) * (item.scale || 1);
+
+        minX = Math.min(minX, item.x - w / 2);
+        minY = Math.min(minY, item.y - h / 2);
+        maxX = Math.max(maxX, item.x + w / 2);
+        maxY = Math.max(maxY, item.y + h / 2);
+        hasValidBounds = true;
       }
     });
 
@@ -87,14 +105,14 @@ export default function PlanPreview({
     const h = maxY - minY;
 
     // Add padding
-    const padding = Math.max(100, Math.min(w * 0.1, h * 0.1));
+    const padding = Math.max(200, Math.min(w * 0.1, h * 0.1));
     return {
       minX: minX - padding,
       minY: minY - padding,
       contentWidth: w + padding * 2,
       contentHeight: h + padding * 2
     };
-  }, [assets]);
+  }, [allItems]);
 
   // Calculate scale to fit
   const scale = Math.min(width / contentWidth, height / contentHeight) || 1;
@@ -105,16 +123,33 @@ export default function PlanPreview({
   const getGradientId = (id: string) => `preview-grad-${id}`;
   const getPatternId = (id: string) => `preview-pat-${id}`;
   const getHatchId = (id: string) => `preview-hatch-${id}`;
-
   const renderDefs = () => {
     return (
       <defs>
-        {assets.map(asset => {
-          // Skip if not a shape-like object that needs complex fills
-          if (!asset || asset.type === 'wall-segments') return null;
+        {/* Texture Library */}
+        {texturePatterns.map(p => {
+          if (p.isImage && p.path) {
+            const size = p.tileSize || 1024;
+            return (
+              <pattern key={p.id} id={p.id} patternUnits="userSpaceOnUse" width={size * 0.5} height={size * 0.5} patternTransform="scale(0.5)">
+                <image href={p.path} width={size * 0.5} height={size * 0.5} preserveAspectRatio="xMidYMid slice" />
+              </pattern>
+            );
+          } else if (p.svg) {
+            return (
+              <React.Fragment key={p.id}>
+                <g dangerouslySetInnerHTML={{ __html: p.svg }} />
+              </React.Fragment>
+            );
+          }
+          return null;
+        })}
 
+        {/* Dynamic Asset Fills (Gradients, Hatches, Images) */}
+        {assets.map(asset => {
+          if (!asset) return null;
           const shape = asset as any;
-          const fillType = shape.fillType || 'color';
+          const fillType = shape.fillType || 'solid';
 
           if (fillType === 'gradient') {
             const colors = shape.gradientColors || ['#ffffff', '#000000'];
@@ -154,8 +189,7 @@ export default function PlanPreview({
                 {pattern === 'diagonal-right' && <path d={`M0,0 L${spacing * 2},${spacing * 2} M0,${spacing * 2} L${spacing * 2},0`} stroke={color} strokeWidth="1" />}
                 {pattern === 'diagonal-left' && <path d={`M0,${spacing * 2} L${spacing * 2},0 M0,0 L${spacing * 2},${spacing * 2}`} stroke={color} strokeWidth="1" />}
                 {pattern === 'cross' && <path d={`M0,${spacing} L${spacing * 2},${spacing} M${spacing},0 L${spacing},${spacing * 2}`} stroke={color} strokeWidth="1" />}
-                {pattern === 'grid' && <path d={`M0,${spacing} L${spacing * 2},${spacing} M${spacing},0 L${spacing},${spacing * 2}`} stroke={color} strokeWidth="1" />}
-                {pattern === 'dots' && <g><circle cx={spacing / 2} cy={spacing / 2} r="1" fill={color} /><circle cx={spacing * 1.5} cy={spacing * 1.5} r="1" fill={color} /></g>}
+                {pattern === 'dots' && <circle cx={spacing / 2} cy={spacing / 2} r="1" fill={color} />}
               </pattern>
             );
           } else if (fillType === 'image' && shape.fillImage) {
@@ -167,26 +201,9 @@ export default function PlanPreview({
                 <image href={shape.fillImage} x="0" y="0" width={size} height={size} preserveAspectRatio="xMidYMid slice" />
               </pattern>
             );
-          } else if (fillType === 'texture' && shape.fillTexture) {
-            // We need to import the raw SVG string from texturePatterns and inject it?
-            // Or simpler: We rely on the texturePatterns definitions being global?
-            // The editor defines them globally. Here we are in a separate SVG context.
-            // We should ideally include the texture definitions in this SVG as well.
-            // For now, let's assume the texture IDs (like 'wood-grain') might naturally resolve if defined.
-            // But they won't be defined in this independent SVG block unless we put them here.
-            // Let's rely on standard patterns.
-            // Actually, let's try to map standard texture IDs to inline patterns if we can, or just fallback.
-            // Since we can't easily import the complex texture array here without bloat, 
-            // let's try to use the raw images or colors.
-            // Limitation: Global definitions are not here.
-            // Fix: We should check if we can import texturePatterns.
           }
           return null;
         })}
-
-        {/* HACK: duplicate texture defs for preview if possible, or just accept simple fallback for now if import is hard. 
-            User specifically requested texture. Let's try to include a few common ones if needed.
-        */}
       </defs>
     );
   };
@@ -198,13 +215,27 @@ export default function PlanPreview({
     if (fillType === 'hatch') return `url(#${getHatchId(asset.id)})`;
     if (fillType === 'image' && asset.fillImage) return `url(#${getPatternId(asset.id)})`;
     if (fillType === 'texture' && asset.fillTexture) {
-      // If the texture ID refers to a global pattern, it might not work in this isolated SVG.
-      // However, if we simply use the ID, it might try to look it up.
-      // For a robust preview, we'd need to inject those patterns.
-      // Let's assume for now the user wants to see *that* it's textured.
       return `url(#${asset.fillTexture})`;
     }
-    return asset.backgroundColor || asset.fillColor || (asset.type === 'line' ? 'none' : '#e5e7eb');
+    return asset.backgroundColor || asset.fillColor || asset.fill || (asset.type === 'line' ? 'none' : '#e5e7eb');
+  };
+
+  const renderText = (asset: any) => {
+    return (
+      <text
+        key={asset.id}
+        x={asset.x}
+        y={asset.y}
+        fontSize={asset.fontSize || 500}
+        fill={asset.color || asset.textColor || '#000000'}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        style={{ fontFamily: asset.fontFamily || 'Arial', fontWeight: asset.fontWeight || 'bold' }}
+        transform={asset.rotation ? `rotate(${asset.rotation} ${asset.x} ${asset.y})` : undefined}
+      >
+        {asset.text}
+      </text>
+    );
   };
 
 
@@ -214,8 +245,8 @@ export default function PlanPreview({
     // Library Asset (SVG)
     const def = ASSET_LIBRARY.find(a => a.id === asset.type);
     if (def?.path) {
-      const w = (asset.width || 24) * (asset.scale || 1);
-      const h = (asset.height || 24) * (asset.scale || 1);
+      const w = (asset.width ?? def.width ?? 500) * (asset.scale || 1);
+      const h = (asset.height ?? def.height ?? 500) * (asset.scale || 1);
       const x = asset.x - w / 2; // SVG uses top-left usually, but here we transform center
       const y = asset.y - h / 2;
 
@@ -231,6 +262,7 @@ export default function PlanPreview({
               fill={asset.fillColor}
               stroke={asset.strokeColor}
               strokeWidth={asset.strokeWidth}
+              category={def.category}
             />
           </foreignObject>
         </g>
@@ -238,8 +270,9 @@ export default function PlanPreview({
     }
 
     // Shapes
-    const w = (asset.width || 50) * (asset.scale || 1);
-    const h = (asset.height || 50) * (asset.scale || 1);
+    const defShape = ASSET_LIBRARY.find(a => a.id === asset.type);
+    const w = (asset.width ?? defShape?.width ?? 500) * (asset.scale || 1);
+    const h = (asset.height ?? defShape?.height ?? 500) * (asset.scale || 1);
     const fill = getFill(asset);
     const stroke = asset.strokeColor || '#000000';
     const strokeWidth = Math.max(1, (asset.strokeWidth || 1) * (asset.scale || 1));
@@ -260,7 +293,7 @@ export default function PlanPreview({
       );
     }
 
-    if (asset.type === 'rect' || asset.type === 'square' || !asset.type) {
+    if (asset.type === 'rect' || asset.type === 'square' || asset.type?.includes('rectangular') || !asset.type) {
       return (
         <rect
           key={asset.id}
@@ -291,44 +324,63 @@ export default function PlanPreview({
       );
     }
 
-    // Wall Segments
-    if (asset.type === 'wall-segments') {
-      const thickness = (asset.wallThickness || 150) * (asset.scale || 1);
+    // Wall (Standard format / Legacy)
+    const nodes = (asset as any).nodes || (asset as any).wallNodes;
+    const edges = (asset as any).edges || (asset as any).wallEdges;
+
+    if (nodes && edges) {
       return (
         <g key={asset.id}>
-          {asset.wallEdges?.map((edge, i) => {
-            const nA = asset.wallNodes?.[edge.a];
-            const nB = asset.wallNodes?.[edge.b];
+          {edges.map((edge: any, i: number) => {
+            const nAId = edge.nodeA !== undefined ? edge.nodeA : edge.a;
+            const nBId = edge.nodeB !== undefined ? edge.nodeB : edge.b;
+
+            const nA = typeof nAId === 'string' ? nodes.find((n: any) => n.id === nAId) : nodes[nAId];
+            const nB = typeof nBId === 'string' ? nodes.find((n: any) => n.id === nBId) : nodes[nBId];
+
             if (!nA || !nB) return null;
             return (
               <line
-                key={i}
+                key={`${asset.id}-edge-${i}`}
                 x1={nA.x} y1={nA.y}
                 x2={nB.x} y2={nB.y}
-                stroke="#e5e7eb"
-                strokeWidth={thickness}
-                strokeLinecap="butt"
+                stroke={getFill(asset) === 'none' ? '#1e293b' : getFill(asset)}
+                strokeWidth={edge.thickness || (asset as any).wallThickness || 150}
+                strokeLinecap="round"
               />
             );
-          })}
-          {/* Overlay outlines roughly */}
-          {asset.wallEdges?.map((edge, i) => {
-            const nA = asset.wallNodes?.[edge.a];
-            const nB = asset.wallNodes?.[edge.b];
-            if (!nA || !nB) return null;
-            // Drawing dual lines for walls is complex in simple SVG without math.
-            // Just drawing center line for preview often sufficient, or thick line with stroke.
-            return null;
           })}
         </g>
       );
     }
 
+    // New Wall Engine (Segments)
+    if (asset.type === 'wall-segments' && (asset as any).wallSegments) {
+      return (
+        <g key={asset.id}>
+          {(asset as any).wallSegments.map((seg: any, i: number) => (
+            <line
+              key={`${asset.id}-seg-${i}`}
+              x1={seg.start.x} y1={seg.start.y}
+              x2={seg.end.x} y2={seg.end.y}
+              stroke={getFill(asset) === 'none' ? '#1e293b' : getFill(asset)}
+              strokeWidth={seg.thickness || (asset as any).wallThickness || 150}
+              strokeLinecap="round"
+            />
+          ))}
+        </g>
+      );
+    }
+
+    if (asset.type === 'text' || asset.text !== undefined) {
+      return renderText(asset);
+    }
+
     return null;
   };
 
-  const renderedAssets = assets
-    ? assets.map(renderAsset).filter(Boolean)
+  const renderedAssets = allItems
+    ? allItems.map((item: any) => renderAsset(item)).filter(Boolean)
     : [];
 
   if (renderedAssets.length === 0) {
@@ -351,30 +403,6 @@ export default function PlanPreview({
         preserveAspectRatio="xMidYMid meet"
         style={{ display: 'block' }}
       >
-        <defs>
-          {/* Include common texture patterns hardcoded for preview completeness if external defs unavailable */}
-          <pattern id="wood-grain" patternUnits="userSpaceOnUse" width="500" height="500">
-            <rect width="500" height="500" fill="#8B4513" />
-            <path d="M0,50 Q125,25 250,50 T500,50" stroke="#654321" stroke-width="10" fill="none" opacity="0.3" />
-            <path d="M0,150 Q125,125 250,150 T500,150" stroke="#654321" stroke-width="8" fill="none" opacity="0.2" />
-            <path d="M0,250 Q125,240 250,250 T500,250" stroke="#654321" stroke-width="10" fill="none" opacity="0.3" />
-          </pattern>
-          <pattern id="brick" patternUnits="userSpaceOnUse" width="300" height="200">
-            <rect width="300" height="200" fill="#8B4513" />
-            <rect x="0" y="0" width="140" height="90" fill="#A0522D" stroke="#654321" stroke-width="5" />
-            <rect x="150" y="0" width="140" height="90" fill="#A0522D" stroke="#654321" stroke-width="5" />
-            <rect x="75" y="100" width="140" height="90" fill="#A0522D" stroke="#654321" stroke-width="5" />
-          </pattern>
-          <pattern id="dots" patternUnits="userSpaceOnUse" width="100" height="100">
-            <rect width="100" height="100" fill="#ffffff" />
-            <circle cx="50" cy="50" r="15" fill="#333333" />
-          </pattern>
-          <pattern id="grid" patternUnits="userSpaceOnUse" width="100" height="100">
-            <rect width="100" height="100" fill="#ffffff" />
-            <path d="M0,0 L0,100 M0,0 L100,0" stroke="#cccccc" stroke-width="5" />
-          </pattern>
-        </defs>
-
         {renderDefs()}
 
         {renderedAssets}

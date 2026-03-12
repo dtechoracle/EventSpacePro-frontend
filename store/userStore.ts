@@ -35,10 +35,25 @@ export const useUserStore = create<UserState>()(
                 set({ isLoading: true, error: null });
                 try {
                     const response = await apiRequest("/user", "GET", null, true);
-                    set({ user: response.data, isLoading: false, error: null });
+                    const userData = response.data;
+
+                    set((state) => {
+                        const combinedUser = state.user ? { ...state.user, ...userData } : userData;
+
+                        // "Local Storage for Now": If backend returns no avatar but we have a local one, 
+                        // explicitly preserve our local Base64 image.
+                        if (state.user?.avatar && !userData.avatar) {
+                            combinedUser.avatar = state.user.avatar;
+                        }
+
+                        return {
+                            user: combinedUser,
+                            isLoading: false,
+                            error: null
+                        };
+                    });
                 } catch (error: any) {
                     set({
-                        user: null,
                         isLoading: false,
                         error: error?.message || "Failed to fetch user profile",
                     });

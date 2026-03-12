@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="448mm" height="534mm" viewBox="0 0 448 534" version="1.1" xmlns="http://www.w3.org/2000/svg" style="stroke-linecap:round;stroke-linejoin:round;">
+    <g transform="translate(-5.5829, 541.5751) scale(1,-1)">
+            <!-- Auto-generated fillable area -->
+            <!-- Main Seat Body (Closed Path) -->
+        <path d="M16.3854,261.0089 A150,150 0 0,0 166.1325,402.3027 L293.0678,402.3027 A150,150 0 0,0 442.8149,261.0089 L453.4487,113.1069 A100,100 0 0,0 353.6173,7.3027 L105.5829,7.3027 A100,100 0 0,0 5.7515,113.1069 Z" style="stroke:#000000;stroke-width:0.1;" />
+        
+        <!-- Backrest (Closed Path) -->
+        <path d="M371.5101,439.5582 A50.1012,50.1012 0 0,1 432.7589,477.286 A5,5 0 0,1 435.1448,486.995 A822.5,822.5 0 0,1 30.2217,486.995 A5,5 0 0,1 32.6833,477.3027 A50.1012,50.1012 0 0,1 93.8565,439.5582 A762.5,762.5 0 0,0 371.5101,439.5582 Z" style="stroke:#000000;stroke-width:0.1;" />
+        
+        <!-- Support Stem -->
+        <path d="M254.6001,452.2965 L254.6001,402.3027 L204.6001,402.3027 L204.6001,452.2965 Z" style="stroke:#000000;stroke-width:0.1;" />
+        
+        <!-- Base / Other Details -->
+        <path d="M254.6001,541.5751 L204.6001,541.5751 L204.6001,529.564 L254.6001,529.564 Z" style="stroke:#000000;stroke-width:0.1;" />
+    </g>
+</svg>

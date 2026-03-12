@@ -45,8 +45,8 @@ export default function SnapMarkersRenderer() {
     if (!hoveredId || snapPoints.length === 0) return null;
 
     // Scale markers based on zoom
-    const markerRadius = 5 / zoom;
-    const strokeWidth = 1.5 / zoom;
+    const markerRadius = 3.5 / zoom;
+    const strokeWidth = 1 / zoom;
 
     return (
         <g pointerEvents="none" className="snap-markers">
@@ -59,8 +59,6 @@ export default function SnapMarkersRenderer() {
                     <circle
                         r={markerRadius}
                         fill="#22c55e" // Green
-                        stroke="#ffffff"
-                        strokeWidth={strokeWidth}
                         opacity={0.8}
                     />
                 </g>

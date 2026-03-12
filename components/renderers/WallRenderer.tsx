@@ -16,7 +16,7 @@ interface WallRendererProps {
 
 export default function WallRenderer({ wall, isSelected, isHovered }: WallRendererProps) {
     const { nodes, edges } = wall;
-    const { selectedEdgeId, setSelectedEdgeId } = useEditorStore();
+    const { selectedEdgeId, setSelectedEdgeId, zoom } = useEditorStore();
     const { assets, walls: allWalls } = useProjectStore();
 
     // Calculate all cutouts for doors/windows
@@ -155,31 +155,16 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
             const openings: Array<{ type: 'asset' | 'wall' | 'door-window'; startT: number; endT: number }> = [];
 
             // 1. Find asset openings (doors/windows)
-            // Instead of relying on attachedToWallId, detect any door/window asset that lies on this edge.
-            const doorWindowAssets = assets.filter(asset => isCutoutAsset(asset));
-
-            doorWindowAssets.forEach(asset => {
-                const { distance, t } = pointToLineDistance(
-                    { x: asset.x, y: asset.y },
-                    nodeA,
-                    nodeB
-                );
-
-                // Within threshold distance of this edge and not at the very ends
-                if (distance < 50 && t > 0.01 && t < 0.99) {
-                    const edgeLength = Math.sqrt(
-                        (nodeB.x - nodeA.x) ** 2 + (nodeB.y - nodeA.y) ** 2
-                    );
-
-                    // Use the projected width of the asset along the edge as the opening width
-                    const assetWidth = asset.width * (asset.scale || 1);
-                    const halfWidth = assetWidth / 2;
-                    const widthT = halfWidth / edgeLength;
-
+            // Use the precomputed wallCutouts which properly considers the dynamic size of the asset
+            // so any part of the door touching the wall creates the opening.
+            const cutoutsForThisEdge = getCutoutsForEdge(wall.id, edge.id, wallCutouts);
+            cutoutsForThisEdge.forEach(cutout => {
+                // Ensure cutout is not just the very ends of the wall
+                if (cutout.startParam > 0.01 && cutout.endParam < 0.99) {
                     openings.push({
                         type: 'asset',
-                        startT: Math.max(0, t - widthT),
-                        endT: Math.min(1, t + widthT)
+                        startT: cutout.startParam,
+                        endT: cutout.endParam
                     });
                 }
             });
@@ -405,8 +390,11 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                     otherWallsAtNodeB.every(otherWall => wall.id < otherWall.id);
 
                 const openings = edgeOpenings.get(edge.id) || [];
-                const lineStrokeWidth = 2;
                 const isEdgeSelected = selectedEdgeId === edge.id;
+
+                // Use wall-specific stroke width if available, otherwise default to 2
+                const lineStrokeWidth = wall.strokeWidth !== undefined ? wall.strokeWidth : 2;
+                const strokeColor = wall.stroke || (isEdgeSelected ? '#2563eb' : isSelected ? '#3b82f6' : isHovered ? '#60a5fa' : '#1f2937');
 
                 // Build segments (parts of the edge between openings)
                 const segments: Array<{ startT: number; endT: number }> = [];
@@ -532,7 +520,7 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                                     <path
                                         d={fillPath}
                                         fill={
-                                            wall.fillType === 'texture' && wall.fillTexture
+                                            (wall.fillType === 'texture' || wall.fillType === 'hatch' || wall.fillType === 'hash') && wall.fillTexture
                                                 ? `url(#${wall.fillTexture}-scale-${wall.fillTextureScale || 1}-thick-${wall.fillTextureThickness || 1})`
                                                 : (wall.fill || '#ffffff')
                                         }
@@ -544,7 +532,7 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                                         <path
                                             d={fillPath}
                                             fill={isEdgeSelected ? '#3b82f6' : '#3b82f6'}
-                                            fillOpacity={isEdgeSelected ? 0.3 : (isSelected ? 0.2 : 0.1)}
+                                            fillOpacity={isEdgeSelected ? 0.15 : (isSelected ? 0.1 : 0.05)}
                                             stroke="none"
                                             style={{ pointerEvents: 'none' }}
                                         />
@@ -554,8 +542,8 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                                     <path
                                         d={outerPath}
                                         fill="none"
-                                        stroke={isEdgeSelected ? '#2563eb' : isSelected ? '#3b82f6' : isHovered ? '#60a5fa' : '#1f2937'}
-                                        strokeWidth={isEdgeSelected ? lineStrokeWidth * 2 : lineStrokeWidth}
+                                        stroke={strokeColor}
+                                        strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth}
                                         strokeLinecap="round"
                                         strokeLinejoin="round"
                                         strokeMiterlimit={cornerRadius}
@@ -566,8 +554,8 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                                         <path
                                             d={innerPath}
                                             fill="none"
-                                            stroke={isEdgeSelected ? '#2563eb' : isSelected ? '#3b82f6' : isHovered ? '#60a5fa' : '#1f2937'}
-                                            strokeWidth={isEdgeSelected ? lineStrokeWidth * 2 : lineStrokeWidth}
+                                            stroke={strokeColor}
+                                            strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth}
                                             strokeLinecap="round"
                                             strokeLinejoin="round"
                                             strokeMiterlimit={cornerRadius}
@@ -640,8 +628,8 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                                         y1={sLeftY}
                                         x2={sRightX}
                                         y2={sRightY}
-                                        stroke={isEdgeSelected ? '#2563eb' : isSelected ? '#3b82f6' : isHovered ? '#60a5fa' : '#1f2937'}
-                                        strokeWidth={isEdgeSelected ? lineStrokeWidth * 2 : lineStrokeWidth}
+                                        stroke={strokeColor}
+                                        strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth}
                                         strokeLinecap="butt"
                                         vectorEffect="non-scaling-stroke"
                                     />
@@ -651,8 +639,8 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                                         y1={eLeftY}
                                         x2={eRightX}
                                         y2={eRightY}
-                                        stroke={isEdgeSelected ? '#2563eb' : isSelected ? '#3b82f6' : isHovered ? '#60a5fa' : '#1f2937'}
-                                        strokeWidth={isEdgeSelected ? lineStrokeWidth * 2 : lineStrokeWidth}
+                                        stroke={strokeColor}
+                                        strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth}
                                         strokeLinecap="butt"
                                         vectorEffect="non-scaling-stroke"
                                     />
@@ -678,11 +666,10 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                     <circle
                         cx={node.x}
                         cy={node.y}
-                        r={4}
+                        r={4 / zoom}
                         fill="#ffffff"
                         stroke="#3b82f6"
-                        strokeWidth={1.5}
-                        vectorEffect="non-scaling-stroke"
+                        strokeWidth={1.5 / zoom}
                         className="cursor-move"
                         data-node-id={node.id}
                         data-wall-id={wall.id}
@@ -690,9 +677,8 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                     <circle
                         cx={node.x}
                         cy={node.y}
-                        r={2}
+                        r={2 / zoom}
                         fill="#3b82f6"
-                        vectorEffect="non-scaling-stroke"
                         pointerEvents="none"
                     />
                 </g>
@@ -735,8 +721,8 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                                 y1={junctionA.left.y}
                                 x2={junctionA.right.x}
                                 y2={junctionA.right.y}
-                                stroke={isSelected ? '#3b82f6' : '#1f2937'}
-                                strokeWidth={2}
+                                stroke={wall.stroke || (isSelected ? '#3b82f6' : '#1f2937')}
+                                strokeWidth={wall.strokeWidth || 2}
                                 strokeLinecap="round"
                                 vectorEffect="non-scaling-stroke"
                             />
@@ -749,8 +735,8 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                                 y1={junctionB.left.y}
                                 x2={junctionB.right.x}
                                 y2={junctionB.right.y}
-                                stroke={isSelected ? '#3b82f6' : '#1f2937'}
-                                strokeWidth={2}
+                                stroke={wall.stroke || (isSelected ? '#3b82f6' : '#1f2937')}
+                                strokeWidth={wall.strokeWidth || 2}
                                 strokeLinecap="round"
                                 vectorEffect="non-scaling-stroke"
                             />

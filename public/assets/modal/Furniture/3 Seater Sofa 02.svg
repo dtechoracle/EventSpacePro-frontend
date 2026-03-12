@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 3 Seater Sofa 02 - Top-down plan view -->
+<svg width="2000mm" height="810mm" viewBox="0 0 2000 810" version="1.1" xmlns="http://www.w3.org/2000/svg"
+     style="stroke-linecap:round;stroke-linejoin:round;">
+
+    <path id="auto-fill" d="
+        M 185,0
+        L 1815,0
+        Q 2000,0 2000,185
+        L 2000,648
+        Q 2000,708 1965,750
+        L 1895,810
+        L 1805,810
+        L 1805,672
+        Q 1805,632 1777,613
+        Q 1749,595 1709,595
+        L 291,595
+        Q 251,595 223,613
+        Q 195,632 195,672
+        L 195,810
+        L 105,810
+        L 35,750
+        Q 0,708 0,648
+        L 0,185
+        Q 0,0 185,0
+        Z
+    " style="stroke-width:6;"/>
+
+    <!-- Back inner edge -->
+    <path fill="none" d="
+        M 150,187
+        L 150,575
+        Q 150,603 178,618
+        Q 206,633 246,633
+        L 1754,633
+        Q 1794,633 1822,618
+        Q 1850,603 1850,575
+        L 1850,187
+    " style="stroke-width:5;"/>
+
+    <!-- Back cushion thickness -->
+    <path fill="none" d="
+        M 150,187 Q 161,159 191,150 L 1809,150 Q 1839,159 1850,187
+    " style="stroke-width:4;"/>
+
+    <!-- Back-to-seat divider -->
+    <line fill="none" x1="150" y1="260" x2="1850" y2="260" style="stroke-width:4;"/>
+
+    <!-- Seat dividers -->
+    <line fill="none" x1="717" y1="187" x2="717" y2="633" style="stroke-width:5;"/>
+    <line fill="none" x1="1283" y1="187" x2="1283" y2="633" style="stroke-width:5;"/>
+
+    <!-- Front edge -->
+    <path fill="none" d="M 195,633 Q 195,688 223,727 Q 251,766 291,785 L 714,785" style="stroke-width:4;"/>
+    <path fill="none" d="M 1805,633 Q 1805,688 1777,727 Q 1749,766 1709,785 L 1286,785" style="stroke-width:4;"/>
+    <line fill="none" x1="715" y1="785" x2="1285" y2="785" style="stroke-width:4;"/>
+
+    <!-- Corner legs -->
+    <rect fill="none" x="99" y="735" width="96" height="70" rx="16" style="stroke-width:4;"/>
+    <rect fill="none" x="1805" y="735" width="96" height="70" rx="16" style="stroke-width:4;"/>
+</svg>

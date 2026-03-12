@@ -41,7 +41,7 @@ export type Group = {
 export type Shape = {
     id: string;
     groupId?: string;
-    type: 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand' | 'polygon' | 'arc';
+    type: 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand' | 'polygon' | 'arc' | 'path';
     x: number;
     y: number;
     width: number;
@@ -54,9 +54,10 @@ export type Shape = {
     polygonSides?: number; // For regular polygons
     zIndex: number;
     sourceAssetId?: string;
+    svgPath?: string; // For custom bezier paths generated via boolean operations
 
     // Advanced fill options
-    fillType?: 'color' | 'gradient' | 'hatch' | 'image' | 'texture' | 'none';
+    fillType?: 'solid' | 'color' | 'gradient' | 'hatch' | 'image' | 'texture' | 'none' | 'hash';
     gradientType?: 'linear' | 'radial';
     gradientColors?: string[]; // Array of color stops
     gradientAngle?: number; // For linear gradients (0-360 degrees)
@@ -107,6 +108,8 @@ export type Asset = {
     strokeColor?: string;
     strokeWidth?: number;
     opacity?: number;
+    fillType?: 'solid' | 'color' | 'gradient' | 'hatch' | 'image' | 'texture' | 'none' | 'hash';
+    fillTexture?: string;
 
     // Text properties
     text?: string;
@@ -137,7 +140,9 @@ export type Wall = {
     nodes: WallNode[];
     edges: WallEdge[];
     fill?: string;
-    fillType?: 'color' | 'texture';
+    stroke?: string; // New: Color for wall stroke
+    strokeWidth?: number; // New: Width for wall stroke
+    fillType?: 'solid' | 'color' | 'texture' | 'hash' | 'hatch';
     fillTexture?: string;
     fillTextureScale?: number;
     fillTextureThickness?: number;
@@ -257,11 +262,12 @@ export type ProjectState = {
     alignSelection: (type: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom', ids: string[]) => void;
     distributeSelection: (axis: 'horizontal' | 'vertical', spacing: number, ids: string[]) => void;
     distributeRadial: (diameter: number, startAngle: number, endAngle: number, ids: string[]) => void;
+    resolveIdsWithGroups: (ids: string[]) => string[];
 
     // History
     history: {
-        past: Array<{ walls: Wall[]; shapes: Shape[]; assets: Asset[] }>;
-        future: Array<{ walls: Wall[]; shapes: Shape[]; assets: Asset[] }>;
+        past: Array<{ walls: Wall[]; shapes: Shape[]; assets: Asset[]; textAnnotations: TextAnnotation[]; labelArrows: LabelArrow[]; dimensions: Dimension[]; groups: Group[] }>;
+        future: Array<{ walls: Wall[]; shapes: Shape[]; assets: Asset[]; textAnnotations: TextAnnotation[]; labelArrows: LabelArrow[]; dimensions: Dimension[]; groups: Group[] }>;
     };
 
     // Persistence
@@ -282,7 +288,7 @@ export type ProjectState = {
     setCanvas: (canvas: Canvas) => void;
 
     // Methods - Walls (Legacy)
-    addWall: (wall: Wall) => void;
+    addWall: (wall: Wall, skipHistory?: boolean) => void;
     updateWall: (id: string, updates: Partial<Wall>, skipHistory?: boolean) => void;
     removeWall: (id: string) => void;
     getWall: (id: string) => Wall | undefined;
@@ -304,13 +310,13 @@ export type ProjectState = {
     removeWallEdge: (wallId: string, edgeId: string) => void;
 
     // Methods - Shapes
-    addShape: (shape: Shape) => void;
+    addShape: (shape: Shape, skipHistory?: boolean) => void;
     updateShape: (id: string, updates: Partial<Shape>, skipHistory?: boolean) => void;
     removeShape: (id: string) => void;
     getShape: (id: string) => Shape | undefined;
 
     // Methods - Assets
-    addAsset: (asset: Asset) => void;
+    addAsset: (asset: Asset, skipHistory?: boolean) => void;
     updateAsset: (id: string, updates: Partial<Asset>, skipHistory?: boolean) => void;
     removeAsset: (id: string) => void;
     getAsset: (id: string) => Asset | undefined;
@@ -326,7 +332,7 @@ export type ProjectState = {
     redo: () => void;
     saveToHistory: () => void;
     clearHistory: () => void;
-    commitDragHistory: (snapshot: { walls: Wall[]; shapes: Shape[]; assets: Asset[] }) => void;
+    commitDragHistory: (snapshot: { walls: Wall[]; shapes: Shape[]; assets: Asset[]; textAnnotations: TextAnnotation[]; labelArrows: LabelArrow[]; dimensions: Dimension[]; groups: Group[] }) => void;
 
     // Methods - Utility
     getNextZIndex: () => number;
@@ -344,28 +350,28 @@ export type ProjectState = {
 
     // Methods - Dimensions
     dimensions: Dimension[];
-    addDimension: (dimension: Dimension) => void;
+    addDimension: (dimension: Dimension, skipHistory?: boolean) => void;
     updateDimension: (id: string, updates: Partial<Dimension>, skipHistory?: boolean) => void;
     removeDimension: (id: string) => void;
 
     // Methods - Text Annotations
-    addTextAnnotation: (annotation: TextAnnotation) => void;
+    addTextAnnotation: (annotation: TextAnnotation, skipHistory?: boolean) => void;
     updateTextAnnotation: (id: string, updates: Partial<TextAnnotation>, skipHistory?: boolean) => void;
     removeTextAnnotation: (id: string) => void;
 
     // Methods - Label Arrows
-    addLabelArrow: (arrow: LabelArrow) => void;
+    addLabelArrow: (arrow: LabelArrow, skipHistory?: boolean) => void;
     updateLabelArrow: (id: string, updates: Partial<LabelArrow>, skipHistory?: boolean) => void;
     removeLabelArrow: (id: string) => void;
 
     // Methods - Comments
-    addComment: (comment: Comment) => void;
+    addComment: (comment: Comment, skipHistory?: boolean) => void;
     updateComment: (id: string, updates: Partial<Comment>) => void;
     removeComment: (id: string) => void;
     resolveComment: (id: string) => void;
 
     // Methods - Groups
-    addGroup: (group: Group) => void;
+    addGroup: (group: Group, skipHistory?: boolean) => void;
     updateGroup: (id: string, updates: Partial<Group>) => void;
     removeGroup: (id: string) => void;
 
@@ -546,9 +552,8 @@ export const useProjectStore = create<ProjectState>()(
                 };
 
                 const updates = { groupId: newGroupId };
-                const { shapes, assets, walls, textAnnotations, labelArrows } = get();
+                const { shapes, assets, walls, textAnnotations, labelArrows, dimensions } = get();
 
-                // Helper to update collection
                 const updateCollection = (collection: any[], ids: string[]) =>
                     collection.map(item => ids.includes(item.id) ? { ...item, ...updates } : item);
 
@@ -559,6 +564,7 @@ export const useProjectStore = create<ProjectState>()(
                     walls: updateCollection(walls, selectedIds),
                     textAnnotations: updateCollection(textAnnotations, selectedIds),
                     labelArrows: updateCollection(labelArrows, selectedIds),
+                    dimensions: updateCollection(dimensions, selectedIds),
                     hasUnsavedChanges: true
                 });
                 return newGroupId;
@@ -629,106 +635,178 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             alignSelection: (type, ids) => {
+                const { shapes, assets, walls, textAnnotations, labelArrows, dimensions, groups } = get();
+                const resolvedIds = get().resolveIdsWithGroups(ids);
+
+                if (resolvedIds.length < 2) return;
                 get().saveToHistory();
-                const { shapes, assets, walls, groups } = get();
 
-                // Handle group unpacking
-                let targetIds = ids;
-                if (ids.length === 1) {
-                    const group = groups.find(g => g.id === ids[0]);
-                    if (group) targetIds = group.itemIds;
-                }
+                const items: any[] = [];
+                const addItem = (item: any, type: string) => {
+                    let x = item.x, y = item.y, w = item.width || 0, h = item.height || 0;
+                    if (type === 'wall') {
+                        const xs = item.nodes.map((n: any) => n.x);
+                        const ys = item.nodes.map((n: any) => n.y);
+                        w = Math.max(...xs) - Math.min(...xs);
+                        h = Math.max(...ys) - Math.min(...ys);
+                        x = (Math.min(...xs) + Math.max(...xs)) / 2;
+                        y = (Math.min(...ys) + Math.max(...ys)) / 2;
+                    } else if (type === 'asset') {
+                        w = item.width * item.scale;
+                        h = item.height * item.scale;
+                    } else if (type === 'text') {
+                        const fs = item.fontSize || 14;
+                        w = (item.text?.length || 1) * (fs * 0.6);
+                        h = fs * 1.2;
+                    }
+                    items.push({ id: item.id, type, x, y, w, h });
+                };
 
-                const items = [
-                    ...shapes.filter(s => targetIds.includes(s.id)),
-                    ...assets.filter(a => targetIds.includes(a.id)),
-                    ...walls.filter(w => targetIds.includes(w.id)) // Walls might be tricky, treating as object
-                ];
+                shapes.filter(s => resolvedIds.includes(s.id)).forEach(i => addItem(i, 'shape'));
+                assets.filter(a => resolvedIds.includes(a.id)).forEach(i => addItem(i, 'asset'));
+                walls.filter(w => resolvedIds.includes(w.id)).forEach(i => addItem(i, 'wall'));
+                textAnnotations.filter(t => resolvedIds.includes(t.id)).forEach(i => addItem(i, 'text'));
 
                 if (items.length < 2) return;
 
-                // Calculate bounding box
-                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-                items.forEach(item => {
-                    // Simple bounding box approximation
-                    // For walls, it's more complex, skipping for now or using node bounds
-                    const w = (item as any).width || 0;
-                    const h = (item as any).height || 0;
-                    const x = (item as any).x || (item as any).nodes?.[0].x || 0;
-                    const y = (item as any).y || (item as any).nodes?.[0].y || 0;
-
-                    minX = Math.min(minX, x - w / 2);
-                    maxX = Math.max(maxX, x + w / 2);
-                    minY = Math.min(minY, y - h / 2);
-                    maxY = Math.max(maxY, y + h / 2);
-                });
-
-                const centerX = (minX + maxX) / 2;
-                const centerY = (minY + maxY) / 2;
-
-                const updates: any = {};
+                let minX = Math.min(...items.map(i => i.x - i.w / 2));
+                let maxX = Math.max(...items.map(i => i.x + i.w / 2));
+                let minY = Math.min(...items.map(i => i.y - i.h / 2));
+                let maxY = Math.max(...items.map(i => i.y + i.h / 2));
+                let centerX = (minX + maxX) / 2;
+                let centerY = (minY + maxY) / 2;
 
                 items.forEach(item => {
-                    const w = (item as any).width || 0;
-                    const h = (item as any).height || 0;
-                    let newX = (item as any).x;
-                    let newY = (item as any).y;
+                    let newX = item.x;
+                    let newY = item.y;
 
                     switch (type) {
-                        case 'left': newX = minX + w / 2; break;
+                        case 'left': newX = minX + item.w / 2; break;
                         case 'center': newX = centerX; break;
-                        case 'right': newX = maxX - w / 2; break;
-                        case 'top': newY = minY + h / 2; break;
+                        case 'right': newX = maxX - item.w / 2; break;
+                        case 'top': newY = minY + item.h / 2; break;
                         case 'middle': newY = centerY; break;
-                        case 'bottom': newY = maxY - h / 2; break;
+                        case 'bottom': newY = maxY - item.h / 2; break;
                     }
 
-                    if ((item as any).type) { // Shape or Asset
-                        if (shapes.find(s => s.id === item.id)) get().updateShape(item.id, { x: newX, y: newY });
-                        if (assets.find(a => a.id === item.id)) get().updateAsset(item.id, { x: newX, y: newY });
-                    }
+                    const dx = newX - item.x;
+                    const dy = newY - item.y;
+
+                    if (item.type === 'shape') get().updateShape(item.id, { x: newX, y: newY }, true);
+                    else if (item.type === 'asset') get().updateAsset(item.id, { x: newX, y: newY }, true);
+                    else if (item.type === 'wall') {
+                        const wall = walls.find(w => w.id === item.id);
+                        if (wall) get().updateWall(item.id, { nodes: wall.nodes.map(n => ({ ...n, x: n.x + dx, y: n.y + dy })) }, true);
+                    } else if (item.type === 'text') get().updateTextAnnotation(item.id, { x: newX - item.w / 2, y: newY }, true);
                 });
             },
 
             distributeSelection: (axis, spacing, ids) => {
+                const { shapes, assets, walls, textAnnotations } = get();
+                const resolvedIds = get().resolveIdsWithGroups(ids);
+
+                if (resolvedIds.length < 2) return;
                 get().saveToHistory();
-                const { shapes, assets, groups } = get();
 
-                // Handle group unpacking
-                let targetIds = ids;
-                if (ids.length === 1) {
-                    const group = groups.find(g => g.id === ids[0]);
-                    if (group) targetIds = group.itemIds;
-                }
+                const items: any[] = [];
+                const addItem = (item: any, type: string) => {
+                    let x = item.x, y = item.y, w = item.width || 0, h = item.height || 0;
+                    if (type === 'wall') {
+                        const xs = item.nodes.map((n: any) => n.x);
+                        const ys = item.nodes.map((n: any) => n.y);
+                        w = Math.max(...xs) - Math.min(...xs);
+                        h = Math.max(...ys) - Math.min(...ys);
+                        x = (Math.min(...xs) + Math.max(...xs)) / 2;
+                        y = (Math.min(...ys) + Math.max(...ys)) / 2;
+                    } else if (type === 'asset') {
+                        w = item.width * (item.scale || 1);
+                        h = item.height * (item.scale || 1);
+                        // If rotated 90 or 270, swap effective w/h for distribution
+                        const rotation = Math.abs(item.rotation || 0) % 180;
+                        if (rotation > 45 && rotation < 135) {
+                            [w, h] = [h, w];
+                        }
+                    } else if (type === 'shape') {
+                        // For shapes, account for rotation in effective w/h
+                        const rotation = Math.abs(item.rotation || 0) % 180;
+                        if (rotation > 45 && rotation < 135) {
+                            [w, h] = [h, w];
+                        }
+                    } else if (type === 'text') {
+                        const fs = item.fontSize || 14;
+                        w = (item.text?.length || 1) * (fs * 0.6);
+                        h = fs * 1.2;
+                        x = item.x + w / 2;
+                        y = item.y + h / 2;
+                    }
+                    items.push({ id: item.id, type, x, y, w, h });
+                };
 
-                const items = [
-                    ...shapes.filter(s => targetIds.includes(s.id)),
-                    ...assets.filter(a => targetIds.includes(a.id))
-                ];
+                shapes.filter(s => resolvedIds.includes(s.id)).forEach(i => addItem(i, 'shape'));
+                assets.filter(a => resolvedIds.includes(a.id)).forEach(i => addItem(i, 'asset'));
+                walls.filter(w => resolvedIds.includes(w.id)).forEach(i => addItem(i, 'wall'));
+                textAnnotations.filter(t => resolvedIds.includes(t.id)).forEach(i => addItem(i, 'text'));
 
                 if (items.length < 2) return;
 
-                // Sort items
+                // Sort items by primary axis
                 items.sort((a, b) => axis === 'horizontal' ? a.x - b.x : a.y - b.y);
 
-                let currentPos = axis === 'horizontal' ? (items[0].x - items[0].width / 2) : (items[0].y - items[0].height / 2);
+                const anchor = items[0];
+                const startX = anchor.x;
+                const startY = anchor.y;
 
                 items.forEach((item, index) => {
-                    if (index === 0) {
-                        currentPos += (axis === 'horizontal' ? item.width : item.height) + spacing;
+                    if (index === 0) return;
+
+                    // Calculate new primary axis position based on center-to-center spacing (pitch)
+                    const newX = axis === 'horizontal' ? startX + (index * spacing) : startX;
+                    const newY = axis === 'vertical' ? startY + (index * spacing) : startY;
+
+                    const dx = newX - item.x;
+                    const dy = newY - item.y;
+
+                    if (item.type === 'shape') get().updateShape(item.id, { x: newX, y: newY }, true);
+                    else if (item.type === 'asset') get().updateAsset(item.id, { x: newX, y: newY }, true);
+                    else if (item.type === 'wall') {
+                        const wall = walls.find(w => w.id === item.id);
+                        if (wall) get().updateWall(item.id, { nodes: wall.nodes.map(n => ({ ...n, x: n.x + dx, y: n.y + dy })) }, true);
+                    } else if (item.type === 'text') {
+                        get().updateTextAnnotation(item.id, {
+                            x: newX - item.w / 2,
+                            y: newY - item.h / 2
+                        }, true);
+                    }
+                });
+            },
+
+            resolveIdsWithGroups: (ids) => {
+                const { shapes, assets, walls, textAnnotations, dimensions, labelArrows, groups } = get();
+                const allItems: any[] = [...shapes, ...assets, ...walls, ...textAnnotations, ...dimensions, ...labelArrows];
+
+                const expandedIds = new Set<string>();
+                ids.forEach(id => {
+                    // Check if it's a Group ID itself
+                    const groupAsPrimary = groups.find(g => g.id === id);
+                    if (groupAsPrimary) {
+                        groupAsPrimary.itemIds.forEach(gid => expandedIds.add(gid));
                         return;
                     }
 
-                    const newPos = currentPos + (axis === 'horizontal' ? item.width / 2 : item.height / 2);
-
-                    if (shapes.find(s => s.id === item.id)) {
-                        get().updateShape(item.id, axis === 'horizontal' ? { x: newPos } : { y: newPos });
+                    // Otherwise check if it's an item in a group
+                    const item = allItems.find(i => i.id === id);
+                    if (item && item.groupId) {
+                        const group = groups.find(g => g.id === item.groupId);
+                        if (group) {
+                            group.itemIds.forEach(gid => expandedIds.add(gid));
+                        } else {
+                            expandedIds.add(id);
+                        }
                     } else {
-                        get().updateAsset(item.id, axis === 'horizontal' ? { x: newPos } : { y: newPos });
+                        expandedIds.add(id);
                     }
-
-                    currentPos += (axis === 'horizontal' ? item.width : item.height) + spacing;
                 });
+                return Array.from(expandedIds);
             },
 
             distributeRadial: (radius, startAngle, endAngle, ids) => {
@@ -923,9 +1001,9 @@ export const useProjectStore = create<ProjectState>()(
                             wallPolygon,
                             centerline,
                             wallThickness: wall.edges[0]?.thickness || 75,
-                            strokeColor: '#1E40AF',
-                            backgroundColor: '#F3F4F6',
-                            strokeWidth: 2,
+                            strokeColor: wall.stroke || '#1E40AF',
+                            backgroundColor: wall.fill || '#F3F4F6',
+                            strokeWidth: wall.strokeWidth !== undefined ? wall.strokeWidth : 2,
                             zIndex: wall.zIndex,
                         });
                     });
@@ -973,8 +1051,8 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             // Wall methods
-            addWall: (wall) => {
-                get().saveToHistory();
+            addWall: (wall, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     walls: [...state.walls, wall],
                     hasUnsavedChanges: true,
@@ -1114,8 +1192,8 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             // Shape methods
-            addShape: (shape) => {
-                get().saveToHistory();
+            addShape: (shape, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     shapes: [...state.shapes, shape],
                     hasUnsavedChanges: true,
@@ -1159,8 +1237,8 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             // Asset methods
-            addAsset: (asset: Asset) => {
-                get().saveToHistory();
+            addAsset: (asset: Asset, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 // Apply default strokeWidth of 2 if not already set
                 const assetWithDefaults = {
                     ...asset,
@@ -1193,9 +1271,9 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             // Group methods
-            addGroup: (group) => {
+            addGroup: (group, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => {
-                    state.saveToHistory();
                     return {
                         groups: [...state.groups, group],
                         hasUnsavedChanges: true
@@ -1249,37 +1327,45 @@ export const useProjectStore = create<ProjectState>()(
 
             // History methods
             undo: () => {
-                const { history, walls, shapes, assets } = get();
+                const { history, walls, shapes, assets, textAnnotations, labelArrows, dimensions, groups } = get();
                 if (history.past.length === 0) return;
 
                 const previous = history.past[history.past.length - 1];
                 const newPast = history.past.slice(0, history.past.length - 1);
 
                 set({
-                    walls: previous.walls,
-                    shapes: previous.shapes,
-                    assets: previous.assets,
+                    walls: previous.walls || [],
+                    shapes: previous.shapes || [],
+                    assets: previous.assets || [],
+                    textAnnotations: previous.textAnnotations || [],
+                    labelArrows: previous.labelArrows || [],
+                    dimensions: previous.dimensions || [],
+                    groups: previous.groups || [],
                     history: {
                         past: newPast,
-                        future: [{ walls, shapes, assets }, ...history.future],
+                        future: [{ walls, shapes, assets, textAnnotations, labelArrows, dimensions, groups }, ...history.future],
                     },
                     hasUnsavedChanges: true,
                 });
             },
 
             redo: () => {
-                const { history, walls, shapes, assets } = get();
+                const { history, walls, shapes, assets, textAnnotations, labelArrows, dimensions, groups } = get();
                 if (history.future.length === 0) return;
 
                 const next = history.future[0];
                 const newFuture = history.future.slice(1);
 
                 set({
-                    walls: next.walls,
-                    shapes: next.shapes,
-                    assets: next.assets,
+                    walls: next.walls || [],
+                    shapes: next.shapes || [],
+                    assets: next.assets || [],
+                    textAnnotations: next.textAnnotations || [],
+                    labelArrows: next.labelArrows || [],
+                    dimensions: next.dimensions || [],
+                    groups: next.groups || [],
                     history: {
-                        past: [...history.past, { walls, shapes, assets }],
+                        past: [...history.past, { walls, shapes, assets, textAnnotations, labelArrows, dimensions, groups }],
                         future: newFuture,
                     },
                     hasUnsavedChanges: true,
@@ -1287,8 +1373,17 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             saveToHistory: () => {
-                const { walls, shapes, assets, history } = get();
-                const newPast = [...history.past, { walls, shapes, assets }].slice(-50);
+                const { walls, shapes, assets, textAnnotations, labelArrows, dimensions, groups, history } = get();
+                const snapshot = {
+                    walls: JSON.parse(JSON.stringify(walls)),
+                    shapes: JSON.parse(JSON.stringify(shapes)),
+                    assets: JSON.parse(JSON.stringify(assets)),
+                    textAnnotations: JSON.parse(JSON.stringify(textAnnotations)),
+                    labelArrows: JSON.parse(JSON.stringify(labelArrows)),
+                    dimensions: JSON.parse(JSON.stringify(dimensions)),
+                    groups: JSON.parse(JSON.stringify(groups)),
+                };
+                const newPast = [...history.past, snapshot].slice(-50);
                 set({
                     history: {
                         past: newPast,
@@ -1490,8 +1585,8 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             // Dimension methods
-            addDimension: (dimension) => {
-                get().saveToHistory();
+            addDimension: (dimension, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     dimensions: [...state.dimensions, dimension],
                     hasUnsavedChanges: true,
@@ -1515,8 +1610,8 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             // Text Annotation methods
-            addTextAnnotation: (annotation) => {
-                get().saveToHistory();
+            addTextAnnotation: (annotation, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     textAnnotations: [...state.textAnnotations, annotation],
                     hasUnsavedChanges: true,
@@ -1540,8 +1635,8 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             // Label Arrow methods
-            addLabelArrow: (arrow) => {
-                get().saveToHistory();
+            addLabelArrow: (arrow, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     labelArrows: [...state.labelArrows, arrow],
                     hasUnsavedChanges: true,
@@ -1565,9 +1660,9 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             // Comment methods
-            addComment: (comment) => {
-                get().saveToHistory();
-                const newComment = { ...comment, author: 'Jeremiah' };
+            addComment: (comment, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                const newComment = { ...comment };
                 set((state) => ({
                     comments: [...state.comments, newComment],
                     hasUnsavedChanges: true,
@@ -1691,6 +1786,7 @@ export const useProjectStore = create<ProjectState>()(
                     dimensions: [],
                     textAnnotations: [],
                     labelArrows: [],
+                    groups: [],
                     clipboard: [],
                 });
             },
@@ -1706,6 +1802,7 @@ export const useProjectStore = create<ProjectState>()(
                 assets: state.assets,
                 layers: state.layers,
                 dimensions: state.dimensions,
+                groups: state.groups,
             }),
         }
     )

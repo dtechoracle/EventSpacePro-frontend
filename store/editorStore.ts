@@ -17,6 +17,8 @@ export type Tool =
   | 'label-arrow'
   | 'text-annotation'
   | 'trim'
+  | 'trim-to-object'
+  | 'trim-to-blend'
   | 'pan';
 
 export type DimensionType = 'linear' | 'aligned' | 'angular' | 'radial';
@@ -93,6 +95,7 @@ export type EditorState = {
   toggleGrid: () => void;
   setGridSize: (size: number) => void;
   toggleSnapToGrid: () => void;
+  setSnapToGrid: (snap: boolean) => void;
   toggleSnapToObjects: () => void;
 
   setDragging: (dragging: boolean) => void;
@@ -232,6 +235,7 @@ export const useEditorStore = create<EditorState>()(
       setGridSize: (size) => set({ gridSize: size }),
 
       toggleSnapToGrid: () => set((state) => ({ snapToGrid: !state.snapToGrid })),
+      setSnapToGrid: (snap) => set({ snapToGrid: snap }),
 
       toggleSnapToObjects: () => set((state) => ({ snapToObjects: !state.snapToObjects })),
 

@@ -4,6 +4,7 @@ import Image from "next/image"
 import { ASSET_LIBRARY, AssetDef, AssetCategory, ASSET_CATEGORIES } from "@/lib/assets"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import { InlineSvg } from "@/components/tools/InlineSvg"
 
 type AssetsModalProps = {
   isOpen: boolean
@@ -19,7 +20,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
   const modalRef = useRef<HTMLDivElement | null>(null)
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const [activeCategory, setActiveCategory] =
-    useState<AssetCategory>("test")
+    useState<AssetCategory>("Furniture")
   const [searchTerm, setSearchTerm] = useState("")
 
   useEffect(() => {
@@ -76,10 +77,19 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
       }}
       whileHover={{ scale: 1.08 }}
       whileTap={{ scale: 0.95 }}
-      className="w-[4.5rem] h-[4.5rem] rounded-xl bg-[#00000005] hover:bg-[#0933BB12] p-2 flex flex-col items-center justify-center"
+      className="w-[5.5rem] h-[5.5rem] flex flex-col items-center justify-center transition-all text-slate-500 hover:text-slate-900 group"
     >
-      <Image src={encodeURI(asset.path)} alt={asset.label} width={26} height={26} />
-      <span className="text-[0.6rem] mt-1 text-center leading-tight">
+      <div className="w-16 h-16 flex items-center justify-center overflow-hidden mb-1">
+        <InlineSvg
+          key={asset.path}
+          src={asset.path}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.2}
+          category={asset.category}
+        />
+      </div>
+      <span className="text-[0.6rem] text-center font-medium leading-[1.1] truncate w-full px-1 opacity-70 group-hover:opacity-100 transition-opacity">
         {formatLabel(asset.label)}
       </span>
     </motion.button>
@@ -93,7 +103,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
       drag
       dragMomentum={false}
       style={{ left: position.x, top: position.y }}
-      className="fixed w-[28rem] h-[33rem] bg-white text-gray-900 rounded-lg p-5 shadow-2xl z-[9999] flex flex-col" // Removed rounded-[2rem], changed to rounded-lg
+      className="fixed w-[28rem] h-[33rem] bg-white text-gray-900 rounded-lg p-5 shadow-2xl z-[9999] flex flex-col"
       initial={{ opacity: 0, scale: 0.92 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.92 }}

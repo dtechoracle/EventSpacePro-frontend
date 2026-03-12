@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BsFolder, BsHeart, BsCalendar, BsStars, BsTrash, BsChevronLeft, BsChevronRight } from "react-icons/bs";
-import { FiLogOut } from "react-icons/fi";
+import { FiLogOut, FiUser } from "react-icons/fi";
 import { useUserStore } from "@/store/userStore";
 import { useRouter } from "next/router";
 import Cookies from "js-cookie";
@@ -91,18 +91,27 @@ export default function DashboardSidebar() {
         {collapsed ? <BsChevronRight className="w-3 h-3" /> : <BsChevronLeft className="w-3 h-3" />}
       </button>
       {/* Profile Section */}
-      <div className="p-4 border-b border-gray-200/50">
+      <div
+        onClick={() => router.push("/dashboard/profile")}
+        className="p-4 border-b border-gray-200/50 cursor-pointer hover:bg-gray-50 transition-colors group"
+      >
         <div className="flex items-center gap-3">
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold shadow-md flex-shrink-0"
-            style={{ backgroundColor: avatarColor }}
-          >
-            {userInitial}
-          </div>
+          {user?.avatar ? (
+            <div className="w-10 h-10 rounded-full overflow-hidden shadow-md flex-shrink-0 border-2 border-white">
+              <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold shadow-md flex-shrink-0"
+              style={{ backgroundColor: avatarColor }}
+            >
+              {userInitial}
+            </div>
+          )}
           {!collapsed && (
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-sm truncate text-gray-800">{userName}</div>
-              <div className="text-xs text-gray-500 truncate">My Workspace</div>
+              <div className="font-semibold text-sm truncate text-gray-800 group-hover:text-blue-600 transition-colors">{userName}</div>
+              <div className="text-xs text-gray-500 truncate">Account Settings</div>
             </div>
           )}
         </div>
@@ -185,6 +194,21 @@ export default function DashboardSidebar() {
           >
             <BsTrash className="w-4 h-4 flex-shrink-0" />
             {!isCollapsed && <span>Trash</span>}
+          </a>
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              router.push("/dashboard/profile");
+            }}
+            className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors ${router.pathname === "/dashboard/profile"
+              ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
+              : "text-gray-600"
+              }`}
+            title={isCollapsed ? "Profile Settings" : undefined}
+          >
+            <FiUser className="w-4 h-4 flex-shrink-0" />
+            {!isCollapsed && <span>Profile Settings</span>}
           </a>
         </nav>
 

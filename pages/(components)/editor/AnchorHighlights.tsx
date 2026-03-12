@@ -20,7 +20,7 @@ export default function AnchorHighlights({ mmToPx }: AnchorHighlightsProps) {
 
   const targetAsset = snapTargetAssetId ? assets.find((a) => a.id === snapTargetAssetId) : null;
   const sourceAsset = snapSourceAssetId ? assets.find((a) => a.id === snapSourceAssetId) : null;
-  
+
   // Debug logging
   if (snapToAnchorMode) {
     console.log('AnchorHighlights render:', {
@@ -37,24 +37,24 @@ export default function AnchorHighlights({ mmToPx }: AnchorHighlightsProps) {
     const isShape = asset.type === "square" || asset.type === "circle";
     const anchors: AnchorPoint[] = isShape
       ? calculateShapeAnchors({
-          x: asset.x,
-          y: asset.y,
-          width: asset.width || 0,
-          height: asset.height || 0,
-        } as any)
+        x: asset.x,
+        y: asset.y,
+        width: asset.width || 0,
+        height: asset.height || 0,
+      } as any)
       : calculateAssetAnchors({
-          x: asset.x,
-          y: asset.y,
-          width: asset.width || 0,
-          height: asset.height || 0,
-          scale: asset.scale || 1,
-        } as any);
+        x: asset.x,
+        y: asset.y,
+        width: asset.width || 0,
+        height: asset.height || 0,
+        scale: asset.scale || 1,
+      } as any);
 
     const highlightColor = isTarget ? "#3B82F6" : "#22C55E"; // Blue for target, green for source
     const selectedAnchorId = isTarget ? snapTargetAnchor : snapSourceAnchor;
 
     // Calculate bounding box correctly
-    const halfW = isShape 
+    const halfW = isShape
       ? (asset.width || 0) / 2
       : ((asset.width || 0) * (asset.scale || 1)) / 2;
     const halfH = isShape
@@ -85,10 +85,10 @@ export default function AnchorHighlights({ mmToPx }: AnchorHighlightsProps) {
               <circle
                 cx={anchor.x * mmToPx}
                 cy={anchor.y * mmToPx}
-                r={isSelected ? 8 : 6}
-                fill={isSelected ? highlightColor : "#FFFFFF"}
-                stroke={highlightColor}
-                strokeWidth={isSelected ? 3 : 2}
+                r={isSelected ? 5 : 4}
+                fill={highlightColor}
+                stroke={isSelected ? "#FFFFFF" : "none"}
+                strokeWidth={isSelected ? 3 : 0}
                 opacity={isSelected ? 1 : 0.9}
               />
               {/* Invisible larger circle for easier clicking */}

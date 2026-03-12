@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="630mm" height="510mm" viewBox="0 0 630 510" version="1.1" xmlns="http://www.w3.org/2000/svg" style="stroke-linecap:round;stroke-linejoin:round;">
+    <g transform="translate(-7.263, 517.3046) scale(1,-1)">
+            <!-- Auto-generated fillable area -->
+            <!-- Combined Path for Seat/Frame to allow proper filling -->
+        <path d="M67.263,517.3046 L577.263,517.3046 L577.263,487.3046 A1098.75,1098.75 0 0,0 67.263,487.3046 L67.263,517.3046 Z" style="stroke:#000000;stroke-width:0.1;" />
+        <path d="M67.263,37.3046 L577.263,37.3046 L577.263,67.3046 A1098.75,1098.75 0 0,0 67.263,67.3046 L67.263,37.3046 Z" style="stroke:#000000;stroke-width:0.1;" />
+        
+        <!-- Seat Main Body -->
+        <path d="M127.263,97.3046 L517.263,97.3046 A75,75 0 0,1 637.263,97.3046 L637.263,367.3046 A75,75 0 0,1 517.263,367.3046 L127.263,367.3046 A75,75 0 0,1 7.263,367.3046 L7.263,97.3046 A75,75 0 0,1 127.263,97.3046 Z" style="stroke:#000000;stroke-width:0.1;" />
+        
+        <!-- Armrest Supports -->
+        <path d="M67.263,427.3046 L577.263,427.3046" style="stroke:#000000;stroke-width:0.1;"/>
+        <path d="M382.263,458.5766 L382.263,427.3046" style="stroke:#000000;stroke-width:0.1;"/>
+        <path d="M262.263,427.3046 L262.263,459.2396" style="stroke:#000000;stroke-width:0.1;"/>
+    </g>
+</svg>

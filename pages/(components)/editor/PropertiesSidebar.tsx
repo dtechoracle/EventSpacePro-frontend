@@ -58,8 +58,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
   };
 
   const handleToggleSnapToGrid = () => {
-    toggleSnapToGrid();
-    editorStore.toggleSnapToGrid();
+    const nextState = !snapToGridEnabled;
+    useEditorStore.getState().setSnapToGrid(nextState);
+    useSceneStore.getState().setSnapToGridEnabled(nextState);
   };
 
   const syncToScene = (id: string, updates: any) => {
@@ -802,8 +803,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           <option value="solid">Solid Color</option>
                           <option value="gradient">Gradient</option>
                           <option value="texture">Texture</option>
-                          <option value="image">Image</option>
-                          <option value="none">None</option>
+                          <option value="hatch">Hatch Pattern</option>
+                          <option value="image">Legacy Image Fill</option>
+                          <option value="none">None (Transparent)</option>
                         </select>
                       </div>
                     )}
@@ -909,10 +911,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     {(selectedItem as any).fillType === 'texture' && (
                       <div className="space-y-2 mb-2">
                         <div className="grid grid-cols-2 gap-2">
-                          {texturePatterns.map((pattern) => (
+                          {texturePatterns.filter(p => !p.id.startsWith('hatch-')).map((pattern) => (
                             <button
                               key={pattern.id}
-                              className={`h-8 border rounded overflow-hidden relative ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500' : 'border-gray-300'
+                              className={`aspect-square h-auto border rounded overflow-hidden relative ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500' : 'border-gray-300'
                                 }`}
                               onClick={() => {
                                 const val = pattern.id;
@@ -930,16 +932,18 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               }}
                               title={pattern.name}
                             >
-                              <svg width="100%" height="100%" viewBox="0 0 512 512" preserveAspectRatio="none">
-                                {pattern.id === 'grass' ? (
-                                  <image href="/assets/grass-texture.svg" width="512" height="512" preserveAspectRatio="none" />
-                                ) : (
-                                  <>
-                                    <defs dangerouslySetInnerHTML={{ __html: pattern.svg.replace(/id="([^"]+)"/g, 'id="preview-shape-$1"') }} />
-                                    <rect width="512" height="512" fill={`url(#preview-shape-${pattern.id})`} />
-                                  </>
-                                )}
-                              </svg>
+                              <div className="w-full h-full bg-white text-slate-800">
+                                <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+                                  {pattern.isImage ? (
+                                    <image href={pattern.path} width="100" height="100" preserveAspectRatio="xMidYMid slice" />
+                                  ) : (
+                                    <>
+                                      <defs dangerouslySetInnerHTML={{ __html: (pattern.svg || "").replace(/id="([^"]+)"/g, 'id="preview-sidebar-texture-$1"') }} />
+                                      <rect width="100" height="100" fill={`url(#preview-sidebar-texture-${pattern.id})`} />
+                                    </>
+                                  )}
+                                </svg>
+                              </div>
                             </button>
                           ))}
                         </div>
@@ -963,6 +967,92 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             type="number"
                             value={(selectedItem as any).fillTextureThickness || 1}
                             onChange={(e) => updateShape(selectedItem.id, { fillTextureThickness: Number(e.target.value) } as any)}
+                            className="sidebar-input w-12 text-right text-xs"
+                            min={0.1}
+                            max={10}
+                            step={0.1}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Hatch Fill (Shape or Asset) */}
+                    {(selectedItem as any).fillType === 'hatch' && (
+                      <div className="space-y-2 mb-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          {texturePatterns.filter(p => p.id.startsWith('hatch-')).map((pattern) => (
+                            <button
+                              key={pattern.id}
+                              className={`aspect-square h-auto border rounded overflow-hidden relative ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500' : 'border-gray-300'
+                                }`}
+                              onClick={() => {
+                                const val = pattern.id;
+                                if ((itemType as string) === 'wall' && !(selectedItem as any).wallSegments) {
+                                  updateWall(selectedItem.id, { fillTexture: val });
+                                  syncToScene(selectedItem.id, { fillTexture: val });
+                                }
+                                else if ((itemType as string) === 'shape') {
+                                  updateShape(selectedItem.id, { fillTexture: val });
+                                }
+                                else {
+                                  updateAsset(selectedItem.id, { fillTexture: val } as any);
+                                  updateSceneAsset(selectedItem.id, { fillTexture: val } as any);
+                                }
+                              }}
+                              title={pattern.name}
+                            >
+                              <div className="w-full h-full bg-white text-slate-800">
+                                <svg width="100%" height="100%" viewBox="0 0 40 40" preserveAspectRatio="xMidYMid slice">
+                                  {pattern.isImage ? (
+                                    <image href={pattern.path} width="40" height="40" preserveAspectRatio="xMidYMid slice" />
+                                  ) : (
+                                    <>
+                                      <defs dangerouslySetInnerHTML={{ __html: (pattern.svg || "").replace(/id="([^"]+)"/g, 'id="preview-sidebar-hatch-$1"') }} />
+                                      <rect width="40" height="40" fill={`url(#preview-sidebar-hatch-${pattern.id})`} />
+                                    </>
+                                  )}
+                                </svg>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Scale</span>
+                          <input
+                            type="number"
+                            value={(selectedItem as any).fillTextureScale || 1}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (itemType === 'shape') {
+                                updateShape((selectedItem as any).id, { fillTextureScale: val });
+                              } else {
+                                updateAsset(selectedItem.id, { fillTextureScale: val } as any);
+                                updateSceneAsset(selectedItem.id, { fillTextureScale: val } as any);
+                              }
+                            }}
+                            className="sidebar-input w-12 text-right text-xs"
+                            min={0.1}
+                            max={10}
+                            step={0.1}
+                          />
+                        </div>
+
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Thickness</span>
+                          <input
+                            type="number"
+                            value={(selectedItem as any).fillTextureThickness || 1}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              const safeVal = Math.max(0.1, val);
+                              if (itemType === 'shape') {
+                                updateShape((selectedItem as any).id, { fillTextureThickness: safeVal });
+                              } else {
+                                updateAsset(selectedItem.id, { fillTextureThickness: safeVal } as any);
+                                updateSceneAsset(selectedItem.id, { fillTextureThickness: safeVal } as any);
+                              }
+                            }}
                             className="sidebar-input w-12 text-right text-xs"
                             min={0.1}
                             max={10}
@@ -1480,8 +1570,65 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       >
                         <option value="color">Color</option>
                         <option value="texture">Texture</option>
+                        <option value="hatch">Hatch</option>
                         <option value="none">None</option>
                       </select>
+                    </div>
+
+                    {/* Wall Stroke Properties */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500 text-xs">Stroke Width</span>
+                      <input
+                        type="number"
+                        value={(selectedItem as any).strokeWidth || 0}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          if (itemType === 'wall') {
+                            updateWall(selectedItem.id, { strokeWidth: val });
+                            syncToScene(selectedItem.id, { strokeWidth: val });
+                          } else {
+                            updateAsset(selectedItem.id, { strokeWidth: val } as any);
+                            updateSceneAsset(selectedItem.id, { strokeWidth: val } as any);
+                          }
+                        }}
+                        className="sidebar-input w-16 text-right"
+                        min={0}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500 text-xs">Stroke Color</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={(selectedItem as any).stroke || '#000000'}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (itemType === 'wall') {
+                              updateWall(selectedItem.id, { stroke: val });
+                              syncToScene(selectedItem.id, { stroke: val });
+                            } else {
+                              updateAsset(selectedItem.id, { strokeColor: val } as any);
+                              updateSceneAsset(selectedItem.id, { strokeColor: val } as any);
+                            }
+                          }}
+                          className="sidebar-input w-20 text-xs"
+                        />
+                        <input
+                          type="color"
+                          value={(selectedItem as any).stroke || '#000000'}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (itemType === 'wall') {
+                              updateWall(selectedItem.id, { stroke: val });
+                              syncToScene(selectedItem.id, { stroke: val });
+                            } else {
+                              updateAsset(selectedItem.id, { strokeColor: val } as any);
+                              updateSceneAsset(selectedItem.id, { strokeColor: val } as any);
+                            }
+                          }}
+                          className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                        />
+                      </div>
                     </div>
 
                     {/* Wall Fill Color */}
@@ -1525,23 +1672,22 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       </div>
                     )}
 
+
+
                     {/* Wall Texture Fill */}
                     {(selectedItem as any).fillType === 'texture' && (
                       <div className="space-y-2 mb-2">
                         <div className="grid grid-cols-2 gap-2">
-                          {texturePatterns.map((pattern) => (
+                          {texturePatterns.filter(p => !p.id.startsWith('hatch-')).map((pattern) => (
                             <button
                               key={pattern.id}
-                              className={`h-8 border rounded overflow-hidden relative ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500' : 'border-gray-300'
+                              className={`aspect-square h-auto border rounded overflow-hidden relative ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500' : 'border-gray-300'
                                 }`}
                               onClick={() => {
                                 const val = pattern.id;
                                 if ((itemType as string) === 'wall' && !(selectedItem as any).wallSegments) {
                                   updateWall(selectedItem.id, { fillTexture: val });
                                   syncToScene(selectedItem.id, { fillTexture: val });
-                                }
-                                else if ((itemType as string) === 'shape') {
-                                  updateShape(selectedItem.id, { fillTexture: val });
                                 }
                                 else {
                                   updateAsset(selectedItem.id, { fillTexture: val } as any);
@@ -1551,11 +1697,11 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               title={pattern.name}
                             >
                               <svg width="100%" height="100%" viewBox="0 0 512 512" preserveAspectRatio="none">
-                                {pattern.id === 'grass' ? (
-                                  <image href="/assets/grass-texture.svg" width="512" height="512" preserveAspectRatio="none" />
+                                {pattern.isImage ? (
+                                  <image href={pattern.path} width="512" height="512" preserveAspectRatio="none" />
                                 ) : (
                                   <>
-                                    <defs dangerouslySetInnerHTML={{ __html: pattern.svg.replace(/id="([^"]+)"/g, 'id="preview-wall-$1"') }} />
+                                    <defs dangerouslySetInnerHTML={{ __html: (pattern.svg || "").replace(/id="([^"]+)"/g, 'id="preview-wall-$1"') }} />
                                     <rect width="512" height="512" fill={`url(#preview-wall-${pattern.id})`} />
                                   </>
                                 )}
@@ -1611,6 +1757,92 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         </div>
                       </div>
                     )}
+
+                    {/* Wall Hatch Fill */}
+                    {(selectedItem as any).fillType === 'hatch' && (
+                      <div className="space-y-2 mb-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          {texturePatterns.filter(p => p.id.startsWith('hatch-')).map((pattern) => (
+                            <button
+                              key={pattern.id}
+                              className={`aspect-square h-auto border rounded overflow-hidden relative ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500' : 'border-gray-300'
+                                }`}
+                              onClick={() => {
+                                const val = pattern.id;
+                                if ((itemType as string) === 'wall' && !(selectedItem as any).wallSegments) {
+                                  updateWall(selectedItem.id, { fillTexture: val });
+                                  syncToScene(selectedItem.id, { fillTexture: val });
+                                }
+                                else {
+                                  updateAsset(selectedItem.id, { fillTexture: val } as any);
+                                  updateSceneAsset(selectedItem.id, { fillTexture: val } as any);
+                                }
+                              }}
+                              title={pattern.name}
+                            >
+                              <svg width="100%" height="100%" viewBox="0 0 512 512" preserveAspectRatio="none">
+                                {pattern.isImage ? (
+                                  <image href={pattern.path} width="512" height="512" preserveAspectRatio="none" />
+                                ) : (
+                                  <>
+                                    <defs dangerouslySetInnerHTML={{ __html: (pattern.svg || "").replace(/id="([^"]+)"/g, 'id="preview-wall-hatch-$1"') }} />
+                                    <rect width="512" height="512" fill={`url(#preview-wall-hatch-${pattern.id})`} />
+                                  </>
+                                )}
+                              </svg>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Scale</span>
+                          <input
+                            type="number"
+                            value={(selectedItem as any).fillTextureScale || 1}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (itemType === 'wall') {
+                                updateWall(selectedItem.id, { fillTextureScale: val });
+                                syncToScene(selectedItem.id, { fillTextureScale: val });
+                              }
+                              else {
+                                updateAsset(selectedItem.id, { fillTextureScale: val } as any);
+                                updateSceneAsset(selectedItem.id, { fillTextureScale: val } as any);
+                              }
+                            }}
+                            className="sidebar-input w-12 text-right text-xs"
+                            min={0.1}
+                            max={10}
+                            step={0.1}
+                          />
+                        </div>
+
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Thickness</span>
+                          <input
+                            type="number"
+                            value={(selectedItem as any).fillTextureThickness || 1}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              const safeVal = Math.max(0.1, val);
+                              if (itemType === 'wall') {
+                                updateWall(selectedItem.id, { fillTextureThickness: safeVal });
+                                syncToScene(selectedItem.id, { fillTextureThickness: safeVal });
+                              }
+                              else {
+                                updateAsset(selectedItem.id, { fillTextureThickness: safeVal } as any);
+                                updateSceneAsset(selectedItem.id, { fillTextureThickness: safeVal } as any);
+                              }
+                            }}
+                            className="sidebar-input w-12 text-right text-xs"
+                            min={0.1}
+                            max={10}
+                            step={0.1}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+
 
                     {/* Wall Thickness */}
                     <div className="flex justify-between items-center mb-2">

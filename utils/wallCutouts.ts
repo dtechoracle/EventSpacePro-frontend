@@ -1,5 +1,6 @@
 import { Asset } from '@/store/projectStore';
 import { Wall } from '@/store/projectStore';
+import { ASSET_LIBRARY } from '@/lib/assets';
 
 export interface WallCutout {
     assetId: string;
@@ -11,16 +12,18 @@ export interface WallCutout {
 }
 
 export function isCutoutAsset(asset: Partial<Asset>): boolean {
-    const id = (asset.id || '').toLowerCase();
-    const type = (asset.type || '').toLowerCase();
+    const id = (asset.type || asset.id || '').toLowerCase(); // asset.type usually holds the library ID
+    const def = ASSET_LIBRARY.find(a => a.id.toLowerCase() === id);
+
+    if (def && def.category === 'Space_Elements') {
+        return true;
+    }
+
+    // Fallback logic just in case
     return id.includes('door') ||
         id.includes('window') ||
         id.includes('group 91') ||
-        id.includes('group-91') ||
-        type.includes('door') ||
-        type.includes('window') ||
-        type.includes('group 91') ||
-        type.includes('group-91');
+        id.includes('group-91');
 }
 
 export function detectWallCutout(
@@ -40,26 +43,36 @@ export function detectWallCutout(
     const assetWidth = asset.width * (asset.scale || 1);
     const assetHeight = (asset.height || asset.width) * (asset.scale || 1);
 
+    // Use a small fixed threshold (e.g. 50mm) to ensure the asset is actually ON the wall
+    // This prevents gaps from appearing when the door is only nearby.
+    const dynamicThreshold = 20;
+
     for (const edge of wall.edges) {
         const nodeA = wall.nodes.find(n => n.id === edge.nodeA);
         const nodeB = wall.nodes.find(n => n.id === edge.nodeB);
 
         if (!nodeA || !nodeB) continue;
 
-        const { distance, param } = distanceToSegment(
+        const { distance, param, closestPoint } = distanceToSegment(
             assetCenterX, assetCenterY,
             nodeA.x, nodeA.y, nodeB.x, nodeB.y
         );
 
-        if (distance <= threshold) {
+        if (distance <= dynamicThreshold) {
             const edgeLength = Math.hypot(nodeB.x - nodeA.x, nodeB.y - nodeA.y);
             const edgeAngle = Math.atan2(nodeB.y - nodeA.y, nodeB.x - nodeA.x);
             const assetRotation = (asset.rotation || 0) * Math.PI / 180;
             const relativeAngle = Math.abs(assetRotation - edgeAngle);
 
+            // Project the asset's bounding box onto the wall edge
+            // Assuming asset is rectangular and rotated
+            // The projected width of the asset along the wall edge
             const cutoutWidth = Math.abs(Math.cos(relativeAngle)) * assetWidth +
                 Math.abs(Math.sin(relativeAngle)) * assetHeight;
 
+            // Compute parametric distance of the asset's center projection (closestPoint)
+            // relative to the segment. closestPoint is already parametrically 'param' along the segment
+            // but we need to ensure the cutout is centered at 'closestPoint'
             const halfCutout = cutoutWidth / (2 * edgeLength);
             const startParam = Math.max(0, param - halfCutout);
             const endParam = Math.min(1, param + halfCutout);
