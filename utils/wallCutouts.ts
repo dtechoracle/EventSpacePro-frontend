@@ -38,14 +38,28 @@ export function detectWallCutout(
         return null;
     }
 
-    const assetCenterX = asset.x;
-    const assetCenterY = asset.y;
     const assetWidth = asset.width * (asset.scale || 1);
     const assetHeight = (asset.height || asset.width) * (asset.scale || 1);
+    const assetCenterX = asset.x;
+    const assetCenterY = asset.y;
+    const dynamicThreshold = 100;
 
-    // Use a small fixed threshold (e.g. 50mm) to ensure the asset is actually ON the wall
-    // This prevents gaps from appearing when the door is only nearby.
-    const dynamicThreshold = 20;
+    // For space elements, we want to check if any part of the asset's "base" or bounding box is on the wall.
+    // Instead of just checking the center, we'll check the center and the 4 midpoints of the sides.
+    const halfW = assetWidth / 2;
+    const halfH = assetHeight / 2;
+    const rot = (asset.rotation || 0) * Math.PI / 180;
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+
+    // Points to check: center, and 4 midpoints of edges
+    const checkPoints = [
+        { x: assetCenterX, y: assetCenterY }, // Center
+        { x: assetCenterX + halfH * sin, y: assetCenterY - halfH * cos }, // Top mid
+        { x: assetCenterX - halfH * sin, y: assetCenterY + halfH * cos }, // Bottom mid
+        { x: assetCenterX - halfW * cos, y: assetCenterY - halfW * sin }, // Left mid
+        { x: assetCenterX + halfW * cos, y: assetCenterY + halfW * sin }, // Right mid
+    ];
 
     for (const edge of wall.edges) {
         const nodeA = wall.nodes.find(n => n.id === edge.nodeA);
@@ -53,29 +67,34 @@ export function detectWallCutout(
 
         if (!nodeA || !nodeB) continue;
 
-        const { distance, param, closestPoint } = distanceToSegment(
-            assetCenterX, assetCenterY,
-            nodeA.x, nodeA.y, nodeB.x, nodeB.y
-        );
+        // Find the point among our checkPoints that is closest to the wall edge
+        let bestDistance = Infinity;
+        let bestParam = 0;
 
-        if (distance <= dynamicThreshold) {
+        for (const pt of checkPoints) {
+            const { distance, param } = distanceToSegment(
+                pt.x, pt.y,
+                nodeA.x, nodeA.y, nodeB.x, nodeB.y
+            );
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestParam = param;
+            }
+        }
+
+        if (bestDistance <= dynamicThreshold) {
             const edgeLength = Math.hypot(nodeB.x - nodeA.x, nodeB.y - nodeA.y);
             const edgeAngle = Math.atan2(nodeB.y - nodeA.y, nodeB.x - nodeA.x);
             const assetRotation = (asset.rotation || 0) * Math.PI / 180;
             const relativeAngle = Math.abs(assetRotation - edgeAngle);
 
             // Project the asset's bounding box onto the wall edge
-            // Assuming asset is rectangular and rotated
-            // The projected width of the asset along the wall edge
             const cutoutWidth = Math.abs(Math.cos(relativeAngle)) * assetWidth +
                 Math.abs(Math.sin(relativeAngle)) * assetHeight;
 
-            // Compute parametric distance of the asset's center projection (closestPoint)
-            // relative to the segment. closestPoint is already parametrically 'param' along the segment
-            // but we need to ensure the cutout is centered at 'closestPoint'
             const halfCutout = cutoutWidth / (2 * edgeLength);
-            const startParam = Math.max(0, param - halfCutout);
-            const endParam = Math.min(1, param + halfCutout);
+            const startParam = Math.max(0, bestParam - halfCutout);
+            const endParam = Math.min(1, bestParam + halfCutout);
 
             return {
                 assetId: asset.id,

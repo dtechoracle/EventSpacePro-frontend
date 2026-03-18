@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React from 'react';
 import { Shape } from '@/store/projectStore';
@@ -38,10 +38,16 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
             return `url(#${gradientId})`;
         } else if (fillType === 'none') {
             return 'transparent';
-        } else if (fillType === 'hatch' || fillType === 'texture') {
-            const scale = shape.fillTextureScale || 1;
+        } else if (fillType === 'hatch' || fillType === 'texture' || fillType === 'hash') {
+            const scale = shape.fillTextureScale || 4;
             const thickness = shape.fillTextureThickness || 1;
-            return shape.fillTexture ? `url(#${shape.fillTexture}-scale-${scale}-thick-${thickness})` : fillColor;
+            if (shape.fillTexture) {
+                return `url(#${shape.fillTexture}-scale-${scale}-thick-${thickness})`;
+            }
+            if (fillType === 'hatch' || fillType === 'hash') {
+                return `url(#${hatchId})`;
+            }
+            return fillColor;
         } else if (fillType === 'image' && shape.fillImage) {
             return `url(#${patternId})`;
         } else {
@@ -615,7 +621,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
         if (shape.fillType !== 'hatch') return null;
 
         const pattern = shape.hatchPattern || 'horizontal';
-        const spacing = shape.hatchSpacing || 50;
+        const spacing = (shape.hatchSpacing || 25) * (shape.fillTextureScale || 4);
         const color = shape.hatchColor || '#000000';
         const strokeWidth = shape.hatchThickness || 1;
 
@@ -694,10 +700,8 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
         if (shape.fillType !== 'image' || !shape.fillImage) return null;
 
         const scale = shape.fillImageScale || 1;
-        // Use the shape's own bounds so the image covers the shape at scale=1,
-        // and tiles at smaller scales (e.g. scale=0.5 = 4 tiles across the shape).
-        const tileW = Math.max(1, shape.width * scale);
-        const tileH = Math.max(1, shape.height * scale);
+        const tileW = Math.max(1, 1024 * scale);
+        const tileH = Math.max(1, 1024 * scale);
 
         return (
             <pattern id={patternId} patternUnits="userSpaceOnUse"
@@ -719,7 +723,13 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                 {renderImageDef()}
             </defs>
 
-            <g transform={transform} style={{ cursor: 'pointer' }}>
+            <g 
+                transform={transform} 
+                style={{ 
+                    cursor: 'pointer',
+                    color: shape.hatchColor || shape.fill || '#000000'
+                }}
+            >
                 {/* Render highlight behind the shape */}
                 {showHighlight && renderPrimitive(true)}
                 {/* Render actual shape */}

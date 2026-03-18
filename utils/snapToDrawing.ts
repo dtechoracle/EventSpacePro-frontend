@@ -131,40 +131,49 @@ export function getSnapPoints(element: SnapTarget): SnapPoint[] {
             snapPoints.push({ x: node.x, y: node.y, type: 'center', elementId: wall.id });
         });
 
-        wall.edges.forEach(edge => {
-            const n1 = wall.nodes.find(n => n.id === edge.nodeA);
-            const n2 = wall.nodes.find(n => n.id === edge.nodeB);
-            if (n1 && n2) {
-                // Centerline midpoint
-                snapPoints.push({
-                    x: (n1.x + n2.x) / 2,
-                    y: (n1.y + n2.y) / 2,
-                    type: 'midpoint',
-                    elementId: wall.id
+                wall.edges.forEach(edge => {
+                    const n1 = wall.nodes.find(n => n.id === edge.nodeA);
+                    const n2 = wall.nodes.find(n => n.id === edge.nodeB);
+                    if (n1 && n2) {
+                        const dx = n2.x - n1.x;
+                        const dy = n2.y - n1.y;
+                        const length = Math.sqrt(dx * dx + dy * dy);
+
+                        // Centerline midpoint
+                        snapPoints.push({
+                            x: (n1.x + n2.x) / 2,
+                            y: (n1.y + n2.y) / 2,
+                            type: 'midpoint',
+                            elementId: wall.id
+                        });
+
+                        if (length > 0) {
+                            const thickness = edge.thickness || 150;
+                            const halfThick = thickness / 2;
+                            const ux = dx / length;
+                            const uy = dy / length;
+                            const px = -uy * halfThick;
+                            const py = ux * halfThick;
+
+                            const midX = (n1.x + n2.x) / 2;
+                            const midY = (n1.y + n2.y) / 2;
+
+                            // Left and Right midpoints
+                            snapPoints.push(
+                                { x: midX + px, y: midY + py, type: 'midpoint', elementId: wall.id },
+                                { x: midX - px, y: midY - py, type: 'midpoint', elementId: wall.id }
+                            );
+
+                            // Four corners of the segment (visual approximation)
+                            snapPoints.push(
+                                { x: n1.x + px, y: n1.y + py, type: 'corner', elementId: wall.id },
+                                { x: n1.x - px, y: n1.y - py, type: 'corner', elementId: wall.id },
+                                { x: n2.x + px, y: n2.y + py, type: 'corner', elementId: wall.id },
+                                { x: n2.x - px, y: n2.y - py, type: 'corner', elementId: wall.id }
+                            );
+                        }
+                    }
                 });
-
-                // Add visual corners (offset by thickness/2)
-                const dx = n2.x - n1.x;
-                const dy = n2.y - n1.y;
-                const length = Math.sqrt(dx * dx + dy * dy);
-                if (length > 0) {
-                    const thickness = edge.thickness || 150; // Default if missing
-                    const halfThick = thickness / 2;
-                    const ux = dx / length;
-                    const uy = dy / length;
-                    const px = -uy * halfThick;
-                    const py = ux * halfThick;
-
-                    // Four corners of the segment (visual approximation)
-                    snapPoints.push(
-                        { x: n1.x + px, y: n1.y + py, type: 'corner', elementId: wall.id },
-                        { x: n1.x - px, y: n1.y - py, type: 'corner', elementId: wall.id },
-                        { x: n2.x + px, y: n2.y + py, type: 'corner', elementId: wall.id },
-                        { x: n2.x - px, y: n2.y - py, type: 'corner', elementId: wall.id }
-                    );
-                }
-            }
-        });
     }
     return snapPoints;
 }

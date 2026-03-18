@@ -12,9 +12,12 @@ export function calculateWorkspaceBounds(
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
+    let hasActualContent = false;
+    let backgroundShape: Shape | null = null;
 
     // Process walls (support both node-based walls and wall-polygon from API)
     walls.forEach(wall => {
+        let wallHasPoints = false;
         // Node-based walls
         if (wall.nodes && wall.nodes.length) {
             wall.nodes.forEach(node => {
@@ -22,6 +25,7 @@ export function calculateWorkspaceBounds(
                 minY = Math.min(minY, node.y);
                 maxX = Math.max(maxX, node.x);
                 maxY = Math.max(maxY, node.y);
+                wallHasPoints = true;
             });
         }
 
@@ -35,6 +39,7 @@ export function calculateWorkspaceBounds(
                 minY = Math.min(minY, py);
                 maxX = Math.max(maxX, px);
                 maxY = Math.max(maxY, py);
+                wallHasPoints = true;
             });
         }
 
@@ -48,12 +53,25 @@ export function calculateWorkspaceBounds(
                 minY = Math.min(minY, py);
                 maxX = Math.max(maxX, px);
                 maxY = Math.max(maxY, py);
+                wallHasPoints = true;
             });
+        }
+
+        if (wallHasPoints) {
+            hasActualContent = true;
         }
     });
 
     // Process shapes (shapes are centered at x, y)
     shapes.forEach(shape => {
+        // Skip background texture for bounds calculation to ensure tight zoom on content
+        if (shape.id === 'background-texture') {
+            backgroundShape = shape;
+            return;
+        }
+
+        hasActualContent = true;
+
         const halfWidth = shape.width / 2;
         const halfHeight = shape.height / 2;
         const left = shape.x - halfWidth;
@@ -82,9 +100,19 @@ export function calculateWorkspaceBounds(
         minY = Math.min(minY, top);
         maxX = Math.max(maxX, right);
         maxY = Math.max(maxY, bottom);
+        hasActualContent = true;
     });
 
-    // If no items found, return null
+    // If no actual content found but we have a background, use the background
+    if (!hasActualContent && backgroundShape) {
+        const bg = backgroundShape as Shape;
+        minX = bg.x - bg.width / 2;
+        minY = bg.y - bg.height / 2;
+        maxX = bg.x + bg.width / 2;
+        maxY = bg.y + bg.height / 2;
+    }
+
+    // If still no items found, return null
     if (!isFinite(minX) || !isFinite(minY)) {
         return null;
     }
@@ -167,7 +195,6 @@ export function fitWorkspaceToContainer(
     }
 
     // Calculate zoom to fit content
-    // Use smaller padding for better cropping in previews
     const effectivePadding = Math.min(padding, 20);
     const availableWidth = containerWidth - (effectivePadding * 2);
     const availableHeight = containerHeight - (effectivePadding * 2);

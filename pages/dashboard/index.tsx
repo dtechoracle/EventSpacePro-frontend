@@ -11,6 +11,7 @@ import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
 import CreateProjectModal from "@/pages/(components)/projects/CreateProjectModal";
 import EventCard from "@/components/dashboard/EventCard"; // Switch to EventCard
+import { TEMPLATES } from "@/lib/templates";
 
 interface EventData {
   _id: string;
@@ -55,6 +56,7 @@ const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateEventModal, setShowCreateEventModal] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false); // Added for New Project button
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
 
   useEffect(() => {
     // Fetch user on mount and check periodically
@@ -239,6 +241,12 @@ const Dashboard = () => {
           {showCreateProjectModal && (
             <CreateProjectModal onClose={() => setShowCreateProjectModal(false)} />
           )}
+          {selectedTemplate && (
+            <CreateEventModal
+              onClose={() => setSelectedTemplate(null)}
+              initialTemplateData={selectedTemplate.canvasData}
+            />
+          )}
 
           {/* Recent Events Section */}
           <section className="mb-16">
@@ -268,7 +276,15 @@ const Dashboard = () => {
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-bold text-gray-800">Recent Events</h2>
                   <div className="flex items-center gap-4">
+                  <div className="flex flex-col items-end">
                     <span className="text-sm text-gray-500">{recentEvents.length} {recentEvents.length === 1 ? 'event' : 'events'}</span>
+                    <button 
+                      onClick={() => router.push("/dashboard/projects")}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors mt-0.5"
+                    >
+                      View Projects
+                    </button>
+                  </div>
                   </div>
                 </div>
 
@@ -310,45 +326,35 @@ const Dashboard = () => {
           <section>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-800">Templates</h2>
+              <button
+                onClick={() => router.push("/dashboard/templates")}
+                className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+              >
+                View all templates →
+              </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {/* Template Placeholder Cards */}
-              <motion.div
-                whileHover={{ scale: 1.03, y: -4 }}
-                className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
-              >
-                <div className="h-40 bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
-                  <div className="text-white text-5xl">🌳</div>
-                </div>
-                <div className="p-4">
-                  <h3 className="font-semibold text-sm text-gray-800">Outdoor Event</h3>
-                  <p className="text-xs text-gray-500 mt-1">Outdoor event layout with various zones</p>
-                </div>
-              </motion.div>
-              <motion.div
-                whileHover={{ scale: 1.03, y: -4 }}
-                className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
-              >
-                <div className="h-40 bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
-                  <div className="text-white text-5xl">🎪</div>
-                </div>
-                <div className="p-4">
-                  <h3 className="font-semibold text-sm text-gray-800">Marquee Event</h3>
-                  <p className="text-xs text-gray-500 mt-1">Large marquee setup for special events</p>
-                </div>
-              </motion.div>
-              <motion.div
-                whileHover={{ scale: 1.03, y: -4 }}
-                className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
-              >
-                <div className="h-40 bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center">
-                  <div className="text-gray-500 text-4xl">📐</div>
-                </div>
-                <div className="p-4">
-                  <h3 className="font-semibold text-sm text-gray-800">Starter Template</h3>
-                  <p className="text-xs text-gray-500 mt-1">Begin with a blank canvas</p>
-                </div>
-              </motion.div>
+              {TEMPLATES.slice(0, 4).map((template) => (
+                <motion.div
+                  key={template.id}
+                  whileHover={{ scale: 1.03, y: -4 }}
+                  onClick={() => setSelectedTemplate(template)}
+                  className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
+                >
+                  <div className={`h-40 flex items-center justify-center ${template.id === 'bedroom' ? 'bg-gradient-to-br from-orange-400 to-orange-600' :
+                    template.id === 'office' ? 'bg-gradient-to-br from-blue-400 to-blue-600' :
+                      'bg-gradient-to-br from-green-400 to-green-600'
+                    }`}>
+                    <div className={`${template.id === 'starter' ? 'text-gray-500' : 'text-white'} text-5xl`}>
+                      {template.icon}
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <h3 className="font-semibold text-sm text-gray-800">{template.name}</h3>
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-1">{template.description}</p>
+                  </div>
+                </motion.div>
+              ))}
             </div>
           </section>
         </div>

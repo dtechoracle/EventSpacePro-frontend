@@ -2,9 +2,9 @@
 
 import React, { useMemo, useId } from 'react';
 import { Wall, Shape, Asset } from '@/store/projectStore';
-import { fitWorkspaceToContainer, calculateWorkspaceBounds } from '@/utils/workspaceBounds';
-import { ASSET_LIBRARY } from '@/lib/assets';
+import { calculateWorkspaceBounds } from '@/utils/workspaceBounds';
 import AssetRenderer from './renderers/AssetRenderer';
+import { texturePatterns } from '@/utils/texturePatterns';
 
 interface WorkspacePreviewProps {
     walls: Wall[];
@@ -43,15 +43,16 @@ export default function WorkspacePreview({
             return { zoom: 1, panX: 0, panY: 0 };
         }
 
-        // Use smaller padding for tighter previews
-        const padding = 20;
-        const availableWidth = width - (padding * 2);
-        const availableHeight = height - (padding * 2);
+        // Zero padding for maximum impact
+        const padding = 0;
+        const availableWidth = width;
+        const availableHeight = height;
 
         // Calculate zoom to fit all content
-        const zoomX = availableWidth / bounds.width;
-        const zoomY = availableHeight / bounds.height;
-        const zoom = Math.min(zoomX, zoomY, 1); // Never zoom in, always zoom out
+        const zoomX = availableWidth / (bounds.width || 1);
+        const zoomY = availableHeight / (bounds.height || 1);
+        // Allow zooming in to fill the space, up to 2x for clarity
+        const zoom = Math.min(zoomX, zoomY, 2);
 
         // Calculate center point
         const centerX = bounds.minX + (bounds.width / 2);
@@ -67,6 +68,69 @@ export default function WorkspacePreview({
             panY: isFinite(panY) ? panY : height / 2,
         };
     }, [walls, shapes, assets, width, height, hasContent]);
+
+    const renderDefs = () => {
+        return (
+            <defs>
+                {/* Background grid */}
+                <pattern id={`grid_${uid}`} width="20" height="20" patternUnits="userSpaceOnUse">
+                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#f3f4f6" strokeWidth="0.5" />
+                </pattern>
+
+                {/* Texture Library */}
+                {texturePatterns.map(p => {
+                    // Find all unique scale/thickness combos used for THIS pattern in THIS preview
+                    const usages = new Set<{ s: number, t: number }>();
+                    
+                    // Check shapes for textures
+                    shapes.forEach((s: any) => {
+                        if (s.fillType === 'texture' && s.fillTexture === p.id) {
+                            usages.add({ s: s.fillTextureScale || 4, t: s.fillTextureThickness || 1 });
+                        }
+                    });
+
+                    // Check assets for textures (fallback)
+                    assets.forEach((a: any) => {
+                        if (a.fillType === 'texture' && a.fillTexture === p.id) {
+                            usages.add({ s: a.fillTextureScale || 4, t: a.fillTextureThickness || 1 });
+                        }
+                    });
+
+                    // Add default 1,1 for safety if it's referenced by id directly
+                    usages.add({ s: 1, t: 1 });
+                    
+                    // Deduplicate
+                    const uniqueUsages = Array.from(usages).filter((v, i, a) => 
+                        a.findIndex(t => t.s === v.s && t.t === v.t) === i
+                    );
+
+                    return uniqueUsages.map(usage => {
+                        const scaledId = usage.s === 1 && usage.t === 1 ? p.id : `${p.id}-scale-${usage.s}-thick-${usage.t}`;
+                        
+                        if (p.isImage && p.path) {
+                            return (
+                                <pattern 
+                                    key={scaledId} 
+                                    id={scaledId} 
+                                    patternUnits="userSpaceOnUse" 
+                                    width={p.tileSize || 1024} 
+                                    height={p.tileSize || 1024} 
+                                    patternTransform={`scale(${usage.s})`}
+                                >
+                                    <image href={p.path} width={p.tileSize || 1024} height={p.tileSize || 1024} preserveAspectRatio="xMidYMid slice" />
+                                </pattern>
+                            );
+                        } else if (p.svg) {
+                            let svgStr = p.svg.replace(/id="[^"]*"/, `id="${scaledId}"`);
+                            svgStr = svgStr.replace('<pattern', `<pattern patternTransform="scale(${usage.s})"`);
+                            return <g key={scaledId} dangerouslySetInnerHTML={{ __html: svgStr }} />;
+                        }
+                        return null;
+                    });
+                })}
+            </defs>
+        );
+    };
 
     return (
         <div
@@ -91,52 +155,30 @@ export default function WorkspacePreview({
                     viewBox={`0 0 ${width} ${height}`}
                     preserveAspectRatio="xMidYMid meet"
                 >
-                    {/* Background grid - use unique id per instance to avoid SVG ref conflicts */}
-                    <defs>
-                        <pattern id={`grid_${uid}`} width="20" height="20" patternUnits="userSpaceOnUse">
-                            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#f3f4f6" strokeWidth="0.5" />
-                        </pattern>
-                    </defs>
+                    {renderDefs()}
                     <rect width="100%" height="100%" fill={`url(#grid_${uid})`} opacity="0.3" />
 
                     <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
                         {/* Render walls (support wall-polygon) */}
                         {walls.map((wall) => {
                             const hasPolygon = (wall as any).wallPolygon && Array.isArray((wall as any).wallPolygon);
+                            const strokeColor = "#334155"; // Darker slate gray
+
                             if (hasPolygon) {
                                 const poly = (wall as any).wallPolygon as Array<{ x: number; y: number }>;
-                                const points = poly.map(p => `${p.x + (wall as any).x} ${p.y + (wall as any).y}`).join(' ');
-                                const strokeColor = (wall as any).strokeColor || '#1E40AF';
+                                const points = poly.map(p => `${p.x + ((wall as any).x || 0)} ${p.y + ((wall as any).y || 0)}`).join(' ');
                                 const fillColor = (wall as any).backgroundColor || 'transparent';
-                                // Keep wall strokes lean in preview to avoid big solid fills
-                                const rawThickness =
-                                    (wall as any).wallThickness ??
-                                    (wall as any).strokeWidth ??
-                                    (wall as any).thickness ??
-                                    6;
-                                const thickness = Math.max(rawThickness, 1) / viewport.zoom;
+                                
                                 return (
-                                    <g key={wall.id}>
-                                        <polygon
-                                            points={points}
-                                            fill={fillColor}
-                                            stroke={strokeColor}
-                                            strokeWidth={Math.max(thickness, 2)}
-                                            strokeLinejoin="round"
-                                        />
-                                        {/* Optional centerline */}
-                                        {(wall as any).centerline && Array.isArray((wall as any).centerline) && (wall as any).centerline.length >= 2 && (
-                                            <polyline
-                                                points={(wall as any).centerline.map((p: any) => `${p.x + (wall as any).x} ${p.y + (wall as any).y}`).join(' ')}
-                                                fill="none"
-                                                stroke={strokeColor}
-                                                strokeWidth={1}
-                                                strokeDasharray="4,4"
-                                                strokeLinecap="round"
-                                                opacity={0.6}
-                                            />
-                                        )}
-                                    </g>
+                                    <polygon
+                                        key={wall.id}
+                                        points={points}
+                                        fill={fillColor}
+                                        stroke={strokeColor}
+                                        strokeWidth={1.5}
+                                        strokeLinejoin="round"
+                                        vectorEffect="non-scaling-stroke"
+                                    />
                                 );
                             }
 
@@ -147,8 +189,6 @@ export default function WorkspacePreview({
                                         const nodeB = wall.nodes.find(n => n.id === edge.nodeB);
                                         if (!nodeA || !nodeB) return null;
 
-                                        const thickness = Math.max(edge.thickness || 75, 2) / viewport.zoom;
-
                                         return (
                                             <line
                                                 key={edge.id}
@@ -156,10 +196,11 @@ export default function WorkspacePreview({
                                                 y1={nodeA.y}
                                                 x2={nodeB.x}
                                                 y2={nodeB.y}
-                                                stroke="#1E40AF"
-                                                strokeWidth={Math.max(thickness, 2)}
+                                                stroke={strokeColor}
+                                                strokeWidth={1.5}
                                                 strokeLinecap="round"
                                                 strokeLinejoin="round"
+                                                vectorEffect="non-scaling-stroke"
                                             />
                                         );
                                     })}
@@ -170,11 +211,25 @@ export default function WorkspacePreview({
                         {/* Render shapes - match ShapeRenderer exactly */}
                         {shapes.map((shape) => {
                             const transform = `translate(${shape.x}, ${shape.y}) rotate(${shape.rotation || 0})`;
-                            // Use the same logic as ShapeRenderer - check fill first, then backgroundColor, then fillColor
-                            // Default to 'transparent' if none exists
-                            const fill = shape.fill || (shape as any).backgroundColor || (shape as any).fillColor || 'transparent';
                             const stroke = shape.stroke || (shape as any).strokeColor || '#1f2937';
-                            const strokeWidth = Math.max((shape.strokeWidth || 2) / viewport.zoom, 1);
+                            const strokeWidth = shape.strokeWidth || 1;
+
+                            // Normalize fill property
+                            let fill = shape.fill || (shape as any).backgroundColor || (shape as any).fillColor || 'transparent';
+                            
+                            // Map texture fill to its scaled version if applicable
+                            if (shape.fillType === 'texture' && shape.fillTexture) {
+                                const s = shape.fillTextureScale || 4;
+                                const t = shape.fillTextureThickness || 1;
+                                fill = `url(#${shape.fillTexture}-scale-${s}-thick-${t})`;
+                            }
+
+                            const commonProps = {
+                                fill,
+                                stroke,
+                                strokeWidth,
+                                vectorEffect: "non-scaling-stroke" as "non-scaling-stroke"
+                            };
 
                             if (shape.type === 'rectangle') {
                                 return (
@@ -185,9 +240,7 @@ export default function WorkspacePreview({
                                         y={-shape.height / 2}
                                         width={shape.width}
                                         height={shape.height}
-                                        fill={fill}
-                                        stroke={stroke}
-                                        strokeWidth={strokeWidth}
+                                        {...commonProps}
                                         rx={4}
                                         ry={4}
                                     />
@@ -195,35 +248,29 @@ export default function WorkspacePreview({
                             }
 
                             if (shape.type === 'ellipse') {
-                                const rx = shape.width / 2 || 50;
-                                const ry = shape.height / 2 || 50;
                                 return (
                                     <ellipse
                                         key={shape.id}
                                         transform={transform}
                                         cx={0}
                                         cy={0}
-                                        rx={rx}
-                                        ry={ry}
-                                        fill={fill}
-                                        stroke={stroke}
-                                        strokeWidth={strokeWidth}
+                                        rx={shape.width / 2}
+                                        ry={shape.height / 2}
+                                        {...commonProps}
                                     />
                                 );
                             }
 
                             if (shape.type === 'line') {
-                                // Handle line with points if available
                                 if (shape.points && shape.points.length >= 2) {
-                                    const points = shape.points.map((p: any) => `${p.x},${p.y}`).join(' ');
+                                    const pointsString = shape.points.map((p: any) => `${p.x},${p.y}`).join(' ');
                                     return (
                                         <polyline
                                             key={shape.id}
                                             transform={transform}
-                                            points={points}
+                                            points={pointsString}
+                                            {...commonProps}
                                             fill="none"
-                                            stroke={stroke}
-                                            strokeWidth={strokeWidth}
                                             strokeLinecap="round"
                                             strokeLinejoin="round"
                                         />
@@ -238,46 +285,33 @@ export default function WorkspacePreview({
                                         y1={0}
                                         x2={shape.width / 2}
                                         y2={0}
-                                        stroke={stroke}
-                                        strokeWidth={strokeWidth}
+                                        {...commonProps}
                                         strokeLinecap="round"
                                     />
                                 );
                             }
 
                             if (shape.type === 'polygon') {
-                                // Render polygon using stored points if present; fallback to regular polygon by sides
-                                let points: string | null = null;
+                                let pointsString = '';
                                 if (shape.points && shape.points.length >= 3) {
-                                    points = shape.points.map((p: any) => `${p.x},${p.y}`).join(' ');
+                                    pointsString = shape.points.map((p: any) => `${p.x},${p.y}`).join(' ');
                                 } else {
-                                    const sides = Math.max(
-                                        4,
-                                        Math.min(
-                                            12,
-                                            shape.polygonSides ||
-                                            (shape.points ? shape.points.length : 4)
-                                        )
-                                    );
+                                    const sides = Math.max(3, shape.polygonSides || 4);
                                     const r = Math.min(shape.width, shape.height) / 2;
                                     const pts: string[] = [];
                                     for (let i = 0; i < sides; i++) {
                                         const angle = ((Math.PI * 2) / sides) * i - Math.PI / 2;
-                                        const x = r * Math.cos(angle);
-                                        const y = r * Math.sin(angle);
-                                        pts.push(`${x},${y}`);
+                                        pts.push(`${r * Math.cos(angle)},${r * Math.sin(angle)}`);
                                     }
-                                    points = pts.join(' ');
+                                    pointsString = pts.join(' ');
                                 }
 
                                 return (
                                     <polygon
                                         key={shape.id}
                                         transform={transform}
-                                        points={points || ''}
-                                        fill={fill}
-                                        stroke={stroke}
-                                        strokeWidth={strokeWidth}
+                                        points={pointsString}
+                                        {...commonProps}
                                         strokeLinejoin="round"
                                     />
                                 );
@@ -288,7 +322,6 @@ export default function WorkspacePreview({
 
                         {/* Render assets using the same renderer as the workspace */}
                         {assets.map((asset) => {
-                            // If an explicit path exists on the asset, prefer it (covers backend-provided paths)
                             const path = (asset as any).path;
                             const assetWithPath = path
                                 ? { ...asset, path, type: asset.type, width: asset.width || 100, height: asset.height || 100, metadata: asset.metadata }
@@ -299,6 +332,7 @@ export default function WorkspacePreview({
                                     asset={assetWithPath as any}
                                     isSelected={false}
                                     isHovered={false}
+                                    isPreview={true}
                                 />
                             );
                         })}

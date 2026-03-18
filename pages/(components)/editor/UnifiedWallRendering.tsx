@@ -174,7 +174,6 @@ export default function UnifiedWallRendering({ mmToPx }: UnifiedWallRenderingPro
           <g key={`mask-${idx}`}>
             <line x1={ax1} y1={ay1} x2={ax2} y2={ay2} stroke="#ffffff" strokeWidth={p.t2 * mmToPx} strokeLinecap="butt" />
             <line x1={bx1} y1={by1} x2={bx2} y2={by2} stroke="#ffffff" strokeWidth={p.t1 * mmToPx} strokeLinecap="butt" />
-            <circle cx={p.x * mmToPx} cy={p.y * mmToPx} r={3} fill="#000000" />
           </g>
         );
       })}
@@ -220,9 +219,7 @@ export default function UnifiedWallRendering({ mmToPx }: UnifiedWallRenderingPro
         ));
       })()}
       {/* Additional safety: small white plug exactly at crossing center to hide any remaining cross pixels */}
-      {intersections.map((p, idx) => (
-        <circle key={`plug-${idx}`} cx={p.x * mmToPx} cy={p.y * mmToPx} r={visualThicknessPx * 0.6} fill="#ffffff" />
-      ))}
+      {/* Crossing plugs removed at user request */}
     </svg>
   );
 }

@@ -154,59 +154,7 @@ export default function DrawingPath({
           (the mask will remove any pixels that fall inside wall polygons)
           =============================== */}
       <g mask="url(#wallVoidMask)">
-        {/* === SHAPE DRAWING PREVIEW === */}
-        {shapeMode && shapeStart && shapeTempEnd && (() => {
-          const x1 = shapeStart.x * mmToPx;
-          const y1 = shapeStart.y * mmToPx;
-          const x2 = shapeTempEnd.x * mmToPx;
-          const y2 = shapeTempEnd.y * mmToPx;
-          const left = Math.min(x1, x2);
-          const top = Math.min(y1, y2);
-          const w = Math.abs(x2 - x1);
-          const h = Math.abs(y2 - y1);
-
-          if (shapeMode === 'rectangle')
-            return (
-              <rect
-                x={left}
-                y={top}
-                width={w}
-                height={h}
-                fill="none"
-                stroke="#111827"
-                strokeWidth={1.5}
-                strokeDasharray="6,4"
-              />
-            );
-          if (shapeMode === 'ellipse')
-            return (
-              <ellipse
-                cx={left + w / 2}
-                cy={top + h / 2}
-                rx={w / 2}
-                ry={h / 2}
-                fill="none"
-                stroke="#111827"
-                strokeWidth={1.5}
-                strokeDasharray="6,4"
-              />
-            );
-          if (shapeMode === 'line')
-            return (
-              <line
-                x1={x1}
-                y1={y1}
-                x2={x2}
-                y2={y2}
-                stroke="#111827"
-                strokeWidth={2}
-                strokeDasharray="6,4"
-              />
-            );
-          return null;
-        })()}
-
-        {/* === PEN DRAWING === */}
+        {/* === PEN DRAWING (Masked by walls) === */}
         {isDrawing && tempPath.length > 0 && !wallDrawingMode && (
           tempPath.length === 1 ? (
             <circle
@@ -229,13 +177,65 @@ export default function DrawingPath({
             />
           )
         )}
+      </g>
+
+      {/* === PREVIEWS & UI (Unmasked - Always visible on top) === */}
+      <g style={{ pointerEvents: 'none' }}>
+        {/* === SHAPE DRAWING PREVIEW === */}
+        {shapeMode && shapeStart && shapeTempEnd && (() => {
+          const x1 = shapeStart!.x * mmToPx;
+          const y1 = shapeStart!.y * mmToPx;
+          const x2 = shapeTempEnd!.x * mmToPx;
+          const y2 = shapeTempEnd!.y * mmToPx;
+          const left = Math.min(x1, x2);
+          const top = Math.min(y1, y2);
+          const w = Math.abs(x2 - x1);
+          const h = Math.abs(y2 - y1);
+
+          if (shapeMode === 'rectangle')
+            return (
+              <rect
+                x={left}
+                y={top}
+                width={w}
+                height={h}
+                fill="none"
+                stroke="#111827"
+                strokeWidth={1.5}
+              />
+            );
+          if (shapeMode === 'ellipse')
+            return (
+              <ellipse
+                cx={left + w / 2}
+                cy={top + h / 2}
+                rx={w / 2}
+                ry={h / 2}
+                fill="none"
+                stroke="#111827"
+                strokeWidth={1.5}
+              />
+            );
+          if (shapeMode === 'line')
+            return (
+              <line
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke="#111827"
+                strokeWidth={2}
+              />
+            );
+          return null;
+        })()}
 
         {/* === RECTANGULAR SELECTION (if any) === */}
         {isRectangularSelectionMode && rectangularSelectionStart && rectangularSelectionEnd && (() => {
-          const x1 = rectangularSelectionStart.x * mmToPx;
-          const y1 = rectangularSelectionStart.y * mmToPx;
-          const x2 = rectangularSelectionEnd.x * mmToPx;
-          const y2 = rectangularSelectionEnd.y * mmToPx;
+          const x1 = rectangularSelectionStart!.x * mmToPx;
+          const y1 = rectangularSelectionStart!.y * mmToPx;
+          const x2 = rectangularSelectionEnd!.x * mmToPx;
+          const y2 = rectangularSelectionEnd!.y * mmToPx;
           const left = Math.min(x1, x2);
           const top = Math.min(y1, y2);
           const w = Math.abs(x2 - x1);
@@ -246,17 +246,13 @@ export default function DrawingPath({
               y={top}
               width={w}
               height={h}
-              fill="none"
-              stroke="#2563EB"
+              fill="rgba(59, 130, 246, 0.1)"
+              stroke="#3B82F6"
               strokeWidth={1.5}
-              strokeDasharray="4,4"
+              strokeLinejoin="round"
             />
           );
         })()}
-
-        {/* You can also render other scene layers here: assets, background grid, selection highlights, etc.
-            Because they are inside the mask group, anything inside wall polygons will be hidden (void).
-         */}
       </g>
 
       {/* ===============================
@@ -414,22 +410,6 @@ export default function DrawingPath({
             const dimensionAngle = Math.atan2(dy, dx) * (180 / Math.PI);
             const textAngle = dimensionAngle < -90 || dimensionAngle > 90 ? dimensionAngle + 180 : dimensionAngle;
 
-            // If length is tiny, just show a dot and guides
-            if (length < 0.001) {
-              return (
-                <>
-                  <circle
-                    cx={startPx.x}
-                    cy={startPx.y}
-                    r={2}
-                    fill="#000"
-                  />
-                  {guideLines}
-                  {guideTexts}
-                </>
-              );
-            }
-
             // Build seamless preview using the same geometry approach as actual walls
             // Combine all current segments with the temp segment for seamless rendering
             const allSegments = [
@@ -490,7 +470,6 @@ export default function DrawingPath({
                       fill="none"
                       stroke="#000000"
                       strokeWidth={previewStrokeWidth}
-                      strokeDasharray="6,4"
                       strokeLinecap="square"
                       strokeLinejoin="round"
                       opacity="0.9"
@@ -500,7 +479,6 @@ export default function DrawingPath({
                       fill="none"
                       stroke="#000000"
                       strokeWidth={previewStrokeWidth}
-                      strokeDasharray="6,4"
                       strokeLinecap="square"
                       strokeLinejoin="round"
                       opacity="0.9"
@@ -594,7 +572,6 @@ export default function DrawingPath({
                   y2={line1EndMm.y * mmToPx}
                   stroke="#000000"
                   strokeWidth={previewStrokeWidth}
-                  strokeDasharray="6,4"
                   strokeLinecap="square"
                   strokeLinejoin="round"
                   opacity="0.9"
@@ -606,7 +583,6 @@ export default function DrawingPath({
                   y2={line2EndMm.y * mmToPx}
                   stroke="#000000"
                   strokeWidth={previewStrokeWidth}
-                  strokeDasharray="6,4"
                   strokeLinecap="square"
                   strokeLinejoin="round"
                   opacity="0.9"
@@ -642,16 +618,7 @@ export default function DrawingPath({
             );
           })()}
 
-          {currentWallStart && (
-            <circle
-              cx={currentWallStart.x * mmToPx}
-              cy={currentWallStart.y * mmToPx}
-              r="3"
-              fill="#000"
-              stroke="white"
-              strokeWidth="1"
-            />
-          )}
+          {/* Start point circle removed at user request */}
         </>
       )}
     </svg>

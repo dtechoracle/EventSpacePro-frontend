@@ -212,7 +212,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 deactivateAllTools();
                 setEditorTool("trim");
                 setActiveTool("trim");
-                toast("Trim Tool Active: Click lines to trim, or drag to slice", { icon: '✂️', duration: 3000 });
+                toast("Slice Tool Active: Click lines to trim, or drag to slice", { icon: '✂️', duration: 3000 });
                 break;
 
             case "trim-to-blend": {

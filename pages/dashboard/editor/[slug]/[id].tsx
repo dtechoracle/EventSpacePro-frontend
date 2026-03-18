@@ -8,6 +8,7 @@ import Scene3D from "@/components/Scene3D";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import AiTrigger from "@/pages/(components)/AiTrigger";
 import InlineSvg from "@/components/tools/InlineSvg";
+import TexturePatternDefs from "@/components/TexturePatternDefs";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/router";
@@ -23,6 +24,7 @@ import {
 import WorkspacePreview from "@/components/WorkspacePreview";
 import { ASSET_LIBRARY } from "@/lib/assets";
 import toast from "react-hot-toast";
+import { calculateWorkspaceBounds } from "@/utils/workspaceBounds";
 
 // Extended EventData type with canvasData
 type EventData = BaseEventData & {
@@ -40,14 +42,31 @@ function ElementsPane() {
   const { walls, shapes, assets, textAnnotations, dimensions, labelArrows, groups } = useProjectStore();
   const { selectedIds, setSelectedIds, zoom, setPan } = useEditorStore();
   const [expandedAssets, setExpandedAssets] = React.useState<Record<string, boolean>>({});
+  const [renamingId, setRenamingId] = React.useState<string | null>(null);
+  const [renamingText, setRenamingText] = React.useState("");
+
+  const handleRename = (id: string, newName: string, type: string) => {
+    const store = useProjectStore.getState();
+    const updates = { name: newName };
+
+    if (type === "Wall") store.updateWall(id, updates);
+    else if (type === "Shape") store.updateShape(id, updates);
+    else if (type === "Asset") store.updateAsset(id, updates);
+    else if (type === "Text") store.updateTextAnnotation(id, updates);
+    else if (type === "Dimension") store.updateDimension(id, updates);
+    else if (type === "Label") store.updateLabelArrow(id, updates);
+    else if (type === "Group") store.updateGroup(id, updates);
+
+    setRenamingId(null);
+  };
 
   // Group shapes by exploded asset (sourceAssetId)
   const assetChildrenMap: Record<string, typeof shapes> = {};
   const independentShapes: typeof shapes = [];
 
   shapes.forEach((s) => {
-    // Hidden shapes
-    if (s.id === 'background-texture') return;
+    // Show all shapes including background-texture if it exists
+    // if (s.id === 'background-texture') return;
 
     const sourceId = (s as any).sourceAssetId as string | undefined;
     if (sourceId) {
@@ -62,17 +81,17 @@ function ElementsPane() {
     // Filter out items that belong to a group
     ...walls.filter(w => !w.groupId).map((w) => {
       if (!w.nodes || w.nodes.length === 0) {
-        return { id: w.id, label: "Wall", type: "Wall" as const, x: 0, y: 0 };
+        return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: 0, y: 0 };
       }
       const xs = w.nodes.map((n) => n.x);
       const ys = w.nodes.map((n) => n.y);
       const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
       const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
-      return { id: w.id, label: "Wall", type: "Wall" as const, x: centerX, y: centerY };
+      return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: centerX, y: centerY };
     }),
     ...independentShapes.filter(s => !s.groupId).map((s) => ({
       id: s.id,
-      label: s.type,
+      label: s.name || s.type,
       type: "Shape" as const,
       x: s.x,
       y: s.y,
@@ -80,7 +99,7 @@ function ElementsPane() {
     })),
     ...assets.filter(a => !a.groupId).map((a) => ({
       id: a.id,
-      label: (a.metadata as any)?.label || a.type || "Asset",
+      label: a.name || (a.metadata as any)?.label || a.type || "Asset",
       type: "Asset" as const,
       x: a.x,
       y: a.y,
@@ -89,7 +108,7 @@ function ElementsPane() {
     })),
     ...textAnnotations.filter(t => !t.groupId).map((t) => ({
       id: t.id,
-      label: t.text || "Text",
+      label: t.name || t.text || "Text",
       type: "Text" as const,
       x: t.x,
       y: t.y,
@@ -97,7 +116,7 @@ function ElementsPane() {
     })),
     ...dimensions.filter(d => !d.groupId).map((d) => ({
       id: d.id,
-      label: (d.type as string) === "wall" ? "Wall Dimension" : "Dimension",
+      label: d.name || ((d.type as string) === "wall" ? "Wall Dimension" : "Dimension"),
       type: "Dimension" as const,
       x: (d.startPoint.x + d.endPoint.x) / 2,
       y: (d.startPoint.y + d.endPoint.y) / 2,
@@ -105,7 +124,7 @@ function ElementsPane() {
     })),
     ...labelArrows.filter(la => !la.groupId).map((la) => ({
       id: la.id,
-      label: la.label || "Label",
+      label: la.name || la.label || "Label",
       type: "Label" as const,
       x: (la.startPoint.x + la.endPoint.x) / 2,
       y: (la.startPoint.y + la.endPoint.y) / 2,
@@ -147,7 +166,7 @@ function ElementsPane() {
 
       return {
         id: g.id,
-        label: `Group (${g.itemIds.length} items)`,
+        label: g.name || `Group (${g.itemIds.length} items)`,
         type: "Group" as const,
         x: avgX,
         y: avgY,
@@ -192,8 +211,12 @@ function ElementsPane() {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="px-3 py-2 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+    <div className="flex flex-col h-full">
+      {/* Invisible SVG to host global pattern definitions for sidebar previews */}
+      <svg width="0" height="0" className="absolute pointer-events-none">
+        <TexturePatternDefs />
+      </svg>
+      <div className="p-3 border-b border-gray-100 flex items-center justify-between">
         Elements
       </div>
       <div
@@ -238,12 +261,12 @@ function ElementsPane() {
                 <div className="w-7 h-7 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
                   {item.type === "Asset" && item.asset && (
                     assetDef?.path ? (
-                      <div className="w-full h-full p-0.5">
+                      <div className="w-full h-full p-1">
                         <InlineSvg
                           src={assetDef.path}
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={2}
+                          fill={item.asset.fillColor || (item.asset as any).fill || "none"}
+                          stroke={item.asset.strokeColor || (item.asset as any).stroke || "currentColor"}
+                          strokeWidth={1.2}
                           category={assetDef.category}
                         />
                       </div>
@@ -257,13 +280,20 @@ function ElementsPane() {
                     <svg width={24} height={24} viewBox="0 0 24 24">
                       {item.shape.type === "rectangle" && (
                         <rect
-                          x={4}
-                          y={7}
-                          width={16}
-                          height={10}
-                          fill={item.shape.fill || "transparent"}
+                          x={!item.shape.fillType || item.shape.fillType === 'solid' ? 4 : 2}
+                          y={!item.shape.fillType || item.shape.fillType === 'solid' ? 7 : 5}
+                          width={!item.shape.fillType || item.shape.fillType === 'solid' ? 16 : 20}
+                          height={!item.shape.fillType || item.shape.fillType === 'solid' ? 10 : 14}
+                          fill={(() => {
+                            if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
+                              if (item.shape.fillTexture) {
+                                return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 4}-thick-${item.shape.fillTextureThickness || 1})`;
+                              }
+                            }
+                            return item.shape.fill || "transparent";
+                          })()}
                           stroke={item.shape.stroke || "#9CA3AF"}
-                          strokeWidth={2}
+                          strokeWidth={1.2}
                           rx={2}
                           ry={2}
                         />
@@ -272,11 +302,18 @@ function ElementsPane() {
                         <ellipse
                           cx={12}
                           cy={12}
-                          rx={8}
-                          ry={9}
-                          fill={item.shape.fill || "transparent"}
+                          rx={!item.shape.fillType || item.shape.fillType === 'solid' ? 8 : 10}
+                          ry={!item.shape.fillType || item.shape.fillType === 'solid' ? 9 : 11}
+                          fill={(() => {
+                            if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
+                              if (item.shape.fillTexture) {
+                                return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 4}-thick-${item.shape.fillTextureThickness || 1})`;
+                              }
+                            }
+                            return item.shape.fill || "transparent";
+                          })()}
                           stroke={item.shape.stroke || "#9CA3AF"}
-                          strokeWidth={2}
+                          strokeWidth={1.2}
                         />
                       )}
                       {item.shape.type === "line" && (
@@ -286,7 +323,7 @@ function ElementsPane() {
                           x2={20}
                           y2={12}
                           stroke={item.shape.stroke || "#9CA3AF"}
-                          strokeWidth={2.5}
+                          strokeWidth={1.5}
                           strokeLinecap="round"
                         />
                       )}
@@ -296,10 +333,10 @@ function ElementsPane() {
                             const sides =
                               item.shape.polygonSides ||
                               (item.shape.points ? item.shape.points.length : 4);
-                            const s = Math.max(4, Math.min(12, sides || 4));
+                            const s = Math.max(3, Math.min(12, sides || 4));
                             const cx = 12;
                             const cy = 12;
-                            const r = 8;
+                            const r = !item.shape.fillType || item.shape.fillType === 'solid' ? 8 : 10;
                             const pts: string[] = [];
                             for (let i = 0; i < s; i++) {
                               const angle = ((Math.PI * 2) / s) * i - Math.PI / 2;
@@ -309,9 +346,16 @@ function ElementsPane() {
                             }
                             return pts.join(" ");
                           })()}
-                          fill={item.shape.fill || "transparent"}
+                          fill={(() => {
+                            if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
+                              if (item.shape.fillTexture) {
+                                return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 4}-thick-${item.shape.fillTextureThickness || 1})`;
+                              }
+                            }
+                            return item.shape.fill || "transparent";
+                          })()}
                           stroke={item.shape.stroke || "#9CA3AF"}
-                          strokeWidth={2}
+                          strokeWidth={1.2}
                           strokeLinejoin="round"
                         />
                       )}
@@ -319,21 +363,30 @@ function ElementsPane() {
                   )}
                   {item.type === "Group" && (
                     <svg width={24} height={24} viewBox="0 0 24 24">
-                      <path d="M3 7h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" fill="none" stroke="#3b82f6" strokeWidth={2} />
-                      <path d="M7 4h10a1 1 0 0 1 1 1v2H6V5a1 1 0 0 1 1-1z" fill="none" stroke="#3b82f6" strokeWidth={2} />
+                      <path d="M3 7h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" fill="none" stroke="#2563eb" strokeWidth={1.5} />
+                      <path d="M7 4h10a1 1 0 0 1 1 1v2H6V5a1 1 0 0 1 1-1z" fill="none" stroke="#2563eb" strokeWidth={1.5} />
                     </svg>
                   )}
                   {item.type === "Wall" && (
                     <svg width={24} height={24} viewBox="0 0 24 24">
-                      <line
-                        x1={4}
-                        y1={12}
-                        x2={20}
-                        y2={12}
-                        stroke="#9CA3AF"
-                        strokeWidth={3}
-                        strokeLinecap="round"
+                      <rect
+                        x={4}
+                        y={8}
+                        width={16}
+                        height={8}
+                        fill={(() => {
+                          const w = (item as any).wall;
+                          if (!w) return "#cbd5e1";
+                          if ((w.fillType === 'texture' || w.fillType === 'hatch' || w.fillType === 'hash') && w.fillTexture) {
+                            return `url(#${w.fillTexture}-scale-${w.fillTextureScale || 1}-thick-${w.fillTextureThickness || 1})`;
+                          }
+                          return w.fill || "#cbd5e1";
+                        })()}
+                        stroke={(item as any).wall?.stroke || "#94a3b8"}
+                        strokeWidth={1.2}
+                        rx={1}
                       />
+                      <line x1={4} y1={12} x2={20} y2={12} stroke="currentColor" strokeWidth={0.5} strokeOpacity={0.3} />
                     </svg>
                   )}
                   {item.type === "Text" && item.text && (
@@ -352,41 +405,38 @@ function ElementsPane() {
                   )}
                   {item.type === "Dimension" && item.dimension && (
                     <svg width={24} height={24} viewBox="0 0 24 24">
-                      {/* main dimension line */}
                       <line
                         x1={4}
                         y1={12}
                         x2={20}
                         y2={12}
-                        stroke="#111827"
-                        strokeWidth={1.5}
+                        stroke={item.dimension.color || "#111827"}
+                        strokeWidth={1}
                         strokeLinecap="round"
                       />
-                      {/* arrows */}
                       <polyline
                         points="6,10 4,12 6,14"
                         fill="none"
-                        stroke="#111827"
-                        strokeWidth={1.2}
+                        stroke={item.dimension.color || "#111827"}
+                        strokeWidth={0.8}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
                       <polyline
                         points="18,10 20,12 18,14"
                         fill="none"
-                        stroke="#111827"
-                        strokeWidth={1.2}
+                        stroke={item.dimension.color || "#111827"}
+                        strokeWidth={0.8}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
-                      {/* text */}
                       <text
                         x={12}
                         y={10}
                         textAnchor="middle"
-                        fontSize={7}
-                        fill="#111827"
-                        fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                        fontSize={6}
+                        fill={item.dimension.color || "#111827"}
+                        fontFamily="system-ui"
                       >
                         dim
                       </text>
@@ -400,16 +450,16 @@ function ElementsPane() {
                         y1={16}
                         x2={18}
                         y2={16}
-                        stroke="#111827"
-                        strokeWidth={1.5}
+                        stroke={item.labelArrow.color || "#111827"}
+                        strokeWidth={1.2}
                         strokeLinecap="round"
                       />
                       {/* arrow head */}
                       <polyline
                         points="16,14 18,16 16,18"
                         fill="none"
-                        stroke="#111827"
-                        strokeWidth={1.5}
+                        stroke={item.labelArrow.color || "#111827"}
+                        strokeWidth={1.2}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
@@ -422,16 +472,16 @@ function ElementsPane() {
                         rx={2}
                         ry={2}
                         fill="#F3F4F6"
-                        stroke="#9CA3AF"
-                        strokeWidth={1}
+                        stroke={item.labelArrow.color || "#9CA3AF"}
+                        strokeWidth={0.8}
                       />
                       <text
                         x={12}
                         y={10}
                         textAnchor="middle"
                         fontSize={6}
-                        fill="#111827"
-                        fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                        fill={item.labelArrow.color || "#111827"}
+                        fontFamily="system-ui"
                       >
                         Aa
                       </text>
@@ -440,11 +490,35 @@ function ElementsPane() {
                 </div>
 
                 {/* Label and type */}
-                <div className="flex-1 min-w-0">
-                  <div className="truncate text-gray-700 leading-tight">{item.label}</div>
-                  <div className="text-[0.6rem] text-gray-400 mt-0.5">
-                    {isAsset && hasChildren ? "Asset (exploded)" : item.type}
-                  </div>
+                <div 
+                  className="flex-1 min-w-0" 
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setRenamingId(item.id);
+                    setRenamingText(item.label);
+                  }}
+                >
+                  {renamingId === item.id ? (
+                    <input
+                      autoFocus
+                      className="w-full text-[11px] px-1 py-0.5 border border-blue-400 rounded outline-none"
+                      value={renamingText}
+                      onChange={(e) => setRenamingText(e.target.value)}
+                      onBlur={() => handleRename(item.id, renamingText, item.type)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRename(item.id, renamingText, item.type);
+                        if (e.key === 'Escape') setRenamingId(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <>
+                      <div className="truncate text-gray-700 leading-tight">{item.label}</div>
+                      <div className="text-[0.6rem] text-gray-400 mt-0.5">
+                        {isAsset && hasChildren ? "Asset (exploded)" : item.type}
+                      </div>
+                    </>
+                  )}
                 </div>
               </button>
 
@@ -461,26 +535,40 @@ function ElementsPane() {
                         <svg width={18} height={18} viewBox="0 0 24 24">
                           {s.type === "rectangle" && (
                             <rect
-                              x={4}
-                              y={7}
-                              width={16}
-                              height={10}
-                              fill={s.fill || "transparent"}
+                              x={!s.fillType || s.fillType === 'solid' ? 4 : 2}
+                              y={!s.fillType || s.fillType === 'solid' ? 7 : 5}
+                              width={!s.fillType || s.fillType === 'solid' ? 16 : 20}
+                              height={!s.fillType || s.fillType === 'solid' ? 10 : 14}
+                              fill={(() => {
+                                if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
+                                  if (s.fillTexture) {
+                                    return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                                  }
+                                }
+                                return s.fill || "transparent";
+                              })()}
                               stroke={s.stroke || "#9CA3AF"}
-                              strokeWidth={2}
-                              rx={2}
-                              ry={2}
+                              strokeWidth={1}
+                              rx={1.5}
+                              ry={1.5}
                             />
                           )}
                           {s.type === "ellipse" && (
                             <ellipse
                               cx={12}
                               cy={12}
-                              rx={8}
-                              ry={9}
-                              fill={s.fill || "transparent"}
+                              rx={!s.fillType || s.fillType === 'solid' ? 8 : 10}
+                              ry={!s.fillType || s.fillType === 'solid' ? 9 : 11}
+                              fill={(() => {
+                                if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
+                                  if (s.fillTexture) {
+                                    return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                                  }
+                                }
+                                return s.fill || "transparent";
+                              })()}
                               stroke={s.stroke || "#9CA3AF"}
-                              strokeWidth={2}
+                              strokeWidth={1}
                             />
                           )}
                           {s.type === "line" && (
@@ -490,7 +578,7 @@ function ElementsPane() {
                               x2={20}
                               y2={12}
                               stroke={s.stroke || "#9CA3AF"}
-                              strokeWidth={2.5}
+                              strokeWidth={1.2}
                               strokeLinecap="round"
                             />
                           )}
@@ -500,10 +588,10 @@ function ElementsPane() {
                                 const sides =
                                   s.polygonSides ||
                                   (s.points ? s.points.length : 4);
-                                const cnt = Math.max(4, Math.min(12, sides || 4));
+                                const cnt = Math.max(3, Math.min(12, sides || 4));
                                 const cx = 12;
                                 const cy = 12;
-                                const r = 8;
+                                const r = !s.fillType || s.fillType === 'solid' ? 8 : 10;
                                 const pts: string[] = [];
                                 for (let i = 0; i < cnt; i++) {
                                   const angle = ((Math.PI * 2) / cnt) * i - Math.PI / 2;
@@ -513,9 +601,16 @@ function ElementsPane() {
                                 }
                                 return pts.join(" ");
                               })()}
-                              fill={s.fill || "transparent"}
+                              fill={(() => {
+                                if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
+                                  if (s.fillTexture) {
+                                    return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                                  }
+                                }
+                                return s.fill || "transparent";
+                              })()}
                               stroke={s.stroke || "#9CA3AF"}
-                              strokeWidth={2}
+                              strokeWidth={1}
                               strokeLinejoin="round"
                             />
                           )}
@@ -747,6 +842,51 @@ export default function Editor() {
       }
     }
   }, [isRouterReady, router.query, router, currentEventData]);
+ 
+  // Handle marqueeId query param
+  useEffect(() => {
+    if (isRouterReady && router.query.marqueeId && currentEventData) {
+      const routeId = router.query.id as string;
+      const currentId = currentEventData._id || (currentEventData as any).id;
+ 
+      if (currentId !== routeId) return;
+ 
+      const marqueeId = Array.isArray(router.query.marqueeId) ? router.query.marqueeId[0] : router.query.marqueeId;
+      if (!marqueeId) return;
+
+      const projectStore = useProjectStore.getState();
+      
+      // Check if marquee already exists by checking if any asset has this marquee ID as its type
+      const existingMarquee = projectStore.assets.find(a => a.type === marqueeId);
+      
+      if (!existingMarquee) {
+        console.log(`[Editor] Marquee missing from workspace! Force-loading: ${marqueeId}`);
+        const canvas = currentEventData.canvasData?.canvas || currentEventData.canvases?.[0];
+        const width = canvas?.width || 10000;
+        const height = canvas?.height || 10000;
+
+        // Find marquee dimensions from ASSET_LIBRARY
+        const marqueeDef = ASSET_LIBRARY.find(a => a.id === marqueeId);
+        const marqueeWidth = marqueeDef?.width || 10000;
+        const marqueeHeight = marqueeDef?.height || 10000;
+
+        projectStore.addAsset({
+          id: `marquee-${Date.now()}`,
+          name: 'Marquee',
+          type: marqueeId,
+          x: width / 2,
+          y: height / 2,
+          width: marqueeWidth,
+          height: marqueeHeight,
+          rotation: 0,
+          scale: 1,
+          zIndex: 1
+        });
+        
+        toast.success(`Loaded marquee: ${marqueeDef?.label || marqueeId}`);
+      }
+    }
+  }, [isRouterReady, router.query, currentEventData]);
 
 
   // Reset currentEventData when route changes to ensure new event loads
@@ -841,6 +981,34 @@ export default function Editor() {
               projectStore.addAsset(asset);
             });
 
+            // DEFAULT OUTDOOR LAYOUT if empty
+            if (eventData.type === 'Outdoor Venue' && shapes.length === 0 && walls.length === 0 && assets.length === 0) {
+              const textureId = (router.query.texture as string) || 'sand-01';
+              const canvas = eventData.canvasData?.canvas || eventData.canvases?.[0];
+              const width = canvas?.width || 10000;
+              const height = canvas?.height || 10000;
+
+              console.log(`[Editor] Applying fallback outdoor layout (texture: ${textureId})`);
+              const backgroundName = textureId === 'sand-01' ? 'Beach Layout' : 'Grass Layout';
+              projectStore.addShape({
+                id: "background-texture",
+                name: backgroundName,
+                type: "rectangle",
+                x: width / 2,
+                y: height / 2,
+                width: width,
+                height: height,
+                fill: `url(#${textureId})`,
+                fillType: 'texture',
+                fillTexture: textureId,
+                stroke: "none",
+                strokeWidth: 0,
+                rotation: 0,
+                zIndex: -100,
+                points: []
+              });
+            }
+
             console.log(`[Editor] ✅ Loaded ${walls.length} walls, ${shapes.length} shapes, ${assets.length} assets from DATABASE`);
           }
         }
@@ -893,6 +1061,7 @@ export default function Editor() {
                 if (!existingWall) {
                   projectStore.addWall({
                     id: asset.id,
+                    name: asset.name, // RESTORE NAME
                     nodes: wallNodes,
                     edges: wallEdges,
                     zIndex: asset.zIndex || 0
@@ -921,6 +1090,7 @@ export default function Editor() {
                 if (!existingWall) {
                   projectStore.addWall({
                     id: asset.id,
+                    name: asset.name, // RESTORE NAME
                     nodes: wallNodes,
                     edges: wallEdges,
                     zIndex: asset.zIndex || 0
@@ -972,6 +1142,7 @@ export default function Editor() {
 
                 projectStore.addShape({
                   id: asset.id,
+                  name: asset.name, // RESTORE NAME
                   type: asset.type as 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand',
                   x: asset.x || 0,
                   y: asset.y || 0,
@@ -1014,6 +1185,7 @@ export default function Editor() {
 
                 projectStore.addAsset({
                   id: asset.id,
+                  name: asset.name, // RESTORE NAME
                   type: asset.type,
                   x: asset.x || 0,
                   y: asset.y || 0,
@@ -1049,6 +1221,59 @@ export default function Editor() {
       }
     }
   }, [eventData, currentEventData, id]);
+  // Handle focusing on content if requested in query params
+  useEffect(() => {
+    if (router.query.focus === 'true' && eventData && (walls.length > 0 || shapes.length > 0 || projectAssets.length > 0)) {
+      // Small timeout to ensure stores are fully populated and layout is ready
+      const timeoutId = setTimeout(() => {
+        const bounds = calculateWorkspaceBounds(walls, shapes, projectAssets);
+        
+        // If no bounds (because only background exists), fallback to background bounds if it exists
+        let targetBounds = bounds;
+        if (!targetBounds) {
+          const bgTexture = shapes.find(s => s.id === 'background-texture');
+          if (bgTexture) {
+            targetBounds = {
+              minX: bgTexture.x - bgTexture.width / 2,
+              minY: bgTexture.y - bgTexture.height / 2,
+              maxX: bgTexture.x + bgTexture.width / 2,
+              maxY: bgTexture.y + bgTexture.height / 2,
+              width: bgTexture.width,
+              height: bgTexture.height
+            };
+          }
+        }
+
+        if (targetBounds) {
+          const viewportWidth = window.innerWidth - 300; // Account for sidebars
+          const viewportHeight = window.innerHeight - 150; // Account for toolbars
+
+          const zoomX = viewportWidth / (targetBounds.width || 100);
+          const zoomY = viewportHeight / (targetBounds.height || 100);
+          
+          // Use a reasonable zoom level
+          const finalZoom = Math.max(0.05, Math.min(zoomX, zoomY, 0.4));
+          setZoom(finalZoom);
+
+          // Center the content
+          const centerX = (targetBounds.minX + targetBounds.maxX) / 2;
+          const centerY = (targetBounds.minY + targetBounds.maxY) / 2;
+          
+          const panX = (window.innerWidth / 2) - (centerX * finalZoom);
+          const panY = (window.innerHeight / 2) - (centerY * finalZoom);
+          
+          setPan(panX, panY);
+          
+          // Clear the focus param so it doesn't keep focusing
+          const newQuery = { ...router.query };
+          delete newQuery.focus;
+          router.replace({ pathname: router.pathname, query: newQuery }, undefined, { shallow: true });
+        }
+      }, 300);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [router.query.focus, eventData, walls, shapes, projectAssets]);
 
   // Auto-fit content when in preview mode
   useEffect(() => {

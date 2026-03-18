@@ -1,0 +1,37 @@
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Bricks 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Bricks 02.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Concrete 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Concrete 02.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Concrete 03.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Concrete 04.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Dots 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Dots 02.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Grass 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Grass 02.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Grass 03.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Gravel 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Gravel 02.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Marble 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Marble 02.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Marble 03.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Paving 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Paving 02.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\porous-cement-wall.jpg
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Road 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Road 02.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Road 03.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Sand 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Sand 02.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Sand 03.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Soil 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Stone 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Tile 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Tile 02.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Water 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Water 02.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\White grunge.jpg
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Wood grain 01.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Wood grain 02.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\textures\Wood grain 03.png
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\bg.jpg
+C:\Users\Jeremiah\EventSpacePro-frontend\public\assets\noise.png

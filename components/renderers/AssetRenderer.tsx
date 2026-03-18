@@ -29,9 +29,10 @@ interface AssetRendererProps {
     asset: Asset;
     isSelected: boolean;
     isHovered: boolean;
+    isPreview?: boolean;
 }
 
-export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRendererProps) {
+export default function AssetRenderer({ asset, isSelected, isHovered, isPreview }: AssetRendererProps) {
     const [svgContent, setSvgContent] = React.useState<string | null>(null);
     const updateAsset = useSceneStore(s => s.updateAsset);
 
@@ -169,7 +170,9 @@ export default function AssetRenderer({ asset, isSelected, isHovered }: AssetRen
 
         const currentFill = asset.fillColor || 'none';
         const currentStroke = asset.strokeColor || '#000000';
-        const currentStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : 0.5;
+        // Use much thinner strokes for previews to prevent "blobbing"
+        const defaultStrokeWidth = isPreview ? 0.4 : 0.5;
+        const currentStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : defaultStrokeWidth;
 
         // Strip any stale width/height/x/y/fill/stroke from existing attrs to avoid conflicts,
         // then inject our precise pixel values so centering works correctly.

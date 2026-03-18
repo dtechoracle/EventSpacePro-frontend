@@ -2,7 +2,8 @@ export type AssetCategory =
   | "Furniture"
   | "Layout"
   | "Sitting_Styles"
-  | "Space_Elements";
+  | "Space_Elements"
+  | "Marquee";
 
 export type AssetDef = {
   name: string
@@ -14,9 +15,22 @@ export type AssetDef = {
   height?: number
 }
 
-export const ASSET_CATEGORIES: AssetCategory[] = ["Furniture", "Layout", "Sitting_Styles", "Space_Elements"];
+export const ASSET_CATEGORIES: AssetCategory[] = ["Furniture", "Layout", "Sitting_Styles", "Space_Elements", "Marquee"];
+
+import { MARQUEES } from './marquees';
+
+const MARQUEE_ASSETS: AssetDef[] = MARQUEES.map(m => ({
+    id: m.id,
+    label: m.name,
+    path: m.path,
+    category: "Marquee",
+    width: m.width,
+    height: m.height,
+    name: m.name
+}));
 
 export const ASSET_LIBRARY: AssetDef[] = [
+    ...MARQUEE_ASSETS,
   {
     "id": "10-seater-rectangular-table",
     "label": "10 seater rectangular table",

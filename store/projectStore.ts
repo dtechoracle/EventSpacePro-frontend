@@ -34,12 +34,14 @@ export type WallEdge = {
 
 export type Group = {
     id: string;
+    name?: string;
     itemIds: string[];
     zIndex: number;
 };
 
 export type Shape = {
     id: string;
+    name?: string;
     groupId?: string;
     type: 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand' | 'polygon' | 'arc' | 'path';
     x: number;
@@ -89,6 +91,7 @@ export type Shape = {
 
 export type Asset = {
     id: string;
+    name?: string;
     groupId?: string;
     type: string; // e.g., 'chair', 'table', 'door', 'window'
     x: number;
@@ -136,6 +139,7 @@ export type Asset = {
 
 export type Wall = {
     id: string;
+    name?: string;
     groupId?: string;
     nodes: WallNode[];
     edges: WallEdge[];
@@ -170,6 +174,7 @@ export type Canvas = {
 
 export interface Dimension {
     id: string;
+    name?: string;
     type: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
     startPoint: { x: number; y: number };
     endPoint: { x: number; y: number };
@@ -201,6 +206,7 @@ export type Comment = {
 
 export type TextAnnotation = {
     id: string;
+    name?: string;
     groupId?: string;
     x: number;
     y: number;
@@ -218,6 +224,7 @@ export type TextAnnotation = {
 
 export type LabelArrow = {
     id: string;
+    name?: string;
     groupId?: string;
     startPoint: { x: number; y: number };
     endPoint: { x: number; y: number };
@@ -903,17 +910,25 @@ export const useProjectStore = create<ProjectState>()(
 
                     if (data.canvasData) {
                         // Load from rich canvasData if available
-                        const { shapes, assets, walls, layers, canvas } = data.canvasData;
+                        const { 
+                            shapes, assets, walls, layers, canvas,
+                            textAnnotations, dimensions, labelArrows, groups, wallSegments
+                        } = data.canvasData;
                         set({
                             shapes: shapes || [],
                             assets: assets || [],
                             walls: walls || [],
                             layers: layers || [DEFAULT_LAYER],
                             canvas: canvas || DEFAULT_CANVAS,
+                            textAnnotations: textAnnotations || [],
+                            dimensions: dimensions || [],
+                            labelArrows: labelArrows || [],
+                            groups: groups || [],
+                            wallSegments: wallSegments || [],
                             hasUnsavedChanges: false,
                             lastSaved: new Date(),
                         });
-                        console.log(`✓ Loaded event ${eventId} from backend`);
+                        console.log(`✓ Loaded event ${eventId} from backend with ${shapes?.length || 0} shapes and ${assets?.length || 0} assets`);
                     } else if (data.canvasAssets) {
                         // Fallback to legacy canvasAssets
                         set({ hasUnsavedChanges: false, lastSaved: new Date() });
@@ -945,7 +960,10 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             saveEvent: async (eventId: string, slug: string) => {
-                const { shapes, assets, walls, layers, canvas } = get();
+                const { 
+                    shapes, assets, walls, layers, canvas, 
+                    textAnnotations, dimensions, labelArrows, groups, wallSegments 
+                } = get();
                 set({ isSaving: true });
                 try {
                     // GET current event to preserve name and other fields
@@ -963,7 +981,10 @@ export const useProjectStore = create<ProjectState>()(
                         console.warn('[projectStore] Could not fetch current event, using defaults');
                     }
 
-                    const canvasData = { shapes, assets, walls, layers, canvas };
+                    const canvasData = { 
+                        shapes, assets, walls, layers, canvas,
+                        textAnnotations, dimensions, labelArrows, groups, wallSegments
+                    };
 
                     // CRITICAL: Save complete asset data, not just id/type/x/y
                     // Convert shapes, assets, and walls to canvasAssets format with ALL properties
@@ -973,6 +994,7 @@ export const useProjectStore = create<ProjectState>()(
                     shapes.forEach(shape => {
                         canvasAssets.push({
                             id: shape.id,
+                            name: shape.name, // SAVE NAME
                             type: shape.type,
                             x: shape.x,
                             y: shape.y,
@@ -992,6 +1014,7 @@ export const useProjectStore = create<ProjectState>()(
                     assets.forEach(asset => {
                         canvasAssets.push({
                             id: asset.id,
+                            name: asset.name, // SAVE NAME
                             type: asset.type,
                             x: asset.x,
                             y: asset.y,
@@ -1022,6 +1045,7 @@ export const useProjectStore = create<ProjectState>()(
 
                         canvasAssets.push({
                             id: wall.id,
+                            name: wall.name, // SAVE NAME
                             type: 'wall-polygon',
                             x: wall.nodes[0]?.x || 0,
                             y: wall.nodes[0]?.y || 0,
@@ -1762,13 +1786,26 @@ export const useProjectStore = create<ProjectState>()(
 
             removeItemsBatch: (ids: string[], skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
+                
+                const state = get();
+                const allResolvedIdsToDelete = state.resolveIdsWithGroups(ids);
+                const idsToDelete = new Set([...ids, ...allResolvedIdsToDelete]);
+
+                // Also find any groups whose items are being deleted
+                state.groups.forEach(g => {
+                    if (g.itemIds.some(itemId => idsToDelete.has(itemId))) {
+                        idsToDelete.add(g.id);
+                    }
+                });
+
                 set((state) => ({
-                    walls: state.walls.filter((w) => !ids.includes(w.id)),
-                    shapes: state.shapes.filter((s) => !ids.includes(s.id)),
-                    assets: state.assets.filter((a) => !ids.includes(a.id)),
-                    dimensions: state.dimensions.filter((d) => !ids.includes(d.id)),
-                    labelArrows: state.labelArrows.filter((la) => !ids.includes(la.id)),
-                    textAnnotations: state.textAnnotations.filter((ta) => !ids.includes(ta.id)),
+                    walls: state.walls.filter((w) => !idsToDelete.has(w.id)),
+                    shapes: state.shapes.filter((s) => !idsToDelete.has(s.id)),
+                    assets: state.assets.filter((a) => !idsToDelete.has(a.id)),
+                    dimensions: state.dimensions.filter((d) => !idsToDelete.has(d.id)),
+                    labelArrows: state.labelArrows.filter((la) => !idsToDelete.has(la.id)),
+                    textAnnotations: state.textAnnotations.filter((ta) => !idsToDelete.has(ta.id)),
+                    groups: state.groups.filter((g) => !idsToDelete.has(g.id)),
                     hasUnsavedChanges: true,
                 }));
             },

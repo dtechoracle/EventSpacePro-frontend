@@ -86,7 +86,7 @@ export const trimToBlendShapes = (shapes: Shape[]): Shape | null => {
     if (shapes.length < 2) return null;
     initPaper();
 
-    // Create a temporary project for the blending operation
+    // Create a temporary project for the slicing operation
     const project = new paper.Project(new paper.Size(10000, 10000));
     project.activate();
 
@@ -105,23 +105,16 @@ export const trimToBlendShapes = (shapes: Shape[]): Shape | null => {
 
         if (paths.length < 2) return null;
 
-        // "Move it on top of it": Align all shapes to the center of the primary shape (first selected)
-        const primaryCenter = paths[0].position.clone();
-        for (let i = 1; i < paths.length; i++) {
-            paths[i].position = primaryCenter;
-        }
-
-        // Sequence through all selected shapes to perform a union
+        // Sequence through all selected shapes to perform an intersection (Cut)
         let resultPath: paper.PathItem = paths[0];
         for (let i = 1; i < paths.length; i++) {
-            const next = resultPath.unite(paths[i]);
+            const next = resultPath.intersect(paths[i]);
             resultPath = next;
         }
 
-        // We specifically do NOT call simplify() here anymore to avoid distorting rectangles/circles
-        // resultPath.simplify() was the cause of the "pill" shape distortion.
-
         const bounds = resultPath.bounds;
+        if (bounds.width < 0.1 || bounds.height < 0.1) return null; // No intersection
+
         const centerX = bounds.center.x;
         const centerY = bounds.center.y;
 
@@ -131,7 +124,7 @@ export const trimToBlendShapes = (shapes: Shape[]): Shape | null => {
         const svgD = resultPath.pathData;
         const baseShape = shapes[0];
 
-        const mergedShape: Shape = {
+        const blendedShape: Shape = {
             ...baseShape,
             id: `shape-blended-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             type: 'path',
@@ -145,7 +138,7 @@ export const trimToBlendShapes = (shapes: Shape[]): Shape | null => {
             polygonSides: undefined,
         };
 
-        return mergedShape;
+        return blendedShape;
     } catch (error) {
         console.error("[shapeBoolean] Blending error:", error);
         return null;

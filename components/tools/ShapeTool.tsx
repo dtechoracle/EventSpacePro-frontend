@@ -168,6 +168,9 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 }
             }
 
+            if (lastPoint) {
+                snapped = snapTo90Degrees(lastPoint, snapped, 6);
+            }
             setPreviewPoint(snapped);
         } else {
             if (!isDrawing || !startPoint) return;
@@ -250,6 +253,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             setSegments([]);
             setLastPoint(null);
             setPreviewPoint(null);
+            setActiveTool('select');
             return;
         }
 
@@ -383,6 +387,10 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             }
         }
 
+        if (lastPoint && isDrawing) {
+            snapped = snapTo90Degrees(lastPoint, snapped, 6);
+        }
+
         const snapThreshold = 20 / useEditorStore.getState().zoom;
         for (const p of existingEndpoints) {
             if (Math.hypot(snapped.x - p.x, snapped.y - p.y) < snapThreshold) {
@@ -449,6 +457,10 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 if (Math.hypot(snapped.x - start.x, snapped.y - start.y) < snapThreshold) {
                     snapped = start;
                 }
+            }
+
+            if (dragStartPos.current) {
+                snapped = snapTo90Degrees(dragStartPos.current, snapped, 6);
             }
 
             const dist = Math.hypot(snapped.x - dragStartPos.current.x, snapped.y - dragStartPos.current.y);
@@ -614,7 +626,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                             const dx = previewPoint.x - lastPt.x;
                             const dy = previewPoint.y - lastPt.y;
                             const wallLength = Math.sqrt(dx * dx + dy * dy);
-                            const guideLength = Math.max(wallLength * 2, 500);
+                            const guideLength = 200000; // Increased to 200m to cover almost any reasonable workspace size
 
                             return (
                                 <>
@@ -725,7 +737,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                                 x2={seg.end.x}
                                 y2={seg.end.y}
                                 stroke="#3b82f6"
-                                strokeWidth={5}
+                                strokeWidth={2}
                                 opacity={0.6}
                                 vectorEffect="non-scaling-stroke"
                             />
@@ -737,7 +749,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                             x2={previewPoint.x}
                             y2={previewPoint.y}
                             stroke="#3b82f6"
-                            strokeWidth={5}
+                            strokeWidth={2}
                             strokeDasharray="5,5"
                             opacity={0.6}
                             vectorEffect="non-scaling-stroke"

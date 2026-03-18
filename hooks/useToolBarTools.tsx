@@ -96,7 +96,7 @@ export function useToolbarTools(): Tool[] {
       icon: <FaEdit size={18} />,
       label: "Modify",
       options: [
-        { id: "trim", label: "Trim", icon: <FaCut size={14} /> },
+        { id: "trim", label: "Slice", icon: <FaCut size={14} /> },
         { id: "trim-to-blend", label: "Trim to Blend", icon: <FaCrosshairs size={14} /> },
         { id: "move", label: "Move", icon: <FaArrowsAlt size={14} /> },
         { id: "copy", label: "Copy", icon: <FaCopy size={14} /> },

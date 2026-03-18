@@ -304,6 +304,7 @@ export default function AiTrigger() {
       else if (r.includes('padded')) id = 'padded-chair';
       else if (r.includes('office')) id = 'office-chair';
       else if (r.includes('stool')) id = 'cocktail-stool';
+      else if (r.includes('marquee')) id = '12m-x-12m-marquee'; // Default fuzzy marquee
       else if (r.includes('chair') || r.includes('seat')) id = 'normal-chair';
 
       const def = ASSET_LIBRARY.find(a => a.id === id);
@@ -454,7 +455,7 @@ export default function AiTrigger() {
         height: a.heightMm || sh,
         strokeWidth: a.strokeWidth || 5, // AI provided or natural 5
         strokeColor: a.strokeColor || '#1a1a1a',
-        fillColor: a.fillColor || '#e8e4d0',   // slightly darker cream for stage
+        fillColor: a.fillColor || 'transparent',   // No fill by default per user request
         scale: 1, zIndex: 3
       });
 
@@ -517,6 +518,7 @@ export default function AiTrigger() {
           height: h,
           rotation: a.rotation || 0,
           strokeWidth: a.strokeWidth || 5, // Respect AI request
+          fillColor: a.fillColor || 'transparent', // No fill by default
           scale: 1,
           zIndex: rawType.includes('rug') || rawType.includes('carpet') ? 2 : 5
         });
@@ -577,6 +579,7 @@ export default function AiTrigger() {
           type: resolved.id,
           x: cx, y: cy,
           width: tw, height: th,
+          fillColor: 'transparent',
           scale: 1, zIndex: 5
         });
 
@@ -592,6 +595,7 @@ export default function AiTrigger() {
             y: cy + Math.sin(angle) * radius,
             rotation: (angle * 180 / Math.PI) + 90,
             width: CHAIR_SIZE, height: CHAIR_SIZE,
+            fillColor: 'transparent',
             scale: 1, zIndex: 15
           });
         }
@@ -696,6 +700,7 @@ export default function AiTrigger() {
           width: renderW, height: renderH,
           strokeWidth: 5, // Natural mode default
           strokeColor: '#1a1a1a',
+          fillColor: 'transparent', // No fill by default per user request
           scale: 1, zIndex: 5
         });
 
@@ -728,7 +733,8 @@ export default function AiTrigger() {
               y: tableCY + Math.sin(angle) * radius,
               rotation: (angle * 180 / Math.PI) + 90,
               width: effChairSize, height: effChairSize,
-              strokeWidth: 5, scale: 1, zIndex: 15
+              strokeWidth: 5, scale: 1, zIndex: 15,
+              fillColor: 'transparent'
             });
           }
         } else {
@@ -745,7 +751,8 @@ export default function AiTrigger() {
                 id: `chair-${i}-r-${ci}-${rot}`, type: 'normal-chair',
                 x, y, rotation: rot,
                 width: effChairSize, height: effChairSize,
-                strokeWidth: 5, scale: 1, zIndex: 15
+                strokeWidth: 5, scale: 1, zIndex: 15,
+                fillColor: 'transparent'
               });
             }
           };
@@ -756,7 +763,8 @@ export default function AiTrigger() {
                 id: `chair-${i}-c-${ci}-${rot}`, type: 'normal-chair',
                 x, y, rotation: rot,
                 width: effChairSize, height: effChairSize,
-                strokeWidth: 5, scale: 1, zIndex: 15
+                strokeWidth: 5, scale: 1, zIndex: 15,
+                fillColor: 'transparent'
               });
             }
           };
@@ -786,7 +794,7 @@ export default function AiTrigger() {
           x: sx, y: sy,
           width: s.widthMm ?? s.width ?? 1000,
           height: s.heightMm ?? s.height ?? 1000,
-          fill: s.fillColor || s.fill || '#e5e7eb',
+          fill: s.fillColor || s.fill || 'transparent',
           stroke: s.strokeColor || s.stroke || '#000000',
           strokeWidth: s.strokeWidth ?? 5,
           rotation: s.rotation ?? 0,

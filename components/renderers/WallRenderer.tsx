@@ -660,29 +660,7 @@ export default function WallRenderer({ wall, isSelected, isHovered }: WallRender
                 );
             })}
 
-            {/* Control points - show nodes for selected walls */}
-            {isSelected && nodes.map((node) => (
-                <g key={`control-${node.id}`}>
-                    <circle
-                        cx={node.x}
-                        cy={node.y}
-                        r={4 / zoom}
-                        fill="#ffffff"
-                        stroke="#3b82f6"
-                        strokeWidth={1.5 / zoom}
-                        className="cursor-move"
-                        data-node-id={node.id}
-                        data-wall-id={wall.id}
-                    />
-                    <circle
-                        cx={node.x}
-                        cy={node.y}
-                        r={2 / zoom}
-                        fill="#3b82f6"
-                        pointerEvents="none"
-                    />
-                </g>
-            ))}
+            {/* Control points removed at user request */}
 
             {/* End caps - close wall ends for nodes with only one edge */}
             {edges.map((edge) => {

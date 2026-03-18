@@ -440,6 +440,8 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
         if (e.key === 'Escape') {
             if (isDrawing) {
                 finishWall(false);
+            } else {
+                setActiveTool('select');
             }
         } else if (e.key === 'Enter') {
             if (isDrawing && currentWall && currentWall.nodes.length >= 2) {
@@ -535,7 +537,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                 const dx = previewPoint.x - lastNode.x;
                 const dy = previewPoint.y - lastNode.y;
                 const wallLength = Math.sqrt(dx * dx + dy * dy);
-                const guideLength = Math.max(wallLength * 2, 500); // At least 500mm or 2x wall length
+                const guideLength = 200000; // Increased to 200m to cover workspace size
 
                 return (
                     <>
@@ -548,7 +550,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                             stroke="#ef4444"
                             strokeWidth={1}
                             opacity={0.7}
-                            strokeDasharray="4,4"
+                            strokeDasharray={`${4 / zoom},${4 / zoom}`}
                             vectorEffect="non-scaling-stroke"
                         />
                         {/* Vertical guide (green) from start point */}
@@ -560,7 +562,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                             stroke="#22c55e"
                             strokeWidth={1}
                             opacity={0.7}
-                            strokeDasharray="4,4"
+                            strokeDasharray={`${4 / zoom},${4 / zoom}`}
                             vectorEffect="non-scaling-stroke"
                         />
                         {/* Horizontal guide (red) from current point */}
@@ -572,7 +574,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                             stroke="#ef4444"
                             strokeWidth={1}
                             opacity={0.7}
-                            strokeDasharray="4,4"
+                            strokeDasharray={`${4 / zoom},${4 / zoom}`}
                             vectorEffect="non-scaling-stroke"
                         />
                         {/* Vertical guide (green) from current point */}
@@ -584,7 +586,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                             stroke="#22c55e"
                             strokeWidth={1}
                             opacity={0.7}
-                            strokeDasharray="4,4"
+                            strokeDasharray={`${4 / zoom},${4 / zoom}`}
                             vectorEffect="non-scaling-stroke"
                         />
                     </>
@@ -614,9 +616,10 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                             x2={previewPoint.x - perpX}
                             y2={previewPoint.y - perpY}
                             stroke="#3b82f6"
-                            strokeWidth={2 / zoom}
-                            strokeDasharray={`${5 / zoom},${5 / zoom}`}
+                            strokeWidth={2}
+                            strokeDasharray="5,5"
                             opacity={0.6}
+                            vectorEffect="non-scaling-stroke"
                         />
 
                         {/* Right line */}
@@ -626,9 +629,10 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                             x2={previewPoint.x + perpX}
                             y2={previewPoint.y + perpY}
                             stroke="#3b82f6"
-                            strokeWidth={2 / zoom}
-                            strokeDasharray={`${5 / zoom},${5 / zoom}`}
+                            strokeWidth={2}
+                            strokeDasharray="5,5"
                             opacity={0.6}
+                            vectorEffect="non-scaling-stroke"
                         />
                     </g>
                 );

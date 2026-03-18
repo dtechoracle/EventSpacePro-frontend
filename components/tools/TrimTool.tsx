@@ -61,7 +61,7 @@ export default function TrimTool({ isActive, isTrimToObject }: TrimToolProps) {
 
         if (isClick && walls.length > 0) {
             if (isTrimToObject && useEditorStore.getState().selectedIds.length === 0) {
-                toast.error('Select boundary walls first using the Pointer tool, then choose Trim to Object.', { id: 'trim-err-sel' });
+                toast.error('Select boundary walls first using the Pointer tool, then choose Slice to Object.', { id: 'trim-err-sel' });
                 setStartPoint(null);
                 setCurrentPoint(null);
                 return;
@@ -158,12 +158,12 @@ export default function TrimTool({ isActive, isTrimToObject }: TrimToolProps) {
                         // Shrink n1 to endHole
                         const updatedNodes = clickedWall.nodes.map(n => n.id === n1.id ? { ...n, x: endHole.x, y: endHole.y } : n);
                         useProjectStore.getState().updateWall(clickedWall.id, { nodes: updatedNodes });
-                        toast.success('Trimmed to intersection point', { icon: '✂️' });
+                        toast.success('Sliced to intersection point', { icon: '✂️' });
                     } else if (segmentStartIndex === intersections.length - 1) {
                         // Shrink n2 to startHole
                         const updatedNodes = clickedWall.nodes.map(n => n.id === n2.id ? { ...n, x: startHole.x, y: startHole.y } : n);
                         useProjectStore.getState().updateWall(clickedWall.id, { nodes: updatedNodes });
-                        toast.success('Trimmed to intersection point', { icon: '✂️' });
+                        toast.success('Sliced to intersection point', { icon: '✂️' });
                     } else {
                         // Removed a middle segment: need to split the edge into two disconnected pieces!
                         // That creates a new node for the startHole and a new node for the endHole.
@@ -179,13 +179,13 @@ export default function TrimTool({ isActive, isTrimToObject }: TrimToolProps) {
                         const updatedEdges = clickedWall.edges.filter(e => e.id !== clickedEdge!.id).concat([edge1, edge2]);
 
                         useProjectStore.getState().updateWall(clickedWall.id, { nodes: updatedNodes, edges: updatedEdges, isClosed: false });
-                        toast.success('Trimmed segment between intersections', { icon: '✂️' });
+                        toast.success('Sliced segment between intersections', { icon: '✂️' });
                     }
                 } else {
                     toast.error('No intersecting bounding objects to trim against', { id: 'trim-err' });
                 }
             } else {
-                toast.error('Click a wall edge to trim, or drag to slice', { id: 'trim-err2' });
+                toast.error('Click a wall edge to slice, or drag to cut', { id: 'trim-err2' });
             }
 
             setStartPoint(null);

@@ -19,8 +19,8 @@ export default function TexturePatternDefs() {
             if (!scales.has(textureId)) scales.set(textureId, new Set());
 
             const set = scales.get(textureId)!;
-            const s = scale || 1;
-            const t = thickness || 1;
+            const s = scale === undefined ? 4 : scale;
+            const t = thickness === undefined ? 1 : thickness;
 
             let exists = false;
             set.forEach(item => {
@@ -71,7 +71,8 @@ export default function TexturePatternDefs() {
                             patternUnits="userSpaceOnUse"
                             width={baseTileSize}
                             height={baseTileSize}
-                            patternTransform={`scale(${scale})`} // 1:1 scale by default
+                            patternTransform={`scale(${scale})`}
+                            style={{ color: 'currentColor' }}
                         >
                             <image
                                 href={pattern.path}

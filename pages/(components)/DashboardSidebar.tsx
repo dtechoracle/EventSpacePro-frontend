@@ -81,7 +81,7 @@ export default function DashboardSidebar() {
   const collapsed = hydrated ? isCollapsed : false;
 
   return (
-    <div className={`${collapsed ? 'w-16' : 'w-56'} bg-white/80 backdrop-blur-sm border-r border-gray-300/50 flex flex-col shadow-sm transition-all duration-300 relative`}>
+    <div className={`${collapsed ? 'w-16' : 'w-56'} bg-white/80 backdrop-blur-sm border-r border-gray-300/50 flex flex-col shadow-sm transition-all duration-300 relative z-50`}>
       {/* Collapse Toggle Button */}
       <button
         onClick={toggleCollapse}
@@ -90,31 +90,21 @@ export default function DashboardSidebar() {
       >
         {collapsed ? <BsChevronRight className="w-3 h-3" /> : <BsChevronLeft className="w-3 h-3" />}
       </button>
-      {/* Profile Section */}
-      <div
-        onClick={() => router.push("/dashboard/profile")}
-        className="p-4 border-b border-gray-200/50 cursor-pointer hover:bg-gray-50 transition-colors group"
-      >
-        <div className="flex items-center gap-3">
-          {user?.avatar ? (
-            <div className="w-10 h-10 rounded-full overflow-hidden shadow-md flex-shrink-0 border-2 border-white">
-              <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
-            </div>
-          ) : (
-            <div
-              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold shadow-md flex-shrink-0"
-              style={{ backgroundColor: avatarColor }}
-            >
-              {userInitial}
-            </div>
-          )}
-          {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold text-sm truncate text-gray-800 group-hover:text-blue-600 transition-colors">{userName}</div>
-              <div className="text-xs text-gray-500 truncate">Account Settings</div>
-            </div>
-          )}
-        </div>
+      {/* Logo Section */}
+      <div className={`p-6 mb-4 flex items-center ${collapsed ? 'justify-center px-1' : 'justify-start px-6'}`}>
+        {!collapsed ? (
+          <img 
+            src="/assets/mainLogo.svg" 
+            alt="Logo" 
+            className="h-8 w-auto object-contain" 
+          />
+        ) : (
+          <img 
+            src="/assets/mainLogo.svg" 
+            alt="Logo" 
+            className="w-10 h-auto object-contain" 
+          />
+        )}
       </div>
 
       {/* Navigation */}
@@ -195,21 +185,7 @@ export default function DashboardSidebar() {
             <BsTrash className="w-4 h-4 flex-shrink-0" />
             {!isCollapsed && <span>Trash</span>}
           </a>
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              router.push("/dashboard/profile");
-            }}
-            className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors ${router.pathname === "/dashboard/profile"
-              ? "font-semibold text-blue-600 bg-blue-50 border border-blue-100"
-              : "text-gray-600"
-              }`}
-            title={isCollapsed ? "Profile Settings" : undefined}
-          >
-            <FiUser className="w-4 h-4 flex-shrink-0" />
-            {!isCollapsed && <span>Profile Settings</span>}
-          </a>
+
         </nav>
 
         {/* Shared Section */}
@@ -229,6 +205,49 @@ export default function DashboardSidebar() {
         )}
       </div>
 
+      {/* Profile Section with Hover Dropdown */}
+      <div className="relative group px-4 mb-6">
+        <div 
+          className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} p-2 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors border border-transparent hover:border-gray-200`}
+        >
+          {user?.avatar ? (
+            <div className="w-9 h-9 rounded-full overflow-hidden shadow-sm flex-shrink-0 border-2 border-white">
+              <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-semibold shadow-sm flex-shrink-0"
+              style={{ backgroundColor: avatarColor }}
+            >
+              {userInitial}
+            </div>
+          )}
+
+        </div>
+
+        {/* Hover Dropdown */}
+        <div className={`absolute bottom-full ${collapsed ? 'left-14' : 'left-4'} mb-1 w-48 bg-white border border-gray-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 py-1 overflow-hidden`}>
+          <div className="px-4 py-2 border-b border-gray-100">
+            <p className="text-xs font-semibold text-gray-900 truncate">{user?.firstName} {user?.lastName}</p>
+            <p className="text-[10px] text-gray-500 truncate">{user?.email}</p>
+          </div>
+          <button
+            onClick={() => router.push("/dashboard/profile")}
+            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+          >
+            <FiUser className="w-4 h-4" />
+            <span>Settings</span>
+          </button>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors"
+          >
+            <FiLogOut className="w-4 h-4" />
+            <span>Logout</span>
+          </button>
+        </div>
+      </div>
+
       {/* Bottom Actions */}
       {!isCollapsed && (
         <div className="p-4 border-t border-gray-200/50 space-y-1">
@@ -241,17 +260,7 @@ export default function DashboardSidebar() {
         </div>
       )}
 
-      {/* Logout */}
-      <div className="p-4 border-t border-gray-200/50">
-        <button
-          onClick={handleLogout}
-          className={`w-full flex items-center ${isCollapsed ? "justify-center" : "gap-2"} px-3 py-2 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors`}
-          title="Logout"
-        >
-          <FiLogOut className="w-4 h-4" />
-          {!isCollapsed && <span>Logout</span>}
-        </button>
-      </div>
+
     </div>
   );
 }

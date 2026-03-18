@@ -86,13 +86,17 @@ export default function PlanPreview({
       } else if (isFinite(item.x) && isFinite(item.y)) {
         // Resolve actual dimensions
         const def = ASSET_LIBRARY.find(a => a.id === item.type);
-        const w = (item.width ?? def?.width ?? 500) * (item.scale || 1);
-        const h = (item.height ?? def?.height ?? 500) * (item.scale || 1);
+        const w = (item.width ?? def?.width ?? 600);
+        const h = (item.height ?? def?.height ?? 600);
+        const scale = item.scale || 1;
 
-        minX = Math.min(minX, item.x - w / 2);
-        minY = Math.min(minY, item.y - h / 2);
-        maxX = Math.max(maxX, item.x + w / 2);
-        maxY = Math.max(maxY, item.y + h / 2);
+        const halfW = (w * scale) / 2;
+        const halfH = (h * scale) / 2;
+
+        minX = Math.min(minX, item.x - halfW);
+        minY = Math.min(minY, item.y - halfH);
+        maxX = Math.max(maxX, item.x + halfW);
+        maxY = Math.max(maxY, item.y + halfH);
         hasValidBounds = true;
       }
     });
@@ -128,21 +132,37 @@ export default function PlanPreview({
       <defs>
         {/* Texture Library */}
         {texturePatterns.map(p => {
-          if (p.isImage && p.path) {
-            const size = p.tileSize || 1024;
-            return (
-              <pattern key={p.id} id={p.id} patternUnits="userSpaceOnUse" width={size * 0.5} height={size * 0.5} patternTransform="scale(0.5)">
-                <image href={p.path} width={size * 0.5} height={size * 0.5} preserveAspectRatio="xMidYMid slice" />
-              </pattern>
-            );
-          } else if (p.svg) {
-            return (
-              <React.Fragment key={p.id}>
-                <g dangerouslySetInnerHTML={{ __html: p.svg }} />
-              </React.Fragment>
-            );
-          }
-          return null;
+          // Find all unique scale/thickness combos used for THIS pattern in THIS preview
+          const usages = new Set<{ s: number, t: number }>();
+          allItems.forEach((item: any) => {
+            if (item && (item.fillType === 'texture' || item.fillType === 'hatch') && item.fillTexture === p.id) {
+              usages.add({ s: item.fillTextureScale || 4, t: item.fillTextureThickness || 1 });
+            }
+          });
+          // Also add default 1,1 for safety
+          usages.add({ s: 1, t: 1 });
+          // Deduplicate
+          const uniqueUsages = Array.from(usages).filter((v, i, a) => 
+            a.findIndex(t => t.s === v.s && t.t === v.t) === i
+          );
+
+          return uniqueUsages.map(usage => {
+            const scaledId = `${p.id}-scale-${usage.s}-thick-${usage.t}`;
+            if (p.isImage && p.path) {
+              const size = p.tileSize || 1024;
+              return (
+                <pattern key={scaledId} id={scaledId} patternUnits="userSpaceOnUse" width={p.tileSize || 1024} height={p.tileSize || 1024} patternTransform={`scale(${usage.s})`}>
+                  <image href={p.path} width={p.tileSize || 1024} height={p.tileSize || 1024} preserveAspectRatio="xMidYMid slice" />
+                </pattern>
+              );
+            } else if (p.svg) {
+              // Same logic as TexturePatternDefs.tsx but simplified
+              let svgStr = p.svg.replace(/id="[^"]*"/, `id="${scaledId}"`);
+              svgStr = svgStr.replace('<pattern', `<pattern patternTransform="scale(${usage.s})"`);
+              return <g key={scaledId} dangerouslySetInnerHTML={{ __html: svgStr }} />;
+            }
+            return null;
+          });
         })}
 
         {/* Dynamic Asset Fills (Gradients, Hatches, Images) */}
@@ -177,19 +197,20 @@ export default function PlanPreview({
             }
           } else if (fillType === 'hatch') {
             const pattern = shape.hatchPattern || 'horizontal';
-            const spacing = shape.hatchSpacing || 5;
+            const s = shape.fillTextureScale || 4;
+            const spacing = (shape.hatchSpacing || 25) * s;
             const color = shape.hatchColor || '#000000';
             const id = getHatchId(asset.id);
 
             return (
-              <pattern id={id} key={id} patternUnits="userSpaceOnUse" width={spacing * 2} height={spacing * 2}>
-                <rect width={spacing * 2} height={spacing * 2} fill="transparent" />
-                {pattern === 'horizontal' && <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth="1" />}
-                {pattern === 'vertical' && <line x1={spacing} y1="0" x2={spacing} y2={spacing * 2} stroke={color} strokeWidth="1" />}
-                {pattern === 'diagonal-right' && <path d={`M0,0 L${spacing * 2},${spacing * 2} M0,${spacing * 2} L${spacing * 2},0`} stroke={color} strokeWidth="1" />}
-                {pattern === 'diagonal-left' && <path d={`M0,${spacing * 2} L${spacing * 2},0 M0,0 L${spacing * 2},${spacing * 2}`} stroke={color} strokeWidth="1" />}
-                {pattern === 'cross' && <path d={`M0,${spacing} L${spacing * 2},${spacing} M${spacing},0 L${spacing},${spacing * 2}`} stroke={color} strokeWidth="1" />}
-                {pattern === 'dots' && <circle cx={spacing / 2} cy={spacing / 2} r="1" fill={color} />}
+              <pattern id={id} key={id} patternUnits="userSpaceOnUse" width={spacing} height={spacing}>
+                <rect width={spacing} height={spacing} fill="transparent" />
+                {pattern === 'horizontal' && <line x1="0" y1={spacing / 2} x2={spacing} y2={spacing / 2} stroke={color} strokeWidth="1" />}
+                {pattern === 'vertical' && <line x1={spacing / 2} y1="0" x2={spacing / 2} y2={spacing} stroke={color} strokeWidth="1" />}
+                {pattern === 'diagonal-right' && <path d={`M0,0 L${spacing},${spacing}`} stroke={color} strokeWidth="1" />}
+                {pattern === 'diagonal-left' && <path d={`M0,${spacing} L${spacing},0`} stroke={color} strokeWidth="1" />}
+                {pattern === 'cross' && <path d={`M0,${spacing / 2} L${spacing},${spacing / 2} M${spacing / 2},0 L${spacing / 2},${spacing}`} stroke={color} strokeWidth="1" />}
+                {pattern === 'dots' && <circle cx={spacing / 2} cy={spacing / 2} r={Math.max(0.5, spacing / 10)} fill={color} />}
               </pattern>
             );
           } else if (fillType === 'image' && shape.fillImage) {
@@ -208,19 +229,24 @@ export default function PlanPreview({
     );
   };
 
-  // Helper to get fill
   const getFill = (asset: any) => {
     const fillType = asset.fillType || 'color';
     if (fillType === 'gradient') return `url(#${getGradientId(asset.id)})`;
     if (fillType === 'hatch') return `url(#${getHatchId(asset.id)})`;
     if (fillType === 'image' && asset.fillImage) return `url(#${getPatternId(asset.id)})`;
     if (fillType === 'texture' && asset.fillTexture) {
-      return `url(#${asset.fillTexture})`;
+      const scale = asset.fillTextureScale || 4;
+      const thickness = asset.fillTextureThickness || 1;
+      return `url(#${asset.fillTexture}-scale-${scale}-thick-${thickness})`;
     }
-    return asset.backgroundColor || asset.fillColor || asset.fill || (asset.type === 'line' ? 'none' : '#e5e7eb');
+    const fill = asset.backgroundColor || asset.fillColor || asset.fill;
+    if (fill && fill !== 'transparent') return fill;
+    if (asset.type === 'line' || asset.nodes || asset.wallNodes || asset.type === 'wall-segments') return 'none';
+    return 'transparent';
   };
 
   const renderText = (asset: any) => {
+    if (!isFinite(asset.x) || !isFinite(asset.y)) return null;
     return (
       <text
         key={asset.id}
@@ -231,7 +257,7 @@ export default function PlanPreview({
         textAnchor="middle"
         dominantBaseline="middle"
         style={{ fontFamily: asset.fontFamily || 'Arial', fontWeight: asset.fontWeight || 'bold' }}
-        transform={asset.rotation ? `rotate(${asset.rotation} ${asset.x} ${asset.y})` : undefined}
+        transform={asset.rotation && isFinite(asset.rotation) ? `rotate(${asset.rotation} ${asset.x} ${asset.y})` : undefined}
       >
         {asset.text}
       </text>
@@ -240,18 +266,18 @@ export default function PlanPreview({
 
 
   const renderAsset = (asset: AssetInstance) => {
-    if (!asset) return null;
+    const isWall = (asset as any).nodes || (asset as any).wallNodes || asset.type === 'wall-segments';
+    if (!isWall && (!isFinite(asset.x) || !isFinite(asset.y))) return null;
 
     // Library Asset (SVG)
     const def = ASSET_LIBRARY.find(a => a.id === asset.type);
     if (def?.path) {
       const w = (asset.width ?? def.width ?? 500) * (asset.scale || 1);
       const h = (asset.height ?? def.height ?? 500) * (asset.scale || 1);
-      const x = asset.x - w / 2; // SVG uses top-left usually, but here we transform center
-      const y = asset.y - h / 2;
+      const rotation = isFinite(asset.rotation || 0) ? asset.rotation : 0;
 
       return (
-        <g key={asset.id} transform={`translate(${asset.x}, ${asset.y}) rotate(${asset.rotation || 0})`}>
+        <g key={asset.id} transform={`translate(${asset.x}, ${asset.y}) rotate(${rotation || 0})`}>
           {/* Background */}
           {(asset.backgroundColor && asset.backgroundColor !== "transparent") && (
             <rect x={-w / 2} y={-h / 2} width={w} height={h} fill={asset.backgroundColor} />
@@ -329,6 +355,8 @@ export default function PlanPreview({
     const edges = (asset as any).edges || (asset as any).wallEdges;
 
     if (nodes && edges) {
+      const stroke = (asset as any).strokeColor || (asset as any).stroke || '#1e293b';
+      const thickness = (asset as any).wallThickness || 150;
       return (
         <g key={asset.id}>
           {edges.map((edge: any, i: number) => {
@@ -344,8 +372,8 @@ export default function PlanPreview({
                 key={`${asset.id}-edge-${i}`}
                 x1={nA.x} y1={nA.y}
                 x2={nB.x} y2={nB.y}
-                stroke={getFill(asset) === 'none' ? '#1e293b' : getFill(asset)}
-                strokeWidth={edge.thickness || (asset as any).wallThickness || 150}
+                stroke={stroke}
+                strokeWidth={edge.thickness || thickness}
                 strokeLinecap="round"
               />
             );
@@ -356,17 +384,27 @@ export default function PlanPreview({
 
     // New Wall Engine (Segments)
     if (asset.type === 'wall-segments' && (asset as any).wallSegments) {
+      const thickness = (asset as any).wallThickness || 150;
       return (
         <g key={asset.id}>
           {(asset as any).wallSegments.map((seg: any, i: number) => (
-            <line
-              key={`${asset.id}-seg-${i}`}
-              x1={seg.start.x} y1={seg.start.y}
-              x2={seg.end.x} y2={seg.end.y}
-              stroke={getFill(asset) === 'none' ? '#1e293b' : getFill(asset)}
-              strokeWidth={seg.thickness || (asset as any).wallThickness || 150}
-              strokeLinecap="round"
-            />
+            <React.Fragment key={`${asset.id}-seg-${i}`}>
+              {/* Hollow wall look for preview - two lines */}
+              <line
+                x1={seg.start.x} y1={seg.start.y}
+                x2={seg.end.x} y2={seg.end.y}
+                stroke="#1e293b"
+                strokeWidth={thickness}
+                strokeLinecap="butt"
+              />
+              <line
+                x1={seg.start.x} y1={seg.start.y}
+                x2={seg.end.x} y2={seg.end.y}
+                stroke="white"
+                strokeWidth={thickness - 30}
+                strokeLinecap="butt"
+              />
+            </React.Fragment>
           ))}
         </g>
       );
@@ -380,7 +418,11 @@ export default function PlanPreview({
   };
 
   const renderedAssets = allItems
-    ? allItems.map((item: any) => renderAsset(item)).filter(Boolean)
+    ? allItems.map((item: any) => (
+      <g key={item.id} style={{ color: item.hatchColor || item.fillColor || item.fill || '#000000' }}>
+        {renderAsset(item)}
+      </g>
+    )).filter(Boolean)
     : [];
 
   if (renderedAssets.length === 0) {

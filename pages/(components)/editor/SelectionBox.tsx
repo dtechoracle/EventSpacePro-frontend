@@ -20,7 +20,7 @@ export default function SelectionBox({ mmToPx }: SelectionBoxProps) {
 
   return (
     <div
-      className="absolute border-2 border-blue-500 bg-blue-100 bg-opacity-20 pointer-events-none z-50"
+      className="absolute border border-blue-500 bg-blue-500 bg-opacity-10 pointer-events-none z-50"
       style={{
         left,
         top,

@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import { useSceneStore } from "@/store/sceneStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import toast from "react-hot-toast";
+import { MARQUEES } from "@/lib/marquees";
+import InlineSvg from "@/components/tools/InlineSvg";
 
 interface ApiError {
   message: string;
@@ -14,7 +16,7 @@ interface ApiError {
 }
 
 export default function CreateEventModal({ onClose, initialTemplateData }: { onClose: () => void, initialTemplateData?: any }) {
-  const [step, setStep] = useState<'initial' | 'venue-selection' | 'outdoor-selection' | 'event-details' | 'upload-image'>('initial');
+  const [step, setStep] = useState<'initial' | 'venue-selection' | 'outdoor-selection' | 'outdoor-dimensions' | 'marquee-selection' | 'event-details' | 'upload-image'>('initial');
 
   useEffect(() => {
     if (initialTemplateData) {
@@ -28,10 +30,13 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
   const [outdoorWidth, setOutdoorWidth] = useState(20);
   const [outdoorDepth, setOutdoorDepth] = useState(20);
   const [eventName, setEventName] = useState("");
+  const [selectedMarquee, setSelectedMarquee] = useState<any>(null);
   const [venueImage, setVenueImage] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const router = useRouter();
   const setCanvas = useSceneStore((s) => s.setCanvas);
+  const lastCanvasDataRef = useRef<any>(null);
+  const lastCanvasesRef = useRef<any>(null);
   const { slug } = router.query;
 
   // Fetch projects if no slug is present
@@ -48,10 +53,10 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
     if (slug) {
       setSelectedProjectId(slug as string);
     } else {
-      const projectsList = Array.isArray(projects) ? projects : (projects as any)?.data || [];
-      if (projectsList && projectsList.length > 0 && !selectedProjectId) {
-        setSelectedProjectId(projectsList[0].slug);
-      }
+      // Remove auto-default to force user to select a project
+      // if (!selectedProjectId && projectsList.length > 0) {
+      //   setSelectedProjectId(projectsList[0].slug);
+      // }
     }
   }, [slug, projects, selectedProjectId]);
 
@@ -85,24 +90,91 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
         'outdoor': 'Outdoor Venue'
       };
 
+      // Determine canvas data (assets, shapes, etc)
+      let canvasData = undefined;
+      
+      if (venueType === 'outdoor') {
+        const textureId = outdoorType === 'beach' ? 'sand-01' : 'grass-01';
+        const backgroundName = outdoorType === 'beach' ? 'Beach Layout' : 'Grass Layout';
+        canvasData = {
+          walls: [],
+          assets: [],
+          shapes: [
+            {
+              id: "background-texture",
+              name: backgroundName,
+              type: "rectangle",
+              x: width / 2,
+              y: height / 2,
+              width: width,
+              height: height,
+              fill: `url(#${textureId})`,
+              fillType: 'texture',
+              fillTexture: textureId,
+              stroke: "none",
+              strokeWidth: 0,
+              rotation: 0,
+              zIndex: -100,
+              points: []
+            }
+          ],
+          canvas: { width, height, color: '#ffffff' }
+        };
+      } else if (venueType === 'marquee' && selectedMarquee) {
+        // Set canvas to be slightly larger than the marquee
+        width = selectedMarquee.width + 4000;
+        height = selectedMarquee.height + 4000;
+        canvases[0].width = width;
+        canvases[0].height = height;
+
+        canvasData = {
+          walls: [],
+          shapes: [],
+          assets: [
+            {
+              id: `marquee-${Date.now()}`,
+              name: 'Marquee',
+              type: selectedMarquee.id,
+              x: width / 2,
+              y: height / 2,
+              width: selectedMarquee.width,
+              height: selectedMarquee.height,
+              scale: 1,
+              rotation: 0,
+              zIndex: 1,
+              fillColor: "none",
+              strokeColor: "#000000",
+              strokeWidth: 0.5
+            }
+          ],
+          canvas: { width, height, color: '#ffffff' }
+        };
+      }
+
+      lastCanvasDataRef.current = canvasData;
+      lastCanvasesRef.current = canvases;
+
       return apiRequest(`/projects/${selectedProjectId}/events`, "POST", {
         name: eventName,
         type: eventTypeMap[venueType],
-        canvases
+        canvases,
+        canvasData
       }, true);
     },
     onSuccess: async (response) => {
       const eventId = response.data._id;
 
-      // Handle Template Data Injection
-      if (initialTemplateData) {
+      // Handle Template or Marquee Data Injection
+      if (initialTemplateData || (venueType === 'marquee' && selectedMarquee)) {
         try {
+          const dataToApply = initialTemplateData || lastCanvasDataRef.current;
           await apiRequest(`/projects/${selectedProjectId}/events/${eventId}`, "PUT", {
-            canvasData: initialTemplateData
+            canvasData: dataToApply,
+            canvases: lastCanvasesRef.current // Ensure canvas dimensions are sync'd
           }, true);
         } catch (e) {
-          console.error("Failed to apply template data", e);
-          toast.error("Created event but failed to apply template");
+          console.error("Failed to apply marquee/template data", e);
+          toast.error("Created event but failed to apply initial layout");
         }
       }
 
@@ -110,7 +182,11 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
       if (creationType === 'ai') {
         router.push({
           pathname: `/dashboard/editor/${selectedProjectId}/${eventId}`,
-          query: { aiMode: 'true' }
+          query: { 
+            aiMode: 'true',
+            marqueeId: venueType === 'marquee' ? selectedMarquee?.id : undefined,
+            focus: 'true'
+          }
         });
         toast.success("Event created! AI assistant is ready.");
         onClose();
@@ -151,9 +227,13 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
         }
       } else {
         // Normal event - go straight to editor
-        const query: any = {};
+        const query: any = { focus: 'true' };
         if (venueType === 'outdoor' && outdoorType) {
-          query.texture = outdoorType === 'beach' ? 'sand' : 'grass';
+          query.texture = outdoorType === 'beach' ? 'sand-01' : 'grass-01';
+        }
+
+        if (venueType === 'marquee' && selectedMarquee) {
+          query.marqueeId = selectedMarquee.id;
         }
 
         router.push({
@@ -308,7 +388,7 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                   <button
                     onClick={() => {
                       setVenueType('marquee');
-                      setStep('event-details');
+                      setStep('marquee-selection');
                     }}
                     className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-200 hover:border-[var(--accent)] hover:bg-[#0000000A] transition-all"
                   >
@@ -372,7 +452,7 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                   <button
                     onClick={() => {
                       setOutdoorType('field');
-                      setStep('event-details');
+                      setStep('outdoor-dimensions');
                     }}
                     className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-200 hover:border-[var(--accent)] hover:bg-[#0000000A] transition-all"
                   >
@@ -389,7 +469,7 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                   <button
                     onClick={() => {
                       setOutdoorType('beach');
-                      setStep('event-details');
+                      setStep('outdoor-dimensions');
                     }}
                     className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-200 hover:border-[var(--accent)] hover:bg-[#0000000A] transition-all"
                   >
@@ -401,6 +481,122 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                       <p className="text-xs text-gray-500 mt-1">Sandy environment</p>
                     </div>
                   </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Step 2.6: Outdoor Dimensions */}
+            {step === 'outdoor-dimensions' && (
+              <motion.div
+                key="outdoor-dimensions"
+                initial={{ opacity: 0, x: 40 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -40 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-col gap-6"
+              >
+                <div>
+                  <button
+                    onClick={() => setStep('outdoor-selection')}
+                    className="text-sm text-gray-500 hover:text-gray-700 mb-2"
+                  >
+                    ← Back
+                  </button>
+                  <h2 className="text-[2rem] font-semibold text-[#272235]">
+                    Set Area Dimensions
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Enter the size of your {outdoorType === 'beach' ? 'beach' : 'field'} space
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700 ml-1">Width (m)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={outdoorWidth}
+                      onChange={(e) => setOutdoorWidth(Number(e.target.value))}
+                      className="w-full h-14 rounded-2xl px-6 bg-[#0000000A] text-base outline-none mt-1"
+                      placeholder="20"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700 ml-1">Length (m)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={outdoorDepth}
+                      onChange={(e) => setOutdoorDepth(Number(e.target.value))}
+                      className="w-full h-14 rounded-2xl px-6 bg-[#0000000A] text-base outline-none mt-1"
+                      placeholder="20"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setStep('event-details')}
+                  disabled={!outdoorWidth || !outdoorDepth || outdoorWidth <= 0 || outdoorDepth <= 0}
+                  className="w-full h-14 rounded-2xl text-white text-base font-medium bg-[var(--accent)] disabled:opacity-50"
+                >
+                  Confirm Dimensions
+                </button>
+              </motion.div>
+            )}
+
+            {/* Step 2.7: Marquee Selection */}
+            {step === 'marquee-selection' && (
+              <motion.div
+                key="marquee-selection"
+                initial={{ opacity: 0, x: 40 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -40 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-col gap-6 w-full max-h-[70vh]"
+              >
+                <div>
+                  <button
+                    onClick={() => setStep('venue-selection')}
+                    className="text-sm text-gray-500 hover:text-gray-700 mb-2"
+                  >
+                    ← Back
+                  </button>
+                  <h2 className="text-[2rem] font-semibold text-[#272235]">
+                    Select Marquee
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Choose a marquee template to start with
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 overflow-y-auto pr-2 custom-scrollbar">
+                  {MARQUEES.map((marquee) => (
+                    <button
+                      key={marquee.id}
+                      onClick={() => {
+                        setSelectedMarquee(marquee);
+                        setStep('event-details');
+                      }}
+                      className={`flex flex-col items-center gap-3 p-4 rounded-2xl border-2 transition-all hover:bg-[#00000005] group ${
+                        selectedMarquee?.id === marquee.id ? 'border-[var(--accent)] bg-[#0000000A]' : 'border-gray-100'
+                      }`}
+                    >
+                      <div className="w-full aspect-video bg-white rounded-xl border border-gray-100 overflow-hidden flex items-center justify-center p-4 group-hover:shadow-sm transition-all">
+                        <InlineSvg 
+                            src={marquee.path} 
+                            stroke="#272235"
+                            strokeWidth={2}
+                            fill="none"
+                        />
+                      </div>
+                      <div className="text-center">
+                        <h3 className="font-semibold text-sm truncate w-full">{marquee.name}</h3>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{marquee.width/1000}m x {marquee.height/1000}m</p>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               </motion.div>
             )}
@@ -417,7 +613,12 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
               >
                 <div>
                   <button
-                    onClick={() => setStep(creationType === 'ai' ? 'initial' : 'venue-selection')}
+                    onClick={() => {
+                        if (creationType === 'ai') setStep('initial');
+                        else if (venueType === 'outdoor') setStep('outdoor-dimensions');
+                        else if (venueType === 'marquee') setStep('marquee-selection');
+                        else setStep('venue-selection');
+                    }}
                     className="text-sm text-gray-500 hover:text-gray-700 mb-2"
                   >
                     ← Back
@@ -453,32 +654,7 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                   autoFocus
                 />
 
-                {venueType === 'outdoor' && (
-                  <div className="flex gap-4">
-                    <div className="flex-1">
-                      <label className="text-sm font-medium text-gray-700 ml-1">Width (m)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={outdoorWidth}
-                        onChange={(e) => setOutdoorWidth(Number(e.target.value))}
-                        className="w-full h-14 rounded-2xl px-6 bg-[#0000000A] text-base outline-none mt-1"
-                        placeholder="20"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-sm font-medium text-gray-700 ml-1">Length (m)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={outdoorDepth}
-                        onChange={(e) => setOutdoorDepth(Number(e.target.value))}
-                        className="w-full h-14 rounded-2xl px-6 bg-[#0000000A] text-base outline-none mt-1"
-                        placeholder="20"
-                      />
-                    </div>
-                  </div>
-                )}
+
 
                 <button
                   onClick={() => {
@@ -488,7 +664,7 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                       handleCreateEvent();
                     }
                   }}
-                  disabled={!eventName || (venueType === 'outdoor' && (!outdoorWidth || !outdoorDepth))}
+                  disabled={!eventName || !selectedProjectId || (venueType === 'outdoor' && (!outdoorWidth || !outdoorDepth))}
                   className="w-full h-14 rounded-2xl text-white text-base font-medium bg-[var(--accent)] disabled:opacity-50"
                 >
                   {venueType === 'preloaded' && creationType === 'manual' ? 'Next' : 'Create Event'}

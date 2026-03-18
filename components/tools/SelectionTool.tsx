@@ -1213,7 +1213,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                     cx={rotPt.x}
                     cy={rotPt.y}
                     r={rotateHandleRadiusPx}
-                    fill="white"
+                    fill="rgba(255, 255, 255, 0.01)"
                     stroke="#3B82F6"
                     strokeWidth={2}
                     vectorEffect="non-scaling-stroke"
@@ -1231,7 +1231,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                 points={`${boxTopLeft.x},${boxTopLeft.y} ${boxTopRight.x},${boxTopRight.y} ${boxBottomRight.x},${boxBottomRight.y} ${boxBottomLeft.x},${boxBottomLeft.y}`}
                 fill="none"
                 stroke="#3B82F6"
-                strokeWidth={1}
+                strokeWidth={1.5}
                 vectorEffect="non-scaling-stroke"
                 pointerEvents="none"
             />
@@ -1248,7 +1248,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 y={pos.y - handleSizePx / 2}
                                 width={handleSizePx}
                                 height={handleSizePx}
-                                fill="#ffffff"
+                                fill="rgba(255, 255, 255, 0.01)"
                                 stroke="#3b82f6"
                                 strokeWidth={2}
                                 vectorEffect="non-scaling-stroke"
@@ -1266,7 +1266,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 y={pos.y - handleSizePx / 2}
                                 width={handleSizePx}
                                 height={handleSizePx}
-                                fill="#ffffff"
+                                fill="rgba(255, 255, 255, 0.01)"
                                 stroke="#3b82f6"
                                 strokeWidth={2}
                                 vectorEffect="non-scaling-stroke"
@@ -1284,7 +1284,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 y={pos.y - handleSizePx / 2}
                                 width={handleSizePx}
                                 height={handleSizePx}
-                                fill="#ffffff"
+                                fill="rgba(255, 255, 255, 0.01)"
                                 stroke="#3b82f6"
                                 strokeWidth={2}
                                 vectorEffect="non-scaling-stroke"
@@ -1302,7 +1302,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 y={pos.y - handleSizePx / 2}
                                 width={handleSizePx}
                                 height={handleSizePx}
-                                fill="#ffffff"
+                                fill="rgba(255, 255, 255, 0.01)"
                                 stroke="#3b82f6"
                                 strokeWidth={2}
                                 vectorEffect="non-scaling-stroke"
@@ -1322,7 +1322,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 y={pos.y - handleSizePx / 2}
                                 width={handleSizePx}
                                 height={handleSizePx}
-                                fill="#ffffff"
+                                fill="rgba(255, 255, 255, 0.01)"
                                 stroke="#3b82f6"
                                 strokeWidth={2}
                                 vectorEffect="non-scaling-stroke"
@@ -1340,7 +1340,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 y={pos.y - handleSizePx / 2}
                                 width={handleSizePx}
                                 height={handleSizePx}
-                                fill="#ffffff"
+                                fill="rgba(255, 255, 255, 0.01)"
                                 stroke="#3b82f6"
                                 strokeWidth={2}
                                 vectorEffect="non-scaling-stroke"
@@ -1358,7 +1358,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 y={pos.y - handleSizePx / 2}
                                 width={handleSizePx}
                                 height={handleSizePx}
-                                fill="#ffffff"
+                                fill="rgba(255, 255, 255, 0.01)"
                                 stroke="#3b82f6"
                                 strokeWidth={2}
                                 vectorEffect="non-scaling-stroke"
@@ -1376,7 +1376,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                                 y={pos.y - handleSizePx / 2}
                                 width={handleSizePx}
                                 height={handleSizePx}
-                                fill="#ffffff"
+                                fill="rgba(255, 255, 255, 0.01)"
                                 stroke="#3b82f6"
                                 strokeWidth={2}
                                 vectorEffect="non-scaling-stroke"

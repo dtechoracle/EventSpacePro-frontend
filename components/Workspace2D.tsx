@@ -322,21 +322,66 @@ export default function Workspace2D({
             ASSET_LIBRARY.find(al => al.id.toLowerCase() === (a.type || a.id).toLowerCase())?.category === 'Space_Elements');
 
         if (isSpaceElement && walls.length > 0) {
-          const wallSnap = findWallSnapPoint({ x: worldX, y: worldY }, walls, 50); // Larger distance for snapping doors
-          if (wallSnap.snapped && wallSnap.wallId && wallSnap.edgeId) {
-            finalX = wallSnap.x;
-            finalY = wallSnap.y;
-            // Match rotation to wall edge
-            const wall = walls.find(w => w.id === wallSnap.wallId);
-            if (wall) {
-              const edge = wall.edges.find(e => e.id === wallSnap.edgeId);
-              if (edge) {
-                const nodeA = wall.nodes.find(n => n.id === edge.nodeA);
-                const nodeB = wall.nodes.find(n => n.id === edge.nodeB);
-                if (nodeA && nodeB) {
-                  finalRotation = Math.atan2(nodeB.y - nodeA.y, nodeB.x - nodeA.x) * (180 / Math.PI);
+          const asset = assets.find(a => a.id === selectedIds[0]);
+          if (asset) {
+            const aw = (asset.width || 0) * (asset.scale || 1);
+            const ah = (asset.height || 0) * (asset.scale || 1);
+            
+            const dx = worldX - draggedItemStart.x;
+            const dy = worldY - draggedItemStart.y;
+            const proposedCenter = { x: asset.x + dx, y: asset.y + dy };
+
+            let bestSnap: any = null;
+            let minSnapDist = 150;
+
+            // 1. Find the closest wall edge first to determine orientation
+            const initialSnap = findWallSnapPoint(proposedCenter, walls, 150);
+            
+            if (initialSnap.snapped && initialSnap.wallId && initialSnap.edgeId) {
+              const wall = walls.find(w => w.id === initialSnap.wallId);
+              const edge = wall?.edges.find(e => e.id === initialSnap.edgeId);
+              const nA = wall?.nodes.find(n => n.id === edge?.nodeA);
+              const nB = wall?.nodes.find(n => n.id === edge?.nodeB);
+
+              if (nA && nB) {
+                // Determine wall angle
+                const wallAngleRad = Math.atan2(nB.y - nA.y, nB.x - nA.x);
+                const wallAngleDeg = wallAngleRad * (180 / Math.PI);
+                
+                // We want to check door points at THIS angle
+                const cos = Math.cos(wallAngleRad);
+                const sin = Math.sin(wallAngleRad);
+
+                // Door points relative to center, rotated to match wall
+                // Prioritize 'Bottom' (sill) of the door
+                // We add a tiny offset (10mm) to the bottom snap point to "push" it deeper into the wall
+                const doorPoints = [
+                  { x: -((ah / 2) + 10) * sin, y: ((ah / 2) + 10) * cos, type: 'bottom' },
+                  { x: 0, y: 0, type: 'center' },
+                  { x: ((ah / 2) + 10) * sin, y: -((ah / 2) + 10) * cos, type: 'top' },
+                ];
+
+                for (const pt of doorPoints) {
+                  const proposedPt = { x: proposedCenter.x + pt.x, y: proposedCenter.y + pt.y };
+                  // Re-check snap for this specific point against THIS wall specifically for precision
+                  const snap = findWallSnapPoint(proposedPt, [wall!], 150);
+                  if (snap.snapped) {
+                    const dist = Math.hypot(proposedPt.x - snap.x, proposedPt.y - snap.y);
+                    // Give slight preference to 'bottom' edge snap
+                    const biasedDist = pt.type === 'bottom' ? dist * 0.8 : dist;
+                    if (biasedDist < minSnapDist) {
+                      minSnapDist = biasedDist;
+                      bestSnap = { ...snap, localOffset: pt, wallAngle: wallAngleDeg };
+                    }
+                  }
                 }
               }
+            }
+
+            if (bestSnap) {
+              finalRotation = bestSnap.wallAngle;
+              finalX = worldX + (bestSnap.x - (asset.x + dx + bestSnap.localOffset.x));
+              finalY = worldY + (bestSnap.y - (asset.y + dy + bestSnap.localOffset.y));
             }
           }
         } else if (snapToObjectsEnabled && selectedIds.length === 1) {
@@ -791,67 +836,43 @@ export default function Workspace2D({
         if (isSnapMode && snapSourceId && snapAnchor) {
           let targetHit: SnapObject | null = null;
 
-          // Check if clicked on a shape
-          for (const shape of shapes) {
-            if (shape.id === snapSourceId) continue;
-            const width = shape.width || 100;
-            const height = shape.height || 100;
-            const halfW = width / 2;
-            const halfH = height / 2;
-            if (
-              worldX >= shape.x - halfW &&
-              worldX <= shape.x + halfW &&
-              worldY >= shape.y - halfH &&
-              worldY <= shape.y + halfH
-            ) {
-              targetHit = { type: 'shape', object: shape };
-              break;
-            }
-          }
+          // Unified z-aware hit testing for snap target
+          const getZIndex = (item: any) => (typeof item.zIndex === 'number' ? item.zIndex : 0);
+          const candidates = [
+            ...walls.map(w => ({ ...w, _renderType: 'wall' as const })),
+            ...shapes.map(s => ({ ...s, _renderType: 'shape' as const })),
+            ...assets.map(a => ({ ...a, _renderType: 'asset' as const })),
+          ]
+            .filter(item => item.id !== snapSourceId) // Don't snap to self
+            .sort((a, b) => getZIndex(a) - getZIndex(b));
 
-          // Check if clicked on an asset
-          if (!targetHit) {
-            for (const asset of assets) {
-              if (asset.isExploded) continue;
-              if (asset.id === snapSourceId) continue;
-              const width = asset.width || 100;
-              const height = asset.height || 100;
-              const scale = asset.scale || 1;
-              const halfW = (width * scale) / 2;
-              const halfH = (height * scale) / 2;
-              if (
-                worldX >= asset.x - halfW &&
-                worldX <= asset.x + halfW &&
-                worldY >= asset.y - halfH &&
-                worldY <= asset.y + halfH
-              ) {
-                targetHit = { type: 'asset', object: asset };
-                break;
+          for (let i = candidates.length - 1; i >= 0; i--) {
+            const item = candidates[i];
+            let isHit = false;
+
+            if (item._renderType === 'shape') {
+              const shape = item;
+              const halfW = (shape.width || 100) / 2, halfH = (shape.height || 100) / 2;
+              if (worldX >= shape.x - halfW && worldX <= shape.x + halfW && worldY >= shape.y - halfH && worldY <= shape.y + halfH) isHit = true;
+            } else if (item._renderType === 'asset') {
+              const asset = item;
+              if (!asset.isExploded) {
+                const halfW = ((asset.width || 100) * (asset.scale || 1)) / 2, halfH = ((asset.height || 100) * (asset.scale || 1)) / 2;
+                if (worldX >= asset.x - halfW && worldX <= asset.x + halfW && worldY >= asset.y - halfH && worldY <= asset.y + halfH) isHit = true;
               }
-            }
-          }
-
-          // Check if clicked on a wall (use its bounding box)
-          if (!targetHit) {
-            for (const wall of walls) {
-              if (wall.id === snapSourceId) continue;
-              if (!wall.nodes || wall.nodes.length === 0) continue;
-
-              let minX = Infinity,
-                minY = Infinity,
-                maxX = -Infinity,
-                maxY = -Infinity;
-              wall.nodes.forEach((node) => {
-                minX = Math.min(minX, node.x);
-                minY = Math.min(minY, node.y);
-                maxX = Math.max(maxX, node.x);
-                maxY = Math.max(maxY, node.y);
+            } else if (item._renderType === 'wall') {
+              const wall = item;
+              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+              wall.nodes.forEach(node => {
+                minX = Math.min(minX, node.x); minY = Math.min(minY, node.y);
+                maxX = Math.max(maxX, node.x); maxY = Math.max(maxY, node.y);
               });
+              if (worldX >= minX && worldX <= maxX && worldY >= minY && worldY <= maxY) isHit = true;
+            }
 
-              if (worldX >= minX && worldX <= maxX && worldY >= minY && worldY <= maxY) {
-                targetHit = { type: 'wall', object: wall };
-                break;
-              }
+            if (isHit) {
+              targetHit = { type: item._renderType as any, object: item as any };
+              break;
             }
           }
 
@@ -956,7 +977,7 @@ export default function Workspace2D({
               setSelectedIds(newSelection);
 
               if (newSelection.length === 1) {
-                toast("Now select the second object to be trimmed relative to the first.", { icon: '✨', duration: 4000 });
+                  toast("Now select the second object to be trimmed relative to the first.", { icon: '✨', duration: 4000 });
               } else if (newSelection.length === 2) {
                 const shapesToBlend = [
                   shapes.find(s => s.id === newSelection[0]),
@@ -973,10 +994,22 @@ export default function Workspace2D({
                     if (blendedShape) {
                       // Save history once for the entire atomic operation
                       projectStore.saveToHistory();
-                      shapesToBlend.forEach(s => projectStore.removeShape(s.id, true));
+                      // Only remove the SECOND shape (the one being cut)
+                      // Keep the FIRST shape (the cutter/boundary)
+                      projectStore.removeShape(shapesToBlend[1]!.id, true);
+                      
                       projectStore.addShape(blendedShape, true);
+                      
+                      // Group the cutter (shapesToBlend[0]) and the result (blendedShape)
+                      const groupId = crypto.randomUUID();
+                      projectStore.addGroup({
+                        id: groupId,
+                        itemIds: [shapesToBlend[0].id, blendedShape.id],
+                        zIndex: Math.max(shapesToBlend[0].zIndex || 0, blendedShape.zIndex || 0)
+                      }, true);
+
                       setSelectedIds([blendedShape.id]);
-                      toast.success("Shapes blended successfully!", { icon: '✨' });
+                      toast.success("Shape blended and grouped!", { icon: '✨' });
                     } else {
                       toast.error("Failed to blend shapes. Ensure they intersect cleanly.");
                       setSelectedIds([]);
@@ -1011,286 +1044,160 @@ export default function Workspace2D({
             }
           };
 
-          // Check dimensions FIRST (before shapes/assets) so they're easier to select
-          for (let i = dimensions.length - 1; i >= 0; i--) {
-            const dim = dimensions[i];
-            // Hit-test the dimension line (the offset line, not the extension lines)
-            const dx = dim.endPoint.x - dim.startPoint.x;
-            const dy = dim.endPoint.y - dim.startPoint.y;
-            const length = Math.sqrt(dx * dx + dy * dy);
-            if (length === 0) continue;
+          // Combine all items into a single list for unified, z-aware hit testing
+          const getZ = (item: any) => (typeof item.zIndex === 'number' ? item.zIndex : 0);
+          const allRenderables = [
+            ...walls.map(w => ({ ...w, _renderType: 'wall' as const })),
+            ...shapes.map(s => ({ ...s, _renderType: 'shape' as const })),
+            ...assets.map(a => ({ ...a, _renderType: 'asset' as const })),
+            ...dimensions.map(d => ({ ...d, _renderType: 'dimension' as const })),
+            ...labelArrows.map(l => ({ ...l, _renderType: 'labelArrow' as const })),
+            ...textAnnotations.map(t => ({ ...t, _renderType: 'textAnnotation' as const })),
+          ].sort((a, b) => getZ(a) - getZ(b));
 
-            const nx = dx / length;
-            const ny = dy / length;
-            const px = -ny;
-            const py = nx;
+          // Check items from front to back (highest zIndex first)
+          for (let i = allRenderables.length - 1; i >= 0; i--) {
+            const item = allRenderables[i];
+            let isHit = false;
 
-            // Calculate dimension line position
-            const p1x = dim.startPoint.x + px * dim.offset;
-            const p1y = dim.startPoint.y + py * dim.offset;
-            const p2x = dim.endPoint.x + px * dim.offset;
-            const p2y = dim.endPoint.y + py * dim.offset;
-
-            // Hit-test the dimension line
-            const lineDx = p2x - p1x;
-            const lineDy = p2y - p1y;
-            const lineLengthSquared = lineDx * lineDx + lineDy * lineDy;
-            if (lineLengthSquared === 0) continue;
-
-            const t = Math.max(
-              0,
-              Math.min(
-                1,
-                ((worldX - p1x) * lineDx + (worldY - p1y) * lineDy) / lineLengthSquared
-              )
-            );
-
-            const projX = p1x + t * lineDx;
-            const projY = p1y + t * lineDy;
-            const dist = Math.sqrt((worldX - projX) ** 2 + (worldY - projY) ** 2);
-
-            // Also check if clicking near the text (midpoint)
-            const midX = (p1x + p2x) / 2;
-            const midY = (p1y + p2y) / 2;
-            const distToText = Math.sqrt((worldX - midX) ** 2 + (worldY - midY) ** 2);
-
-            // Also check extension lines
-            const distToStart = Math.sqrt((worldX - dim.startPoint.x) ** 2 + (worldY - dim.startPoint.y) ** 2);
-            const distToEnd = Math.sqrt((worldX - dim.endPoint.x) ** 2 + (worldY - dim.endPoint.y) ** 2);
-
-            const hitRadius = 40; // Even larger hit radius for easier clicking
-            const textHitRadius = 50; // Larger radius for text area
-            const extensionHitRadius = 30; // For extension lines
-
-            if (dist <= hitRadius || distToText <= textHitRadius || distToStart <= extensionHitRadius || distToEnd <= extensionHitRadius) {
-              const idsToSelect = resolveIdsWithGroups([dim.id]);
-              if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
-                useProjectStore.getState().saveToHistory();
-                setIsDraggingItem(true);
-                setDraggedItemStart({ x: worldX, y: worldY });
-              } else {
-                handleItemSelection([dim.id], e.shiftKey);
-              }
-              itemSelected = true;
-              return;
-            }
-          }
-
-          // Check shapes (reverse order for z-index)
-          for (let i = shapes.length - 1; i >= 0; i--) {
-            const shape = shapes[i];
-
-            // Improved hit-test for lines/arrows
-            if (shape.type === 'line' || shape.type === 'arrow') {
-              const thickness = (shape.strokeWidth ?? 20) / 2 + 10; // extra padding
-
-              // If this is a polyline, test each segment
-              if (shape.points && shape.points.length >= 2) {
-                let hit = false;
-                for (let s = 0; s < shape.points.length - 1; s++) {
-                  const p1 = shape.points[s];
-                  const p2 = shape.points[s + 1];
-                  const ax = shape.x + p1.x;
-                  const ay = shape.y + p1.y;
-                  const bx = shape.x + p2.x;
-                  const by = shape.y + p2.y;
-
-                  const dx = bx - ax;
-                  const dy = by - ay;
-                  const lenSq = dx * dx + dy * dy;
-                  if (lenSq === 0) continue;
-                  const t = Math.max(0, Math.min(1, ((worldX - ax) * dx + (worldY - ay) * dy) / lenSq));
-                  const projX = ax + t * dx;
-                  const projY = ay + t * dy;
-                  const dist = Math.hypot(worldX - projX, worldY - projY);
-                  if (dist <= thickness) {
-                    hit = true;
-                    break;
+            if (item._renderType === 'dimension') {
+              const dim = item;
+              const dx = dim.endPoint.x - dim.startPoint.x;
+              const dy = dim.endPoint.y - dim.startPoint.y;
+              const length = Math.sqrt(dx * dx + dy * dy);
+              if (length > 0) {
+                const nx = dx / length;
+                const ny = dy / length;
+                const px = -ny;
+                const py = nx;
+                const p1x = dim.startPoint.x + px * dim.offset;
+                const p1y = dim.startPoint.y + py * dim.offset;
+                const p2x = dim.endPoint.x + px * dim.offset;
+                const p2y = dim.endPoint.y + py * dim.offset;
+                const lineDx = p2x - p1x;
+                const lineDy = p2y - p1y;
+                const lineLengthSquared = lineDx * lineDx + lineDy * lineDy;
+                if (lineLengthSquared > 0) {
+                  const t = Math.max(0, Math.min(1, ((worldX - p1x) * lineDx + (worldY - p1y) * lineDy) / lineLengthSquared));
+                  const projX = p1x + t * lineDx;
+                  const projY = p1y + t * lineDy;
+                  const dist = Math.sqrt((worldX - projX) ** 2 + (worldY - projY) ** 2);
+                  const midX = (p1x + p2x) / 2;
+                  const midY = (p1y + p2y) / 2;
+                  const distToText = Math.sqrt((worldX - midX) ** 2 + (worldY - midY) ** 2);
+                  const distToStart = Math.sqrt((worldX - dim.startPoint.x) ** 2 + (worldY - dim.startPoint.y) ** 2);
+                  const distToEnd = Math.sqrt((worldX - dim.endPoint.x) ** 2 + (worldY - dim.endPoint.y) ** 2);
+                  if (dist <= 40 || distToText <= 50 || distToStart <= 30 || distToEnd <= 30) {
+                    isHit = true;
                   }
                 }
-
-                if (!hit) continue;
+              }
+            } else if (item._renderType === 'shape') {
+              const shape = item;
+              if (shape.type === 'line' || shape.type === 'arrow') {
+                const thickness = (shape.strokeWidth ?? 20) / 2 + 10;
+                if (shape.points && shape.points.length >= 2) {
+                  for (let s = 0; s < shape.points.length - 1; s++) {
+                    const p1 = shape.points[s];
+                    const p2 = shape.points[s + 1];
+                    const ax = shape.x + p1.x;
+                    const ay = shape.y + p1.y;
+                    const bx = shape.x + p2.x;
+                    const by = shape.y + p2.y;
+                    const dx = bx - ax;
+                    const dy = by - ay;
+                    const lenSq = dx * dx + dy * dy;
+                    if (lenSq === 0) continue;
+                    const t = Math.max(0, Math.min(1, ((worldX - ax) * dx + (worldY - ay) * dy) / lenSq));
+                    const projX = ax + t * dx;
+                    const projY = ay + t * dy;
+                    if (Math.hypot(worldX - projX, worldY - projY) <= thickness) {
+                      isHit = true;
+                      break;
+                    }
+                  }
+                } else {
+                  const rot = (shape.rotation || 0) * (Math.PI / 180);
+                  const cosR = Math.cos(rot), sinR = Math.sin(rot);
+                  const halfLen = shape.width / 2;
+                  const ax = shape.x - halfLen * cosR, ay = shape.y - halfLen * sinR;
+                  const bx = shape.x + halfLen * cosR, by = shape.y + halfLen * sinR;
+                  const dx = bx - ax, dy = by - ay;
+                  const lenSq = dx * dx + dy * dy;
+                  if (lenSq > 0) {
+                    const t = Math.max(0, Math.min(1, ((worldX - ax) * dx + (worldY - ay) * dy) / lenSq));
+                    if (Math.hypot(worldX - (ax + t * dx), worldY - (ay + t * dy)) <= thickness) isHit = true;
+                  }
+                }
               } else {
-                // Legacy straight line/arrow defined by width + rotation
-                const rot = (shape.rotation || 0) * (Math.PI / 180);
-                const cosR = Math.cos(rot);
-                const sinR = Math.sin(rot);
-                const halfLen = shape.width / 2;
-                const ax = shape.x - halfLen * cosR;
-                const ay = shape.y - halfLen * sinR;
-                const bx = shape.x + halfLen * cosR;
-                const by = shape.y + halfLen * sinR;
-                const dx = bx - ax;
-                const dy = by - ay;
+                const halfW = shape.width / 2, halfH = shape.height / 2;
+                if (worldX >= shape.x - halfW && worldX <= shape.x + halfW && worldY >= shape.y - halfH && worldY <= shape.y + halfH) isHit = true;
+              }
+            } else if (item._renderType === 'asset') {
+              const asset = item;
+              if (!asset.isExploded) {
+                const halfW = (asset.width * asset.scale) / 2, halfH = (asset.height * asset.scale) / 2;
+                if (worldX >= asset.x - halfW && worldX <= asset.x + halfW && worldY >= asset.y - halfH && worldY <= asset.y + halfH) isHit = true;
+              }
+            } else if (item._renderType === 'wall') {
+              const wall = item;
+              const wallNodeMap = new Map(wall.nodes.map((n: any) => [n.id, n]));
+              for (const edge of wall.edges) {
+                const nA = wallNodeMap.get(edge.nodeA), nB = wallNodeMap.get(edge.nodeB);
+                if (!nA || !nB) continue;
+                const dx = nB.x - nA.x, dy = nB.y - nA.y;
                 const lenSq = dx * dx + dy * dy;
                 if (lenSq === 0) continue;
-                const t = Math.max(0, Math.min(1, ((worldX - ax) * dx + (worldY - ay) * dy) / lenSq));
-                const projX = ax + t * dx;
-                const projY = ay + t * dy;
-                const dist = Math.hypot(worldX - projX, worldY - projY);
-                if (dist > thickness) continue;
-              }
-
-              const idsToSelect = resolveIdsWithGroups([shape.id]);
-              if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
-                useProjectStore.getState().saveToHistory();
-                setIsDraggingItem(true);
-                setDraggedItemStart({ x: worldX, y: worldY });
-              } else {
-                handleItemSelection([shape.id], e.shiftKey);
-              }
-              itemSelected = true;
-              return;
-            }
-
-            // Default hit-test for rectangles / ellipses / other shapes
-            const halfW = shape.width / 2;
-            const halfH = shape.height / 2;
-
-            if (
-              worldX >= shape.x - halfW &&
-              worldX <= shape.x + halfW &&
-              worldY >= shape.y - halfH &&
-              worldY <= shape.y + halfH
-            ) {
-              const idsToSelect = resolveIdsWithGroups([shape.id]);
-              if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
-                useProjectStore.getState().saveToHistory();
-                setIsDraggingItem(true);
-                setDraggedItemStart({ x: worldX, y: worldY });
-              } else {
-                handleItemSelection([shape.id], e.shiftKey);
-              }
-              itemSelected = true;
-              return;
-            }
-          }
-
-          // Check assets (reverse order for z-index)
-          for (let i = assets.length - 1; i >= 0; i--) {
-            const asset = assets[i];
-            if (asset.isExploded) continue;
-            const halfW = (asset.width * asset.scale) / 2;
-            const halfH = (asset.height * asset.scale) / 2;
-
-            if (
-              worldX >= asset.x - halfW &&
-              worldX <= asset.x + halfW &&
-              worldY >= asset.y - halfH &&
-              worldY <= asset.y + halfH
-            ) {
-              const idsToSelect = resolveIdsWithGroups([asset.id]);
-              if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
-                useProjectStore.getState().saveToHistory();
-                setIsDraggingItem(true);
-                setDraggedItemStart({ x: worldX, y: worldY });
-              } else {
-                handleItemSelection([asset.id], e.shiftKey);
-              }
-              itemSelected = true;
-              return;
-            }
-          }
-
-          // Check walls
-          for (const wall of walls) {
-            const nodeMap = new Map(wall.nodes.map((n) => [n.id, n]));
-            for (const edge of wall.edges) {
-              const nodeA = nodeMap.get(edge.nodeA);
-              const nodeB = nodeMap.get(edge.nodeB);
-              if (!nodeA || !nodeB) continue;
-
-              const dx = nodeB.x - nodeA.x;
-              const dy = nodeB.y - nodeA.y;
-              const lengthSquared = dx * dx + dy * dy;
-              if (lengthSquared === 0) continue;
-
-              const t = Math.max(0, Math.min(1, ((worldX - nodeA.x) * dx + (worldY - nodeA.y) * dy) / lengthSquared));
-              const projX = nodeA.x + t * dx;
-              const projY = nodeA.y + t * dy;
-              const dist = Math.sqrt((worldX - projX) ** 2 + (worldY - projY) ** 2);
-
-              if (dist <= edge.thickness / 2 + 20) {
-                const idsToSelect = resolveIdsWithGroups([wall.id]);
-                if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
-                  useProjectStore.getState().saveToHistory();
-                  setIsDraggingItem(true);
-                  setDraggedItemStart({ x: worldX, y: worldY });
-                } else {
-                  handleItemSelection([wall.id], e.shiftKey);
+                const t = Math.max(0, Math.min(1, ((worldX - nA.x) * dx + (worldY - nA.y) * dy) / lenSq));
+                if (Math.hypot(worldX - (nA.x + t * dx), worldY - (nA.y + t * dy)) <= (edge.thickness || 150) / 2 + 20) {
+                  isHit = true;
+                  break;
                 }
-                itemSelected = true;
-                return;
               }
-            }
-          }
-
-          // Check text annotations (reverse order for z-index)
-          for (let i = textAnnotations.length - 1; i >= 0; i--) {
-            const annotation = textAnnotations[i];
-            const fontSize = annotation.fontSize || 14;
-            const textLength = annotation.text.length || 1;
-            const estimatedWidth = textLength * fontSize * 0.6;
-            const estimatedHeight = fontSize * 1.2;
-            const hitRadius = Math.max(Math.max(estimatedWidth, estimatedHeight) / 2, 30);
-
-            const dist = Math.hypot(worldX - annotation.x, worldY - annotation.y);
-            if (dist <= hitRadius) {
-              const idsToSelect = resolveIdsWithGroups([annotation.id]);
-              if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
-                // Check if double-click for editing
-                const now = Date.now();
-                const lastClickTime = (window as any).__lastTextClickTime || 0;
-                const lastClickId = (window as any).__lastTextClickId;
-
-                if (now - lastClickTime < 300 && lastClickId === annotation.id) {
-                  (window as any).__lastTextClickTime = 0;
-                  (window as any).__lastTextClickId = null;
-                  setSelectedIds([annotation.id]); // Just this one for editing
-                  sceneStore.selectMultipleAssets([annotation.id]);
-                } else {
-                  useProjectStore.getState().saveToHistory();
-                  setIsDraggingItem(true);
-                  setDraggedItemStart({ x: worldX, y: worldY });
+            } else if (item._renderType === 'textAnnotation') {
+              const ann = item;
+              const fS = ann.fontSize || 14;
+              const hitR = Math.max((ann.text.length || 1) * fS * 0.3, fS * 0.6, 30);
+              if (Math.hypot(worldX - ann.x, worldY - ann.y) <= hitR) {
+                isHit = true;
+                // Special double-click handling for text
+                if (isHit && activeTool !== 'trim-to-blend' && !e.shiftKey && selectedIds.includes(ann.id)) {
+                  const now = Date.now();
+                  const lastT = (window as any).__lastTextClickTime || 0;
+                  const lastI = (window as any).__lastTextClickId;
+                  if (now - lastT < 300 && lastI === ann.id) {
+                    (window as any).__lastTextClickTime = 0;
+                    (window as any).__lastTextClickId = null;
+                    setSelectedIds([ann.id]);
+                    sceneStore.selectMultipleAssets([ann.id]);
+                    itemSelected = true;
+                    return;
+                  }
+                  (window as any).__lastTextClickTime = now;
+                  (window as any).__lastTextClickId = ann.id;
                 }
-                (window as any).__lastTextClickTime = now;
-                (window as any).__lastTextClickId = annotation.id;
-              } else {
-                handleItemSelection([annotation.id], e.shiftKey);
-                (window as any).__lastTextClickTime = Date.now();
-                (window as any).__lastTextClickId = annotation.id;
               }
-              itemSelected = true;
-              return;
-            }
-          }
-
-          // Check label arrows
-          for (let i = labelArrows.length - 1; i >= 0; i--) {
-            const arrow = labelArrows[i];
-            const dx = arrow.endPoint.x - arrow.startPoint.x;
-            const dy = arrow.endPoint.y - arrow.startPoint.y;
-            const lengthSquared = dx * dx + dy * dy;
-            const thickness = (arrow.strokeWidth || 2) + 20;
-
-            let dist = Infinity;
-            if (lengthSquared === 0) {
-              dist = Math.hypot(worldX - arrow.startPoint.x, worldY - arrow.startPoint.y);
-            } else {
-              const t = Math.max(0, Math.min(1, ((worldX - arrow.startPoint.x) * dx + (worldY - arrow.startPoint.y) * dy) / lengthSquared));
-              const projX = arrow.startPoint.x + t * dx;
-              const projY = arrow.startPoint.y + t * dy;
-              dist = Math.hypot(worldX - projX, worldY - projY);
+            } else if (item._renderType === 'labelArrow') {
+              const arrow = item;
+              const dx = arrow.endPoint.x - arrow.startPoint.x, dy = arrow.endPoint.y - arrow.startPoint.y;
+              const lenSq = dx * dx + dy * dy;
+              const thickness = (arrow.strokeWidth || 2) + 20;
+              if (lenSq === 0) {
+                if (Math.hypot(worldX - arrow.startPoint.x, worldY - arrow.startPoint.y) <= thickness) isHit = true;
+              } else {
+                const t = Math.max(0, Math.min(1, ((worldX - arrow.startPoint.x) * dx + (worldY - arrow.startPoint.y) * dy) / lenSq));
+                if (Math.hypot(worldX - (arrow.startPoint.x + t * dx), worldY - (arrow.startPoint.y + t * dy)) <= thickness) isHit = true;
+              }
             }
 
-            if (dist <= thickness) {
-              const idsToSelect = resolveIdsWithGroups([arrow.id]);
+            if (isHit) {
+              const idsToSelect = resolveIdsWithGroups([item.id]);
               if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
                 useProjectStore.getState().saveToHistory();
                 setIsDraggingItem(true);
                 setDraggedItemStart({ x: worldX, y: worldY });
               } else {
-                handleItemSelection([arrow.id], e.shiftKey);
+                handleItemSelection([item.id], e.shiftKey);
               }
               itemSelected = true;
               return;
@@ -1743,7 +1650,19 @@ export default function Workspace2D({
 
       // Reset / Clear selection (Esc)
       if (e.key === 'Escape') {
+        const active = useEditorStore.getState().activeTool;
+        // Don't auto-reset to 'select' if we are in a drawing mode that might need to finish or handle its own Escape
+        // These tools handle Escape internally (either to finish or cancel specifically)
+        const isDrawingTool = ['wall', 'shape-line', 'shape-arrow', 'shape-polygon', 'freehand', 'dimension', 'label-arrow', 'text-annotation', 'trim-to-blend'].includes(active);
+        
+        if (isDrawingTool) {
+          // Let the specific tool handle it. If it wants to exit, it will call setActiveTool('select') itself.
+          return;
+        }
+
         clearSelection();
+        useEditorStore.getState().setActiveTool('select');
+        useEditorStore.getState().setPlacementMode({ active: false, data: null });
         useEditorStore.getState().setSelectedEdgeId(null);
         return;
       }
@@ -2228,64 +2147,50 @@ export default function Workspace2D({
     const worldX = (x - panX) / zoom;
     const worldY = (y - panY) / zoom;
 
-    // Try to find the top‑most object under the cursor to mark as target
+    // Unified z-aware hit testing for context menu target
+    const getZ = (item: any) => (typeof item.zIndex === 'number' ? item.zIndex : 0);
+    const allItems = [
+      ...walls.map(w => ({ ...w, _renderType: 'wall' as const })),
+      ...shapes.map(s => ({ ...s, _renderType: 'shape' as const })),
+      ...assets.map(a => ({ ...a, _renderType: 'asset' as const })),
+      ...dimensions.map(d => ({ ...d, _renderType: 'dimension' as const })),
+      ...labelArrows.map(l => ({ ...l, _renderType: 'labelArrow' as const })),
+      ...textAnnotations.map(t => ({ ...t, _renderType: 'textAnnotation' as const })),
+    ].sort((a, b) => getZ(a) - getZ(b));
+
     let targetId: string | null = null;
+    for (let i = allItems.length - 1; i >= 0; i--) {
+      const item = allItems[i];
+      let isHit = false;
 
-    // Check shapes (reverse order for z-index)
-    for (let i = shapes.length - 1; i >= 0; i--) {
-      const shape = shapes[i];
-      const halfW = shape.width / 2;
-      const halfH = shape.height / 2;
-      if (
-        worldX >= shape.x - halfW &&
-        worldX <= shape.x + halfW &&
-        worldY >= shape.y - halfH &&
-        worldY <= shape.y + halfH
-      ) {
-        targetId = shape.id;
-        break;
-      }
-    }
-
-    // Check assets if no shape was hit
-    if (!targetId) {
-      for (let i = assets.length - 1; i >= 0; i--) {
-        const asset = assets[i];
-        const halfW = (asset.width * asset.scale) / 2;
-        const halfH = (asset.height * asset.scale) / 2;
-        if (
-          worldX >= asset.x - halfW &&
-          worldX <= asset.x + halfW &&
-          worldY >= asset.y - halfH &&
-          worldY <= asset.y + halfH
-        ) {
-          targetId = asset.id;
-          break;
+      if (item._renderType === 'shape') {
+        const s = item;
+        const halfW = s.width / 2, halfH = s.height / 2;
+        if (worldX >= s.x - halfW && worldX <= s.x + halfW && worldY >= s.y - halfH && worldY <= s.y + halfH) isHit = true;
+      } else if (item._renderType === 'asset') {
+        const a = item;
+        if (!a.isExploded) {
+          const halfW = (a.width * (a.scale || 1)) / 2, halfH = (a.height * (a.scale || 1)) / 2;
+          if (worldX >= a.x - halfW && worldX <= a.x + halfW && worldY >= a.y - halfH && worldY <= a.y + halfH) isHit = true;
         }
-      }
-    }
-
-    // Check walls if no shape or asset was hit
-    if (!targetId) {
-      for (let i = walls.length - 1; i >= 0; i--) {
-        const wall = walls[i];
-        // Check if point is within wall's bounding box
+      } else if (item._renderType === 'wall') {
+        const w = item;
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        wall.nodes.forEach(node => {
-          minX = Math.min(minX, node.x);
-          minY = Math.min(minY, node.y);
-          maxX = Math.max(maxX, node.x);
-          maxY = Math.max(maxY, node.y);
+        w.nodes.forEach(node => {
+          minX = Math.min(minX, node.x); minY = Math.min(minY, node.y);
+          maxX = Math.max(maxX, node.x); maxY = Math.max(maxY, node.y);
         });
-        if (
-          worldX >= minX &&
-          worldX <= maxX &&
-          worldY >= minY &&
-          worldY <= maxY
-        ) {
-          targetId = wall.id;
-          break;
-        }
+        if (worldX >= minX && worldX <= maxX && worldY >= minY && worldY <= maxY) isHit = true;
+      } else if (item._renderType === 'textAnnotation') {
+        const t = item;
+        const fS = t.fontSize || 14;
+        const hitR = Math.max((t.text?.length || 1) * fS * 0.3, fS * 0.6, 30);
+        if (Math.hypot(worldX - t.x, worldY - t.y) <= hitR) isHit = true;
+      }
+
+      if (isHit) {
+        targetId = item.id;
+        break;
       }
     }
 
@@ -2657,9 +2562,25 @@ export default function Workspace2D({
 
     // Grouping Actions
     if (hasSelection) {
+      const store = useProjectStore.getState();
+      const isExactlyOneGroup = store.groups.some(g => 
+        g.itemIds.length === selectedIds.length && 
+        g.itemIds.every(id => selectedIds.includes(id))
+      );
+      
+      const hasGroupedItems = selectedIds.some(id => {
+        const item = store.shapes.find(s => s.id === id) ||
+          store.assets.find(a => a.id === id) ||
+          store.walls.find(w => w.id === id) ||
+          store.textAnnotations.find(t => t.id === id) ||
+          store.labelArrows.find(l => l.id === id);
+        return !!item?.groupId;
+      });
+
+      // Show Group if multiple items selected AND it's not already exactly one group
       actions.push({
         label: 'Group',
-        disabled: selectedIds.length <= 1,
+        disabled: selectedIds.length <= 1 || isExactlyOneGroup,
         action: () => {
           const newGroupId = useProjectStore.getState().groupSelection(selectedIds);
           useEditorStore.getState().setSelectedIds(useProjectStore.getState().groups.find(g => g.id === newGroupId)?.itemIds || []);
@@ -2668,17 +2589,10 @@ export default function Workspace2D({
         }
       });
 
+      // Show Ungroup if any part of selection is grouped
       actions.push({
         label: 'Ungroup',
-        disabled: !selectedIds.some(id => {
-          const store = useProjectStore.getState();
-          const item = store.shapes.find(s => s.id === id) ||
-            store.assets.find(a => a.id === id) ||
-            store.walls.find(w => w.id === id) ||
-            store.textAnnotations.find(t => t.id === id) ||
-            store.labelArrows.find(l => l.id === id);
-          return !!item?.groupId;
-        }),
+        disabled: !hasGroupedItems,
         action: () => {
           const ungroupedIds = useProjectStore.getState().ungroupSelection(selectedIds);
           useEditorStore.getState().setSelectedIds(ungroupedIds);
@@ -2687,7 +2601,6 @@ export default function Workspace2D({
         }
       });
 
-      actions.push({ separator: true });
       actions.push({ separator: true });
     }
 
@@ -2855,15 +2768,7 @@ export default function Workspace2D({
       shortcut: "Del",
       disabled: !hasSelection,
       action: () => {
-        const state = useProjectStore.getState();
-        selectedIds.forEach((id) => {
-          state.removeShape(id);
-          state.removeWall(id);
-          state.removeAsset(id);
-          state.removeDimension(id);
-          state.removeLabelArrow(id);
-          state.removeTextAnnotation(id);
-        });
+        useProjectStore.getState().removeItemsBatch(selectedIds);
         useEditorStore.getState().clearSelection();
       },
     });
@@ -3121,8 +3026,7 @@ export default function Workspace2D({
               height={Math.abs(selectionRect.y2 - selectionRect.y1)}
               fill="rgba(59, 130, 246, 0.1)"
               stroke="#3b82f6"
-              strokeWidth={1}
-              strokeDasharray={`${4 / zoom},${4 / zoom}`}
+              strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"
               pointerEvents="none"
             />

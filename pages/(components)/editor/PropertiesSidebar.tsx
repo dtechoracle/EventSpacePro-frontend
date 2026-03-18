@@ -962,12 +962,11 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           <span className="text-gray-500 text-xs">Scale</span>
                           <input
                             type="number"
-                            value={(selectedItem as any).fillTextureScale || 1}
+                            value={(selectedItem as any).fillTextureScale || 4}
                             onChange={(e) => updateShape(selectedItem.id, { fillTextureScale: Number(e.target.value) } as any)}
                             className="sidebar-input w-12 text-right text-xs"
-                            min={0.1}
-                            max={10}
-                            step={0.1}
+                            max={1000}
+                            step={0.5}
                           />
                         </div>
 
@@ -1031,7 +1030,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           <span className="text-gray-500 text-xs">Scale</span>
                           <input
                             type="number"
-                            value={(selectedItem as any).fillTextureScale || 1}
+                            value={(selectedItem as any).fillTextureScale || 4}
                             onChange={(e) => {
                               const val = Number(e.target.value);
                               if (itemType === 'shape') {
@@ -1042,9 +1041,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               }
                             }}
                             className="sidebar-input w-12 text-right text-xs"
-                            min={0.1}
-                            max={10}
-                            step={0.1}
+                            max={1000}
+                            step={0.5}
                           />
                         </div>
 

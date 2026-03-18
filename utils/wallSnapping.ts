@@ -44,18 +44,18 @@ export function findWallSnapPoint(
             }
         }
 
-        // Check wall edges
+        // Check wall edges (centerline and faces)
         for (const edge of wall.edges) {
             const nodeA = nodeMap.get(edge.nodeA);
             const nodeB = nodeMap.get(edge.nodeB);
 
             if (!nodeA || !nodeB) continue;
 
+            // 1. Centerline snap
             const closest = getClosestPointOnSegment(point, nodeA, nodeB);
             const dist = Math.hypot(point.x - closest.x, point.y - closest.y);
 
-            // Only snap to edge points that are not at endpoints (handled above)
-            if (dist < minDistance && closest.t > 0.05 && closest.t < 0.95) {
+            if (dist < minDistance && closest.t > 0.01 && closest.t < 0.99) {
                 minDistance = dist;
                 closestSnap = {
                     snapped: true,
@@ -65,6 +65,38 @@ export function findWallSnapPoint(
                     wallId: wall.id,
                     edgeId: edge.id,
                 };
+            }
+
+            // 2. Face snapping (offset by thickness/2)
+            const dx = nodeB.x - nodeA.x;
+            const dy = nodeB.y - nodeA.y;
+            const length = Math.hypot(dx, dy);
+            if (length > 0) {
+                const thickness = edge.thickness || 150;
+                const halfThick = thickness / 2;
+                const nx = -dy / length; // Normal X
+                const ny = dx / length;  // Normal Y
+                
+                // Left face and Right face
+                const faces = [
+                    { x: closest.x + nx * halfThick, y: closest.y + ny * halfThick },
+                    { x: closest.x - nx * halfThick, y: closest.y - ny * halfThick }
+                ];
+
+                for (const facePt of faces) {
+                    const faceDist = Math.hypot(point.x - facePt.x, point.y - facePt.y);
+                    if (faceDist < minDistance) {
+                        minDistance = faceDist;
+                        closestSnap = {
+                            snapped: true,
+                            x: facePt.x,
+                            y: facePt.y,
+                            snapType: 'wall-edge',
+                            wallId: wall.id,
+                            edgeId: edge.id,
+                        };
+                    }
+                }
             }
         }
     }
