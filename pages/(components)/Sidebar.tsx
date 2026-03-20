@@ -106,21 +106,45 @@ const Sidebar = () => {
     <>
       {/* Desktop Sidebar */}
       <motion.aside
-        animate={{ width: isCollapsed ? "5rem" : "13rem" }}
+        animate={{ width: isCollapsed ? "5rem" : "14rem" }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className="relative z-50 bg-[var(--accent)]/5 h-screen px-3 py-8 flex-col justify-between hidden lg:flex"
+        className="relative z-50 bg-white border-r border-gray-100 h-screen px-3 py-8 flex flex-col justify-between hidden lg:flex"
       >
         <div>
-          <div className="w-full flex justify-center">
+          <div className={`w-full flex ${isCollapsed ? 'justify-center' : 'justify-start px-3'} mb-8`}>
             <Image
-              alt=""
+              alt="Logo"
               src={"/assets/mainLogo.svg"}
-              width={isCollapsed ? 50 : 200}
-              height={isCollapsed ? 50 : 200}
+              width={isCollapsed ? 40 : 130}
+              height={isCollapsed ? 40 : 40}
+              className="object-contain"
             />
           </div>
 
-          <div className="pt-8 space-y-1">
+          {/* Profile Section (Moved up, permanent) */}
+          <div className={`flex items-center gap-3 mb-8 ${isCollapsed ? 'justify-center' : 'px-3'}`}>
+            {user?.avatar ? (
+              <div className="w-9 h-9 rounded-full overflow-hidden shadow-sm flex-shrink-0 border-2 border-white pointer-events-none">
+                <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-sm flex-shrink-0 bg-blue-500 pointer-events-none"
+              >
+                {user?.firstName?.[0]?.toUpperCase() || "U"}
+              </div>
+            )}
+            {!isCollapsed && (
+              <div className="flex flex-col overflow-hidden">
+                <p className="text-[12px] font-bold text-gray-900 truncate tracking-tight">
+                  {user?.firstName} {user?.lastName}
+                </p>
+                <p className="text-[10px] text-gray-500 truncate leading-tight">{user?.email}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="pt-2 space-y-1">
             {links.map((item, index) => (
               <div
                 key={index}
@@ -147,53 +171,23 @@ const Sidebar = () => {
           </div>
         </div>
 
-        <div className="relative group flex justify-center mb-2">
-          {/* Profile Icon Only */}
-          <div className="bg-white rounded-full p-2 cursor-pointer shadow-sm hover:ring-2 hover:ring-blue-400 transition-all">
-            {user?.avatar ? (
-              <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0">
-                <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
-              </div>
-            ) : (
-              <div
-                className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-semibold bg-blue-500"
-              >
-                {user?.firstName?.[0]?.toUpperCase() || "U"}
-              </div>
-            )}
-          </div>
-
-          {/* Hover Dropdown */}
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-white border border-gray-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 py-1 overflow-hidden">
-            <div className="px-4 py-2 border-b border-gray-100">
-              <p className="text-xs font-semibold text-gray-900 truncate">
-                {user?.firstName} {user?.lastName}
-              </p>
-              <p className="text-[10px] text-gray-500 truncate">{user?.email}</p>
-            </div>
-            <button
-              onClick={() => router.push("/dashboard/profile")}
-              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-            >
-              <FiUser className="w-4 h-4" />
-              <span>Settings</span>
-            </button>
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors"
-            >
-              <FiLogOut className="w-4 h-4" />
-              <span>Logout</span>
-            </button>
-          </div>
+        {/* Logout at bottom */}
+        <div className={`flex ${isCollapsed ? 'justify-center' : 'px-3'} mb-2`}>
+          <button
+            onClick={handleLogout}
+            className={`flex items-center gap-3 w-full p-3 rounded-md text-red-500 hover:bg-red-50 transition-colors ${isCollapsed ? 'justify-center' : ''}`}
+          >
+            <FiLogOut className="w-4 h-4" />
+            {!isCollapsed && <span className="text-sm font-medium">Logout</span>}
+          </button>
         </div>
 
         {/* Collapse / Expand Button */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="absolute top-1/2 -right-3 transform -translate-y-1/2 bg-white shadow-lg rounded-full p-1"
+          className="absolute top-1/2 -right-3 transform -translate-y-1/2 bg-white shadow-lg rounded-full p-1 border border-gray-100"
         >
-          {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
       </motion.aside>
 

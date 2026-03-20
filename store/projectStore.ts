@@ -1755,16 +1755,24 @@ export const useProjectStore = create<ProjectState>()(
                 centerX /= clipboard.length;
                 centerY /= clipboard.length;
 
-                // If cursor position provided, paste at cursor; otherwise use offset
-                const offsetX = cursorPos ? cursorPos.x - centerX : 20;
-                const offsetY = cursorPos ? cursorPos.y - centerY : 20;
+                // If cursor position provided, paste at cursor; otherwise use zero offset (paste-in-place)
+                const offsetX = cursorPos ? cursorPos.x - centerX : 0;
+                const offsetY = cursorPos ? cursorPos.y - centerY : 0;
 
                 const newShapes = [...shapes];
                 const newWalls = [...walls];
                 const newAssets = [...assets];
 
+                const generateId = (): string => {
+                    try {
+                        return crypto.randomUUID();
+                    } catch {
+                        return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                    }
+                };
+                
                 clipboard.forEach(item => {
-                    const newId = crypto.randomUUID();
+                    const newId = generateId();
                     newIds.push(newId);
 
                     if (item.type === 'shape') {

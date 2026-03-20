@@ -262,6 +262,7 @@ function ElementsPane() {
                   {item.type === "Asset" && item.asset && (
                     assetDef?.path ? (
                       <div className="w-full h-full p-1">
+
                         <InlineSvg
                           src={assetDef.path}
                           fill={item.asset.fillColor || (item.asset as any).fill || "none"}
@@ -1389,18 +1390,16 @@ export default function Editor() {
   useEffect(() => {
     if (!currentEventData || !id || !slug) return;
 
-    const projectStore = useProjectStore.getState();
-    const hasChanges = projectStore.hasUnsavedChanges;
-
-    if (!hasChanges) return;
+    if (!projectHasUnsavedChanges) return;
 
     console.log('[Editor] Auto-save triggered - saving to DATABASE');
 
     const timeoutId = setTimeout(() => {
-      const currentHasChanges = useProjectStore.getState().hasUnsavedChanges;
+      // Check again after delay
+      const store = useProjectStore.getState();
+      const currentHasChanges = store.hasUnsavedChanges;
 
       if (currentHasChanges && id && typeof id === 'string' && slug && typeof slug === 'string') {
-        const store = useProjectStore.getState();
         const { walls, shapes, assets } = store;
 
         console.log('[Editor] Auto-save: Saving to DATABASE:', {
@@ -1429,7 +1428,7 @@ export default function Editor() {
     }, 2000); // Auto-save after 2 seconds
 
     return () => clearTimeout(timeoutId);
-  }, [hasUnsavedChanges, currentEventData, id, slug]);
+  }, [projectHasUnsavedChanges, currentEventData, id, slug]);
 
   // Save functionality is handled by PropertiesSidebar
 

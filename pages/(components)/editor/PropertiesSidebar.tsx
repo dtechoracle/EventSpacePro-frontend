@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { FaUserCircle, FaChevronDown, FaChevronRight, FaAlignLeft, FaAlignCenter, FaAlignRight, FaArrowUp, FaArrowDown, FaArrowsAltV, FaArrowsAltH, FaCircleNotch, FaBold, FaItalic, FaUnderline, FaHighlighter } from "react-icons/fa";
+import { FaUserCircle, FaChevronDown, FaChevronRight, FaAlignLeft, FaAlignCenter, FaAlignRight, FaArrowUp, FaArrowDown, FaArrowsAltV, FaArrowsAltH, FaCircleNotch, FaBold, FaItalic, FaUnderline, FaHighlighter, FaTimes, FaExpand } from "react-icons/fa";
+
 import { IoPlayOutline } from "react-icons/io5";
 import ShareModal from "./ShareModal";
 import ExportPanel from "./ExportPanel";
@@ -16,9 +17,9 @@ import { convertAssetToShapes } from "@/utils/assetUtils";
 import LineTypeSelector from "@/components/ui/LineTypeSelector";
 
 export default function PropertiesSidebar(): React.JSX.Element {
-  const { selectedIds } = useEditorStore();
+  const { selectedIds, screenToWorld, zoom, worldToScreen, panX, panY, canvasOffset, activeTool } = useEditorStore();
   const {
-    shapes, assets, walls, textAnnotations, labelArrows, dimensions,
+    shapes, assets, walls, textAnnotations, labelArrows, dimensions, groups,
     updateShape, updateAsset, updateWall, updateTextAnnotation, updateLabelArrow, updateDimension,
     updateShapeBatch, updateAssetBatch, updateWallBatch,
     isSaving, lastSaved, saveEvent, hasUnsavedChanges
@@ -26,6 +27,87 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
   // Resolve the single selected item
   const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
+
+  // Multi-selection logic
+  const isMultiSelection = selectedIds.length > 1;
+
+  // Calculate collective bounding box for multi-selection or single item
+  const getCollectiveBounds = () => {
+    if (selectedIds.length === 0) return null;
+    
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    selectedIds.forEach(id => {
+      const shape = shapes.find(s => s.id === id);
+      if (shape) {
+        const halfW = shape.width / 2;
+        const halfH = shape.height / 2;
+        const rot = (shape.rotation || 0) * (Math.PI / 180);
+        const cosR = Math.cos(rot);
+        const sinR = Math.sin(rot);
+        const corners = [
+          { x: -halfW, y: -halfH }, { x: halfW, y: -halfH },
+          { x: halfW, y: halfH }, { x: -halfW, y: halfH }
+        ].map(c => ({
+          x: shape.x + c.x * cosR - c.y * sinR,
+          y: shape.y + c.x * sinR + c.y * cosR
+        }));
+        corners.forEach(c => {
+          minX = Math.min(minX, c.x); minY = Math.min(minY, c.y);
+          maxX = Math.max(maxX, c.x); maxY = Math.max(maxY, c.y);
+        });
+        return;
+      }
+      const asset = assets.find(a => a.id === id);
+      if (asset) {
+        const width = asset.width * (asset.scale || 1);
+        const height = asset.height * (asset.scale || 1);
+        const halfW = width / 2;
+        const halfH = height / 2;
+        const rot = (asset.rotation || 0) * (Math.PI / 180);
+        const cosR = Math.cos(rot);
+        const sinR = Math.sin(rot);
+        const corners = [
+          { x: -halfW, y: -halfH }, { x: halfW, y: -halfH },
+          { x: halfW, y: halfH }, { x: -halfW, y: halfH }
+        ].map(c => ({
+          x: asset.x + c.x * cosR - c.y * sinR,
+          y: asset.y + c.x * sinR + c.y * cosR
+        }));
+        corners.forEach(c => {
+          minX = Math.min(minX, c.x); minY = Math.min(minY, c.y);
+          maxX = Math.max(maxX, c.x); maxY = Math.max(maxY, c.y);
+        });
+        return;
+      }
+      const wall = walls.find(w => w.id === id);
+      if (wall) {
+        wall.nodes.forEach(n => {
+          minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+          maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y);
+        });
+        return;
+      }
+      const text = textAnnotations.find(t => t.id === id);
+      if (text) {
+        const fs = text.fontSize || 14;
+        const w = (text.text.length || 1) * fs * 0.6;
+        const h = fs * 1.2;
+        minX = Math.min(minX, text.x); minY = Math.min(minY, text.y - h/2);
+        maxX = Math.max(maxX, text.x + w); maxY = Math.max(maxY, text.y + h/2);
+      }
+    });
+
+    if (minX === Infinity) return null;
+    return {
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2,
+      width: maxX - minX,
+      height: maxY - minY
+    };
+  };
+
+  const collectiveBounds = getCollectiveBounds();
 
   const selectedShape = selectedId ? shapes.find(s => s.id === selectedId) : null;
   const selectedAsset = selectedId ? assets.find(a => a.id === selectedId) : null;
@@ -37,9 +119,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const selectedItem = selectedShape || selectedAsset || selectedWall || selectedTextAnnotation || selectedLabelArrow || selectedDimension;
   const itemType = selectedShape ? 'shape' : selectedWall ? 'wall' : (selectedAsset?.type === 'wall-segments') ? 'wall' : selectedAsset ? 'asset' : selectedTextAnnotation ? 'text-annotation' : selectedLabelArrow ? 'label-arrow' : selectedDimension ? 'dimension' : null;
 
-  // Multi-selection logic
-  const isMultiSelection = selectedIds.length > 1;
-  const selectedShapes = isMultiSelection ? shapes.filter(s => selectedIds.includes(s.id)) : [];
+  const selectedShapes = shapes.filter(s => selectedIds.includes(s.id));
+  const selectedAssets = assets.filter(a => selectedIds.includes(a.id));
   const allSelectedAreShapes = isMultiSelection && selectedShapes.length === selectedIds.length;
 
   const showGrid = useSceneStore((s) => s.showGrid);
@@ -147,10 +228,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
         />
         <div className="flex items-center gap-1">
           <button
-            className={`px-2 py-1.5 rounded text-xs shadow flex items-center gap-1 transition-colors
+            className={`px-2 py-1.5 rounded text-xs border flex items-center gap-1 transition-colors
                 ${hasUnsavedChanges
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ? 'border-blue-600 text-blue-600 bg-white hover:bg-blue-50'
+                : 'border-gray-200 text-gray-500 bg-white hover:bg-gray-50'
               }
                 ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}
             `}
@@ -159,15 +240,17 @@ export default function PropertiesSidebar(): React.JSX.Element {
           >
             {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save' : 'Saved'}
           </button>
+
           <button className="p-1 rounded hover:bg-gray-100" onClick={() => open3D && open3D()}>
             <IoPlayOutline size={14} />
           </button>
           <button
-            className="bg-[var(--accent)] text-white px-2 py-1.5 rounded text-xs shadow"
+            className="border border-gray-300 text-gray-700 px-2 py-1.5 rounded text-xs bg-white hover:bg-gray-50 transition-colors"
             onClick={() => setShowShareModal(true)}
           >
             Share
           </button>
+
         </div>
       </div>
 
@@ -397,53 +480,81 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
 
             {/* MULTI SELECTION PROPERTIES */}
-            {isMultiSelection && allSelectedAreShapes && (
+            {isMultiSelection && (
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-500">
-                  {selectedIds.length} Shapes Selected
+                  {selectedIds.length} Items Selected
                 </div>
 
-                {/* Fill Color */}
+                {/* Bounding Box Info */}
+                {collectiveBounds && (
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                     <div className="flex items-center justify-between">
+                      <span className="text-gray-500">W</span>
+                      <span className="sidebar-input w-16 text-right bg-gray-50 text-gray-400">{roundForDisplay(collectiveBounds.width)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">H</span>
+                      <span className="sidebar-input w-16 text-right bg-gray-50 text-gray-400">{roundForDisplay(collectiveBounds.height)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">X</span>
+                      <span className="sidebar-input w-16 text-right bg-gray-50 text-gray-400">{roundForDisplay(collectiveBounds.x)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Y</span>
+                      <span className="sidebar-input w-16 text-right bg-gray-50 text-gray-400">{roundForDisplay(collectiveBounds.y)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Fill Color for multiple items */}
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-gray-500">Fill Color</span>
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
                       onChange={(e) => {
-                        const ids = selectedShapes.map(s => s.id);
-                        updateShapeBatch(ids, { fill: e.target.value, fillType: 'color' });
+                        const sIds = selectedShapes.map(s => s.id);
+                        const aIds = selectedAssets.map(a => a.id);
+                        if (sIds.length > 0) updateShapeBatch(sIds, { fill: e.target.value, fillType: 'color' });
+                        if (aIds.length > 0) updateAssetBatch(aIds, { fillColor: e.target.value });
                       }}
                       className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
                     />
                   </div>
                 </div>
 
-                {/* Stroke Color */}
+                {/* Stroke Color for multiple items */}
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-gray-500">Stroke Color</span>
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
                       onChange={(e) => {
-                        const ids = selectedShapes.map(s => s.id);
-                        updateShapeBatch(ids, { stroke: e.target.value });
+                        const sIds = selectedShapes.map(s => s.id);
+                        const aIds = selectedAssets.map(a => a.id);
+                        if (sIds.length > 0) updateShapeBatch(sIds, { stroke: e.target.value });
+                        if (aIds.length > 0) updateAssetBatch(aIds, { strokeColor: e.target.value });
                       }}
                       className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
                     />
                   </div>
                 </div>
 
-                {/* Stroke Width */}
+                {/* Stroke Width for multiple items */}
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-gray-500">Stroke Width</span>
                   <input
                     type="number"
-                    placeholder="Mixed"
+                    placeholder="Set All"
                     onChange={(e) => {
                       const val = Number(e.target.value);
                       if (val >= 0) {
-                        const ids = selectedShapes.map(s => s.id);
-                        updateShapeBatch(ids, { strokeWidth: val });
+                        const sIds = selectedShapes.map(s => s.id);
+                        const aIds = selectedAssets.map(a => a.id);
+                        if (sIds.length > 0) updateShapeBatch(sIds, { strokeWidth: val });
+                        if (aIds.length > 0) updateAssetBatch(aIds, { strokeWidth: val });
                       }
                     }}
                     className="sidebar-input w-16 text-right"
@@ -2049,10 +2160,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         />
                         <span className="text-xs text-gray-400">mm</span>
                       </div>
-                    </div>
-
-
-                  </div>
+                                      </div>
+  </div>
                 )}
 
 
@@ -2137,6 +2246,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 {(itemType === 'shape' || itemType === 'asset' || itemType === 'wall') && (
                   <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-100">
                     <span className="text-gray-500">Show Dimensions</span>
+                    <div />
+
+
                     <button
                       onClick={() => {
                         const cur = !!(selectedItem as any).showDimensions;

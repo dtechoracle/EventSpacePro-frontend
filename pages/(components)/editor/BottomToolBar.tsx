@@ -291,7 +291,8 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                     }
 
                     const projectState = useProjectStore.getState();
-                    const offset = 20; // Offset for copied elements
+                    const offset = 0; // Offset for copied elements
+
 
                     selectedIds.forEach(id => {
                         // Copy shapes

@@ -26,7 +26,7 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
 
   const [creationType, setCreationType] = useState<'manual' | 'ai'>('manual');
   const [venueType, setVenueType] = useState<'preloaded' | 'custom' | 'marquee' | 'outdoor'>('custom');
-  const [outdoorType, setOutdoorType] = useState<'beach' | 'field' | null>(null);
+  const [outdoorType, setOutdoorType] = useState<'beach' | 'field' | 'parking-lot' | null>(null);
   const [outdoorWidth, setOutdoorWidth] = useState(20);
   const [outdoorDepth, setOutdoorDepth] = useState(20);
   const [eventName, setEventName] = useState("");
@@ -94,8 +94,8 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
       let canvasData = undefined;
       
       if (venueType === 'outdoor') {
-        const textureId = outdoorType === 'beach' ? 'sand-01' : 'grass-01';
-        const backgroundName = outdoorType === 'beach' ? 'Beach Layout' : 'Grass Layout';
+        const textureId = outdoorType === 'beach' ? 'sand-01' : (outdoorType === 'parking-lot' ? 'parking-lot' : 'grass-01');
+        const backgroundName = outdoorType === 'beach' ? 'Beach Layout' : (outdoorType === 'parking-lot' ? 'Parking Lot' : 'Grass Layout');
         canvasData = {
           walls: [],
           assets: [],
@@ -229,7 +229,7 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
         // Normal event - go straight to editor
         const query: any = { focus: 'true' };
         if (venueType === 'outdoor' && outdoorType) {
-          query.texture = outdoorType === 'beach' ? 'sand-01' : 'grass-01';
+          query.texture = outdoorType === 'beach' ? 'sand-01' : (outdoorType === 'parking-lot' ? 'parking-lot' : 'grass-01');
         }
 
         if (venueType === 'marquee' && selectedMarquee) {
@@ -447,23 +447,25 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                   </h2>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                   {/* Field Option */}
                   <button
                     onClick={() => {
                       setOutdoorType('field');
                       setStep('outdoor-dimensions');
                     }}
-                    className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-200 hover:border-[var(--accent)] hover:bg-[#0000000A] transition-all"
+                    className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-gray-200 hover:border-[var(--accent)] hover:bg-[#0000000A] transition-all"
                   >
-                    <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center text-3xl">
+                    <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-2xl">
                       🌿
                     </div>
                     <div className="text-center">
-                      <h3 className="font-semibold text-base">Field / Grass</h3>
-                      <p className="text-xs text-gray-500 mt-1">Green open space</p>
+                      <h3 className="font-semibold text-xs whitespace-nowrap">Grass Area</h3>
+                      <p className="text-[10px] text-gray-400 mt-0.5">Field / Grass</p>
                     </div>
                   </button>
+
+
 
                   {/* Beach Option */}
                   <button
@@ -471,16 +473,35 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                       setOutdoorType('beach');
                       setStep('outdoor-dimensions');
                     }}
-                    className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-200 hover:border-[var(--accent)] hover:bg-[#0000000A] transition-all"
+                    className="flex flex-col items-center gap-3 p-4 rounded-2xl border-2 border-gray-200 hover:border-[var(--accent)] hover:bg-[#0000000A] transition-all"
                   >
-                    <div className="w-16 h-16 rounded-full bg-yellow-100 flex items-center justify-center text-3xl">
+                    <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-2xl">
                       🏖️
                     </div>
                     <div className="text-center">
-                      <h3 className="font-semibold text-base">Beach / Sand</h3>
-                      <p className="text-xs text-gray-500 mt-1">Sandy environment</p>
+                      <h3 className="font-semibold text-[13px]">Beach / Sand</h3>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Sand area</p>
                     </div>
                   </button>
+
+
+                  {/* Parking Lot Option */}
+                  <button
+                    onClick={() => {
+                      setOutdoorType('parking-lot');
+                      setStep('outdoor-dimensions');
+                    }}
+                    className="flex flex-col items-center gap-3 p-4 rounded-2xl border-2 border-gray-200 hover:border-[var(--accent)] hover:bg-[#0000000A] transition-all"
+                  >
+                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-2xl">
+                      🚗
+                    </div>
+                    <div className="text-center">
+                      <h3 className="font-semibold text-[13px]">Paved Area</h3>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Landscaped Paving</p>
+                    </div>
+                  </button>
+
                 </div>
               </motion.div>
             )}

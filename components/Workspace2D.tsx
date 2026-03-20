@@ -414,32 +414,21 @@ export default function Workspace2D({
           if (itemBounds) {
             // Collect targets
             const targets = [
-              ...shapes.filter(s => s.id !== id).map(s => ({
-                x: s.x, y: s.y, width: s.width, height: s.height, id: s.id
-              })),
-              ...assets.filter(a => a.id !== id).map(a => ({
-                x: a.x,
-                y: a.y,
-                width: (a.width || 0) * (a.scale || 1),
-                height: (a.height || 0) * (a.scale || 1),
-                id: a.id
-              })),
+              ...shapes.filter(s => s.id !== id).map(s => {
+                const rad = ((s.rotation || 0) * Math.PI) / 180;
+                const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+                return { id: s.id, x: s.x, y: s.y, width: s.width * cos + s.height * sin, height: s.width * sin + s.height * cos };
+              }),
+              ...assets.filter(a => a.id !== id).map(a => {
+                const w = (a.width || 0) * (a.scale || 1), h = (a.height || 0) * (a.scale || 1);
+                const rad = ((a.rotation || 0) * Math.PI) / 180;
+                const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+                return { id: a.id, x: a.x, y: a.y, width: w * cos + h * sin, height: w * sin + h * cos };
+              }),
               ...walls.filter(w => w.id !== id).map(w => {
-                // Calculate wall bounding box from nodes
                 let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-                w.nodes.forEach(n => {
-                  minX = Math.min(minX, n.x);
-                  minY = Math.min(minY, n.y);
-                  maxX = Math.max(maxX, n.x);
-                  maxY = Math.max(maxY, n.y);
-                });
-                return {
-                  x: (minX + maxX) / 2,
-                  y: (minY + maxY) / 2,
-                  width: maxX - minX,
-                  height: maxY - minY,
-                  id: w.id
-                };
+                w.nodes.forEach(n => { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); });
+                return { id: w.id, x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY };
               })
             ];
 
@@ -1779,69 +1768,62 @@ export default function Workspace2D({
       else if (ctrlKey && e.key === 'd') {
         e.preventDefault();
         const { selectedIds, setSelectedIds } = useEditorStore.getState();
-        const projectStore = useProjectStore.getState();
-        const { shapes, walls, assets } = projectStore;
+        const store = useProjectStore.getState();
+        const { shapes, walls, assets } = store;
 
         const newSelectedIds: string[] = [];
-        const offset = 20; // 20mm offset
+        const offset = 0;
 
-        // Collect all new items first
         const newShapes: any[] = [];
         const newAssets: any[] = [];
         const newWalls: any[] = [];
 
         selectedIds.forEach(id => {
-          // Try shape
           const shape = shapes.find(s => s.id === id);
           if (shape) {
-            const newShape = { ...shape, id: crypto.randomUUID(), x: shape.x + offset, y: shape.y + offset };
-            newShapes.push(newShape);
-            newSelectedIds.push(newShape.id);
+            const newId = generateId();
+            newShapes.push({ ...shape, id: newId, x: shape.x + offset, y: shape.y + offset });
+            newSelectedIds.push(newId);
             return;
           }
 
-          // Try asset
           const asset = assets.find(a => a.id === id);
           if (asset) {
-            const newAsset = { ...asset, id: crypto.randomUUID(), x: asset.x + offset, y: asset.y + offset };
-            newAssets.push(newAsset);
-            newSelectedIds.push(newAsset.id);
+            const newId = generateId();
+            newAssets.push({ ...asset, id: newId, x: asset.x + offset, y: asset.y + offset });
+            newSelectedIds.push(newId);
             return;
           }
 
-          // Try wall
           const wall = walls.find(w => w.id === id);
           if (wall) {
             const nodeIdMap = new Map<string, string>();
             const newWallNodes = wall.nodes.map(n => {
-              const newId = crypto.randomUUID();
+              const newId = generateId();
               nodeIdMap.set(n.id, newId);
               return { ...n, id: newId, x: n.x + offset, y: n.y + offset };
             });
 
             const newEdges = wall.edges.map(e => ({
               ...e,
-              id: crypto.randomUUID(),
+              id: generateId(),
               nodeA: nodeIdMap.get(e.nodeA)!,
               nodeB: nodeIdMap.get(e.nodeB)!
             }));
 
-            const newWall = { ...wall, id: crypto.randomUUID(), nodes: newWallNodes, edges: newEdges };
-            newWalls.push(newWall);
-            newSelectedIds.push(newWall.id);
+            const newId = generateId();
+            newWalls.push({ ...wall, id: newId, nodes: newWallNodes, edges: newEdges });
+            newSelectedIds.push(newId);
           }
         });
 
         if (newSelectedIds.length > 0) {
-          // Save history once
-          projectStore.saveToHistory();
-
-          // Add items without saving history for each
-          if (newShapes.length > 0) projectStore.addShapeBatch(newShapes, true);
-          if (newAssets.length > 0) projectStore.addAssetBatch(newAssets, true);
-          if (newWalls.length > 0) projectStore.addWallBatch(newWalls, true);
-
+          store.saveToHistory();
+          if (newShapes.length > 0) store.addShapeBatch(newShapes, true);
+          if (newAssets.length > 0) store.addAssetBatch(newAssets, true);
+          if (newWalls.length > 0) store.addWallBatch(newWalls, true);
           setSelectedIds(newSelectedIds);
+          toast.success(`Duplicated ${selectedIds.length} item(s)`);
         }
       }
       // Delete key (global delete for selected items)
@@ -1872,7 +1854,7 @@ export default function Workspace2D({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [zoomIn, zoomOut, clearSelection]);
+  }, [zoomIn, zoomOut, clearSelection, selectedIds]);
 
 
 

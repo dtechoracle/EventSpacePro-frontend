@@ -15,6 +15,7 @@ export type TextureId =
   | 'stone-01'
   | 'tile-01' | 'tile-02'
   | 'water-01' | 'water-02'
+  | 'parking-lot'
   | 'white-grunge'
   | 'wood-grain-01' | 'wood-grain-02' | 'wood-grain-03'
   | 'hatch-diagonal-thin' | 'hatch-diagonal-thick' | 'hatch-cross-thin' | 'hatch-vertical-thin' | 'hatch-horizontal-thin'
@@ -62,6 +63,7 @@ export const texturePatterns: TexturePattern[] = [
   { id: 'road-01', name: 'Road 01', isImage: true, path: '/assets/textures/Road 01.png', tileSize: 1024 },
   { id: 'road-02', name: 'Road 02', isImage: true, path: '/assets/textures/Road 02.png', tileSize: 1024 },
   { id: 'road-03', name: 'Road 03', isImage: true, path: '/assets/textures/Road 03.png', tileSize: 1024 },
+  { id: 'parking-lot', name: 'Parking Lot', isImage: true, path: '/assets/textures/Road 01.png', tileSize: 1024 },
   { id: 'sand-01', name: 'Sand 01', isImage: true, path: '/assets/textures/Sand 01.png', tileSize: 800 },
   { id: 'sand-02', name: 'Sand 02', isImage: true, path: '/assets/textures/Sand 02.png', tileSize: 800 },
   { id: 'sand-03', name: 'Sand 03', isImage: true, path: '/assets/textures/Sand 03.png', tileSize: 800 },

@@ -1529,33 +1529,18 @@ export default function ExportPanel() {
                 <button
                   onClick={() => handleExport(option)}
                   disabled={isExporting}
-                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded transition-colors ${isExporting
-                    ? "bg-gray-400 text-white cursor-not-allowed"
-                    : "bg-blue-600 text-white hover:bg-blue-700"
+                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded border transition-colors ${isExporting
+                    ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                    : "border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
                     }`}
                 >
+
                   <Download className="w-3 h-3" />
                   {isExporting ? "Exporting..." : `Export ${option.format.toUpperCase()}`}
                 </button>
               </div>
             ))}
 
-            <button
-              onClick={addExportOption}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-xs text-gray-600 hover:border-gray-400 hover:bg-gray-50 transition-colors"
-            >
-              <Plus className="w-3 h-3" />
-              Add Export Option
-            </button>
-
-            {/* Import Button */}
-            <button
-              onClick={handleImport}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition-colors mt-2"
-            >
-              <Upload className="w-3 h-3" />
-              Import Project
-            </button>
           </div>
         </>
       )}

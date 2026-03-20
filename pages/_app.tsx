@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Toaster } from "react-hot-toast";
 import { useRouter } from "next/router";
 import Preloader from "./(components)/Preloader";
+import { instrumentSans } from "@/helpers/fonts";
 
 export default function App({ Component, pageProps }: AppProps) {
   const [queryClient] = useState(() => new QueryClient());
@@ -31,10 +32,13 @@ export default function App({ Component, pageProps }: AppProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {loading && <Preloader />}
-      <Toaster position="top-right" reverseOrder={false} />
-      <Component {...pageProps} />
+      <div className={instrumentSans.className}>
+        {loading && <Preloader />}
+        <Toaster position="top-right" reverseOrder={false} />
+        <Component {...pageProps} />
+      </div>
     </QueryClientProvider>
   );
 }
+
 
