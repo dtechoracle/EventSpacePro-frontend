@@ -88,7 +88,7 @@ type SceneState = {
   hasUnsavedChanges: boolean;
   showGrid: boolean;
   snapToGridEnabled: boolean;
-  unitSystem: 'metric' | 'imperial'; // metric = mm/m, imperial = feet display
+  unitSystem: 'metric-mm' | 'metric-m' | 'imperial-ft'; // explicit unit systems
   showDebugOutlines?: boolean;
   gridSize: number; // Grid size in mm
 
@@ -203,7 +203,7 @@ type SceneState = {
   toggleGrid: () => void;
   toggleDebugOutlines: () => void;
   setGridSize: (size: number) => void;
-  setUnitSystem: (unit: 'metric' | 'imperial') => void;
+  setUnitSystem: (unit: 'metric-mm' | 'metric-m' | 'imperial-ft') => void;
   toggleSnapToGrid: () => void;
   setSnapToGridEnabled: (enabled: boolean) => void;
   snapToGrid: (x: number, y: number) => { x: number; y: number };
@@ -314,7 +314,7 @@ export const useSceneStore = create<SceneState>()(
       hasUnsavedChanges: false,
       hasHydrated: false,
       showGrid: false,
-      unitSystem: 'metric',
+      unitSystem: 'metric-mm',
       showDebugOutlines: false,
       // Grid in millimetres (mm). We treat 1000mm = 1m.
       // Available sizes in meters: 0.1m, 0.5m, 1m, 2m, 5m
@@ -642,7 +642,7 @@ export const useSceneStore = create<SceneState>()(
 
       toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
 
-      setUnitSystem: (unit: 'metric' | 'imperial') => set({ unitSystem: unit }),
+      setUnitSystem: (unit: 'metric-mm' | 'metric-m' | 'imperial-ft') => set({ unitSystem: unit }),
 
       toggleDebugOutlines: () => set((state) => ({ showDebugOutlines: !state.showDebugOutlines })),
 

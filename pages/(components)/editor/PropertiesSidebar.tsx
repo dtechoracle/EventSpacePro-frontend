@@ -15,6 +15,7 @@ import { useUserStore } from "@/store/userStore";
 import toast from "react-hot-toast";
 import { convertAssetToShapes } from "@/utils/assetUtils";
 import LineTypeSelector from "@/components/ui/LineTypeSelector";
+import { fromStoreValue, toStoreValue, getUnitLabel, UnitSystem } from '@/lib/units';
 
 export default function PropertiesSidebar(): React.JSX.Element {
   const { selectedIds, screenToWorld, zoom, worldToScreen, panX, panY, canvasOffset, activeTool } = useEditorStore();
@@ -131,6 +132,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const snapToGridEnabled = useSceneStore((s) => s.snapToGridEnabled);
   const toggleSnapToGrid = useSceneStore((s) => s.toggleSnapToGrid);
   const updateSceneAsset = useSceneStore((s) => s.updateAsset);
+  const unitSystem = useSceneStore((s) => s.unitSystem) || 'metric-mm';
+  const unitLabel = getUnitLabel(unitSystem);
 
   const editorStore = useEditorStore();
 
@@ -212,7 +215,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
   const [canvasName, setCanvasName] = useState<string>("");
 
-  const roundForDisplay = (num: number) => Math.round(num * 100) / 100;
+  const roundForDisplay = (num: number, isValueFromStore = true) => {
+    const val = isValueFromStore ? fromStoreValue(num, unitSystem) : num;
+    return Math.round(val * 100) / 100;
+  };
 
   return (
     <aside className="h-screen flex flex-col p-3 pb-24 overflow-y-auto text-sm bg-white text-gray-900">
@@ -337,19 +343,20 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 <div className="text-xs font-semibold mb-2 text-gray-600">Distribution</div>
                 <div className="flex flex-col gap-2">
                   {/* Linear Distribution */}
-                  <div className="flex gap-2 items-center">
-                    <span className="text-gray-500 w-12">Linear</span>
-                    <input
-                      type="number"
-                      value={distributeSpacing}
-                      onChange={(e) => setDistributeSpacing(Number(e.target.value))}
-                      className="w-16 sidebar-input text-right"
-                      placeholder="Gap"
-                    />
-                    <span className="text-xs text-gray-400">mm</span>
-                    <div className="flex gap-1 ml-auto">
-                      <button onClick={() => useProjectStore.getState().distributeSelection('horizontal', distributeSpacing, selectedIds)} className="p-1.5 hover:bg-gray-100 rounded" title="Distribute Horizontally"> <FaArrowsAltH /> </button>
-                      <button onClick={() => useProjectStore.getState().distributeSelection('vertical', distributeSpacing, selectedIds)} className="p-1.5 hover:bg-gray-100 rounded" title="Distribute Vertically"> <FaArrowsAltV /> </button>
+                  <div className="grid grid-cols-2 gap-2 items-end">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Linear Gap ({unitLabel})</span>
+                      <input
+                        type="number"
+                        value={roundForDisplay(distributeSpacing, false)}
+                        onChange={(e) => setDistributeSpacing(Number(e.target.value))}
+                        className="sidebar-input w-full text-center font-medium"
+                        placeholder="Gap"
+                      />
+                    </div>
+                    <div className="flex gap-1 ml-auto pb-1">
+                      <button onClick={() => useProjectStore.getState().distributeSelection('horizontal', toStoreValue(distributeSpacing, unitSystem), selectedIds)} className="p-1.5 hover:bg-gray-100 rounded" title="Distribute Horizontally"> <FaArrowsAltH /> </button>
+                      <button onClick={() => useProjectStore.getState().distributeSelection('vertical', toStoreValue(distributeSpacing, unitSystem), selectedIds)} className="p-1.5 hover:bg-gray-100 rounded" title="Distribute Vertically"> <FaArrowsAltV /> </button>
                     </div>
                   </div>
 
@@ -360,7 +367,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       type="number"
                       value={radialDiameter} // Using same state var, but semantically it's radius now
                       onChange={(e) => setRadialDiameter(Number(e.target.value))}
-                      className="w-16 sidebar-input text-right"
+                      className="w-16 sidebar-input text-center"
                       placeholder="Radius"
                     />
                     <span className="text-xs text-gray-400">rad</span>
@@ -441,8 +448,11 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   className="w-full text-xs border rounded px-2 py-1 bg-white"
                 >
                   {(availableGridSizes || [100, 500, 1000, 2000, 5000]).map((size) => {
-                    const meters = size / 1000;
-                    const label = meters >= 1 ? `${meters}m` : `${meters * 1000}mm (${meters}m)`;
+                    const label = unitSystem === 'imperial-ft' 
+                      ? `${(size / 304.8).toFixed(1)}ft` 
+                      : unitSystem === 'metric-m' 
+                        ? `${size / 1000}m` 
+                        : `${size}mm`;
                     return <option key={size} value={size}>{label}</option>;
                   })}
                 </select>
@@ -489,21 +499,21 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 {/* Bounding Box Info */}
                 {collectiveBounds && (
                   <div className="grid grid-cols-2 gap-2 mb-4">
-                     <div className="flex items-center justify-between">
-                      <span className="text-gray-500">W</span>
-                      <span className="sidebar-input w-16 text-right bg-gray-50 text-gray-400">{roundForDisplay(collectiveBounds.width)}</span>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Width ({unitLabel})</span>
+                      <span className="sidebar-input w-full text-center bg-gray-50 text-gray-500 border-none font-medium">{roundForDisplay(collectiveBounds.width)}</span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-500">H</span>
-                      <span className="sidebar-input w-16 text-right bg-gray-50 text-gray-400">{roundForDisplay(collectiveBounds.height)}</span>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Height ({unitLabel})</span>
+                      <span className="sidebar-input w-full text-center bg-gray-50 text-gray-500 border-none font-medium">{roundForDisplay(collectiveBounds.height)}</span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-500">X</span>
-                      <span className="sidebar-input w-16 text-right bg-gray-50 text-gray-400">{roundForDisplay(collectiveBounds.x)}</span>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">X ({unitLabel})</span>
+                      <span className="sidebar-input w-full text-center bg-gray-50 text-gray-500 border-none font-medium">{roundForDisplay(collectiveBounds.x)}</span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-500">Y</span>
-                      <span className="sidebar-input w-16 text-right bg-gray-50 text-gray-400">{roundForDisplay(collectiveBounds.y)}</span>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Y ({unitLabel})</span>
+                      <span className="sidebar-input w-full text-center bg-gray-50 text-gray-500 border-none font-medium">{roundForDisplay(collectiveBounds.y)}</span>
                     </div>
                   </div>
                 )}
@@ -557,7 +567,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         if (aIds.length > 0) updateAssetBatch(aIds, { strokeWidth: val });
                       }
                     }}
-                    className="sidebar-input w-16 text-right"
+                    className="sidebar-input w-16 text-center"
                     min={0}
                     step={0.5}
                   />
@@ -577,36 +587,38 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 {/* Position */}
                 {(itemType === 'shape' || itemType === 'asset') && (
                   <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-500">X</span>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Pos X ({unitLabel})</span>
                       <input
                         type="number"
                         value={roundForDisplay((selectedItem as any).x)}
                         onChange={(e) => {
                           const val = Number(e.target.value);
-                          if (itemType === 'shape') updateShape(selectedItem.id, { x: val });
+                          const storeVal = toStoreValue(val, unitSystem);
+                          if (itemType === 'shape') updateShape(selectedItem.id, { x: storeVal });
                           if (itemType === 'asset') {
-                            updateAsset(selectedItem.id, { x: val });
-                            updateSceneAsset(selectedItem.id, { x: val });
+                            updateAsset(selectedItem.id, { x: storeVal });
+                            updateSceneAsset(selectedItem.id, { x: storeVal });
                           }
                         }}
-                        className="sidebar-input w-16 text-right"
+                        className="sidebar-input w-full text-center font-medium"
                       />
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-500">Y</span>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Pos Y ({unitLabel})</span>
                       <input
                         type="number"
                         value={roundForDisplay((selectedItem as any).y)}
                         onChange={(e) => {
                           const val = Number(e.target.value);
-                          if (itemType === 'shape') updateShape(selectedItem.id, { y: val });
+                          const storeVal = toStoreValue(val, unitSystem);
+                          if (itemType === 'shape') updateShape(selectedItem.id, { y: storeVal });
                           if (itemType === 'asset') {
-                            updateAsset(selectedItem.id, { y: val });
-                            updateSceneAsset(selectedItem.id, { y: val });
+                            updateAsset(selectedItem.id, { y: storeVal });
+                            updateSceneAsset(selectedItem.id, { y: storeVal });
                           }
                         }}
-                        className="sidebar-input w-16 text-right"
+                        className="sidebar-input w-full text-center font-medium"
                       />
                     </div>
                   </div>
@@ -615,37 +627,62 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 {/* Dimensions (Shape/Asset) */}
                 {(itemType === 'shape' || itemType === 'asset') && (
                   <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-500">W</span>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Width ({unitLabel})</span>
                       <input
                         type="number"
                         value={roundForDisplay((selectedItem as any).width)}
                         onChange={(e) => {
                           const val = Number(e.target.value);
-                          if (itemType === 'shape') updateShape(selectedItem.id, { width: val });
+                          const storeVal = toStoreValue(val, unitSystem);
+                          if (itemType === 'shape') updateShape(selectedItem.id, { width: storeVal });
                           if (itemType === 'asset') {
-                            updateAsset(selectedItem.id, { width: val });
-                            updateSceneAsset(selectedItem.id, { width: val });
+                            updateAsset(selectedItem.id, { width: storeVal });
+                            updateSceneAsset(selectedItem.id, { width: storeVal });
                           }
                         }}
-                        className="sidebar-input w-16 text-right"
+                        className="sidebar-input w-full text-center font-medium"
                       />
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-500">H</span>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Height ({unitLabel})</span>
                       <input
                         type="number"
                         value={roundForDisplay((selectedItem as any).height)}
                         onChange={(e) => {
                           const val = Number(e.target.value);
-                          if (itemType === 'shape') updateShape(selectedItem.id, { height: val });
+                          const storeVal = toStoreValue(val, unitSystem);
+                          if (itemType === 'shape') updateShape(selectedItem.id, { height: storeVal });
                           if (itemType === 'asset') {
-                            updateAsset(selectedItem.id, { height: val });
-                            updateSceneAsset(selectedItem.id, { height: val });
+                            updateAsset(selectedItem.id, { height: storeVal });
+                            updateSceneAsset(selectedItem.id, { height: storeVal });
                           }
                         }}
-                        className="sidebar-input w-16 text-right"
+                        className="sidebar-input w-full text-center font-medium"
                       />
+                    </div>
+                  </div>
+                )}
+
+                {/* Rotation (Unified Shape/Asset) */}
+                {(itemType === 'shape' || itemType === 'asset') && (
+                  <div className="flex justify-between items-center mb-4 pt-2 border-t border-gray-100">
+                    <span className="text-gray-500">Rotation</span>
+                    <div className="flex items-center">
+                      <input
+                        type="number"
+                        value={roundForDisplay((selectedItem as any).rotation || 0)}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          if (itemType === 'shape') updateShape(selectedItem.id, { rotation: val });
+                          if (itemType === 'asset') {
+                            updateAsset(selectedItem.id, { rotation: val });
+                            updateSceneAsset(selectedItem.id, { rotation: val });
+                          }
+                        }}
+                        className="sidebar-input w-16 text-center"
+                      />
+                      <span className="ml-1 text-gray-400">°</span>
                     </div>
                   </div>
                 )}
@@ -676,9 +713,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     </div>
 
                     {(selectedItem as any).showDimensions && (
-                      <div className="space-y-2 mb-2">
+                      <div className="space-y-2 mt-3">
+                        {/* Style / Type */}
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-500 text-xs">Type</span>
+                          <span className="text-gray-500 text-xs">Line Style</span>
                           <select
                             value={(selectedItem as any).dimensionType || 'solid'}
                             onChange={(e) => {
@@ -691,7 +729,40 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             <option value="solid">Solid</option>
                             <option value="dashed">Dashed</option>
                             <option value="dotted">Dotted</option>
-                            <option value="circular">Circular</option>
+                          </select>
+                        </div>
+
+                        {/* Font Size */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Font Size</span>
+                          <input
+                            type="number"
+                            min="6"
+                            max="500000"
+                            value={(selectedItem as any).dimensionFontSize || 12}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionFontSize: val });
+                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionFontSize: val });
+                            }}
+                            className="sidebar-input w-16 text-center"
+                          />
+                        </div>
+
+                        {/* Text Position */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Text Position</span>
+                          <select
+                            value={(selectedItem as any).dimensionTextPosition || 'inbetween'}
+                            onChange={(e) => {
+                              const val = e.target.value as any;
+                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionTextPosition: val });
+                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionTextPosition: val });
+                            }}
+                            className="text-xs border rounded px-2 py-1 bg-white"
+                          >
+                            <option value="inbetween">In-between</option>
+                            <option value="above">Above Line</option>
                           </select>
                         </div>
                       </div>
@@ -724,21 +795,44 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     </div>
 
                     {(selectedItem as any).showDimensions && (
-                      <div className="space-y-2 mb-2">
+                      <div className="space-y-2 mt-3">
+                         {/* Style / Type */}
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-500 text-xs">Type</span>
+                          <span className="text-gray-500 text-xs">Line Style</span>
                           <select
                             value={(selectedItem as any).dimensionType || 'solid'}
-                            onChange={(e) => {
-                              const val = e.target.value as any;
-                              updateWall(selectedItem.id, { dimensionType: val });
-                            }}
+                            onChange={(e) => updateWall(selectedItem.id, { dimensionType: e.target.value as any })}
                             className="text-xs border rounded px-2 py-1 bg-white w-32"
                           >
                             <option value="solid">Solid</option>
                             <option value="dashed">Dashed</option>
                             <option value="dotted">Dotted</option>
-                            <option value="circular">Circular</option>
+                          </select>
+                        </div>
+
+                        {/* Font Size */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Font Size</span>
+                          <input
+                            type="number"
+                            min="6"
+                            max="500000"
+                            value={(selectedItem as any).dimensionFontSize || 12}
+                            onChange={(e) => updateWall(selectedItem.id, { dimensionFontSize: Number(e.target.value) })}
+                            className="sidebar-input w-16 text-center"
+                          />
+                        </div>
+
+                        {/* Text Position */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Text Position</span>
+                          <select
+                            value={(selectedItem as any).dimensionTextPosition || 'inbetween'}
+                            onChange={(e) => updateWall(selectedItem.id, { dimensionTextPosition: e.target.value as any })}
+                            className="text-xs border rounded px-2 py-1 bg-white"
+                          >
+                            <option value="inbetween">In-between</option>
+                            <option value="above">Above Line</option>
                           </select>
                         </div>
                       </div>
@@ -812,7 +906,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         step="0.1"
                         value={(selectedItem as any).arrowHeadSize || 1}
                         onChange={(e) => updateShape(selectedItem.id, { arrowHeadSize: Number(e.target.value) })}
-                        className="sidebar-input w-16 text-right"
+                        className="sidebar-input w-16 text-center"
                       />
                     </div>
 
@@ -876,7 +970,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         step="0.1"
                         value={(selectedItem as any).arrowTailSize || 1}
                         onChange={(e) => updateShape(selectedItem.id, { arrowTailSize: Number(e.target.value) })}
-                        className="sidebar-input w-16 text-right"
+                        className="sidebar-input w-16 text-center"
                       />
                     </div>
                   </div>
@@ -884,28 +978,6 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
 
 
-                {/* Rotation */}
-                {(itemType === 'shape' || itemType === 'asset') && (
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-500">Rotation</span>
-                    <div className="flex items-center">
-                      <input
-                        type="number"
-                        value={roundForDisplay((selectedItem as any).rotation || 0)}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          if (itemType === 'shape') updateShape(selectedItem.id, { rotation: val });
-                          if (itemType === 'asset') {
-                            updateAsset(selectedItem.id, { rotation: val });
-                            updateSceneAsset(selectedItem.id, { rotation: val });
-                          }
-                        }}
-                        className="sidebar-input w-16 text-right"
-                      />
-                      <span className="ml-1 text-gray-400">°</span>
-                    </div>
-                  </div>
-                )}
 
                 {/* Appearance (Shape/Asset) */}
                 {(itemType === 'shape' || itemType === 'asset') && (
@@ -1017,7 +1089,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                                 type="number"
                                 value={(selectedItem as any).gradientAngle || 0}
                                 onChange={(e) => updateShape(selectedItem.id, { gradientAngle: Number(e.target.value) })}
-                                className="sidebar-input w-12 text-right text-xs"
+                                className="sidebar-input w-12 text-center text-xs"
                                 min={0}
                                 max={360}
                               />
@@ -1075,7 +1147,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             type="number"
                             value={(selectedItem as any).fillTextureScale || 4}
                             onChange={(e) => updateShape(selectedItem.id, { fillTextureScale: Number(e.target.value) } as any)}
-                            className="sidebar-input w-12 text-right text-xs"
+                            className="sidebar-input w-12 text-center text-xs"
                             max={1000}
                             step={0.5}
                           />
@@ -1087,7 +1159,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             type="number"
                             value={(selectedItem as any).fillTextureThickness || 1}
                             onChange={(e) => updateShape(selectedItem.id, { fillTextureThickness: Number(e.target.value) } as any)}
-                            className="sidebar-input w-12 text-right text-xs"
+                            className="sidebar-input w-12 text-center text-xs"
                             min={0.1}
                             max={10}
                             step={0.1}
@@ -1151,7 +1223,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                                 updateSceneAsset(selectedItem.id, { fillTextureScale: val } as any);
                               }
                             }}
-                            className="sidebar-input w-12 text-right text-xs"
+                            className="sidebar-input w-12 text-center text-xs"
                             max={1000}
                             step={0.5}
                           />
@@ -1172,7 +1244,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                                 updateSceneAsset(selectedItem.id, { fillTextureThickness: safeVal } as any);
                               }
                             }}
-                            className="sidebar-input w-12 text-right text-xs"
+                            className="sidebar-input w-12 text-center text-xs"
                             min={0.1}
                             max={10}
                             step={0.1}
@@ -1217,7 +1289,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                                 type="number"
                                 value={(selectedItem as any).fillImageScale || 1}
                                 onChange={(e) => updateShape(selectedItem.id, { fillImageScale: Number(e.target.value) })}
-                                className="sidebar-input w-12 text-right text-xs"
+                                className="sidebar-input w-12 text-center text-xs"
                                 min={0.1}
                                 max={5}
                                 step={0.1}
@@ -1275,7 +1347,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               updateSceneAsset(selectedItem.id, { strokeWidth: val });
                             }
                           }}
-                          className="sidebar-input w-16 text-right"
+                          className="sidebar-input w-16 text-center"
                           min={0}
                           step={0.5}
                         />
@@ -1326,7 +1398,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           const value = Number(e.target.value);
                           updateShape(selectedItem.id, { strokeWidth: value >= 0 ? value : 2 });
                         }}
-                        className="sidebar-input w-16 text-right"
+                        className="sidebar-input w-16 text-center"
                         min={0}
                         step={0.5}
                       />
@@ -1359,12 +1431,24 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span className="text-gray-500">Font Size (px)</span>
                       <input
                         type="number"
-                        value={selectedTextAnnotation.fontSize || 200}
-                        onChange={(e) => {
+                        defaultValue={selectedTextAnnotation.fontSize || 200}
+                        key={`${selectedTextAnnotation.id}-fs-${selectedTextAnnotation.fontSize}`}
+                        onBlur={(e) => {
                           const val = Number(e.target.value);
-                          updateTextAnnotation(selectedTextAnnotation.id, { fontSize: Math.max(8, Math.min(1000, val)) });
+                          if (!isNaN(val) && val > 0) {
+                            updateTextAnnotation(selectedTextAnnotation.id, { fontSize: Math.max(8, Math.min(1000, val)) });
+                          }
                         }}
-                        className="sidebar-input w-16 text-right"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const val = Number((e.target as HTMLInputElement).value);
+                            if (!isNaN(val) && val > 0) {
+                              updateTextAnnotation(selectedTextAnnotation.id, { fontSize: Math.max(8, Math.min(1000, val)) });
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }
+                        }}
+                        className="sidebar-input w-16 text-center"
                         min={8}
                         max={1000}
                       />
@@ -1489,7 +1573,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             const val = Number(e.target.value);
                             updateTextAnnotation(selectedTextAnnotation.id, { x: val });
                           }}
-                          className="sidebar-input w-16 text-right"
+                          className="sidebar-input w-16 text-center"
                         />
                       </div>
                       <div className="flex items-center justify-between">
@@ -1501,7 +1585,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             const val = Number(e.target.value);
                             updateTextAnnotation(selectedTextAnnotation.id, { y: val });
                           }}
-                          className="sidebar-input w-16 text-right"
+                          className="sidebar-input w-16 text-center"
                         />
                       </div>
                     </div>
@@ -1534,7 +1618,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           const val = Number(e.target.value);
                           updateLabelArrow(selectedLabelArrow.id, { fontSize: Math.max(8, Math.min(72, val)) });
                         }}
-                        className="sidebar-input w-16 text-right"
+                        className="sidebar-input w-16 text-center"
                         min={8}
                         max={72}
                       />
@@ -1569,7 +1653,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           const val = Number(e.target.value);
                           updateLabelArrow(selectedLabelArrow.id, { strokeWidth: Math.max(1, val) });
                         }}
-                        className="sidebar-input w-16 text-right"
+                        className="sidebar-input w-16 text-center"
                         min={1}
                       />
                     </div>
@@ -1580,6 +1664,25 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 {itemType === 'dimension' && selectedDimension && (
                   <div className="mt-3 pt-3 border-t border-gray-100">
                     <div className="text-xs font-semibold mb-2 text-gray-600">Dimension Properties</div>
+
+                    {/* Dimension Type */}
+                    <div className="mb-3">
+                      <span className="text-gray-500 text-xs mb-1 block">Type</span>
+                      <div className="grid grid-cols-2 gap-1">
+                        {(['linear', 'aligned', 'angular', 'radial'] as const).map((type) => (
+                          <button
+                            key={type}
+                            onClick={() => updateDimension(selectedDimension.id, { type })}
+                            className={`px-2 py-1 text-xs rounded border transition-colors ${selectedDimension.type === type
+                              ? "bg-blue-50 border-blue-300 text-blue-600 font-medium"
+                              : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                              }`}
+                          >
+                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
                     {/* Value Override */}
                     <div className="mb-2">
@@ -1604,10 +1707,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         value={selectedDimension.fontSize || 12}
                         onChange={(e) => {
                           const val = Number(e.target.value);
-                          updateDimension(selectedDimension.id, { fontSize: Math.max(8, Math.min(72, val)) });
+                          updateDimension(selectedDimension.id, { fontSize: Math.max(6, Math.min(72, val)) });
                         }}
-                        className="sidebar-input w-16 text-right"
-                        min={8}
+                        className="sidebar-input w-16 text-center"
+                        min={6}
                         max={72}
                       />
                     </div>
@@ -1633,18 +1736,31 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
                     {/* Stroke Width */}
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Line Thickness</span>
+                      <span className="text-gray-500">Line Weight</span>
                       <input
                         type="number"
-                        value={selectedDimension.strokeWidth || 10}
+                        value={selectedDimension.strokeWidth || 1.5}
                         onChange={(e) => {
                           const val = Number(e.target.value);
-                          updateDimension(selectedDimension.id, { strokeWidth: Math.max(0.5, val) });
+                          updateDimension(selectedDimension.id, { strokeWidth: Math.max(0.2, val) });
                         }}
-                        className="sidebar-input w-16 text-right"
-                        min={0.5}
-                        step={0.5}
+                        className="sidebar-input w-16 text-center"
+                        min={0.2}
+                        step={0.1}
                       />
+                    </div>
+
+                    {/* Text Position */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Text Position</span>
+                      <select
+                        value={selectedDimension.textPosition || 'inbetween'}
+                        onChange={(e) => updateDimension(selectedDimension.id, { textPosition: e.target.value as any })}
+                        className="text-xs border rounded px-2 py-1 bg-white"
+                      >
+                        <option value="inbetween">In-between</option>
+                        <option value="above">Above Line</option>
+                      </select>
                     </div>
 
                     {/* Offset */}
@@ -1657,7 +1773,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           const val = Number(e.target.value);
                           updateDimension(selectedDimension.id, { offset: val });
                         }}
-                        className="sidebar-input w-16 text-right"
+                        className="sidebar-input w-16 text-center"
                         step={5}
                       />
                     </div>
@@ -1710,7 +1826,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             updateSceneAsset(selectedItem.id, { strokeWidth: val } as any);
                           }
                         }}
-                        className="sidebar-input w-16 text-right"
+                        className="sidebar-input w-16 text-center"
                         min={0}
                       />
                     </div>
@@ -1844,7 +1960,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                                 updateSceneAsset(selectedItem.id, { fillTextureScale: val } as any);
                               }
                             }}
-                            className="sidebar-input w-12 text-right text-xs"
+                            className="sidebar-input w-12 text-center text-xs"
                             min={0.1}
                             max={10}
                             step={0.1}
@@ -1868,7 +1984,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                                 updateSceneAsset(selectedItem.id, { fillTextureThickness: safeVal } as any);
                               }
                             }}
-                            className="sidebar-input w-12 text-right text-xs"
+                            className="sidebar-input w-12 text-center text-xs"
                             min={0.1}
                             max={10}
                             step={0.1}
@@ -1928,7 +2044,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                                 updateSceneAsset(selectedItem.id, { fillTextureScale: val } as any);
                               }
                             }}
-                            className="sidebar-input w-12 text-right text-xs"
+                            className="sidebar-input w-12 text-center text-xs"
                             min={0.1}
                             max={10}
                             step={0.1}
@@ -1952,7 +2068,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                                 updateSceneAsset(selectedItem.id, { fillTextureThickness: safeVal } as any);
                               }
                             }}
-                            className="sidebar-input w-12 text-right text-xs"
+                            className="sidebar-input w-12 text-center text-xs"
                             min={0.1}
                             max={10}
                             step={0.1}
@@ -1984,38 +2100,36 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             updateSceneAsset(selectedItem.id, { wallThickness: safeVal } as any);
                           }
                         }}
-                        className="sidebar-input w-16 text-right"
+                        className="sidebar-input w-16 text-center"
                         min={1}
                       />
-                    </div>
-
-                    {/* Wall Length & Height */}
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Length</span>
-                      <div className="flex items-center gap-1">
+                                        {/* Wall Length & Height */}
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Length ({unitLabel})</span>
                         <input
                           type="number"
                           value={(() => {
                             if (itemType === 'wall' && (selectedItem as any).nodes) {
                               const xs = (selectedItem as any).nodes.map((n: any) => n.x);
-                              if (xs.length) return Math.round(Math.max(...xs) - Math.min(...xs)) || 0;
+                              if (xs.length) return roundForDisplay(Math.max(...xs) - Math.min(...xs)) || 0;
                             }
                             if ((itemType === 'wall' || itemType === 'asset') && (selectedItem as any).wallSegments) {
                               let len = 0;
                               (selectedItem as any).wallSegments.forEach((s: any) => {
                                 len += Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y);
                               });
-                              return Math.round(len);
+                              return roundForDisplay(len);
                             }
                             if (itemType === 'asset' && (selectedItem as any).wallNodes) {
                               const xs = (selectedItem as any).wallNodes.map((n: any) => n.x);
-                              if (xs.length) return Math.round(Math.max(...xs) - Math.min(...xs)) || 0;
+                              if (xs.length) return roundForDisplay(Math.max(...xs) - Math.min(...xs)) || 0;
                             }
                             return 0;
                           })()}
                           onChange={(e) => {
-                            const newLen = Number(e.target.value);
-                            if (newLen <= 0) return;
+                            const newStoreLen = toStoreValue(Number(e.target.value), unitSystem);
+                            if (newStoreLen <= 0) return;
 
                             // 1. Native Walls (nodes)
                             if (itemType === 'wall' && (selectedItem as any).nodes) {
@@ -2025,7 +2139,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               const currentLen = maxX - minX;
                               if (currentLen === 0) return;
                               const centerX = (minX + maxX) / 2;
-                              const scale = newLen / currentLen;
+                              const scale = newStoreLen / currentLen;
                               const updatedNodes = (selectedItem as any).nodes.map((node: any) => ({
                                 ...node,
                                 x: centerX + (node.x - centerX) * scale
@@ -2042,7 +2156,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               const currentLen = maxX - minX;
                               if (currentLen > 0) {
                                 const centerX = (minX + maxX) / 2;
-                                const scale = newLen / currentLen;
+                                const scale = newStoreLen / currentLen;
                                 const updatedNodes = (selectedItem as any).wallNodes.map((node: any) => ({
                                   ...node,
                                   x: centerX + (node.x - centerX) * scale
@@ -2053,7 +2167,6 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             }
 
                             // 3. Manual Wall Segments (Perimeter Scale)
-                            // This can apply to itemType='wall' (aliased) or 'asset'
                             if ((selectedItem as any).wallSegments) {
                               const segments = (selectedItem as any).wallSegments;
                               let currentLen = 0;
@@ -2062,8 +2175,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               });
 
                               if (currentLen > 0) {
-                                const scale = newLen / currentLen;
-                                // Find center of all segments
+                                const scale = newStoreLen / currentLen;
                                 let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
                                 segments.forEach((s: any) => {
                                   minX = Math.min(minX, s.start.x, s.end.x);
@@ -2091,15 +2203,12 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               }
                             }
                           }}
-                          className="sidebar-input w-16 text-right"
+                          className="sidebar-input w-full text-center font-medium"
                         />
-                        <span className="text-xs text-gray-400">mm</span>
                       </div>
-                    </div>
 
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Height</span>
-                      <div className="flex items-center gap-1">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Height ({unitLabel})</span>
                         <input
                           type="number"
                           value={(() => {
@@ -2110,12 +2219,12 @@ export default function PropertiesSidebar(): React.JSX.Element {
                                 minY = Math.min(minY, seg.start.y, seg.end.y);
                                 maxY = Math.max(maxY, seg.start.y, seg.end.y);
                               });
-                              if (minY !== Infinity && maxY !== -Infinity) return Math.round(maxY - minY);
+                              if (minY !== Infinity && maxY !== -Infinity) return roundForDisplay(maxY - minY);
                             }
-                            return (selectedItem as any).height || 3000;
+                            return roundForDisplay((selectedItem as any).height || 3000);
                           })()}
                           onChange={(e) => {
-                            const val = Number(e.target.value);
+                            const val = toStoreValue(Number(e.target.value), unitSystem);
                             if (val <= 0) return;
 
                             // Handle manual wall segments (Scale Y)
@@ -2156,146 +2265,17 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               updateSceneAsset(selectedItem.id, { height: val });
                             }
                           }}
-                          className="sidebar-input w-16 text-right"
+                          className="sidebar-input w-full text-center font-medium"
                         />
-                        <span className="text-xs text-gray-400">mm</span>
                       </div>
-                                      </div>
+                    </div>
+                          </div>
   </div>
                 )}
 
 
-                {/* Dimension Properties */}
-                {itemType === 'dimension' && selectedDimension && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <div className="text-xs font-semibold mb-2 text-gray-600">Dimension Properties</div>
 
-                    {/* Dimension Type */}
-                    <div className="mb-3">
-                      <span className="text-gray-500 text-xs mb-1 block">Type</span>
-                      <div className="grid grid-cols-2 gap-1">
-                        {(['linear', 'aligned', 'angular', 'radial'] as const).map((type) => (
-                          <button
-                            key={type}
-                            onClick={() => updateDimension(selectedDimension.id, { type })}
-                            className={`px-2 py-1 text-xs rounded border transition-colors ${selectedDimension.type === type
-                              ? "bg-blue-50 border-blue-300 text-blue-600 font-medium"
-                              : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                              }`}
-                          >
-                            {type.charAt(0).toUpperCase() + type.slice(1)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Stroke Width */}
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Line Width</span>
-                      <input
-                        type="number"
-                        value={selectedDimension.strokeWidth || 7.5}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          updateDimension(selectedDimension.id, { strokeWidth: Math.max(0.5, val) });
-                        }}
-                        className="sidebar-input w-16 text-right"
-                        min={0.5}
-                        step={0.5}
-                      />
-                    </div>
-
-                    {/* Color */}
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Color</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={selectedDimension.color || '#000000'}
-                          onChange={(e) => updateDimension(selectedDimension.id, { color: e.target.value })}
-                          className="sidebar-input w-20 text-xs"
-                        />
-                        <input
-                          type="color"
-                          value={selectedDimension.color || '#000000'}
-                          onChange={(e) => updateDimension(selectedDimension.id, { color: e.target.value })}
-                          className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Font Size */}
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Font Size</span>
-                      <input
-                        type="number"
-                        value={selectedDimension.fontSize || 12}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          updateDimension(selectedDimension.id, { fontSize: Math.max(6, Math.min(48, val)) });
-                        }}
-                        className="sidebar-input w-16 text-right"
-                        min={6}
-                        max={48}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Show Dimensions Toggle (Global Bottom) */}
-                {(itemType === 'shape' || itemType === 'asset' || itemType === 'wall') && (
-                  <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-100">
-                    <span className="text-gray-500">Show Dimensions</span>
-                    <div />
-
-
-                    <button
-                      onClick={() => {
-                        const cur = !!(selectedItem as any).showDimensions;
-                        const next = !cur;
-
-                        // Handle based on types
-                        if (itemType === 'wall' && !(selectedItem as any).wallSegments) {
-                          updateWall(selectedItem.id, { showDimensions: next } as any);
-                          syncToScene(selectedItem.id, { showDimensions: next });
-                        }
-                        else if (itemType === 'asset' || (itemType === 'wall' && (selectedItem as any).wallSegments)) {
-                          updateAsset(selectedItem.id, { showDimensions: next } as any);
-                          updateSceneAsset(selectedItem.id, { showDimensions: next } as any);
-                        }
-                        else if (itemType === 'shape') {
-                          updateShape(selectedItem.id, { showDimensions: next } as any);
-                          syncToScene(selectedItem.id, { showDimensions: next });
-                        }
-                      }}
-                      className={`w-10 h-5 rounded-full flex items-center transition-colors px-1 ${(selectedItem as any).showDimensions ? "bg-blue-600 justify-end" : "bg-gray-300 justify-start"
-                        }`}
-                    >
-                      <div className="w-3 h-3 bg-white rounded-full shadow-sm" />
-                    </button>
-                  </div>
-                )}
-
-                {/* Dimension Type Selector (Shape Only) - Visible when Show Dimensions is ON */}
-                {itemType === 'shape' && (selectedItem as any).showDimensions && (
-                  <div className="mt-2 pl-2 border-l-2 border-gray-100">
-                    <span className="text-gray-500 text-xs mb-1 block">Dimension Style</span>
-                    <div className="grid grid-cols-2 gap-1">
-                      {(['linear', 'aligned', 'angular', 'radial'] as const).map((type) => (
-                        <button
-                          key={type}
-                          onClick={() => updateShape(selectedItem.id, { dimensionType: type } as any)}
-                          className={`px-2 py-1 text-xs rounded border transition-colors ${((selectedItem as any).dimensionType || 'linear') === type
-                            ? "bg-blue-50 border-blue-300 text-blue-600 font-medium"
-                            : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                            }`}
-                        >
-                          {type.charAt(0).toUpperCase() + type.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* End Of Object Properties */}
               </div>
             )}
 

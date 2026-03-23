@@ -1,9 +1,12 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSceneStore } from '@/store/sceneStore';
 import { Asset } from '@/store/projectStore';
 import { ASSET_LIBRARY } from '@/lib/assets';
+
+// Global cache for SVGs - defined at module top level to prevent ReferenceErrors during evaluation
+const svgCache: Record<string, string> = {};
 
 // Helper to extract dimensions from SVG string
 function getSvgSize(svgText: string) {
@@ -30,10 +33,12 @@ interface AssetRendererProps {
     isSelected: boolean;
     isHovered: boolean;
     isPreview?: boolean;
+    onMouseEnter?: (name: string) => void;
+    onMouseLeave?: () => void;
 }
 
-export default function AssetRenderer({ asset, isSelected, isHovered, isPreview }: AssetRendererProps) {
-    const [svgContent, setSvgContent] = React.useState<string | null>(null);
+const AssetRendererBase = ({ asset, isSelected, isHovered, isPreview, onMouseEnter, onMouseLeave }: AssetRendererProps) => {
+    const [svgContent, setSvgContent] = useState<string | null>(null);
     const updateAsset = useSceneStore(s => s.updateAsset);
 
     // Find the definition for this asset type
@@ -43,7 +48,7 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
     const highlightColor = isSelected ? '#3b82f6' : '#60a5fa';
 
     // Fetch SVG content
-    React.useEffect(() => {
+    useEffect(() => {
         if (!definition?.path) return;
 
         const handleSvgText = (text: string) => {
@@ -52,18 +57,12 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
             // Extract dimensions from the SVG itself
             const { width: svgWidth, height: svgHeight } = getSvgSize(text);
 
-            // If the asset in the store has no dimensions, update the store.
-            // This ensures the asset uses the "real" SVG size only if no width/height was explicitly provided.
             if (svgWidth && svgHeight) {
                 const currentW = asset.width;
                 const currentH = asset.height;
-
-                // Check if update is needed (only if missing)
                 const needsUpdate = !currentW || !currentH;
 
                 if (needsUpdate) {
-                    console.log(`[AssetRenderer] Updating asset ${asset.id} dimensions from SVG: ${svgWidth}x${svgHeight}`);
-                    // Use a timeout to avoid updating during render phase
                     setTimeout(() => {
                         updateAsset(asset.id, { width: svgWidth, height: svgHeight });
                     }, 0);
@@ -86,10 +85,7 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
             .catch(err => console.error("Failed to load SVG", err));
     }, [definition?.path, asset.id, asset.width, asset.height, updateAsset]);
 
-    // 1. Base SVG processing (Heavy - runs once per unique SVG content)
-    // Tags each element with CSS classes based on STRUCTURAL properties only.
-    // Color decisions happen in stage 2 via CSS inheritance from the root fill.
-    const baseSvg = React.useMemo(() => {
+    const baseSvg = useMemo(() => {
         if (!svgContent || typeof window === 'undefined') return null;
 
         try {
@@ -98,7 +94,6 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
             const svg = doc.querySelector("svg");
             if (!svg) return svgContent;
 
-            // Inject CSS that handles inheritance and vector-effect in one pass
             const styleId = "dynamic-asset-style";
             if (!doc.getElementById(styleId)) {
                 const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
@@ -116,7 +111,6 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
                 const styleAttr = el.getAttribute("style");
                 const dAttr = el.getAttribute("d") || "";
 
-                // Structural classification - does NOT depend on current fill color
                 const wasExplicitlyNone = fillAttr === 'none' || (styleAttr && /fill\s*:\s*none/i.test(styleAttr));
                 const isLineElement = tag === 'line' || tag === 'polyline';
                 const hasFillRule = el.hasAttribute("fill-rule") || (styleAttr && /fill-rule/i.test(styleAttr));
@@ -124,7 +118,6 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
                 const isOpenPath = tag === 'path' && !isClosed;
                 const isAutoFill = el.getAttribute("id") === "auto-fill";
 
-                // Strip hardcoded colors so CSS can take over
                 if (styleAttr) {
                     const cleaned = styleAttr
                         .replace(/fill\s*:[^;]+;?/gi, "")
@@ -137,9 +130,6 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
                 el.removeAttribute("stroke");
                 el.removeAttribute("stroke-width");
 
-                // Class assignment based on STRUCTURE only. 
-                // Transparent root fill + fill-inherit-el = correct transparent element.
-                // Colored root fill + fill-inherit-el = correctly colored element.
                 if ((wasExplicitlyNone || isLineElement || isOpenPath) && !hasFillRule && !isAutoFill) {
                     el.classList.add("fill-none-el");
                 } else {
@@ -147,7 +137,6 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
                 }
             });
 
-            // Strip all paint from root SVG so stage 2 has full control
             svg.removeAttribute("style");
             svg.removeAttribute("fill");
             svg.removeAttribute("stroke");
@@ -162,20 +151,14 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
         }
     }, [svgContent]);
 
-    // 2. Dynamic SVG processing (Light - string manipulation only)
-    // Injects fill/stroke/dimensions directly into the root <svg> tag.
-    // Since all child elements use fill:inherit, color changes are O(1).
-    const processedSvg = React.useMemo(() => {
+    const processedSvg = useMemo(() => {
         if (!baseSvg) return null;
 
         const currentFill = asset.fillColor || 'none';
         const currentStroke = asset.strokeColor || '#000000';
-        // Use much thinner strokes for previews to prevent "blobbing"
         const defaultStrokeWidth = isPreview ? 0.4 : 0.5;
         const currentStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : defaultStrokeWidth;
 
-        // Strip any stale width/height/x/y/fill/stroke from existing attrs to avoid conflicts,
-        // then inject our precise pixel values so centering works correctly.
         return baseSvg.replace(/<svg([^>]*)>/i, (_match, attrs) => {
             const cleanAttrs = attrs
                 .replace(/\s+width\s*=\s*["'][^"']*["']/gi, '')
@@ -187,7 +170,7 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
 
             return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="${asset.width || 100}" height="${asset.height || 100}" x="${-(asset.width || 0) / 2}" y="${-(asset.height || 0) / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none;">`;
         });
-    }, [baseSvg, asset.fillColor, asset.strokeColor, asset.strokeWidth, asset.width, asset.height]);
+    }, [baseSvg, asset.fillColor, asset.strokeColor, asset.strokeWidth, asset.width, asset.height, isPreview]);
 
     if (asset.isExploded) return null;
     const rotation = asset.rotation || 0;
@@ -195,8 +178,12 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
     const transform = `translate(${asset.x}, ${asset.y}) rotate(${rotation}) scale(${scale})`;
 
     return (
-        <g transform={transform} style={{ cursor: 'pointer' }}>
-            {/* Render Inline SVG */}
+        <g 
+            transform={transform} 
+            style={{ cursor: 'pointer' }}
+            onMouseEnter={() => definition && onMouseEnter?.(definition.label)}
+            onMouseLeave={() => onMouseLeave?.()}
+        >
             {processedSvg ? (
                 <g
                     dangerouslySetInnerHTML={{ __html: processedSvg }}
@@ -205,7 +192,6 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
                     }}
                 />
             ) : (
-                // Fallback to image if SVG not loaded yet or failed
                 definition?.path && (
                     <image
                         href={definition.path}
@@ -221,18 +207,16 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
                 )
             )}
 
-            {/* Invisible rect for hit-testing only (no visual outline) */}
             <rect
-                x={-(asset.width || 0) / 2}
-                y={-(asset.height || 0) / 2}
-                width={asset.width || 0}
-                height={asset.height || 0}
+                x={-(asset.width || 100) / 2}
+                y={-(asset.height || 100) / 2}
+                width={asset.width || 100}
+                height={asset.height || 100}
                 fill="transparent"
                 stroke="none"
                 pointerEvents="all"
             />
 
-            {/* Fallback label when definition is missing */}
             {!definition && (
                 <text
                     x={0}
@@ -248,7 +232,12 @@ export default function AssetRenderer({ asset, isSelected, isHovered, isPreview 
             )}
         </g>
     );
-}
+};
 
-// Global cache for SVGs
-const svgCache: Record<string, string> = {};
+// Exporting as a named constant that is memoized
+const AssetRenderer = React.memo(AssetRendererBase);
+
+// Set display name for better debugging
+AssetRenderer.displayName = 'AssetRenderer';
+
+export default AssetRenderer;

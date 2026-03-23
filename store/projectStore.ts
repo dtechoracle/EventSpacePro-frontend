@@ -87,6 +87,8 @@ export type Shape = {
     // Display options
     showDimensions?: boolean;
     dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
+    dimensionFontSize?: number;
+    dimensionTextPosition?: 'inbetween' | 'above';
 };
 
 export type Asset = {
@@ -135,6 +137,8 @@ export type Asset = {
     // Display options
     showDimensions?: boolean;
     dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
+    dimensionFontSize?: number;
+    dimensionTextPosition?: 'inbetween' | 'above';
 };
 
 export type Wall = {
@@ -154,6 +158,8 @@ export type Wall = {
     zIndex: number;
     showDimensions?: boolean;
     dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
+    dimensionFontSize?: number;
+    dimensionTextPosition?: 'inbetween' | 'above';
 };
 
 export type Layer = {
@@ -189,6 +195,7 @@ export interface Dimension {
     fontSize?: number;
     strokeWidth?: number;
     lineStyle?: 'solid' | 'dashed' | 'dotted' | 'double';
+    textPosition?: 'inbetween' | 'above';
 
     zIndex?: number;
     groupId?: string;
@@ -282,8 +289,8 @@ export type ProjectState = {
 
     // Alignment & Distribution
     alignSelection: (type: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom', ids: string[]) => void;
-    distributeSelection: (axis: 'horizontal' | 'vertical', spacing: number, ids: string[]) => void;
-    distributeRadial: (diameter: number, startAngle: number, endAngle: number, ids: string[]) => void;
+    distributeSelection: (axis: 'horizontal' | 'vertical', spacing: number, ids: string[], skipHistory?: boolean) => void;
+    distributeRadial: (diameter: number, startAngle: number, endAngle: number, ids: string[], skipHistory?: boolean) => void;
     resolveIdsWithGroups: (ids: string[]) => string[];
 
     // History
@@ -669,37 +676,72 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             alignSelection: (type, ids) => {
-                const { shapes, assets, walls, textAnnotations, labelArrows, dimensions, groups } = get();
-                const resolvedIds = get().resolveIdsWithGroups(ids);
+                const { shapes, assets, walls, textAnnotations, groups } = get();
+                
+                // Identify top-level IDs
+                const topLevelIds = new Set<string>();
+                ids.forEach(id => {
+                    const item = shapes.find(s => s.id === id) || 
+                                 assets.find(a => a.id === id) || 
+                                 walls.find(w => w.id === id) || 
+                                 textAnnotations.find(t => t.id === id);
+                    if (item?.groupId) {
+                        topLevelIds.add(item.groupId);
+                    } else {
+                        topLevelIds.add(id);
+                    }
+                });
 
-                if (resolvedIds.length < 2) return;
+                const finalIds = Array.from(topLevelIds);
+                if (finalIds.length < 2) return;
                 get().saveToHistory();
 
-                const items: any[] = [];
-                const addItem = (item: any, type: string) => {
-                    let x = item.x, y = item.y, w = item.width || 0, h = item.height || 0;
-                    if (type === 'wall') {
-                        const xs = item.nodes.map((n: any) => n.x);
-                        const ys = item.nodes.map((n: any) => n.y);
-                        w = Math.max(...xs) - Math.min(...xs);
-                        h = Math.max(...ys) - Math.min(...ys);
-                        x = (Math.min(...xs) + Math.max(...xs)) / 2;
-                        y = (Math.min(...ys) + Math.max(...ys)) / 2;
-                    } else if (type === 'asset') {
-                        w = item.width * item.scale;
-                        h = item.height * item.scale;
-                    } else if (type === 'text') {
-                        const fs = item.fontSize || 14;
-                        w = (item.text?.length || 1) * (fs * 0.6);
-                        h = fs * 1.2;
-                    }
-                    items.push({ id: item.id, type, x, y, w, h });
-                };
+                const items: { id: string, type: 'item' | 'group', x: number, y: number, w: number, h: number, memberIds: string[] }[] = [];
+                
+                finalIds.forEach(id => {
+                    const group = groups.find(g => g.id === id);
+                    if (group) {
+                        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                        const members = [...shapes, ...assets, ...walls, ...textAnnotations].filter(i => i.groupId === group.id);
+                        members.forEach(m => {
+                            if ('nodes' in m) {
+                                m.nodes.forEach(n => {
+                                    minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+                                    maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y);
+                                });
+                            } else {
+                                const mAny = m as any;
+                                const w = (mAny.width || 0) * (mAny.scale || 1);
+                                const h = (mAny.height || 0) * (mAny.scale || 1);
+                                minX = Math.min(minX, mAny.x - w/2);
+                                minY = Math.min(minY, mAny.y - h/2);
+                                maxX = Math.max(maxX, mAny.x + w/2);
+                                maxY = Math.max(maxY, mAny.y + h/2);
+                            }
+                        });
+                        items.push({ id: group.id, type: 'group', x: (minX + maxX) / 2, y: (minY + maxY) / 2, w: maxX - minX, h: maxY - minY, memberIds: group.itemIds });
+                    } else {
+                        const item = shapes.find(s => s.id === id) || 
+                                     assets.find(a => a.id === id) || 
+                                     walls.find(w => w.id === id) || 
+                                     textAnnotations.find(t => t.id === id);
+                        if (!item) return;
 
-                shapes.filter(s => resolvedIds.includes(s.id)).forEach(i => addItem(i, 'shape'));
-                assets.filter(a => resolvedIds.includes(a.id)).forEach(i => addItem(i, 'asset'));
-                walls.filter(w => resolvedIds.includes(w.id)).forEach(i => addItem(i, 'wall'));
-                textAnnotations.filter(t => resolvedIds.includes(t.id)).forEach(i => addItem(i, 'text'));
+                        let x = (item as any).x, y = (item as any).y, w = (item as any).width || 0, h = (item as any).height || 0;
+                        if ('nodes' in item) {
+                            const xs = item.nodes.map((n: any) => n.x);
+                            const ys = item.nodes.map((n: any) => n.y);
+                            w = Math.max(...xs) - Math.min(...xs);
+                            h = Math.max(...ys) - Math.min(...ys);
+                            x = (Math.min(...xs) + Math.max(...xs)) / 2;
+                            y = (Math.min(...ys) + Math.max(...ys)) / 2;
+                        } else if ('scale' in (item as any)) {
+                            w = (item as any).width * ((item as any).scale || 1);
+                            h = (item as any).height * ((item as any).scale || 1);
+                        }
+                        items.push({ id, type: 'item', x, y, w, h, memberIds: [id] });
+                    }
+                });
 
                 if (items.length < 2) return;
 
@@ -726,91 +768,129 @@ export const useProjectStore = create<ProjectState>()(
                     const dx = newX - item.x;
                     const dy = newY - item.y;
 
-                    if (item.type === 'shape') get().updateShape(item.id, { x: newX, y: newY }, true);
-                    else if (item.type === 'asset') get().updateAsset(item.id, { x: newX, y: newY }, true);
-                    else if (item.type === 'wall') {
-                        const wall = walls.find(w => w.id === item.id);
-                        if (wall) get().updateWall(item.id, { nodes: wall.nodes.map(n => ({ ...n, x: n.x + dx, y: n.y + dy })) }, true);
-                    } else if (item.type === 'text') get().updateTextAnnotation(item.id, { x: newX - item.w / 2, y: newY }, true);
+                    item.memberIds.forEach(mid => {
+                        const s = shapes.find(sh => sh.id === mid);
+                        if (s) get().updateShape(mid, { x: s.x + dx, y: s.y + dy }, true);
+                        const a = assets.find(as => as.id === mid);
+                        if (a) get().updateAsset(mid, { x: a.x + dx, y: a.y + dy }, true);
+                        const w = walls.find(wa => wa.id === mid);
+                        if (w) get().updateWall(mid, { nodes: w.nodes.map(n => ({ ...n, x: n.x + dx, y: n.y + dy })) }, true);
+                        const t = textAnnotations.find(ta => ta.id === mid);
+                        if (t) get().updateTextAnnotation(mid, { x: t.x + dx, y: t.y + dy }, true);
+                    });
                 });
             },
 
-            distributeSelection: (axis, spacing, ids) => {
-                const { shapes, assets, walls, textAnnotations } = get();
-                const resolvedIds = get().resolveIdsWithGroups(ids);
 
-                if (resolvedIds.length < 2) return;
-                get().saveToHistory();
-
-                const items: any[] = [];
-                const addItem = (item: any, type: string) => {
-                    let x = item.x, y = item.y, w = item.width || 0, h = item.height || 0;
-                    if (type === 'wall') {
-                        const xs = item.nodes.map((n: any) => n.x);
-                        const ys = item.nodes.map((n: any) => n.y);
-                        w = Math.max(...xs) - Math.min(...xs);
-                        h = Math.max(...ys) - Math.min(...ys);
-                        x = (Math.min(...xs) + Math.max(...xs)) / 2;
-                        y = (Math.min(...ys) + Math.max(...ys)) / 2;
-                    } else if (type === 'asset') {
-                        w = item.width * (item.scale || 1);
-                        h = item.height * (item.scale || 1);
-                        // If rotated 90 or 270, swap effective w/h for distribution
-                        const rotation = Math.abs(item.rotation || 0) % 180;
-                        if (rotation > 45 && rotation < 135) {
-                            [w, h] = [h, w];
-                        }
-                    } else if (type === 'shape') {
-                        // For shapes, account for rotation in effective w/h
-                        const rotation = Math.abs(item.rotation || 0) % 180;
-                        if (rotation > 45 && rotation < 135) {
-                            [w, h] = [h, w];
-                        }
-                    } else if (type === 'text') {
-                        const fs = item.fontSize || 14;
-                        w = (item.text?.length || 1) * (fs * 0.6);
-                        h = fs * 1.2;
-                        x = item.x + w / 2;
-                        y = item.y + h / 2;
+            distributeSelection: (axis, spacing, ids, skipHistory = false) => {
+                const { shapes, assets, walls, textAnnotations, groups } = get();
+                
+                // Identify top-level IDs (if an item is in a group, use the group ID)
+                const topLevelIds = new Set<string>();
+                ids.forEach(id => {
+                    const item = shapes.find(s => s.id === id) || 
+                                 assets.find(a => a.id === id) || 
+                                 walls.find(w => w.id === id) || 
+                                 textAnnotations.find(t => t.id === id);
+                    if (item?.groupId) {
+                        topLevelIds.add(item.groupId);
+                    } else {
+                        topLevelIds.add(id);
                     }
-                    items.push({ id: item.id, type, x, y, w, h });
-                };
+                });
 
-                shapes.filter(s => resolvedIds.includes(s.id)).forEach(i => addItem(i, 'shape'));
-                assets.filter(a => resolvedIds.includes(a.id)).forEach(i => addItem(i, 'asset'));
-                walls.filter(w => resolvedIds.includes(w.id)).forEach(i => addItem(i, 'wall'));
-                textAnnotations.filter(t => resolvedIds.includes(t.id)).forEach(i => addItem(i, 'text'));
+                const finalIds = Array.from(topLevelIds);
+                if (finalIds.length < 2) return;
+                if (!skipHistory) get().saveToHistory();
+
+                const items: { id: string, type: 'item' | 'group', x: number, y: number, w: number, h: number, memberIds: string[] }[] = [];
+                
+                finalIds.forEach(id => {
+                    const group = groups.find(g => g.id === id);
+                    if (group) {
+                        // Calculate group bounds
+                        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                        const members = [...shapes, ...assets, ...walls, ...textAnnotations].filter(i => i.groupId === group.id);
+                        
+                        members.forEach(m => {
+                            if ('nodes' in m) { // Wall
+                                m.nodes.forEach(n => {
+                                    minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+                                    maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y);
+                                });
+                            } else {
+                                const mAny = m as any;
+                                const w = (mAny.width || 0) * (mAny.scale || 1);
+                                const h = (mAny.height || 0) * (mAny.scale || 1);
+                                minX = Math.min(minX, mAny.x - w/2);
+                                minY = Math.min(minY, mAny.y - h/2);
+                                maxX = Math.max(maxX, mAny.x + w/2);
+                                maxY = Math.max(maxY, mAny.y + h/2);
+                            }
+                        });
+                        
+                        items.push({
+                            id: group.id,
+                            type: 'group',
+                            x: (minX + maxX) / 2,
+                            y: (minY + maxY) / 2,
+                            w: maxX - minX,
+                            h: maxY - minY,
+                            memberIds: group.itemIds
+                        });
+                    } else {
+                        // Single item
+                        const item = shapes.find(s => s.id === id) || 
+                                     assets.find(a => a.id === id) || 
+                                     walls.find(w => w.id === id) || 
+                                     textAnnotations.find(t => t.id === id);
+                        if (!item) return;
+
+                        let x = (item as any).x, y = (item as any).y, w = (item as any).width || 0, h = (item as any).height || 0;
+                        if ('nodes' in item) { // Wall
+                            const xs = item.nodes.map((n: any) => n.x);
+                            const ys = item.nodes.map((n: any) => n.y);
+                            w = Math.max(...xs) - Math.min(...xs);
+                            h = Math.max(...ys) - Math.min(...ys);
+                            x = (Math.min(...xs) + Math.max(...xs)) / 2;
+                            y = (Math.min(...ys) + Math.max(...ys)) / 2;
+                        } else if ('scale' in (item as any)) { // Asset or Shape
+                            w = (item as any).width * ((item as any).scale || 1);
+                            h = (item as any).height * ((item as any).scale || 1);
+                        }
+                        
+                        items.push({ id, type: 'item', x, y, w, h, memberIds: [id] });
+                    }
+                });
 
                 if (items.length < 2) return;
 
-                // Sort items by primary axis
+                // Sort items by axis
                 items.sort((a, b) => axis === 'horizontal' ? a.x - b.x : a.y - b.y);
 
-                const anchor = items[0];
-                const startX = anchor.x;
-                const startY = anchor.y;
+                const startX = items[0].x;
+                const startY = items[0].y;
 
                 items.forEach((item, index) => {
                     if (index === 0) return;
 
-                    // Calculate new primary axis position based on center-to-center spacing (pitch)
                     const newX = axis === 'horizontal' ? startX + (index * spacing) : startX;
                     const newY = axis === 'vertical' ? startY + (index * spacing) : startY;
 
                     const dx = newX - item.x;
                     const dy = newY - item.y;
 
-                    if (item.type === 'shape') get().updateShape(item.id, { x: newX, y: newY }, true);
-                    else if (item.type === 'asset') get().updateAsset(item.id, { x: newX, y: newY }, true);
-                    else if (item.type === 'wall') {
-                        const wall = walls.find(w => w.id === item.id);
-                        if (wall) get().updateWall(item.id, { nodes: wall.nodes.map(n => ({ ...n, x: n.x + dx, y: n.y + dy })) }, true);
-                    } else if (item.type === 'text') {
-                        get().updateTextAnnotation(item.id, {
-                            x: newX - item.w / 2,
-                            y: newY - item.h / 2
-                        }, true);
-                    }
+                    // Move all members of this group/item
+                    item.memberIds.forEach(mid => {
+                        const s = shapes.find(sh => sh.id === mid);
+                        if (s) get().updateShape(mid, { x: s.x + dx, y: s.y + dy }, true);
+                        const a = assets.find(as => as.id === mid);
+                        if (a) get().updateAsset(mid, { x: a.x + dx, y: a.y + dy }, true);
+                        const w = walls.find(wa => wa.id === mid);
+                        if (w) get().updateWall(mid, { nodes: w.nodes.map(n => ({ ...n, x: n.x + dx, y: n.y + dy })) }, true);
+                        const t = textAnnotations.find(ta => ta.id === mid);
+                        if (t) get().updateTextAnnotation(mid, { x: t.x + dx, y: t.y + dy }, true);
+                    });
                 });
             },
 
@@ -843,45 +923,102 @@ export const useProjectStore = create<ProjectState>()(
                 return Array.from(expandedIds);
             },
 
-            distributeRadial: (radius, startAngle, endAngle, ids) => {
-                get().saveToHistory();
-                const { shapes, assets, groups } = get();
+            distributeRadial: (radius, startAngle, endAngle, ids, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
+                const { shapes, assets, walls, textAnnotations, groups } = get();
 
-                // Handle group unpacking
-                let targetIds = ids;
-                if (ids.length === 1) {
-                    const group = groups.find(g => g.id === ids[0]);
-                    if (group) targetIds = group.itemIds;
-                }
+                const topLevelIds = new Set<string>();
+                ids.forEach(id => {
+                    const item = shapes.find(s => s.id === id) || 
+                                 assets.find(a => a.id === id) || 
+                                 walls.find(w => w.id === id) || 
+                                 textAnnotations.find(t => t.id === id);
+                    if (item?.groupId) {
+                        topLevelIds.add(item.groupId);
+                    } else {
+                        topLevelIds.add(id);
+                    }
+                });
 
-                const items = [
-                    ...shapes.filter(s => targetIds.includes(s.id)),
-                    ...assets.filter(a => targetIds.includes(a.id))
-                ];
+                const finalIds = Array.from(topLevelIds);
+                if (finalIds.length === 0) return;
 
-                if (items.length === 0) return;
+                // Calculate common center of selection to use as radial center
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                const items: { id: string, type: 'group' | 'item', x: number, y: number, memberIds: string[] }[] = [];
 
-                // Calculate center of selection
-                let sumX = 0, sumY = 0;
-                items.forEach(item => { sumX += item.x; sumY += item.y; });
-                const centerX = sumX / items.length;
-                const centerY = sumY / items.length;
+                finalIds.forEach(id => {
+                    const group = groups.find(g => g.id === id);
+                    if (group) {
+                        let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity;
+                        const members = [...shapes, ...assets, ...walls, ...textAnnotations].filter(m => m.groupId === group.id);
+                        members.forEach(m => {
+                             if ('nodes' in m) {
+                                m.nodes.forEach(n => {
+                                    gMinX = Math.min(gMinX, n.x); gMinY = Math.min(gMinY, n.y);
+                                    gMaxX = Math.max(gMaxX, n.x); gMaxY = Math.max(gMaxY, n.y);
+                                });
+                            } else {
+                                const mAny = m as any;
+                                const w = (mAny.width || 0) * (mAny.scale || 1);
+                                const h = (mAny.height || 0) * (mAny.scale || 1);
+                                gMinX = Math.min(gMinX, mAny.x - w/2);
+                                gMinY = Math.min(gMinY, mAny.y - h/2);
+                                gMaxX = Math.max(gMaxX, mAny.x + w/2);
+                                gMaxY = Math.max(gMaxY, mAny.y + h/2);
+                            }
+                        });
+                        const cx = (gMinX + gMaxX) / 2;
+                        const cy = (gMinY + gMaxY) / 2;
+                        items.push({ id, type: 'group', x: cx, y: cy, memberIds: group.itemIds });
+                        minX = Math.min(minX, gMinX); minY = Math.min(minY, gMinY);
+                        maxX = Math.max(maxX, gMaxX); maxY = Math.max(maxY, gMaxY);
+                    } else {
+                        const item = shapes.find(s => s.id === id) || assets.find(a => a.id === id) || walls.find(w => w.id === id) || textAnnotations.find(t => t.id === id);
+                        if (!item) return;
+                        const cx = 'nodes' in item ? (Math.min(...item.nodes.map(n => n.x)) + Math.max(...item.nodes.map(n => n.x))) / 2 : (item as any).x;
+                        const cy = 'nodes' in item ? (Math.min(...item.nodes.map(n => n.y)) + Math.max(...item.nodes.map(n => n.y))) / 2 : (item as any).y;
+                        items.push({ id, type: 'item', x: cx, y: cy, memberIds: [id] });
+                        
+                        if ('nodes' in item) {
+                            item.nodes.forEach(n => {
+                                minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+                                maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y);
+                            });
+                        } else {
+                            const mAny = item as any;
+                            const w = (mAny.width || 0) * (mAny.scale || 1);
+                            const h = (mAny.height || 0) * (mAny.scale || 1);
+                            minX = Math.min(minX, mAny.x - w/2);
+                            minY = Math.min(minY, mAny.y - h/2);
+                            maxX = Math.max(maxX, mAny.x + w/2);
+                            maxY = Math.max(maxY, mAny.y + h/2);
+                        }
+                    }
+                });
 
-                // radius is passed directly
-                const totalAngle = endAngle - startAngle;
-                const stepAngle = items.length > 1 ? totalAngle / items.length : 0;
+                const centerX = (minX + maxX) / 2;
+                const centerY = (minY + maxY) / 2;
 
                 items.forEach((item, index) => {
-                    const angleRad = (startAngle + index * stepAngle) * (Math.PI / 180);
-                    const newX = centerX + radius * Math.cos(angleRad);
-                    const newY = centerY + radius * Math.sin(angleRad);
-                    const rotation = (startAngle + index * stepAngle) + 90; // Rotate item to face center? Optional.
+                    const angle = startAngle + (index * (endAngle - startAngle) / Math.max(1, items.length - 1));
+                    const rad = angle * (Math.PI / 180);
+                    const newX = centerX + radius * Math.cos(rad);
+                    const newY = centerY + radius * Math.sin(rad);
 
-                    if (shapes.find(s => s.id === item.id)) {
-                        get().updateShape(item.id, { x: newX, y: newY, rotation });
-                    } else {
-                        get().updateAsset(item.id, { x: newX, y: newY, rotation });
-                    }
+                    const dx = newX - item.x;
+                    const dy = newY - item.y;
+
+                    item.memberIds.forEach(mid => {
+                        const s = shapes.find(sh => sh.id === mid);
+                        if (s) get().updateShape(mid, { x: s.x + dx, y: s.y + dy }, true);
+                        const a = assets.find(as => as.id === mid);
+                        if (a) get().updateAsset(mid, { x: a.x + dx, y: a.y + dy }, true);
+                        const w = walls.find(wa => wa.id === mid);
+                        if (w) get().updateWall(mid, { nodes: w.nodes.map(n => ({ ...n, x: n.x + dx, y: n.y + dy })) }, true);
+                        const t = textAnnotations.find(ta => ta.id === mid);
+                        if (t) get().updateTextAnnotation(mid, { x: t.x + dx, y: t.y + dy }, true);
+                    });
                 });
             },
 

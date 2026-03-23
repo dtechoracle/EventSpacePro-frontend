@@ -42,94 +42,94 @@ const Events = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateEventModal, setShowCreateEventModal] = useState(false);
 
-  const { data, isLoading, error } = useQuery<ApiResponse>({
-    queryKey: ["events", slug],
-    queryFn: async () => {
-      const res = await apiRequest(`/projects/${slug}/events`, "GET", null, true);
-      // Fetch full data for each event to ensure preview data exists
-      const events = res.data || [];
-      const fullEvents = await Promise.all(events.map(async (event: any) => {
-        try {
-          const fullRes = await apiRequest(`/projects/${slug}/events/${event._id}`, "GET", null, true);
-          return { ...fullRes.data, projectSlug: slug }; // Ensure slug is attached
-        } catch (e) { return { ...event, projectSlug: slug }; }
-      }));
-      return { data: fullEvents };
-    },
-    enabled: !!slug,
-  });
+    const { data, isLoading, error, refetch } = useQuery<ApiResponse>({
+      queryKey: ["events", slug],
+      queryFn: async () => {
+        const res = await apiRequest(`/projects/${slug}/events`, "GET", null, true);
+        const events = res.data || [];
+        const fullEvents = await Promise.all(events.map(async (event: any) => {
+          try {
+            const fullRes = await apiRequest(`/projects/${slug}/events/${event._id}`, "GET", null, true);
+            return { ...fullRes.data, projectSlug: slug };
+          } catch (e) { return { ...event, projectSlug: slug }; }
+        }));
+        return { data: fullEvents };
+      },
+      enabled: !!slug,
+    });
 
-  return (
-    <div className="h-screen flex overflow-hidden bg-gray-50">
-      <DashboardSidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="bg-white/60 backdrop-blur-sm border-b border-gray-300/50 px-8 py-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-[var(--accent)]">
-                {slug ? `Project: ${slug}` : "Events"}
-              </h1>
-              <p className="text-sm text-gray-500 mt-1">Manage and organize your events</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <BsSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Search events..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent w-64 bg-white/80"
-                />
+    return (
+      <div className="h-screen flex overflow-hidden bg-gray-50">
+        <DashboardSidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="bg-white/60 backdrop-blur-sm border-b border-gray-300/50 px-8 py-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-[var(--accent)]">
+                  {slug ? `Project: ${slug}` : "Events"}
+                </h1>
+                <p className="text-sm text-gray-500 mt-1">Manage and organize your events</p>
               </div>
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <BsSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    placeholder="Search events..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent w-64 bg-white/80"
+                  />
+                </div>
 
-              <button
-                onClick={() => setShowCreateEventModal(true)}
-                className="px-5 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-xl hover:opacity-90 flex items-center gap-2 shadow-md transition-opacity"
-              >
-                <span>New Event</span>
-              </button>
+                <button
+                  onClick={() => setShowCreateEventModal(true)}
+                  className="px-5 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-xl hover:opacity-90 flex items-center gap-2 shadow-md transition-opacity"
+                >
+                  <span>New Event</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-8">
-          {showCreateEventModal && (
-            <CreateEventModal onClose={() => setShowCreateEventModal(false)} />
-          )}
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-8">
+            {showCreateEventModal && (
+              <CreateEventModal onClose={() => setShowCreateEventModal(false)} />
+            )}
 
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold">Events</h2>
-          </div>
-
-          {isLoading && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <EventCardShimmer key={index} />
-              ))}
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold">Events</h2>
             </div>
-          )}
 
-          {error && (
-            <div className="flex h-64 items-center justify-center rounded-2xl bg-white shadow">
-              <p className="text-red-500">Error loading events</p>
-            </div>
-          )}
+            {isLoading && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <EventCardShimmer key={index} />
+                ))}
+              </div>
+            )}
 
-          {data && data.data && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {data.data.map((event) => (
-                <EventCard
-                  key={event._id || Math.random()}
-                  event={event}
-                  user={user}
-                  previewData={buildPreviewData(event)}
-                />
-              ))}
-            </div>
-          )}
+            {error && (
+              <div className="flex h-64 items-center justify-center rounded-2xl bg-white shadow">
+                <p className="text-red-500">Error loading events</p>
+              </div>
+            )}
+
+            {data && data.data && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {data.data.map((event) => (
+                  <EventCard
+                    key={event._id || Math.random()}
+                    event={event}
+                    user={user}
+                    previewData={buildPreviewData(event)}
+                    onDelete={() => refetch()}
+                  />
+                ))}
+              </div>
+            )}
 
           {data && data.data && data.data.length === 0 && (
             <div className="flex h-64 items-center justify-center rounded-2xl bg-white shadow">

@@ -51,6 +51,10 @@ export type EditorState = {
   isDrawing: boolean;
   isPanning: boolean;
 
+  // Mouse position state
+  mouseWorldPos: { x: number; y: number };
+  setMouseWorldPos: (pos: { x: number; y: number }) => void;
+
   // Text editing state
   editingTextId: string | null;
   setEditingTextId: (id: string | null) => void;
@@ -145,6 +149,9 @@ export const useEditorStore = create<EditorState>()(
       isDragging: false,
       isDrawing: false,
       isPanning: false,
+
+      mouseWorldPos: { x: 0, y: 0 },
+      setMouseWorldPos: (pos) => set({ mouseWorldPos: pos }),
 
       // Text editing state
       editingTextId: null,

@@ -45,6 +45,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
     <motion.button
       key={asset.id}
       draggable
+      title={asset.label}
       onDragStartCapture={(e: React.DragEvent<HTMLButtonElement>) => {
         e.dataTransfer.setData("assetType", asset.id);
 

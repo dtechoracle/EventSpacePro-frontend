@@ -1,7 +1,7 @@
 import { Wall, Shape, Asset, Dimension } from '../store/projectStore';
 
 export const MM_TO_PX = 2; // Used for export
-export const OFFSET = -100; // Distance from element edge to dimension line (mm)
+export const OFFSET = 3000; // Increased architectural separation (3 Meters) for large-scale venues.
 
 // Helper to transform local point to world point
 export const transformPoint = (x: number, y: number, center: { x: number, y: number }, rotation: number) => {
@@ -30,6 +30,7 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
     const w = obj.width * scale;
     const h = obj.height * scale;
     const dimensionType = (obj as any).dimensionType || 'solid';
+    const dimensionFontSize = (obj as any).dimensionFontSize || 25000;
 
     // Common world points
     const tl = { x: -w / 2, y: -h / 2 };
@@ -51,7 +52,7 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
         const radius = Math.min(w, h) / 2;
         dims.push({
             id: `${idPrefix}-rad`,
-            type: 'circular',
+            type: 'radial',
             startPoint: { x: obj.x, y: obj.y },
             endPoint: {
                 x: obj.x + radius * Math.cos(obj.rotation * Math.PI / 180),
@@ -60,34 +61,35 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
             value: Math.round(radius),
             offset: 0,
             color: '#666666',
-            fontSize: 48,
+            fontSize: dimensionFontSize,
             zIndex: 100,
             lineStyle
         });
     } else {
-        // Aligned (Standard)
+        // TOP EDGE (TL to TR)
         dims.push({
-            id: `${idPrefix}-w-ali`,
-            type: dimensionType as any,
+            id: `${idPrefix}-top`,
+            type: 'aligned',
             startPoint: pTL,
             endPoint: pTR,
             value: Math.round(w),
             offset: OFFSET,
             color: '#666666',
-            fontSize: 48,
+            fontSize: dimensionFontSize,
             zIndex: 100,
             lineStyle
         });
 
+        // RIGHT EDGE (TR to BR)
         dims.push({
-            id: `${idPrefix}-h-ali`,
-            type: dimensionType as any,
+            id: `${idPrefix}-right`,
+            type: 'aligned',
             startPoint: pTR,
             endPoint: pBR,
             value: Math.round(h),
             offset: OFFSET,
             color: '#666666',
-            fontSize: 48,
+            fontSize: dimensionFontSize,
             zIndex: 100,
             lineStyle
         });
@@ -108,8 +110,10 @@ export const getDimensionsForWall = (wall: Wall): Dimension[] => {
         if (n1 && n2) {
             const len = Math.hypot(n2.x - n1.x, n2.y - n1.y);
             const wallThickness = edge.thickness || 75;
-            const wallOffset = OFFSET - (wallThickness / 2);
+            // Wall offset should be positive to be outside
+            const wallOffset = OFFSET + (wallThickness / 2);
             const dimensionType = (wall as any).dimensionType || 'solid';
+            const dimensionFontSize = (wall as any).dimensionFontSize || 12;
             const lineStyle = getLineStyleFromType(dimensionType);
 
             dims.push({
@@ -119,8 +123,8 @@ export const getDimensionsForWall = (wall: Wall): Dimension[] => {
                 value: Math.round(len),
                 offset: wallOffset,
                 color: '#666666',
-                type: dimensionType as any,
-                fontSize: 48,
+                type: 'aligned',
+                fontSize: dimensionFontSize,
                 zIndex: 100,
                 lineStyle
             });

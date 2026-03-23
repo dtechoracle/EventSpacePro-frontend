@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getCompactAssetList, findAssetByName } from '@/lib/aiAssetLibrary';
+import { getCompactAssetList, findAssetByName, searchAssetsByTags } from '@/lib/aiAssetLibrary';
 import { WALL_TYPES, findWallType, TOOLBAR_OPERATIONS, LAYOUT_OPERATIONS } from '@/lib/aiOperations';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -590,19 +590,32 @@ ${obstaclesContext}`;
 
       let options = assetList;
       if (category !== 'all') {
-        let searchTerms = [category];
-        if (category === 'chair' || category === 'seating' || category === 'stool' || category === 'seat' || category === 'sofa') {
-          searchTerms = ['chair', 'seating', 'stool', 'seat', 'sofa'];
-        } else if (category === 'table') {
-          searchTerms = ['table', 'banquet', 'boardroom'];
+        const cat = category.toLowerCase().trim();
+        // Simple plural normalization (chairs -> chair)
+        const singularCat = cat.endsWith('s') ? cat.slice(0, -1) : cat;
+        let tags = [cat, singularCat];
+        
+        // Map common synonyms to tags with broader scope
+        if (['chair', 'seat', 'stool', 'sofa', 'sitting'].some(t => cat.includes(t))) {
+          tags = ['chair', 'seating', 'stool', 'seat', 'sofa', 'sitting', 'furniture'];
+        } else if (['table', 'desk', 'surface', 'banquet'].some(t => cat.includes(t))) {
+          tags = ['table', 'furniture', 'surface', 'desk', 'tables'];
+        } else if (['marquee', 'tent', 'structure', 'cover'].some(t => cat.includes(t))) {
+          tags = ['marquee', 'structural', 'platform'];
         }
 
-        options = assetList.filter(a =>
-          searchTerms.some(term =>
-            a.category.toLowerCase().includes(term) ||
-            a.name.toLowerCase().includes(term)
-          )
-        );
+        const filteredKnowledge = searchAssetsByTags(tags);
+        options = assetList.filter(a => filteredKnowledge.some(k => k.id === a.id));
+        
+        // Fallback for very specific queries or missing tags
+        if (options.length === 0) {
+          const searchVal = singularCat;
+          options = assetList.filter(a => 
+            a.name.toLowerCase().includes(searchVal) || 
+            a.category.toLowerCase().includes(searchVal) ||
+            a.id.toLowerCase().includes(searchVal)
+          );
+        }
       }
 
       // Safety limits: max 40 items if 'all' to avoid breaking the UI grid, but still show a comprehensive list

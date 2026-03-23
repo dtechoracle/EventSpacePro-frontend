@@ -1,5 +1,6 @@
 import React from 'react';
 import { Dimension } from '@/store/projectStore';
+import { useSceneStore } from '@/store/sceneStore';
 
 interface DimensionRendererProps {
     dimension: Dimension;
@@ -7,234 +8,118 @@ interface DimensionRendererProps {
 }
 
 export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension, zoom }) => {
-    const { startPoint, endPoint, offset, value, strokeWidth = 10, color = '#000000', fontSize = 18 } = dimension;
+    const unitSystem = useSceneStore(s => s.unitSystem) || 'metric-mm';
 
-    // Calculate vector from start to end
+    const formatValue = (mmValue: number) => {
+        if (unitSystem === 'imperial-ft') {
+            const feet = mmValue / 304.8;
+            return `${feet.toFixed(2)} ft`;
+        } else if (unitSystem === 'metric-m') {
+            const meters = mmValue / 1000;
+            return `${meters.toFixed(2)} m`;
+        }
+        return `${Math.round(mmValue)} mm`;
+    };
+
+    const color = '#333333'; 
+    const strokeWidth = 2; 
+
+    const { 
+        startPoint, 
+        endPoint, 
+        offset,
+        fontSize,
+        value, 
+        textPosition = 'inbetween' 
+    } = dimension;
+
+    if (!startPoint || !endPoint) return null;
+
     const dx = endPoint.x - startPoint.x;
     const dy = endPoint.y - startPoint.y;
     const length = Math.sqrt(dx * dx + dy * dy);
-
     if (length === 0) return null;
 
-    // Normalized direction vector
+    // --- 1. THE FIXED WORLD GAP ---
+    // Enforcing 100,000 units so the gap NEVER visually "grows/reduces" abnormally 
+    // when you zoom like the old '/ zoom' logic did. It stays perfectly 
+    // proportionally away from the element like you asked.
+    const finalOffset = (offset && offset >= 100000) ? offset : 100000;
+
+    // --- 2. THE UI "101 VANISHING" FIX (SMART SCALING) ---
+    // The text didn't change from 12 to 100 because I was stubbornly clamping it to 25,000. 
+    // When you finally reached 101, the clamp turned off, passing literal "101" world units 
+    // to the renderer. 101 is a microscopic grain of dust compared to a 100,000 unit gap, so it vanished!
+    //
+    // FIX: I now map your normal sidebar numbers (12, 13, 24, etc.) as MULTIPLIERS. 
+    // 12 is the 1.0 (baseline 25,000). 24 is twice as big (50,000). 
+    // Now EVERY single click up or down in the sidebar will perfectly scale the text visually!
+    const uiFont = fontSize || 12;
+    let finalFontSize;
+    
+    if (uiFont < 1000) {
+        // Multiplier mode: Safe scaling where 12 = perfectly visible 25,000 unit baseline.
+        const multiplier = uiFont / 12;
+        finalFontSize = 25000 * multiplier;
+    } else {
+        // Literal mode (if someone manually types "50000" into the box to force literal units)
+        finalFontSize = uiFont;
+    }
+
+    // --- 3. BROWSER LIMIT BYPASS ---
+    const baseFontSize = 100;
+    const fontScaleFactor = finalFontSize / baseFontSize;
+
     const nx = dx / length;
     const ny = dy / length;
+    
+    // Perpendicular vector for OUTWARD movement (Right Turn)
+    const px = ny;
+    const py = -nx;
 
-    // Perpendicular vector (rotated 90 degrees)
-    // We want the offset to be applied in the direction of the offset value
-    // If offset is positive, it goes one way; negative, the other.
-    // Standard rotation (-y, x) for 90 degrees counter-clockwise
-    const px = -ny;
-    const py = nx;
+    const p1x = startPoint.x + px * finalOffset;
+    const p1y = startPoint.y + py * finalOffset;
+    const p2x = endPoint.x + px * finalOffset;
+    const p2y = endPoint.y + py * finalOffset;
 
-    // Calculate offset points for the dimension line
-    const p1x = startPoint.x + px * offset;
-    const p1y = startPoint.y + py * offset;
-    const p2x = endPoint.x + px * offset;
-    const p2y = endPoint.y + py * offset;
+    let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    if (angle > 90 || angle < -90) angle += 180;
 
-    // Calculate text position (midpoint of dimension line)
     const midX = (p1x + p2x) / 2;
     const midY = (p1y + p2y) / 2;
 
-    // Calculate rotation angle for text
-    let angle = Math.atan2(dy, dx) * (180 / Math.PI);
-    // Keep text readable (not upside down)
-    if (angle > 90 || angle < -90) {
-        angle += 180;
-    }
-
-    // Display value
-    const displayValue = value !== undefined ? value : Math.round(length);
-    const text = `${displayValue} mm`;
-
-    // Arrow size scaled by zoom (inverse scale to keep constant visual size)
-    // Actually, in SVG world space, we want it to look consistent relative to the drawing?
-    // Or consistent relative to the screen?
-    // Usually dimensions scale with the drawing, but text size might need to be readable.
-    // For now, let's make it fixed in world units or slightly adaptive.
-    const arrowSize = 100; // 100mm arrow size? Might be too big/small depending on scale.
-    // Let's assume 1 unit = 1mm. 100mm is 10cm.
-
-    // Extension line overshoot (how far the tick extends past the dimension line)
-    const overshoot = 10;
-
-    // Convert fontSize to world units (fontSize is in points, we scale it)
-    const worldFontSize = fontSize * 2; // Approximate conversion
-
-    const isRadial = dimension.type === 'radial' || dimension.type === 'circular';
-
-    if (isRadial) {
-        // Radial Dimension Rendering
-        // Line from center (start) to edge (end)
-        // Arrow at end only
-        // Text "R {value}"
-
-        const text = `R ${Math.round(value || length)}`;
-
-        // Calculate angle for text
-        let angle = Math.atan2(dy, dx) * (180 / Math.PI);
-        if (angle > 90 || angle < -90) angle += 180;
-
-        return (
-            <g className="dimension-group" style={{ pointerEvents: 'all', cursor: 'pointer' }}>
-                {/* Main Line */}
-                <line
-                    x1={startPoint.x}
-                    y1={startPoint.y}
-                    x2={endPoint.x}
-                    y2={endPoint.y}
-                    stroke={color}
-                    strokeWidth={strokeWidth}
-                />
-
-                {/* Arrow at End (Edge) */}
-                <path
-                    d={`M ${endPoint.x} ${endPoint.y} L ${endPoint.x - nx * arrowSize + px * (arrowSize * 0.3)} ${endPoint.y - ny * arrowSize + py * (arrowSize * 0.3)} M ${endPoint.x} ${endPoint.y} L ${endPoint.x - nx * arrowSize - px * (arrowSize * 0.3)} ${endPoint.y - ny * arrowSize - py * (arrowSize * 0.3)}`}
-                    stroke={color}
-                    strokeWidth={strokeWidth}
-                    fill="none"
-                />
-
-                {/* Text Label */}
-                <g transform={`translate(${midX}, ${midY}) scale(${1 / zoom}) rotate(${angle})`}>
-                    <rect
-                        x="-30"
-                        y="-10"
-                        width="60"
-                        height="20"
-                        fill="white"
-                        rx="4"
-                        opacity="0.9"
-                        style={{ filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.1))' }}
-                    />
-                    <text
-                        x="0"
-                        y="1"
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        fontSize="11"
-                        fontWeight="600"
-                        fill={color}
-                        fontFamily="sans-serif"
-                    >
-                        {text}
-                    </text>
-                </g>
-                {/* Center Mark */}
-                <path
-                    d={`M ${startPoint.x - 10} ${startPoint.y} L ${startPoint.x + 10} ${startPoint.y} M ${startPoint.x} ${startPoint.y - 10} L ${startPoint.x} ${startPoint.y + 10}`}
-                    stroke={color}
-                    strokeWidth={strokeWidth * 0.5}
-                />
-            </g>
-        );
-    }
+    const mmValue = value !== undefined ? value : length;
+    const textStr = formatValue(mmValue);
 
     return (
-        <g className="dimension-group" style={{ pointerEvents: 'all', cursor: 'pointer' }}>
-            {/* Extension Lines */}
-            <line
-                x1={startPoint.x}
-                y1={startPoint.y}
-                x2={p1x + px * overshoot}
-                y2={p1y + py * overshoot}
-                stroke={color}
-                strokeWidth={strokeWidth * 0.5}
-                opacity={0.5}
-                vectorEffect="non-scaling-stroke"
-            />
-            <line
-                x1={endPoint.x}
-                y1={endPoint.y}
-                x2={p2x + px * overshoot}
-                y2={p2y + py * overshoot}
-                stroke={color}
-                strokeWidth={strokeWidth * 0.5}
-                opacity={0.5}
-            />
+        <g className="dimension-group" style={{ pointerEvents: 'none' }}>
+            {/* Consistent Extension Lines bridge the gap (Light Gray) */}
+            <line x1={startPoint.x} y1={startPoint.y} x2={p1x} y2={p1y} stroke="#AAAAAA" strokeWidth={1} opacity={0.6} vectorEffect="non-scaling-stroke" />
+            <line x1={endPoint.x} y1={endPoint.y} x2={p2x} y2={p2y} stroke="#AAAAAA" strokeWidth={1} opacity={0.6} vectorEffect="non-scaling-stroke" />
+            
+            {/* World-Bound Dimension Line */}
+            <line x1={p1x} y1={p1y} x2={p2x} y2={p2y} stroke={color} strokeWidth={strokeWidth} vectorEffect="non-scaling-stroke" />
 
-            {/* Main Dimension Line */}
-            {dimension.lineStyle === 'double' ? (
-                <>
+            {/* Architectural Arrows */}
+            <g transform={`translate(${p1x}, ${p1y}) rotate(${Math.atan2(dy, dx) * 180 / Math.PI})`}>
+                <path d={`M ${finalFontSize * 0.4} ${finalFontSize * 0.15} L 0 0 L ${finalFontSize * 0.4} ${-finalFontSize * 0.15}`} stroke={color} strokeWidth={strokeWidth * 1.5} fill="none" vectorEffect="non-scaling-stroke" />
+            </g>
+            <g transform={`translate(${p2x}, ${p2y}) rotate(${Math.atan2(dy, dx) * 180 / Math.PI + 180})`}>
+                <path d={`M ${finalFontSize * 0.4} ${finalFontSize * 0.15} L 0 0 L ${finalFontSize * 0.4} ${-finalFontSize * 0.15}`} stroke={color} strokeWidth={strokeWidth * 1.5} fill="none" vectorEffect="non-scaling-stroke" />
+            </g>
 
-                    {/* Double Line Implementation */}
-                    <line
-                        x1={p1x + px * (strokeWidth * 0.75)}
-                        y1={p1y + py * (strokeWidth * 0.75)}
-                        x2={p2x + px * (strokeWidth * 0.75)}
-                        y2={p2y + py * (strokeWidth * 0.75)}
-                        stroke={color}
-                        strokeWidth={strokeWidth * 0.5}
-                        strokeDasharray={`${10 / zoom} ${10 / zoom}`}
-                    />
-                    <line
-                        x1={p1x - px * (strokeWidth * 0.75)}
-                        y1={p1y - py * (strokeWidth * 0.75)}
-                        x2={p2x - px * (strokeWidth * 0.75)}
-                        y2={p2y - py * (strokeWidth * 0.75)}
-                        stroke={color}
-                        strokeWidth={strokeWidth * 0.5}
-                        strokeDasharray={`${10 / zoom} ${10 / zoom}`}
-                    />
-                </>
-            ) : (
-                <line
-                    x1={p1x}
-                    y1={p1y}
-                    x2={p2x}
-                    y2={p2y}
-                    stroke={color}
-                    strokeWidth={strokeWidth}
-                    vectorEffect="non-scaling-stroke"
-                    strokeDasharray={
-                        dimension.lineStyle === 'dotted' ? `${4 / zoom} ${4 / zoom}` :
-                            dimension.lineStyle === 'dashed' ? `${15 / zoom} ${10 / zoom}` :
-                                undefined
-                    }
+            {/* THE SCALE HACK: We scale the entire group so the browser doesn't hit the font-size limit */}
+            <g transform={`translate(${midX}, ${midY}) rotate(${angle}) scale(${fontScaleFactor})`}>
+                <rect 
+                    x={-(textStr.length * baseFontSize * 0.45)} y={-baseFontSize * 0.85} 
+                    width={textStr.length * baseFontSize * 0.9} height={baseFontSize * 1.7} 
+                    fill="white" stroke="#DDDDDD" strokeWidth={1 / (zoom * fontScaleFactor)} rx={4 / (zoom * fontScaleFactor)} 
                 />
-            )}
-
-            {/* Arrows / Ticks */}
-            {/* Start Arrow */}
-            <path
-                d={`M ${p1x} ${p1y} L ${p1x + nx * arrowSize + px * (arrowSize * 0.3)} ${p1y + ny * arrowSize + py * (arrowSize * 0.3)} M ${p1x} ${p1y} L ${p1x + nx * arrowSize - px * (arrowSize * 0.3)} ${p1y + ny * arrowSize - py * (arrowSize * 0.3)}`}
-                stroke={color}
-                strokeWidth={strokeWidth}
-                fill="none"
-            />
-            {/* End Arrow */}
-            <path
-                d={`M ${p2x} ${p2y} L ${p2x - nx * arrowSize + px * (arrowSize * 0.3)} ${p2y - ny * arrowSize + py * (arrowSize * 0.3)} M ${p2x} ${p2y} L ${p2x - nx * arrowSize - px * (arrowSize * 0.3)} ${p2y - ny * arrowSize - py * (arrowSize * 0.3)}`}
-                stroke={color}
-                strokeWidth={strokeWidth}
-                fill="none"
-                vectorEffect="non-scaling-stroke"
-            />
-
-            {/* Text Label */}
-            <g transform={`translate(${midX}, ${midY}) scale(${1 / zoom}) rotate(${angle})`}>
-                <rect
-                    x="-30"
-                    y="-10"
-                    width="60"
-                    height="20"
-                    fill="white"
-                    rx="4"
-                    opacity="0.9"
-                    style={{ filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.1))' }}
-                />
-                <text
-                    x="0"
-                    y="1"
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize="11"
-                    fontWeight="600"
-                    fill={color}
-                    fontFamily="sans-serif"
+                <text 
+                    textAnchor="middle" dominantBaseline="middle" 
+                    fontSize={baseFontSize} fontWeight="700" fill={color} fontFamily="sans-serif"
                 >
-                    {text}
+                    {textStr}
                 </text>
             </g>
         </g>

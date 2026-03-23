@@ -10,12 +10,14 @@ interface ShapeRendererProps {
     isHovered: boolean;
 }
 
-export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRendererProps) {
-    const { zoom } = useEditorStore();
+const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => {
+    // Use selector for zoom to prevent re-renders on other editor store changes
+    const zoom = useEditorStore(s => s.zoom);
+    
     // Default pure black stroke so new shapes/lines pop clearly
     const strokeColor = shape.stroke || '#000000';
     const fillColor = shape.fill || 'transparent';
-    // Ensure strokeWidth is always a valid number, defaulting to 3 if undefined/null/0
+    // Ensure strokeWidth is always a valid number, defaulting to 1 if undefined/null/0
     const strokeWidth = (shape.strokeWidth !== undefined && shape.strokeWidth !== null && shape.strokeWidth > 0)
         ? shape.strokeWidth
         : 1;
@@ -146,24 +148,6 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                 const points = shape.points.map(p => `${p.x},${p.y}`).join(' ');
 
                 if (shape.lineType === 'double') {
-                    // Render double line by rendering a thick stroke and a thinner background-colored stroke on top?
-                    // Or two offset lines? Offset is hard for arbitrary polyline.
-                    // Easiest "double line" effect for arbitrary path is:
-                    // 1. Thick line (strokeWidth * 3)
-                    // 2. Thinner line (strokeWidth) in background color (or transparent/white) - but transparent won't work if over other things.
-                    // Better: Render the line twice with a gap.
-                    // Since we can't easily offset a polyline in SVG without complex math, let's use the masking/layering trick if possible,
-                    // or just render a thick line with a white inner line (if background is white).
-                    // Assuming white background for now as simple solution, or just two parallel lines if it's a simple straight line.
-
-                    // For complex polylines, a "mask" approach is robust:
-                    // Render thick line (color), then thinner line (white/bg).
-                    // But this occludes things behind it.
-
-                    // Let's stick to the "thick stroke with gap" visual for now using a mask? No, too complex.
-                    // Let's try rendering it as a thick line, then a thinner "gap" line in white (assuming white canvas).
-                    // If the user needs true transparency, we'd need a mask.
-
                     const gapWidth = Math.max(2, commonProps.strokeWidth / 2);
                     const outerWidth = commonProps.strokeWidth * 3; // Total width
 
@@ -298,15 +282,10 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                 const dx = to.x - from.x;
                 const dy = to.y - from.y;
                 const len = Math.sqrt(dx * dx + dy * dy) || 1;
-                const ux = dx / len;
-                const uy = dy / len;
 
                 // Base size calculation - based on ORIGINAL stroke width so it doesn't jump on hover
                 const baseSize = Math.max(sizeStrokeWidth * 4, 12);
                 const size = Math.min(len / 2, baseSize * sizeMultiplier);
-
-                const perpX = -uy * (size / 2);
-                const perpY = ux * (size / 2);
 
                 const commonMarkerProps = {
                     fill: ['filled-triangle', 'circle', 'square', 'diamond', 'field', 'broadhead', 'bodkin', 'bullet', 'target', 'fish'].includes(markerType) ? stroke : 'none',
@@ -447,14 +426,8 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
             }
 
             // Legacy straight arrow
-            const arrowHeadLen = (headType !== 'none' ? Math.max(strokeWidth * 4, 12) * headSizeMult : 0);
-            const arrowTailLen = (tailType !== 'none' ? Math.max(strokeWidth * 4, 12) * tailSizeMult : 0);
-
             const startPoint = { x: -shape.width / 2, y: 0 };
             const endPoint = { x: shape.width / 2, y: 0 };
-
-            // Adjust line start/end to not overlap with markers if needed, but usually markers attach to end
-            // For simple implementation, we draw line full length and markers on top
 
             return (
                 <g>
@@ -493,8 +466,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
         }
 
         if (shape.type === 'arc' && shape.points && shape.points.length >= 3) {
-
-            // ── WAVE / compound arc (>3 points) ──────────────────────────────
+            // compound arc (>3 points)
             if (shape.points.length > 3 && shape.points.length % 2 === 1) {
                 const pts = shape.points;
                 let d = `M ${pts[0].x} ${pts[0].y}`;
@@ -530,7 +502,7 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                 );
             }
 
-            // ── Single quadratic-bezier arc (exactly 3 points) ───────────────
+            // Single quadratic-bezier arc (exactly 3 points)
             const [p1, p2, p3] = shape.points;
             const qcx = 2 * p2.x - (p1.x + p3.x) / 2;
             const qcy = 2 * p2.y - (p1.y + p3.y) / 2;
@@ -670,24 +642,6 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
                         <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth={strokeWidth} />
                         <line x1={spacing} y1="0" x2={spacing} y2={spacing} stroke={color} strokeWidth={strokeWidth} />
                         <line x1="0" y1={spacing} x2={0} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
-                        {/* Brick offset logic is hard in simple pattern without complex path. 
-                            Standard brick:
-                            ________
-                            |  |  |
-                            |__|__|
-                              |  |
-                            __|__| 
-                            
-                            Pattern tile:
-                            M 0,0 L 20,0 (top line)
-                            M 0,10 L 20,10 (middle line)
-                            M 0,20 L 20,20 (bottom line)
-                            M 10,0 L 10,10 (vertical top)
-                            M 0,10 L 0,20 (vertical bottom left)
-                            M 20,10 L 20,20 (vertical bottom right)
-                            
-                            Let's try a simple brick path.
-                         */}
                         <path d={`M 0,${spacing} H ${spacing * 2} M 0,${spacing * 2} H ${spacing * 2} M ${spacing},0 V ${spacing} M 0,${spacing} V ${spacing * 2} M ${spacing * 2},${spacing} V ${spacing * 2}`} stroke={color} strokeWidth="1" fill={getFillValue(false)} />
                     </>
                 )}
@@ -738,4 +692,6 @@ export default function ShapeRenderer({ shape, isSelected, isHovered }: ShapeRen
         </>
     );
 
-}
+};
+
+export default React.memo(ShapeRenderer);

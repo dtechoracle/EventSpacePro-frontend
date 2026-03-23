@@ -181,68 +181,32 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
         updateTextAnnotation(currentAnnotation.id, { text: newText });
     }, [currentAnnotation, updateTextAnnotation]);
 
-    // Handle editing selected text (when select tool is active and text is selected)
+    // Handle editing state based on editingTextId from store
     useEffect(() => {
-        if (!isActive && selectedIds.length === 1) {
-            const selectedId = selectedIds[0];
-            const selectedText = textAnnotations.find(t => t.id === selectedId);
-            if (selectedText) {
-                // Set up for editing when text is selected
-                // Only start editing if not already editing or if it's a different text
-                if (!currentAnnotation || currentAnnotation.id !== selectedText.id) {
-                    setCurrentAnnotation(selectedText);
-                    setText(selectedText.text);
-                    setIsEditingSelected(true);
+        const editingTextId = useEditorStore.getState().editingTextId;
+        
+        if (editingTextId) {
+            const annotation = textAnnotations.find(t => t.id === editingTextId);
+            if (annotation) {
+                setCurrentAnnotation(annotation);
+                setText(annotation.text);
+                setIsEditingSelected(true);
 
-                    // Focus textarea after a short delay to allow selection to complete
-                    setTimeout(() => {
-                        if (inputRef.current && (inputRef.current instanceof HTMLInputElement || inputRef.current instanceof HTMLTextAreaElement)) {
-                            inputRef.current.focus();
-                            // Set cursor to end
-                            if (inputRef.current instanceof HTMLInputElement) {
-                                setCursorToEnd(inputRef.current);
-                            } else if (inputRef.current instanceof HTMLTextAreaElement) {
-                                inputRef.current.setSelectionRange(inputRef.current.value.length, inputRef.current.value.length);
-                            }
-                        }
-                    }, 100);
-                }
-
-                // Listen for keypress to handle typing
-                const handleKeyPress = (e: KeyboardEvent) => {
-                    // If typing starts, ensure we're in edit mode
-                    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                        if (!isEditingSelected || !currentAnnotation || currentAnnotation.id !== selectedText.id) {
-                            setIsEditingSelected(true);
-                            setText(selectedText.text);
-                            setCurrentAnnotation(selectedText);
-                            useEditorStore.getState().setEditingTextId(selectedText.id); // Set editing ID
-                        }
-                        // Ensure textarea is focused
-                        setTimeout(() => {
-                            if (inputRef.current && (inputRef.current instanceof HTMLInputElement || inputRef.current instanceof HTMLTextAreaElement)) {
-                                inputRef.current.focus();
-                            }
-                        }, 10);
+                // Focus textarea
+                setTimeout(() => {
+                    if (inputRef.current) {
+                        inputRef.current.focus();
+                        inputRef.current.setSelectionRange(inputRef.current.value.length, inputRef.current.value.length);
                     }
-                };
-                window.addEventListener('keydown', handleKeyPress);
-                return () => {
-                    window.removeEventListener('keydown', handleKeyPress);
-                };
-            } else if (!selectedText && isEditingSelected) {
-                // Clear editing state when text is deselected
-                setIsEditingSelected(false);
-                setCurrentAnnotation(null);
-                setText('');
+                }, 50);
             }
-        } else if (selectedIds.length === 0 && isEditingSelected) {
-            // Clear editing state when nothing is selected
+        } else if (isEditingSelected) {
+            // Cancel editing if editingTextId is cleared
             setIsEditingSelected(false);
             setCurrentAnnotation(null);
             setText('');
         }
-    }, [isActive, selectedIds, textAnnotations, currentAnnotation, isEditingSelected, setCursorToEnd]);
+    }, [useEditorStore.getState().editingTextId, textAnnotations, isEditingSelected]);
 
     useEffect(() => {
         if (isActive) {
@@ -331,27 +295,33 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
                 }}
                 style={{
                     position: 'fixed',
-                    top: currentAnnotation ? `${(currentAnnotation.y * zoom + panY + canvasOffset.top) - 10}px` : '-9999px',
+                    top: currentAnnotation ? `${(currentAnnotation.y * zoom + panY + canvasOffset.top)}px` : '-9999px',
                     left: currentAnnotation ? `${(currentAnnotation.x * zoom + panX + canvasOffset.left)}px` : '-9999px',
+                    transform: 'translate(-50%, -50%)',
+                    width: 'auto',
+                    minWidth: '100px',
+                    minHeight: '40px',
+                    display: showTextarea ? 'block' : 'none',
                     opacity: showTextarea ? 1 : 0,
                     pointerEvents: showTextarea ? 'auto' : 'none',
                     zIndex: 9999,
-                    background: 'rgba(255, 255, 255, 0.95)',
-                    border: '2px solid #3b82f6',
-                    borderRadius: '4px',
+                    background: 'white',
+                    border: '1.5px solid #3b82f6',
+                    borderRadius: '6px',
                     outline: 'none',
                     color: currentAnnotation?.color || '#000',
-                    fontSize: `${(currentAnnotation?.fontSize || 200) * zoom * 0.8}px`,
+                    fontSize: `${(currentAnnotation?.fontSize || 200) * zoom}px`,
                     fontFamily: currentAnnotation?.fontFamily || 'Arial',
-                    padding: '8px',
+                    padding: '4px 8px',
                     margin: '0',
-                    minWidth: '200px',
-                    minHeight: '60px',
-                    resize: 'both',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                    textAlign: 'center',
+                    resize: 'none',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    overflow: 'hidden',
+                    lineHeight: '1.2'
                 }}
                 autoFocus={showTextarea}
-                placeholder="Type your text here..."
+                placeholder="Type here..."
             />
         </>
     );

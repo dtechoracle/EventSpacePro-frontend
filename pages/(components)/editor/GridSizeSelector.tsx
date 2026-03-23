@@ -38,7 +38,7 @@ export default function GridSizeSelector({ className = "" }: GridSizeSelectorPro
   const currentGridSize = gridSizes[selectedGridSizeIndex] || gridSizes[1] || 10;
 
   const formatGridSize = (size: number) => {
-    if (unitSystem === 'imperial') {
+    if (unitSystem === 'imperial-ft') {
       const feet = size / 304.8;
       return feet >= 10 ? `${feet.toFixed(0)} ft` : `${feet.toFixed(1)} ft`;
     }
@@ -71,12 +71,13 @@ export default function GridSizeSelector({ className = "" }: GridSizeSelectorPro
         {/* Unit Selector */}
         <select
           className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
-          value={unitSystem || 'metric'}
-          onChange={(e) => setUnitSystem?.(e.target.value as 'metric' | 'imperial')}
+          value={unitSystem || 'metric-mm'}
+          onChange={(e) => setUnitSystem?.(e.target.value as 'metric-mm' | 'metric-m' | 'imperial-ft')}
           title="Units"
         >
-          <option value="metric">Meters</option>
-          <option value="imperial">Feet</option>
+          <option value="metric-mm">Millimeters</option>
+          <option value="metric-m">Meters</option>
+          <option value="imperial-ft">Feet</option>
         </select>
 
         {/* Grid Size Selector */}

@@ -15,20 +15,38 @@ export const AutoDimensionRenderer: React.FC<AutoDimensionRendererProps> = ({ wa
 
     // 1. Process Walls
     walls.forEach(wall => {
-        dimensionsToRender.push(...getDimensionsForWall(wall));
+        const wallDims = getDimensionsForWall(wall);
+        wallDims.forEach(dim => {
+            (dim as any).textPosition = (wall as any).dimensionTextPosition || 'inbetween';
+            (dim as any).fontSize = (wall as any).dimensionFontSize || 25000;
+            (dim as any).lineStyle = (wall as any).dimensionType || 'solid';
+        });
+        dimensionsToRender.push(...wallDims);
     });
 
     // 2. Process Shapes
     shapes.forEach(shape => {
         if ((shape as any).showDimensions && shape.type !== 'line' && shape.type !== 'arrow') {
-            dimensionsToRender.push(...getDimensionsForObject(shape as Shape, `auto-dim-${shape.id}`));
+            const shapeDims = getDimensionsForObject(shape as Shape, `auto-dim-${shape.id}`);
+            shapeDims.forEach(dim => {
+                (dim as any).textPosition = (shape as any).dimensionTextPosition || 'inbetween';
+                (dim as any).fontSize = (shape as any).dimensionFontSize || 25000;
+                (dim as any).lineStyle = (shape as any).dimensionType || 'solid';
+            });
+            dimensionsToRender.push(...shapeDims);
         }
     });
 
     // 3. Process Assets
     assets.forEach(asset => {
         if ((asset as any).showDimensions && !asset.isExploded) {
-            dimensionsToRender.push(...getDimensionsForObject(asset as Asset, `auto-dim-${asset.id}`));
+            const assetDims = getDimensionsForObject(asset as Asset, `auto-dim-${asset.id}`);
+            assetDims.forEach(dim => {
+                (dim as any).textPosition = (asset as any).dimensionTextPosition || 'inbetween';
+                (dim as any).fontSize = (asset as any).dimensionFontSize || 25000;
+                (dim as any).lineStyle = (asset as any).dimensionType || 'solid';
+            });
+            dimensionsToRender.push(...assetDims);
         }
     });
 

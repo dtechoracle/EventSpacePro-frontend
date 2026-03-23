@@ -9,11 +9,8 @@ import AssetRenderer from './AssetRenderer';
 import TextAnnotationRenderer from './TextAnnotationRenderer';
 
 
-interface PlacementRendererProps {
-    mouseWorldPos: { x: number; y: number };
-}
-
-export const PlacementRenderer = ({ mouseWorldPos }: PlacementRendererProps) => {
+export const PlacementRenderer = () => {
+    const mouseWorldPos = useEditorStore((s) => s.mouseWorldPos);
     const placementMode = useEditorStore((s) => s.placementMode);
 
     // Memoize the preview content to avoid recalculating on every mouse move
