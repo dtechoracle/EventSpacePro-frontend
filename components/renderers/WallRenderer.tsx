@@ -245,7 +245,7 @@ const WallRenderer = ({ wall, isSelected, isHovered }: WallRendererProps) => {
     }, [setSelectedEdgeId]);
 
     return (
-        <g className="wall" data-wall-id={wall.id}>
+        <g className="wall" data-wall-id={wall.id} data-id={wall.id}>
             {/* Render wall segments with openings */}
             {edges.map((edge) => {
                 const nodeA = nodeMap.get(edge.nodeA);

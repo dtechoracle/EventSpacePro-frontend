@@ -93,7 +93,7 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
             x: worldPos.x,
             y: worldPos.y,
             text: '',
-            fontSize: 200,
+            fontSize: 500,
             color: '#000000',
             fontFamily: 'Arial',
             rotation: 0,

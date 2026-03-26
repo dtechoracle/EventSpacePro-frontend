@@ -1,0 +1,49 @@
+﻿
+> event_space_pro_frontend@0.1.0 lint
+> next lint
+
+node.exe : `next lint` is 
+deprecated and will be 
+removed in Next.js 16.
+At C:\Program 
+Files\nodejs\npm.ps1:29 
+char:3
++   & $NODE_EXE $NPM_CLI_JS 
+$args
++   
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo           
+   : NotSpecified: (`next l  
+  int` is ... in Next.js 1   
+ 6.:String) [], RemoteExc    
+eption
+    + FullyQualifiedErrorId  
+   : NativeCommandError
+ 
+For new projects, use 
+create-next-app to choose 
+your preferred linter.
+For existing projects, 
+migrate to the ESLint CLI:
+npx @next/codemod@canary 
+next-lint-to-eslint-cli .
+
+Converting circular 
+structure to JSON
+    --> starting at object 
+with constructor 'Object'
+    |     property 'configs' 
+-> object with constructor 
+'Object'
+    |     property 'flat' -> 
+object with constructor 
+'Object'
+    |     ...
+    |     property 'plugins' 
+-> object with constructor 
+'Object'
+    --- property 'react' 
+closes the circle
+Referenced from: C:\Users\Jer
+emiah\EventSpacePro-frontend\
+.eslintrc.json

@@ -18,6 +18,7 @@ export default function FreehandRenderer({ shape, isSelected, isHovered }: Freeh
         <g
             transform={`translate(${shape.x}, ${shape.y}) rotate(${shape.rotation})`}
             style={{ pointerEvents: 'all' }}
+            data-id={shape.id}
         >
             {/* Main Path */}
             <path

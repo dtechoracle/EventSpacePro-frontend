@@ -955,6 +955,7 @@ export default function Editor() {
           console.log(`[Editor] Clearing workspace before loading event ${eventId}`);
           projectStore.reset();
           projectStore.clearWorkspace();
+          projectStore.setProjectName(eventData.name);
         }
 
         // PRIORITY 1: Load from canvasData (preferred format from DATABASE)

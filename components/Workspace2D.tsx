@@ -46,7 +46,7 @@ const generateId = (): string => {
 
 import { ASSET_LIBRARY } from '@/lib/assets';
 import { CursorOverlay } from './ui/CursorOverlay';
-import type { RemoteCursor } from '@/hooks/useMultiplayer';
+import { useCollaboration } from '@/hooks/useCollaboration';
 import { findSnapPoint, findWallSnapPoint } from '@/utils/wallSnapping';
 import { convertAssetToShapes } from '@/utils/assetUtils';
 import { texturePatterns } from '@/utils/texturePatterns';
@@ -56,8 +56,6 @@ import { trimToBlendShapes } from '@/utils/shapeBoolean';
 interface Workspace2DProps {
   width?: number;
   height?: number;
-  remoteCursors?: RemoteCursor[];
-  updateCursor?: (x: number, y: number) => void;
 }
 
 type SnapObject =
@@ -68,9 +66,7 @@ type SnapObject =
 
 export default function Workspace2D({
   width = 1200,
-  height = 800,
-  remoteCursors = [],
-  updateCursor
+  height = 800
 }: Workspace2DProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
@@ -137,8 +133,16 @@ export default function Workspace2D({
   const removeComment = useProjectStore(s => s.removeComment);
   const resolveComment = useProjectStore(s => s.resolveComment);
 
+  
+  const { activeUsers, updateCursor, updateTyping } = useCollaboration(undefined, undefined);
+
 
   const activeTool = useEditorStore(s => s.activeTool);
+
+  useEffect(() => {
+    setSelectionRect(null);
+    setDragStart(null);
+  }, [activeTool]);
   const setActiveTool = useEditorStore(s => s.setActiveTool);
   const selectedIds = useEditorStore(s => s.selectedIds);
   const setSelectedIds = useEditorStore(s => s.setSelectedIds);
@@ -295,16 +299,64 @@ export default function Workspace2D({
       // Check shapes (reverse order for z-index)
       for (let i = shapes.length - 1; i >= 0; i--) {
         const shape = shapes[i];
-        const halfW = shape.width / 2;
-        const halfH = shape.height / 2;
-        if (
-          worldX >= shape.x - halfW &&
-          worldX <= shape.x + halfW &&
-          worldY >= shape.y - halfH &&
-          worldY <= shape.y + halfH
-        ) {
-          targetId = shape.id;
-          break;
+        
+        if (shape.type === 'line' || shape.type === 'arrow') {
+          // Thick hit testing for lines and arrows
+          const thickness = Math.max((shape.strokeWidth ?? 2) + 20, 30);
+          if (shape.points && shape.points.length >= 2) {
+            let lineHit = false;
+            for (let s = 0; s < shape.points.length - 1; s++) {
+              const p1 = shape.points[s];
+              const p2 = shape.points[s + 1];
+              const ax = shape.x + p1.x;
+              const ay = shape.y + p1.y;
+              const bx = shape.x + p2.x;
+              const by = shape.y + p2.y;
+              const dx = bx - ax;
+              const dy = by - ay;
+              const lenSq = dx * dx + dy * dy;
+              if (lenSq === 0) continue;
+              const t = Math.max(0, Math.min(1, ((worldX - ax) * dx + (worldY - ay) * dy) / lenSq));
+              const projX = ax + t * dx;
+              const projY = ay + t * dy;
+              if (Math.hypot(worldX - projX, worldY - projY) <= thickness) {
+                lineHit = true;
+                break;
+              }
+            }
+            if (lineHit) {
+              targetId = shape.id;
+              break;
+            }
+          } else {
+            const rot = (shape.rotation || 0) * (Math.PI / 180);
+            const cosR = Math.cos(rot), sinR = Math.sin(rot);
+            const halfLen = shape.width / 2;
+            const ax = shape.x - halfLen * cosR, ay = shape.y - halfLen * sinR;
+            const bx = shape.x + halfLen * cosR, by = shape.y + halfLen * sinR;
+            const dx = bx - ax, dy = by - ay;
+            const lenSq = dx * dx + dy * dy;
+            if (lenSq > 0) {
+              const t = Math.max(0, Math.min(1, ((worldX - ax) * dx + (worldY - ay) * dy) / lenSq));
+              if (Math.hypot(worldX - (ax + t * dx), worldY - (ay + t * dy)) <= thickness) {
+                targetId = shape.id;
+                break;
+              }
+            }
+          }
+        } else {
+          // Rectangular hit testing for other shapes
+          const halfW = shape.width / 2;
+          const halfH = shape.height / 2;
+          if (
+            worldX >= shape.x - halfW &&
+            worldX <= shape.x + halfW &&
+            worldY >= shape.y - halfH &&
+            worldY <= shape.y + halfH
+          ) {
+            targetId = shape.id;
+            break;
+          }
         }
       }
 
@@ -532,6 +584,37 @@ export default function Workspace2D({
             finalY = worldY + result.dy;
             guides = result.guides;
 
+            // Prioritize snapping to wall faces/edges while moving
+            // Check multiple potential snap anchors on the moved item (Center + 4 Edges)
+            const itemHalfW = itemBounds.width / 2;
+            const itemHalfH = itemBounds.height / 2;
+            const itemSnaps = [
+              { x: finalX, y: finalY }, // Center
+              { x: finalX - itemHalfW, y: finalY }, // Left edge
+              { x: finalX + itemHalfW, y: finalY }, // Right edge
+              { x: finalX, y: finalY - itemHalfH }, // Top edge
+              { x: finalX, y: finalY + itemHalfH }  // Bottom edge
+            ];
+
+            let bestWallSnap: any = null;
+            let minWallDist = 20 / zoom;
+
+            itemSnaps.forEach(p => {
+              const ws = findWallSnapPoint(p, walls, 20 / zoom);
+              if (ws.snapped) {
+                const dist = Math.hypot(p.x - ws.x, p.y - ws.y);
+                if (dist < minWallDist) {
+                  minWallDist = dist;
+                  bestWallSnap = { ...ws, sourcePt: p };
+                }
+              }
+            });
+
+            if (bestWallSnap) {
+              finalX = finalX + (bestWallSnap.x - bestWallSnap.sourcePt.x);
+              finalY = finalY + (bestWallSnap.y - bestWallSnap.sourcePt.y);
+            }
+
             // Fallback to grid snap if no object snap was found
             if (guides.length === 0 && snapToGridEnabled) {
               const gridSnapped = snapToGridFn({ x: worldX, y: worldY });
@@ -640,12 +723,33 @@ export default function Workspace2D({
       }
 
       // Update selection rectangle if dragging to select
-      if (selectionRect && dragStart) {
-        setSelectionRect(prev => prev ? {
-          ...prev,
-          x2: worldX,
-          y2: worldY
-        } : null);
+      if (dragStart && !isPanning && !isDraggingItem && activeTool === 'select') {
+        const threshold = 5;
+        const dx = e.clientX - dragStart.x;
+        const dy = e.clientY - dragStart.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (selectionRect) {
+          // Robust coordinate check
+          if (isFinite(worldX) && isFinite(worldY)) {
+            setSelectionRect(prev => prev ? {
+              ...prev,
+              x2: worldX,
+              y2: worldY
+            } : null);
+          }
+        } else if (dist > threshold) {
+          // Initialize selection rectangle only after moving past threshold
+          const startPos = screenToWorld(dragStart.x, dragStart.y);
+          if (isFinite(startPos.x) && isFinite(startPos.y) && isFinite(worldX) && isFinite(worldY)) {
+            setSelectionRect({
+              x1: startPos.x,
+              y1: startPos.y,
+              x2: worldX,
+              y2: worldY
+            });
+          }
+        }
       }
     },
     [panX, panY, zoom, isPanning, dragStart, panBy, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, walls, textAnnotations, labelArrows, dimensions, updateShape, updateAsset, updateWall, snapToGridFn, selectionRect, updateCursor, setHoveredId, draggedPoint, screenToWorld, setMouseWorldPos, canvasOffset, snapToObjectsEnabled, snapToGridEnabled, gridSize, updateTextAnnotation, updateLabelArrow, updateDimension, sceneStore]
@@ -798,11 +902,12 @@ export default function Workspace2D({
           // Double click enters edit mode for text
           setEditingTextId(annotation.id);
           setSelectedIds([annotation.id]);
+          updateTyping(true);
           return;
         }
       }
     },
-    [screenToWorld, shapes, assets, updateShape, setSelectedIds, textAnnotations, setEditingTextId]
+    [assets, shapes, textAnnotations, screenToWorld, setSelectedIds, setEditingTextId, updateTyping]
   );
 
   const handleWheel = useCallback(
@@ -914,8 +1019,9 @@ export default function Workspace2D({
 
 
 
-        // Handle Rectangular Selection
-        if (sceneStore.isRectangularSelectionMode) {
+        // Handle Rectangular Selection - Only if the tool is active
+        if (sceneStore.isRectangularSelectionMode && activeTool === 'rectangular-select') {
+          setDragStart({ x: worldX, y: worldY });
           setSelectionRect({ x1: worldX, y1: worldY, x2: worldX, y2: worldY });
           return;
         }
@@ -1028,7 +1134,8 @@ export default function Workspace2D({
         }
 
         // Normal Selection Logic
-        // Normal Selection Logic
+        setSelectionRect(null);
+        setDragStart(null);
         if (activeTool === 'select' || activeTool === 'trim-to-blend') {
           let itemSelected = false;
 
@@ -1137,6 +1244,10 @@ export default function Workspace2D({
           // Check items from front to back (highest zIndex first)
           for (let i = allRenderables.length - 1; i >= 0; i--) {
             const item = allRenderables[i];
+            
+            // Skip background texture for hit testing in select mode
+            if (activeTool === 'select' && item.id === 'background-texture') continue;
+
             let isHit = false;
 
             if (item._renderType === 'dimension') {
@@ -1174,7 +1285,7 @@ export default function Workspace2D({
             } else if (item._renderType === 'shape') {
               const shape = item;
               if (shape.type === 'line' || shape.type === 'arrow') {
-                const thickness = (shape.strokeWidth ?? 20) / 2 + 10;
+                const thickness = Math.max((shape.strokeWidth ?? 2) + 20, 30); // Increased hit radius for easier selection
                 if (shape.points && shape.points.length >= 2) {
                   for (let s = 0; s < shape.points.length - 1; s++) {
                     const p1 = shape.points[s];
@@ -1236,7 +1347,7 @@ export default function Workspace2D({
             } else if (item._renderType === 'textAnnotation') {
               const ann = item;
               const fS = ann.fontSize || 14;
-              const hitR = Math.max((ann.text.length || 1) * fS * 0.3, fS * 0.6, 30);
+              const hitR = Math.max((ann.text.length || 2) * fS * 0.4, fS * 0.8, 40);
               if (Math.hypot(worldX - ann.x, worldY - ann.y) <= hitR) {
                 isHit = true;
                 // Special double-click handling for text
@@ -1260,7 +1371,7 @@ export default function Workspace2D({
               const arrow = item;
               const dx = arrow.endPoint.x - arrow.startPoint.x, dy = arrow.endPoint.y - arrow.startPoint.y;
               const lenSq = dx * dx + dy * dy;
-              const thickness = (arrow.strokeWidth || 2) + 20;
+              const thickness = (arrow.strokeWidth || 2) + 30; // Increased hit radius
               if (lenSq === 0) {
                 if (Math.hypot(worldX - arrow.startPoint.x, worldY - arrow.startPoint.y) <= thickness) isHit = true;
               } else {
@@ -1271,10 +1382,19 @@ export default function Workspace2D({
 
             if (isHit) {
               const idsToSelect = resolveIdsWithGroups([item.id]);
-              if (activeTool !== 'trim-to-blend' && !e.shiftKey && idsToSelect.some(id => selectedIds.includes(id))) {
-                saveToHistory();
-                setIsDraggingItem(true);
-                setDraggedItemStart({ x: worldX, y: worldY });
+              if (activeTool !== 'trim-to-blend' && !e.shiftKey) {
+                if (idsToSelect.some(id => selectedIds.includes(id))) {
+                  saveToHistory();
+                  setIsDraggingItem(true);
+                  setDraggedItemStart({ x: worldX, y: worldY });
+                } else {
+                  handleItemSelection([item.id], e.shiftKey);
+                  // Allow immediate drag on first click if not shifting
+                  if (!e.shiftKey) {
+                    setIsDraggingItem(true);
+                    setDraggedItemStart({ x: worldX, y: worldY });
+                  }
+                }
               } else {
                 handleItemSelection([item.id], e.shiftKey);
               }
@@ -1298,15 +1418,9 @@ export default function Workspace2D({
             dimensions
               .filter((d) => (d as any).type === 'wall')
               .forEach((d) => removeDimension(d.id));
-            // Start rectangular selection if in selection tool mode
+            // Don't start selectionRect immediately to avoid 1x1 blue dots on simple clicks
             if (activeTool === 'select') {
-              setSelectionRect({
-                x1: worldX,
-                y1: worldY,
-                x2: worldX,
-                y2: worldY
-              });
-              setDragStart({ x: e.clientX, y: e.clientY }); // Set dragStart to enable mouse move updates
+              setDragStart({ x: e.clientX, y: e.clientY }); // Flag that we might start a selection
             }
           }
         } else if (activeTool === 'pan') {
@@ -1462,6 +1576,12 @@ export default function Workspace2D({
       return;
     }
 
+    // Update typing state when clicking away from text
+    if (useEditorStore.getState().editingTextId) {
+      setEditingTextId(null);
+      updateTyping(false);
+    }
+
     // Finalize rectangular selection
     if (selectionRect) {
       const minX = Math.min(selectionRect.x1, selectionRect.x2);
@@ -1473,7 +1593,7 @@ export default function Workspace2D({
 
       // Select shapes within rectangle
       shapes.forEach(shape => {
-        if (shape.x >= minX && shape.x <= maxX && shape.y >= minY && shape.y <= maxY) {
+        if (shape.id !== 'background-texture' && shape.x >= minX && shape.x <= maxX && shape.y >= minY && shape.y <= maxY) {
           selectedItems.push(shape.id);
         }
       });
@@ -1548,7 +1668,7 @@ export default function Workspace2D({
     setDraggedItemStart(null);
     setDraggedPoint(null);
     sceneStore.setSnapGuides([]); // Clear snap guides
-  }, [setPanning, selectionRect, shapes, assets, walls, textAnnotations, labelArrows, setSelectedIds, sceneStore, draggedPoint, clearSelection, setPan, zoom, placementMode, addWall, addAsset, addShape, setPlacementMode, resolveIdsWithGroups]);
+  }, [setPanning, selectionRect, shapes, assets, walls, textAnnotations, labelArrows, setSelectedIds, sceneStore, draggedPoint, clearSelection, setPan, zoom, placementMode, addWall, addAsset, addShape, setPlacementMode, resolveIdsWithGroups, updateTyping]);
 
   const handleAssetDrop = useCallback(
     async (e: React.DragEvent<HTMLDivElement>) => {
@@ -1610,6 +1730,29 @@ export default function Workspace2D({
       ];
       const nextZIndex = zCandidates.length > 0 ? Math.max(...zCandidates) + 1 : 1;
 
+      // Default texture initialization based on type/category
+      let fillType: 'solid' | 'texture' | 'hatch' | 'gradient' = 'solid';
+      let fillTexture: string | undefined = undefined;
+      let fillColor: string = 'transparent';
+
+      const typeLower = type.toLowerCase();
+      const labelLower = (template?.label || '').toLowerCase();
+
+      if (typeLower.includes('grass') || labelLower.includes('grass')) {
+        fillType = 'texture';
+        fillTexture = 'grass-01';
+      } else if (typeLower.includes('beach') || labelLower.includes('beach') || typeLower.includes('sand') || labelLower.includes('sand')) {
+        fillType = 'texture';
+        fillTexture = 'sand-01';
+      } else if (typeLower.includes('parking') || labelLower.includes('parking')) {
+        fillType = 'texture';
+        fillTexture = 'parking-lot';
+      }
+
+      if (fillType === 'texture' && fillTexture) {
+        fillColor = `url(#${fillTexture}-scale-4-thick-1)`;
+      }
+
       const newAsset: Asset = {
         id: `${type}-${Date.now()}`,
         type,
@@ -1620,6 +1763,9 @@ export default function Workspace2D({
         rotation: finalRotation,
         scale: 1,
         zIndex: nextZIndex,
+        fillType,
+        fillTexture,
+        fillColor,
         metadata: template ? { label: template.label } : {},
       };
 
@@ -1629,6 +1775,10 @@ export default function Workspace2D({
 
       // Don't auto-explode on drop - let user double-click to explode if needed
       // Assets should stay as assets initially
+      
+      // Clear any pending selection rectangle
+      setSelectionRect(null);
+      setDragStart(null);
     },
     [addAsset, assets, walls, setSelectedIds, screenToWorld, shapes]
   );
@@ -2857,7 +3007,10 @@ export default function Workspace2D({
       }
       }
       style={{
-        cursor: isPanning ? 'grabbing' : activeTool === 'pan' ? 'grab' : activeTool === 'select' ? undefined : 'crosshair',
+        cursor: isPanning ? 'grabbing' : 
+                activeTool === 'pan' ? 'grab' : 
+                (hoveredId && activeTool === 'select') ? 'pointer' :
+                activeTool === 'select' ? 'default' : 'crosshair',
       }}
     >
       {gridHud.visible && showGrid && (
@@ -2936,6 +3089,8 @@ export default function Workspace2D({
         data-workspace-root="true"
       >
         <TexturePatternDefs />
+        {/* Remote Cursors and User Awareness */}
+        <CursorOverlay cursors={activeUsers} />
         <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>
           {showGrid && <GridRenderer gridSize={sceneGridSize} viewportSize={viewportSize} zoom={zoom} panX={panX} panY={panY} unitSystem={unitSystem} />}
           <SnapMarkersRenderer />
@@ -3048,13 +3203,15 @@ export default function Workspace2D({
           <FreehandTool isActive={activeTool === 'freehand'} />
 
           {/* Rectangular Selection Preview */}
-          {selectionRect && (
+          {/* Rectangular Selection Overlay - Only show if in selection mode and NOT dragging an item */}
+      {selectionRect && !isDraggingItem && (activeTool === 'rectangular-select' || activeTool === 'select') && (
             <rect
               x={Math.min(selectionRect.x1, selectionRect.x2)}
               y={Math.min(selectionRect.y1, selectionRect.y2)}
-              width={Math.abs(selectionRect.x2 - selectionRect.x1)}
-              height={Math.abs(selectionRect.y2 - selectionRect.y1)}
-              fill="rgba(59, 130, 246, 0.1)"
+              width={Math.min(viewportSize.width / (zoom || 1) * 2, Math.abs(selectionRect.x2 - selectionRect.x1))}
+              height={Math.min(viewportSize.height / (zoom || 1) * 2, Math.abs(selectionRect.y2 - selectionRect.y1))}
+              fill="#3b82f6"
+              fillOpacity={0.1}
               stroke="#3b82f6"
               strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"
@@ -3106,7 +3263,7 @@ export default function Workspace2D({
           {/* SelectionTool handles will be rendered outside the scaled group for fixed size */}
         </g>
         {/* Render SelectionTool outside scaled group so handles stay fixed size */}
-        <SelectionTool isActive={activeTool === 'select'} />
+        <SelectionTool isActive={activeTool === 'select'} viewportSize={viewportSize} />
 
         {/* Snap Guides - Rendered last to be on top */}
         <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>

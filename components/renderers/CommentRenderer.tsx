@@ -49,6 +49,7 @@ export default function CommentRenderer({
                 zIndex: isActive || isHovered ? 100 : 50,
                 pointerEvents: 'auto',
             }}
+            data-id={comment.id}
         >
             {/* Pin Icon */}
             <div

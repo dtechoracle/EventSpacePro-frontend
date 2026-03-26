@@ -36,7 +36,7 @@ export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererPr
     }
 
     return (
-        <g>
+        <g data-id={arrow.id}>
             {/* Arrow line */}
             <line
                 x1={arrow.startPoint.x}

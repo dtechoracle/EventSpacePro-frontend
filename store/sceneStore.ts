@@ -53,6 +53,9 @@ export type AssetInstance = {
   groupAssets?: AssetInstance[]; // assets contained within this group
   groupExpanded?: boolean; // whether the group is expanded in the UI
 
+  // Table properties
+  tableName?: string; // for manual/auto table numbering
+
   // UI State properties
   showDimensions?: boolean; // toggle dimension display for walls/shapes
   dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';

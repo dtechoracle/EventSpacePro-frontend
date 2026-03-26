@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { InlineSvg } from "@/components/tools/InlineSvg";
 import { FiBox } from "react-icons/fi";
@@ -58,6 +58,9 @@ export default function AssetRenderer({
   }
 
   const def = ASSET_LIBRARY.find((a) => a.id === asset.type);
+  const isMarquee = asset.type?.toLowerCase().includes('marquee');
+  const defaultStrokeWidth = isMarquee ? 2 : 0.5;
+  const currentStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : defaultStrokeWidth;
 
   // Handle square and circle assets
   if (asset.type === "square" || asset.type === "circle") {
@@ -687,10 +690,31 @@ export default function AssetRenderer({
             src={def.path}
             fill={asset.fillColor}
             stroke={asset.strokeColor}
-            strokeWidth={asset.strokeWidth}
+            strokeWidth={currentStrokeWidth}
             category={def.category}
           />
         </div>
+
+        {/* Table Name / Numbering Label */}
+        {(asset as any).tableName && (
+          <div
+            style={{
+              position: "absolute",
+              left: leftPx,
+              top: topPx,
+              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
+              color: "#1e293b",
+              fontSize: `${Math.max(10, 12 * asset.scale)}px`,
+              fontWeight: "bold",
+              pointerEvents: "none",
+              textShadow: "0 0 4px white, 0 0 2px white",
+              whiteSpace: "nowrap",
+              zIndex: (asset.zIndex || 0) + 2,
+            }}
+          >
+            {(asset as any).tableName}
+          </div>
+        )}
 
         {/* Multi-select indicator */}
         {isMultiSelected && !isSelected && (

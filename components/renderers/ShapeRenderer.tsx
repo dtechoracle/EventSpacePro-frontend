@@ -13,12 +13,13 @@ interface ShapeRendererProps {
 const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => {
     // Use selector for zoom to prevent re-renders on other editor store changes
     const zoom = useEditorStore(s => s.zoom);
+    const activeTool = useEditorStore(s => s.activeTool);
     
     // Default pure black stroke so new shapes/lines pop clearly
     const strokeColor = shape.stroke || '#000000';
     const fillColor = shape.fill || 'transparent';
-    // Ensure strokeWidth is always a valid number, defaulting to 1 if undefined/null/0
-    const strokeWidth = (shape.strokeWidth !== undefined && shape.strokeWidth !== null && shape.strokeWidth > 0)
+    // Ensure strokeWidth is always a valid number, defaulting to 1 if undefined/null
+    const strokeWidth = (shape.strokeWidth !== undefined && shape.strokeWidth !== null)
         ? shape.strokeWidth
         : 1;
 
@@ -76,6 +77,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
             strokeDasharray: shape.lineType !== 'double' ? dashArray : undefined,
             vectorEffect: 'non-scaling-stroke',
             style: { pointerEvents: shape.id === 'background-texture' ? 'none' : 'auto' } as React.CSSProperties,
+            'data-id': shape.id,
             ...overrideProps
         };
 
@@ -86,6 +88,8 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                     y={-shape.height / 2}
                     width={shape.width}
                     height={shape.height}
+                    rx={shape.borderRadius || 0}
+                    ry={shape.borderRadius || 0}
                     {...commonProps}
                 />
             );
@@ -121,7 +125,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
             }
             const pointsStr = pts.map(p => `${p.x},${p.y}`).join(' ');
             return (
-                <g>
+                <g data-id={shape.id}>
                     <polygon
                         points={pointsStr}
                         {...commonProps}
@@ -136,6 +140,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                             stroke="#3b82f6"
                             strokeWidth={1.5 / zoom}
                             className="cursor-move"
+                            data-id={shape.id}
                         />
                     ))}
                 </g>
@@ -152,7 +157,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                     const outerWidth = commonProps.strokeWidth * 3; // Total width
 
                     return (
-                        <g>
+                        <g data-id={shape.id}>
                             {/* Outer/Bottom thick line */}
                             <polyline
                                 points={points}
@@ -162,6 +167,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                                 opacity={commonProps.opacity}
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
+                                data-id={shape.id}
                             />
                             {/* Inner "gap" line - using white for now */}
                             <polyline
@@ -172,6 +178,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                                 opacity={1}
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
+                                data-id={shape.id}
                             />
 
                             {/* Control points for polyline */}
@@ -185,6 +192,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                                     stroke="#3b82f6"
                                     strokeWidth={1.5 / zoom}
                                     className="cursor-move"
+                                    data-id={shape.id}
                                 />
                             ))}
                         </g>
@@ -192,7 +200,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                 }
 
                 return (
-                    <g>
+                    <g data-id={shape.id}>
                         <polyline
                             points={points}
                             fill={commonProps.fill}
@@ -202,6 +210,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                             strokeLinecap="round"
                             strokeLinejoin="round"
                             strokeDasharray={commonProps.strokeDasharray}
+                            data-id={shape.id}
                         />
                         {/* Control points for polyline */}
                         {!isHighlight && isSelected && shape.points.map((p, i) => (
@@ -214,6 +223,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                                 stroke="#3b82f6"
                                 strokeWidth={1.5 / zoom}
                                 className="cursor-move"
+                                data-id={shape.id}
                             />
                         ))}
                     </g>
@@ -222,7 +232,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
 
             // Fallback: legacy straight line using width / rotation.
             return (
-                <g>
+                <g data-id={shape.id}>
                     <line
                         x1={-shape.width / 2}
                         y1={0}
@@ -242,6 +252,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                                 stroke="#3b82f6"
                                 strokeWidth={1.5 / zoom}
                                 className="cursor-move"
+                                data-id={shape.id}
                             />
                             <circle
                                 cx={shape.width / 2}
@@ -251,6 +262,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                                 stroke="#3b82f6"
                                 strokeWidth={1.5 / zoom}
                                 className="cursor-move"
+                                data-id={shape.id}
                             />
                         </>
                     )}
@@ -294,6 +306,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                     opacity: opacity,
                     strokeLinecap: "round" as "round",
                     strokeLinejoin: "round" as "round",
+                    'data-id': shape.id,
                 };
 
                 // Rotation transform for shapes defined at 0,0 pointing right
@@ -330,7 +343,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
 
                     case 'judo': // Spring wire arms (simplified)
                         return (
-                            <g transform={transform}>
+                            <g transform={transform} data-id={shape.id}>
                                 <path d={`M 0 0 L ${-size} 0`} {...commonMarkerProps} />
                                 <path d={`M ${-size / 2} 0 L ${-size / 4} ${-size / 2}`} {...commonMarkerProps} />
                                 <path d={`M ${-size / 2} 0 L ${-size / 4} ${size / 2}`} {...commonMarkerProps} />
@@ -408,7 +421,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                 const last = pts[pts.length - 1];
                 const prev = pts[pts.length - 2];
                 return (
-                    <g>
+                    <g data-id={shape.id}>
                         <polyline
                             points={polyPoints}
                             fill={commonProps.fill}
@@ -418,6 +431,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                             strokeLinecap="round"
                             strokeLinejoin="round"
                             strokeDasharray={commonProps.strokeDasharray}
+                            data-id={shape.id}
                         />
                         {renderArrowMarker(prev, last, headType, commonProps.stroke as string, commonProps.strokeWidth as number, originalStrokeWidth, commonProps.opacity as number, headSizeMult)}
                         {renderArrowMarker(second, first, tailType, commonProps.stroke as string, commonProps.strokeWidth as number, originalStrokeWidth, commonProps.opacity as number, tailSizeMult)}
@@ -430,7 +444,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
             const endPoint = { x: shape.width / 2, y: 0 };
 
             return (
-                <g>
+                <g data-id={shape.id}>
                     <line
                         x1={startPoint.x}
                         y1={startPoint.y}
@@ -440,6 +454,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                         strokeWidth={commonProps.strokeWidth}
                         opacity={commonProps.opacity}
                         strokeDasharray={commonProps.strokeDasharray}
+                        data-id={shape.id}
                     />
                     {renderArrowMarker(
                         startPoint, // from
@@ -482,7 +497,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                 }
 
                 return (
-                    <g>
+                    <g data-id={shape.id}>
                         <path
                             d={d}
                             {...commonProps}
@@ -496,6 +511,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                                 stroke={i % 2 === 0 ? '#3b82f6' : '#f59e0b'}
                                 strokeWidth={1.5 / zoom}
                                 className="cursor-move"
+                                data-id={shape.id}
                             />
                         ))}
                     </g>
@@ -509,7 +525,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
             const pathData = `M ${p1.x} ${p1.y} Q ${qcx} ${qcy} ${p3.x} ${p3.y}`;
 
             return (
-                <g>
+                <g data-id={shape.id}>
                     <path
                         d={pathData}
                         {...commonProps}
@@ -523,6 +539,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                             stroke={i === 2 ? '#f59e0b' : '#3b82f6'}
                             strokeWidth={1.5 / zoom}
                             className="cursor-move"
+                            data-id={shape.id}
                         />
                     ))}
                 </g>
@@ -566,7 +583,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
 
         if (shape.gradientType === 'radial') {
             return (
-                <radialGradient id={gradientId}>
+                <radialGradient id={gradientId} data-id={shape.id}>
                     <stop offset="0%" stopColor={colors[0]} />
                     <stop offset="100%" stopColor={colors[1]} />
                 </radialGradient>
@@ -580,7 +597,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
             const y2 = 50 + 50 * Math.sin(angleRad);
 
             return (
-                <linearGradient id={gradientId} x1={`${x1}%`} y1={`${y1}%`} x2={`${x2}%`} y2={`${y2}%`}>
+                <linearGradient id={gradientId} x1={`${x1}%`} y1={`${y1}%`} x2={`${x2}%`} y2={`${y2}%`} data-id={shape.id}>
                     <stop offset="0%" stopColor={colors[0]} />
                     <stop offset="100%" stopColor={colors[1]} />
                 </linearGradient>
@@ -598,51 +615,51 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
         const strokeWidth = shape.hatchThickness || 1;
 
         return (
-            <pattern id={hatchId} patternUnits="userSpaceOnUse" width={spacing * 2} height={spacing * 2}>
-                <rect width={spacing * 2} height={spacing * 2} fill="transparent" />
+            <pattern id={hatchId} patternUnits="userSpaceOnUse" width={spacing * 2} height={spacing * 2} data-id={shape.id}>
+                <rect width={spacing * 2} height={spacing * 2} fill="transparent" data-id={shape.id} />
                 {pattern === 'horizontal' && (
-                    <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth={strokeWidth} />
+                    <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
                 )}
                 {pattern === 'vertical' && (
-                    <line x1={spacing} y1="0" x2={spacing} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
+                    <line x1={spacing} y1="0" x2={spacing} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
                 )}
                 {pattern === 'diagonal-right' && (
                     <>
-                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
-                        <line x1="0" y1={spacing * 2} x2={spacing * 2} y2="0" stroke={color} strokeWidth={strokeWidth} />
+                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
+                        <line x1="0" y1={spacing * 2} x2={spacing * 2} y2="0" stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
                     </>
                 )}
                 {pattern === 'diagonal-left' && (
                     <>
-                        <line x1="0" y1={spacing * 2} x2={spacing * 2} y2="0" stroke={color} strokeWidth={strokeWidth} />
-                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
+                        <line x1="0" y1={spacing * 2} x2={spacing * 2} y2="0" stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
+                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
                     </>
                 )}
                 {pattern === 'cross' && (
                     <>
-                        <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth={strokeWidth} />
-                        <line x1={spacing} y1="0" x2={spacing} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
+                        <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
+                        <line x1={spacing} y1="0" x2={spacing} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
                     </>
                 )}
                 {pattern === 'diagonal-cross' && (
                     <>
-                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
-                        <line x1={spacing * 2} y1="0" x2="0" y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
+                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
+                        <line x1={spacing * 2} y1="0" x2="0" y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
                     </>
                 )}
                 {pattern === 'dots' && (
                     <>
-                        <circle cx={spacing / 2} cy={spacing / 2} r={strokeWidth} fill={color} />
-                        <circle cx={spacing * 1.5} cy={spacing * 1.5} r={strokeWidth} fill={color} />
+                        <circle cx={spacing / 2} cy={spacing / 2} r={strokeWidth} fill={color} data-id={shape.id} />
+                        <circle cx={spacing * 1.5} cy={spacing * 1.5} r={strokeWidth} fill={color} data-id={shape.id} />
                     </>
                 )}
 
                 {pattern === 'brick' && (
                     <>
-                        <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth={strokeWidth} />
-                        <line x1={spacing} y1="0" x2={spacing} y2={spacing} stroke={color} strokeWidth={strokeWidth} />
-                        <line x1="0" y1={spacing} x2={0} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} />
-                        <path d={`M 0,${spacing} H ${spacing * 2} M 0,${spacing * 2} H ${spacing * 2} M ${spacing},0 V ${spacing} M 0,${spacing} V ${spacing * 2} M ${spacing * 2},${spacing} V ${spacing * 2}`} stroke={color} strokeWidth="1" fill={getFillValue(false)} />
+                        <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
+                        <line x1={spacing} y1="0" x2={spacing} y2={spacing} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
+                        <line x1="0" y1={spacing} x2={0} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
+                        <path d={`M 0,${spacing} H ${spacing * 2} M 0,${spacing * 2} H ${spacing * 2} M ${spacing},0 V ${spacing} M 0,${spacing} V ${spacing * 2} M ${spacing * 2},${spacing} V ${spacing * 2}`} stroke={color} strokeWidth="1" fill={getFillValue(false)} data-id={shape.id} />
                     </>
                 )}
             </pattern>
@@ -660,10 +677,10 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
         return (
             <pattern id={patternId} patternUnits="userSpaceOnUse"
                 x={-shape.width / 2} y={-shape.height / 2}
-                width={tileW} height={tileH}>
+                width={tileW} height={tileH} data-id={shape.id}>
                 <image href={shape.fillImage} x="0" y="0"
                     width={tileW} height={tileH}
-                    preserveAspectRatio="xMidYMid slice" />
+                    preserveAspectRatio="xMidYMid slice" data-id={shape.id} />
             </pattern>
         );
     };
@@ -671,7 +688,7 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
     return (
         <>
             {/* Define gradients, patterns, and hatches */}
-            <defs>
+            <defs data-id={shape.id}>
                 {renderGradientDef()}
                 {renderHatchDef()}
                 {renderImageDef()}
@@ -679,15 +696,48 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
 
             <g 
                 transform={transform} 
+                className={activeTool === 'select' || activeTool === 'trim-to-blend' ? 'cursor-pointer' : ''}
                 style={{ 
-                    cursor: 'pointer',
                     color: shape.hatchColor || shape.fill || '#000000'
                 }}
+                data-id={shape.id}
             >
                 {/* Render highlight behind the shape */}
                 {showHighlight && renderPrimitive(true)}
                 {/* Render actual shape */}
                 {renderPrimitive(false)}
+
+                {/* Table Numbering / Labeling (Billboarded) */}
+                {shape.tableName && (
+                    <g transform={`rotate(${-shape.rotation})`}>
+                        <circle
+                            cx={0}
+                            cy={0}
+                            r={Math.max(16, (shape.width || 100) * 0.12)}
+                            fill="white"
+                            stroke="#000000"
+                            strokeWidth={Math.max(1.5, (shape.width || 100) * 0.01)}
+                            pointerEvents="none"
+                            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
+                        />
+                        <text
+                            x={0}
+                            y={0}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            fontSize={Math.max(14, (shape.width || 100) * 0.14)}
+                            fill="#000000"
+                            fontWeight="900"
+                            pointerEvents="none"
+                            style={{
+                                userSelect: 'none',
+                                fontFamily: 'Inter, sans-serif'
+                            }}
+                        >
+                            {shape.tableName}
+                        </text>
+                    </g>
+                )}
             </g>
         </>
     );

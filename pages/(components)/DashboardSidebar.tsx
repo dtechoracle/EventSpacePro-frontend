@@ -107,29 +107,32 @@ export default function DashboardSidebar() {
         )}
       </div>
 
-      {/* Profile Section (Permanent, no dropdown) */}
-      {!collapsed && (
-        <div className="px-5 pb-6 border-b border-gray-100/50">
-          <div className="flex items-center gap-3">
-            {user?.avatar ? (
-              <div className="w-10 h-10 rounded-full overflow-hidden shadow-sm flex-shrink-0">
-                <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
-              </div>
-            ) : (
-              <div
-                className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold shadow-sm flex-shrink-0"
-                style={{ backgroundColor: avatarColor }}
-              >
-                {userInitial}
-              </div>
-            )}
-            <div className="flex flex-col overflow-hidden">
-              <p className="text-[13px] font-bold text-gray-900 truncate tracking-tight">{userName}</p>
-              <p className="text-[10px] text-gray-500 truncate">{user?.email}</p>
+      {/* Profile Section (Permanent, visible when collapsed as icon) */}
+      <div className={`px-5 pb-6 border-b border-gray-100/50 flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3'}`}>
+        <div className="relative group/avatar cursor-pointer" onClick={() => router.push("/dashboard/profile")}>
+          {user?.avatar ? (
+            <div className={`rounded-full overflow-hidden shadow-sm flex-shrink-0 border-2 border-white transition-transform hover:scale-110 ${collapsed ? 'w-9 h-9' : 'w-10 h-10'}`}>
+              <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
             </div>
-          </div>
+          ) : (
+            <div
+              className={`rounded-full flex items-center justify-center text-white font-semibold shadow-sm flex-shrink-0 transition-transform hover:scale-110 ${collapsed ? 'w-9 h-9 text-[10px]' : 'w-10 h-10 text-xs'}`}
+              style={{ backgroundColor: avatarColor }}
+            >
+              {userInitial}
+            </div>
+          )}
+          {collapsed && (
+            <div className="absolute -right-1 -bottom-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full shadow-sm"></div>
+          )}
         </div>
-      )}
+        {!collapsed && (
+          <div className="flex flex-col overflow-hidden">
+            <p className="text-[13px] font-bold text-gray-900 truncate tracking-tight">{userName}</p>
+            <p className="text-[10px] text-gray-500 truncate">{user?.email}</p>
+          </div>
+        )}
+      </div>
 
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto p-2 pt-4">

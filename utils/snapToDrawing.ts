@@ -179,6 +179,24 @@ export function getSnapPoints(element: SnapTarget): SnapPoint[] {
 }
 
 /**
+ * Closest point on a line segment
+ */
+function getClosestPointOnSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lengthSq = dx * dx + dy * dy;
+    if (lengthSq === 0) return { x: x1, y: y1 };
+
+    let t = ((px - x1) * dx + (py - y1) * dy) / lengthSq;
+    t = Math.max(0, Math.min(1, t));
+
+    return {
+        x: x1 + t * dx,
+        y: y1 + t * dy
+    };
+}
+
+/**
  * Find the closest snap point on a target element
  */
 export function findClosestSnapPoint(
@@ -188,7 +206,7 @@ export function findClosestSnapPoint(
 ): SnapPoint | null {
     const snapPoints = getSnapPoints(element);
 
-    // Find closest snap point
+    // 1. Check discrete snap points first (corners, midpoints, centers)
     let closestPoint: SnapPoint | null = null;
     let closestDistance = snapThreshold;
 
@@ -197,6 +215,79 @@ export function findClosestSnapPoint(
         if (distance < closestDistance) {
             closestDistance = distance;
             closestPoint = point;
+        }
+    }
+
+    // 2. Specialized Edge Snapping for Walls (Inner, Outer, and Center lines)
+    if ('nodes' in element && 'edges' in element) {
+        const wall = element as Wall;
+        wall.edges.forEach(edge => {
+            const n1 = wall.nodes.find(n => n.id === edge.nodeA);
+            const n2 = wall.nodes.find(n => n.id === edge.nodeB);
+            if (n1 && n2) {
+                const thickness = edge.thickness || 150;
+                const halfThick = thickness / 2;
+                const dx = n2.x - n1.x;
+                const dy = n2.y - n1.y;
+                const len = Math.sqrt(dx * dx + dy * dy);
+
+                if (len > 0) {
+                    const ux = dx / len;
+                    const uy = dy / len;
+                    const px = -uy * halfThick;
+                    const py = ux * halfThick;
+
+                    const paths = [
+                        { a: n1, b: n2 }, // Centerline
+                        { a: { x: n1.x + px, y: n1.y + py }, b: { x: n2.x + px, y: n2.y + py } }, // Inner
+                        { a: { x: n1.x - px, y: n1.y - py }, b: { x: n2.x - px, y: n2.y - py } }  // Outer
+                    ];
+
+                    paths.forEach(path => {
+                        const cp = getClosestPointOnSegment(cursorPos.x, cursorPos.y, path.a.x, path.a.y, path.b.x, path.b.y);
+                        const dist = Math.hypot(cursorPos.x - cp.x, cursorPos.y - cp.y);
+                        if (dist < closestDistance) {
+                            closestDistance = dist;
+                            closestPoint = { ...cp, type: 'edge', elementId: wall.id };
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    // 3. Edge Snapping for Shapes (Rectangle boundaries and Polygons)
+    if ('type' in element && (element.type === 'rectangle' || element.type === 'polygon' || element.type === 'line' || element.type === 'polyline')) {
+        const shape = element as Shape;
+        const rot = shape.rotation || 0;
+        
+        const getPoints = () => {
+             if (shape.type === 'rectangle') {
+                 const halfW = shape.width / 2;
+                 const halfH = shape.height / 2;
+                 return [
+                     { x: -halfW, y: -halfH }, { x: halfW, y: -halfH },
+                     { x: halfW, y: halfH }, { x: -halfW, y: halfH },
+                     { x: -halfW, y: -halfH }
+                 ];
+             }
+             if (shape.points) return [...shape.points, (shape.type === 'polygon' && shape.points.length > 2) ? shape.points[0] : null].filter(Boolean) as {x: number, y: number}[];
+             return [];
+        };
+
+        const pts = getPoints();
+        for (let i = 0; i < pts.length - 1; i++) {
+            const p1raw = { x: shape.x + pts[i].x, y: shape.y + pts[i].y };
+            const p2raw = { x: shape.x + pts[i+1].x, y: shape.y + pts[i+1].y };
+            const p1 = rotatePoint(p1raw.x, p1raw.y, shape.x, shape.y, rot);
+            const p2 = rotatePoint(p2raw.x, p2raw.y, shape.x, shape.y, rot);
+
+            const cp = getClosestPointOnSegment(cursorPos.x, cursorPos.y, p1.x, p1.y, p2.x, p2.y);
+            const dist = Math.hypot(cursorPos.x - cp.x, cursorPos.y - cp.y);
+            if (dist < closestDistance) {
+                closestDistance = dist;
+                closestPoint = { ...cp, type: 'edge', elementId: shape.id };
+            }
         }
     }
 
@@ -228,7 +319,6 @@ export function findSnapPointInShapes(
     return closestPoint;
 }
 
-
 /**
  * Snap to edge of a shape (closest point on perimeter)
  */
@@ -237,29 +327,5 @@ export function snapToEdge(
     shape: Shape,
     snapThreshold: number = 20
 ): SnapPoint | null {
-    if (shape.type === 'rectangle') {
-        const halfW = shape.width / 2;
-        const halfH = shape.height / 2;
-
-        // Find closest edge
-        const edges = [
-            { x: cursorPos.x, y: shape.y - halfH, dist: Math.abs(cursorPos.y - (shape.y - halfH)) }, // Top
-            { x: cursorPos.x, y: shape.y + halfH, dist: Math.abs(cursorPos.y - (shape.y + halfH)) }, // Bottom
-            { x: shape.x - halfW, y: cursorPos.y, dist: Math.abs(cursorPos.x - (shape.x - halfW)) }, // Left
-            { x: shape.x + halfW, y: cursorPos.y, dist: Math.abs(cursorPos.x - (shape.x + halfW)) }  // Right
-        ];
-
-        const closestEdge = edges.reduce((min, edge) => edge.dist < min.dist ? edge : min);
-
-        if (closestEdge.dist < snapThreshold) {
-            return {
-                x: Math.max(shape.x - halfW, Math.min(shape.x + halfW, closestEdge.x)),
-                y: Math.max(shape.y - halfH, Math.min(shape.y + halfH, closestEdge.y)),
-                type: 'edge',
-                elementId: shape.id
-            };
-        }
-    }
-
-    return null;
+    return findClosestSnapPoint(cursorPos, shape, snapThreshold);
 }

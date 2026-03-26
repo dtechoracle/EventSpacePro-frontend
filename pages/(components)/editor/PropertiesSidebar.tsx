@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { FaUserCircle, FaChevronDown, FaChevronRight, FaAlignLeft, FaAlignCenter, FaAlignRight, FaArrowUp, FaArrowDown, FaArrowsAltV, FaArrowsAltH, FaCircleNotch, FaBold, FaItalic, FaUnderline, FaHighlighter, FaTimes, FaExpand } from "react-icons/fa";
+import React, { useState, useEffect, useMemo } from "react";
+import { FaUserCircle, FaChevronDown, FaChevronRight, FaAlignLeft, FaAlignCenter, FaAlignRight, FaArrowUp, FaArrowDown, FaArrowsAltV, FaArrowsAltH, FaCircleNotch, FaBold, FaItalic, FaUnderline, FaHighlighter, FaTimes, FaExpand, FaPlus } from "react-icons/fa";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/helpers/Config";
 
 import { IoPlayOutline } from "react-icons/io5";
 import ShareModal from "./ShareModal";
@@ -22,8 +24,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const {
     shapes, assets, walls, textAnnotations, labelArrows, dimensions, groups,
     updateShape, updateAsset, updateWall, updateTextAnnotation, updateLabelArrow, updateDimension,
-    updateShapeBatch, updateAssetBatch, updateWallBatch,
-    isSaving, lastSaved, saveEvent, hasUnsavedChanges
+    updateShapeBatch, updateAssetBatch, updateWallBatch, batchUpdateItems,
+    isSaving, lastSaved, saveEvent, hasUnsavedChanges,
+    projectName, setProjectName
   } = useProjectStore();
 
   // Resolve the single selected item
@@ -35,9 +38,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
   // Calculate collective bounding box for multi-selection or single item
   const getCollectiveBounds = () => {
     if (selectedIds.length === 0) return null;
-    
+
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    
+
     selectedIds.forEach(id => {
       const shape = shapes.find(s => s.id === id);
       if (shape) {
@@ -94,8 +97,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
         const fs = text.fontSize || 14;
         const w = (text.text.length || 1) * fs * 0.6;
         const h = fs * 1.2;
-        minX = Math.min(minX, text.x); minY = Math.min(minY, text.y - h/2);
-        maxX = Math.max(maxX, text.x + w); maxY = Math.max(maxY, text.y + h/2);
+        minX = Math.min(minX, text.x); minY = Math.min(minY, text.y - h / 2);
+        maxX = Math.max(maxX, text.x + w); maxY = Math.max(maxY, text.y + h / 2);
       }
     });
 
@@ -172,7 +175,11 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const [showModel, setShowModel] = useState(true);
   const [showCanvas, setShowCanvas] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showMoveModal, setShowMoveModal] = useState(false);
   const [modelName, setModelName] = useState<string>("");
+  const [targetProjectSlug, setTargetProjectSlug] = useState('');
+  const [startingNumber, setStartingNumber] = useState(1);
+  const [isNumberingEnabled, setIsNumberingEnabled] = useState(false);
   const open3D = useSceneStore((s) => s.open3DOverlay);
 
   const [distributeSpacing, setDistributeSpacing] = useState(100);
@@ -197,15 +204,59 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
 
   useEffect(() => {
-    if (userName && !modelName) {
+    if (userName && !modelName && !projectName) {
       setModelName(userName);
+      setProjectName(userName);
+    } else if (projectName && !modelName) {
+      setModelName(projectName);
     }
-  }, [userName, modelName]);
+  }, [userName, modelName, projectName, setProjectName]);
 
 
 
   const router = useRouter();
   const { id, slug } = router.query;
+
+  const { data: projectData } = useQuery({
+    queryKey: ["project-collaborators", slug],
+    queryFn: async () => {
+      if (!slug) return null;
+      try {
+        const res = await apiRequest(`/projects/${slug}`, "GET", null, true).catch(async () => {
+          const allRes = await apiRequest("/projects", "GET", null, true);
+          return allRes.data.find((p: any) => p.slug === slug);
+        });
+        return res.data || res;
+      } catch (err) {
+        console.error("Failed to fetch project for collaborators:", err);
+        return null;
+      }
+    },
+    enabled: !!slug,
+  });
+
+  const collaborators = useMemo(() => {
+    if (!projectData) return [];
+    const active = (projectData.users || []).map((u: any) => ({
+      email: u.email,
+      name: u.user?.firstName || u.email.split('@')[0],
+      avatar: u.user?.avatar,
+      isPending: false
+    })).filter((c: any) => c.email !== user?.email);
+
+    const pending = (projectData.invites || []).map((i: any) => ({
+      email: i.email,
+      name: i.email.split('@')[0],
+      isPending: true
+    }));
+    return [...active, ...pending];
+  }, [projectData, user?.email]);
+
+  const getAvatarColor = (name: string) => {
+    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316'];
+    const index = (name.charCodeAt(0) || 0) % colors.length;
+    return colors[index];
+  };
 
   const handleSave = async () => {
     if (id && typeof id === 'string' && slug && typeof slug === 'string') {
@@ -223,15 +274,69 @@ export default function PropertiesSidebar(): React.JSX.Element {
   return (
     <aside className="h-screen flex flex-col p-3 pb-24 overflow-y-auto text-sm bg-white text-gray-900">
       {showShareModal && (
-        <ShareModal onClose={() => setShowShareModal(false)} />
+        <ShareModal onClose={() => setShowShareModal(false)} slug={slug as string} />
       )}
 
-      {/* Header */}
       <div className="flex items-center justify-between mb-8">
-        <FaUserCircle
-          className="text-blue-600 bg-blue-100 rounded-full p-0.5"
-          size={28}
-        />
+        <div className="flex items-center group cursor-pointer" onClick={() => setShowShareModal(true)}>
+          <div className="flex -space-x-3 transition-all duration-300">
+            {/* Current User */}
+            <div
+              className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-[#272235] flex items-center justify-center text-white text-xs font-bold z-40 shadow-sm relative transition-transform group-hover:scale-105"
+              title={`${userName} (You)`}
+            >
+              {user?.avatar ? (
+                <img src={user.avatar} className="h-full w-full rounded-full object-cover" />
+              ) : (
+                <span>{user?.firstName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'Y'}</span>
+              )}
+              {/* Active Status Indicator */}
+              <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full"></div>
+            </div>
+
+            {/* Collaborators */}
+            {collaborators.map((collab, idx) => (
+              <div
+                key={collab.email}
+                className={`inline-block h-5 w-5 rounded-full ring-2 ring-white flex items-center justify-center text-white text-[9px] font-bold shadow-sm relative transition-all duration-300 group-hover:translate-x-1 ${collab.isPending ? 'opacity-80' : ''}`}
+                style={{
+                  backgroundColor: getAvatarColor(collab.email),
+                  zIndex: 30 - idx,
+                  border: collab.isPending ? '2px dashed #d1d5db' : 'none'
+                }}
+                title={`${collab.name}${collab.isPending ? ' (Pending)' : ''}`}
+              >
+                {collab.avatar ? (
+                  <img src={collab.avatar} className="h-full w-full rounded-full object-cover" />
+                ) : (
+                  <span>{collab.name.charAt(0).toUpperCase()}</span>
+                )}
+                {collab.isPending && (
+                  <div className="absolute -top-1 -right-1 bg-amber-400 w-3 h-3 rounded-full border-2 border-white" title="Invitation Pending"></div>
+                )}
+              </div>
+            ))}
+
+            {collaborators.length > 5 && (
+              <div
+                className="inline-block h-5 w-5 rounded-full ring-2 ring-white bg-gray-50 flex items-center justify-center text-gray-400 text-[8px] font-bold z-0"
+                title={`+${collaborators.length - 5} more`}
+              >
+                +{collaborators.length - 5}
+              </div>
+            )}
+          </div>
+
+          <button
+            className="ml-4 h-8 w-8 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center hover:bg-[#272235] hover:text-white transition-all duration-300 border border-transparent hover:shadow-lg"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowShareModal(true);
+            }}
+          >
+            <FaPlus size={10} />
+          </button>
+        </div>
         <div className="flex items-center gap-1">
           <button
             className={`px-2 py-1.5 rounded text-xs border flex items-center gap-1 transition-colors
@@ -312,12 +417,15 @@ export default function PropertiesSidebar(): React.JSX.Element {
         {showModel && (
           <div className="space-y-3 pl-5 text-xs">
             <div className="flex justify-between items-center">
-              <span className="text-black">Full Name</span>
+              <span className="text-black">Event Name</span>
               <input
                 type="text"
-                value={modelName}
-                placeholder="New Model"
-                onChange={(e) => setModelName(e.target.value)}
+                value={projectName || ""}
+                placeholder="New Event"
+                onChange={(e) => {
+                  setProjectName(e.target.value);
+                  setModelName(e.target.value);
+                }}
                 className="sidebar-input"
               />
             </div>
@@ -448,10 +556,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   className="w-full text-xs border rounded px-2 py-1 bg-white"
                 >
                   {(availableGridSizes || [100, 500, 1000, 2000, 5000]).map((size) => {
-                    const label = unitSystem === 'imperial-ft' 
-                      ? `${(size / 304.8).toFixed(1)}ft` 
-                      : unitSystem === 'metric-m' 
-                        ? `${size / 1000}m` 
+                    const label = unitSystem === 'imperial-ft'
+                      ? `${(size / 304.8).toFixed(1)}ft`
+                      : unitSystem === 'metric-m'
+                        ? `${size / 1000}m`
                         : `${size}mm`;
                     return <option key={size} value={size}>{label}</option>;
                   })}
@@ -796,7 +904,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
                     {(selectedItem as any).showDimensions && (
                       <div className="space-y-2 mt-3">
-                         {/* Style / Type */}
+                        {/* Style / Type */}
                         <div className="flex justify-between items-center">
                           <span className="text-gray-500 text-xs">Line Style</span>
                           <select
@@ -978,6 +1086,32 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
 
 
+
+                {/* Table Numbering (Manual Override) */}
+                {(itemType === 'shape' || itemType === 'asset') &&
+                  (((selectedItem as any).type || "").toLowerCase().includes('table') ||
+                    ((selectedItem as any).name || "").toLowerCase().includes('table')) && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <div className="text-xs font-semibold mb-2 text-gray-600 uppercase tracking-tight">Numbering</div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-gray-500 text-xs">Label / Number</span>
+                        <input
+                          type="text"
+                          value={(selectedItem as any).tableName || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (itemType === 'shape') {
+                              updateShape(selectedItem.id, { tableName: val });
+                            } else {
+                              updateAsset(selectedItem.id, { tableName: val });
+                            }
+                          }}
+                          className="sidebar-input w-24 text-right text-xs"
+                          placeholder="e.g. 1, A"
+                        />
+                      </div>
+                    </div>
+                  )}
 
                 {/* Appearance (Shape/Asset) */}
                 {(itemType === 'shape' || itemType === 'asset') && (
@@ -1334,24 +1468,45 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
                     {/* Stroke Width (Shape or Asset) */}
                     {(itemType === 'shape' || itemType === 'asset') && (
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-gray-500">Stroke Width</span>
-                        <input
-                          type="number"
-                          value={(itemType === 'asset' ? (selectedItem as any).strokeWidth : (selectedItem as any).strokeWidth) || 0}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            if (itemType === 'shape') updateShape(selectedItem.id, { strokeWidth: val });
-                            if (itemType === 'asset') {
-                              updateAsset(selectedItem.id, { strokeWidth: val });
-                              updateSceneAsset(selectedItem.id, { strokeWidth: val });
-                            }
-                          }}
-                          className="sidebar-input w-16 text-center"
-                          min={0}
-                          step={0.5}
-                        />
-                      </div>
+                      <>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-gray-500">Stroke Width</span>
+                          <input
+                            type="number"
+                            value={(selectedItem as any).strokeWidth || 0}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (itemType === 'shape') updateShape(selectedItem.id, { strokeWidth: val });
+                              if (itemType === 'asset') {
+                                updateAsset(selectedItem.id, { strokeWidth: val });
+                                updateSceneAsset(selectedItem.id, { strokeWidth: val });
+                              }
+                            }}
+                            className="sidebar-input w-16 text-center"
+                            min={0}
+                            step={0.5}
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1 mb-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-500">Corner Radius</span>
+                            <input
+                              type="number"
+                              value={(selectedItem as any).borderRadius || 0}
+                              onChange={(e) => {
+                                const maxR = Math.min((selectedItem as any).width, (selectedItem as any).height) / 2;
+                                updateShape(selectedItem.id, { borderRadius: Math.min(Number(e.target.value), maxR) });
+                              }}
+                              className="sidebar-input w-16 text-center"
+                              min={0}
+                              max={Math.min((selectedItem as any).width, (selectedItem as any).height) / 2}
+                              step={10}
+                            />
+                          </div>
+                          <span className="text-[10px] text-gray-400 italic text-right">Max: {Math.floor(Math.min((selectedItem as any).width, (selectedItem as any).height) / 2)}mm</span>
+                        </div>
+                      </>
                     )}
 
                     {/* Line Type (Shape Only) */}
@@ -1431,26 +1586,16 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span className="text-gray-500">Font Size (px)</span>
                       <input
                         type="number"
-                        defaultValue={selectedTextAnnotation.fontSize || 200}
-                        key={`${selectedTextAnnotation.id}-fs-${selectedTextAnnotation.fontSize}`}
-                        onBlur={(e) => {
+                        value={selectedTextAnnotation.fontSize || 200}
+                        onChange={(e) => {
                           const val = Number(e.target.value);
                           if (!isNaN(val) && val > 0) {
-                            updateTextAnnotation(selectedTextAnnotation.id, { fontSize: Math.max(8, Math.min(1000, val)) });
+                            updateTextAnnotation(selectedTextAnnotation.id, { fontSize: Math.max(8, Math.min(5000, val)) });
                           }
                         }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const val = Number((e.target as HTMLInputElement).value);
-                            if (!isNaN(val) && val > 0) {
-                              updateTextAnnotation(selectedTextAnnotation.id, { fontSize: Math.max(8, Math.min(1000, val)) });
-                              (e.target as HTMLInputElement).blur();
-                            }
-                          }
-                        }}
-                        className="sidebar-input w-16 text-center"
+                        className="sidebar-input w-20 text-center"
                         min={8}
-                        max={1000}
+                        max={5000}
                       />
                     </div>
 
@@ -2103,174 +2248,174 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         className="sidebar-input w-16 text-center"
                         min={1}
                       />
-                                        {/* Wall Length & Height */}
-                    <div className="grid grid-cols-2 gap-2 mb-2">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Length ({unitLabel})</span>
-                        <input
-                          type="number"
-                          value={(() => {
-                            if (itemType === 'wall' && (selectedItem as any).nodes) {
-                              const xs = (selectedItem as any).nodes.map((n: any) => n.x);
-                              if (xs.length) return roundForDisplay(Math.max(...xs) - Math.min(...xs)) || 0;
-                            }
-                            if ((itemType === 'wall' || itemType === 'asset') && (selectedItem as any).wallSegments) {
-                              let len = 0;
-                              (selectedItem as any).wallSegments.forEach((s: any) => {
-                                len += Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y);
-                              });
-                              return roundForDisplay(len);
-                            }
-                            if (itemType === 'asset' && (selectedItem as any).wallNodes) {
-                              const xs = (selectedItem as any).wallNodes.map((n: any) => n.x);
-                              if (xs.length) return roundForDisplay(Math.max(...xs) - Math.min(...xs)) || 0;
-                            }
-                            return 0;
-                          })()}
-                          onChange={(e) => {
-                            const newStoreLen = toStoreValue(Number(e.target.value), unitSystem);
-                            if (newStoreLen <= 0) return;
+                      {/* Wall Length & Height */}
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Length ({unitLabel})</span>
+                          <input
+                            type="number"
+                            value={(() => {
+                              if (itemType === 'wall' && (selectedItem as any).nodes) {
+                                const xs = (selectedItem as any).nodes.map((n: any) => n.x);
+                                if (xs.length) return roundForDisplay(Math.max(...xs) - Math.min(...xs)) || 0;
+                              }
+                              if ((itemType === 'wall' || itemType === 'asset') && (selectedItem as any).wallSegments) {
+                                let len = 0;
+                                (selectedItem as any).wallSegments.forEach((s: any) => {
+                                  len += Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y);
+                                });
+                                return roundForDisplay(len);
+                              }
+                              if (itemType === 'asset' && (selectedItem as any).wallNodes) {
+                                const xs = (selectedItem as any).wallNodes.map((n: any) => n.x);
+                                if (xs.length) return roundForDisplay(Math.max(...xs) - Math.min(...xs)) || 0;
+                              }
+                              return 0;
+                            })()}
+                            onChange={(e) => {
+                              const newStoreLen = toStoreValue(Number(e.target.value), unitSystem);
+                              if (newStoreLen <= 0) return;
 
-                            // 1. Native Walls (nodes)
-                            if (itemType === 'wall' && (selectedItem as any).nodes) {
-                              const xs = (selectedItem as any).nodes.map((n: any) => n.x);
-                              const minX = Math.min(...xs);
-                              const maxX = Math.max(...xs);
-                              const currentLen = maxX - minX;
-                              if (currentLen === 0) return;
-                              const centerX = (minX + maxX) / 2;
-                              const scale = newStoreLen / currentLen;
-                              const updatedNodes = (selectedItem as any).nodes.map((node: any) => ({
-                                ...node,
-                                x: centerX + (node.x - centerX) * scale
-                              }));
-                              updateWall(selectedItem.id, { nodes: updatedNodes });
-                              syncToScene(selectedItem.id, { nodes: updatedNodes });
-                            }
-
-                            // 2. Asset Walls (AI generated wallNodes)
-                            else if (itemType === 'asset' && (selectedItem as any).wallNodes) {
-                              const xs = (selectedItem as any).wallNodes.map((n: any) => n.x);
-                              const minX = Math.min(...xs);
-                              const maxX = Math.max(...xs);
-                              const currentLen = maxX - minX;
-                              if (currentLen > 0) {
+                              // 1. Native Walls (nodes)
+                              if (itemType === 'wall' && (selectedItem as any).nodes) {
+                                const xs = (selectedItem as any).nodes.map((n: any) => n.x);
+                                const minX = Math.min(...xs);
+                                const maxX = Math.max(...xs);
+                                const currentLen = maxX - minX;
+                                if (currentLen === 0) return;
                                 const centerX = (minX + maxX) / 2;
                                 const scale = newStoreLen / currentLen;
-                                const updatedNodes = (selectedItem as any).wallNodes.map((node: any) => ({
+                                const updatedNodes = (selectedItem as any).nodes.map((node: any) => ({
                                   ...node,
                                   x: centerX + (node.x - centerX) * scale
                                 }));
-                                updateAsset(selectedItem.id, { wallNodes: updatedNodes } as any);
-                                updateSceneAsset(selectedItem.id, { wallNodes: updatedNodes } as any);
+                                updateWall(selectedItem.id, { nodes: updatedNodes });
+                                syncToScene(selectedItem.id, { nodes: updatedNodes });
                               }
-                            }
 
-                            // 3. Manual Wall Segments (Perimeter Scale)
-                            if ((selectedItem as any).wallSegments) {
-                              const segments = (selectedItem as any).wallSegments;
-                              let currentLen = 0;
-                              segments.forEach((s: any) => {
-                                currentLen += Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y);
-                              });
+                              // 2. Asset Walls (AI generated wallNodes)
+                              else if (itemType === 'asset' && (selectedItem as any).wallNodes) {
+                                const xs = (selectedItem as any).wallNodes.map((n: any) => n.x);
+                                const minX = Math.min(...xs);
+                                const maxX = Math.max(...xs);
+                                const currentLen = maxX - minX;
+                                if (currentLen > 0) {
+                                  const centerX = (minX + maxX) / 2;
+                                  const scale = newStoreLen / currentLen;
+                                  const updatedNodes = (selectedItem as any).wallNodes.map((node: any) => ({
+                                    ...node,
+                                    x: centerX + (node.x - centerX) * scale
+                                  }));
+                                  updateAsset(selectedItem.id, { wallNodes: updatedNodes } as any);
+                                  updateSceneAsset(selectedItem.id, { wallNodes: updatedNodes } as any);
+                                }
+                              }
 
-                              if (currentLen > 0) {
-                                const scale = newStoreLen / currentLen;
-                                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                              // 3. Manual Wall Segments (Perimeter Scale)
+                              if ((selectedItem as any).wallSegments) {
+                                const segments = (selectedItem as any).wallSegments;
+                                let currentLen = 0;
                                 segments.forEach((s: any) => {
-                                  minX = Math.min(minX, s.start.x, s.end.x);
-                                  maxX = Math.max(maxX, s.start.x, s.end.x);
+                                  currentLen += Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y);
+                                });
+
+                                if (currentLen > 0) {
+                                  const scale = newStoreLen / currentLen;
+                                  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                                  segments.forEach((s: any) => {
+                                    minX = Math.min(minX, s.start.x, s.end.x);
+                                    maxX = Math.max(maxX, s.start.x, s.end.x);
+                                    minY = Math.min(minY, s.start.y, s.end.y);
+                                    maxY = Math.max(maxY, s.start.y, s.end.y);
+                                  });
+                                  const cx = (minX + maxX) / 2;
+                                  const cy = (minY + maxY) / 2;
+
+                                  const updatedSegments = segments.map((s: any) => ({
+                                    ...s,
+                                    start: {
+                                      x: cx + (s.start.x - cx) * scale,
+                                      y: cy + (s.start.y - cy) * scale
+                                    },
+                                    end: {
+                                      x: cx + (s.end.x - cx) * scale,
+                                      y: cy + (s.end.y - cy) * scale
+                                    }
+                                  }));
+
+                                  updateAsset(selectedItem.id, { wallSegments: updatedSegments } as any);
+                                  updateSceneAsset(selectedItem.id, { wallSegments: updatedSegments } as any);
+                                }
+                              }
+                            }}
+                            className="sidebar-input w-full text-center font-medium"
+                          />
+                        </div>
+
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Height ({unitLabel})</span>
+                          <input
+                            type="number"
+                            value={(() => {
+                              if ((selectedItem as any).wallSegments) {
+                                const s = (selectedItem as any).wallSegments;
+                                let minY = Infinity, maxY = -Infinity;
+                                s.forEach((seg: any) => {
+                                  minY = Math.min(minY, seg.start.y, seg.end.y);
+                                  maxY = Math.max(maxY, seg.start.y, seg.end.y);
+                                });
+                                if (minY !== Infinity && maxY !== -Infinity) return roundForDisplay(maxY - minY);
+                              }
+                              return roundForDisplay((selectedItem as any).height || 3000);
+                            })()}
+                            onChange={(e) => {
+                              const val = toStoreValue(Number(e.target.value), unitSystem);
+                              if (val <= 0) return;
+
+                              // Handle manual wall segments (Scale Y)
+                              if ((selectedItem as any).wallSegments) {
+                                const segments = (selectedItem as any).wallSegments;
+                                let minY = Infinity, maxY = -Infinity;
+                                segments.forEach((s: any) => {
                                   minY = Math.min(minY, s.start.y, s.end.y);
                                   maxY = Math.max(maxY, s.start.y, s.end.y);
                                 });
-                                const cx = (minX + maxX) / 2;
-                                const cy = (minY + maxY) / 2;
-
-                                const updatedSegments = segments.map((s: any) => ({
-                                  ...s,
-                                  start: {
-                                    x: cx + (s.start.x - cx) * scale,
-                                    y: cy + (s.start.y - cy) * scale
-                                  },
-                                  end: {
-                                    x: cx + (s.end.x - cx) * scale,
-                                    y: cy + (s.end.y - cy) * scale
-                                  }
-                                }));
-
-                                updateAsset(selectedItem.id, { wallSegments: updatedSegments } as any);
-                                updateSceneAsset(selectedItem.id, { wallSegments: updatedSegments } as any);
+                                const currentH = maxY - minY;
+                                if (currentH > 0) {
+                                  const scale = val / currentH;
+                                  const cy = (minY + maxY) / 2;
+                                  const updatedSegments = segments.map((s: any) => ({
+                                    ...s,
+                                    start: {
+                                      ...s.start,
+                                      y: cy + (s.start.y - cy) * scale
+                                    },
+                                    end: {
+                                      ...s.end,
+                                      y: cy + (s.end.y - cy) * scale
+                                    }
+                                  }));
+                                  updateAsset(selectedItem.id, { wallSegments: updatedSegments } as any);
+                                  updateSceneAsset(selectedItem.id, { wallSegments: updatedSegments } as any);
+                                  return;
+                                }
                               }
-                            }
-                          }}
-                          className="sidebar-input w-full text-center font-medium"
-                        />
-                      </div>
 
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Height ({unitLabel})</span>
-                        <input
-                          type="number"
-                          value={(() => {
-                            if ((selectedItem as any).wallSegments) {
-                              const s = (selectedItem as any).wallSegments;
-                              let minY = Infinity, maxY = -Infinity;
-                              s.forEach((seg: any) => {
-                                minY = Math.min(minY, seg.start.y, seg.end.y);
-                                maxY = Math.max(maxY, seg.start.y, seg.end.y);
-                              });
-                              if (minY !== Infinity && maxY !== -Infinity) return roundForDisplay(maxY - minY);
-                            }
-                            return roundForDisplay((selectedItem as any).height || 3000);
-                          })()}
-                          onChange={(e) => {
-                            const val = toStoreValue(Number(e.target.value), unitSystem);
-                            if (val <= 0) return;
-
-                            // Handle manual wall segments (Scale Y)
-                            if ((selectedItem as any).wallSegments) {
-                              const segments = (selectedItem as any).wallSegments;
-                              let minY = Infinity, maxY = -Infinity;
-                              segments.forEach((s: any) => {
-                                minY = Math.min(minY, s.start.y, s.end.y);
-                                maxY = Math.max(maxY, s.start.y, s.end.y);
-                              });
-                              const currentH = maxY - minY;
-                              if (currentH > 0) {
-                                const scale = val / currentH;
-                                const cy = (minY + maxY) / 2;
-                                const updatedSegments = segments.map((s: any) => ({
-                                  ...s,
-                                  start: {
-                                    ...s.start,
-                                    y: cy + (s.start.y - cy) * scale
-                                  },
-                                  end: {
-                                    ...s.end,
-                                    y: cy + (s.end.y - cy) * scale
-                                  }
-                                }));
-                                updateAsset(selectedItem.id, { wallSegments: updatedSegments } as any);
-                                updateSceneAsset(selectedItem.id, { wallSegments: updatedSegments } as any);
-                                return;
+                              if (itemType === 'wall' && !(selectedItem as any).wallSegments) {
+                                updateWall(selectedItem.id, { height: val } as any);
+                                syncToScene(selectedItem.id, { height: val });
                               }
-                            }
-
-                            if (itemType === 'wall' && !(selectedItem as any).wallSegments) {
-                              updateWall(selectedItem.id, { height: val } as any);
-                              syncToScene(selectedItem.id, { height: val });
-                            }
-                            else {
-                              updateAsset(selectedItem.id, { height: val });
-                              updateSceneAsset(selectedItem.id, { height: val });
-                            }
-                          }}
-                          className="sidebar-input w-full text-center font-medium"
-                        />
+                              else {
+                                updateAsset(selectedItem.id, { height: val });
+                                updateSceneAsset(selectedItem.id, { height: val });
+                              }
+                            }}
+                            className="sidebar-input w-full text-center font-medium"
+                          />
+                        </div>
                       </div>
                     </div>
-                          </div>
-  </div>
+                  </div>
                 )}
 
 
@@ -2282,6 +2427,74 @@ export default function PropertiesSidebar(): React.JSX.Element {
           </div>
         )}
       </div>
+
+      {/* Table Numbering Section (Global Tool for Workspace) */}
+      {assets.some(a => (a.type || "").toLowerCase().includes('table')) && (
+        <div className="mx-4 mb-6">
+          <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-4">
+            Workspace Numbering
+          </div>
+
+          <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200/50">
+            <span className="text-xs font-medium text-slate-700">Enable Table Numbers</span>
+            <button
+              onClick={() => {
+                const nextState = !isNumberingEnabled;
+                setIsNumberingEnabled(nextState);
+
+                // Identify all table-like assets and shapes
+                const tableAssets = assets.filter(a => (a.type || "").toLowerCase().includes('table'));
+                const tableShapes = shapes.filter(s => (s.name || "").toLowerCase().includes('table'));
+
+                const allTables = [
+                  ...tableAssets.map(a => ({ id: a.id, type: 'asset' as const, x: a.x, y: a.y })),
+                  ...tableShapes.map(s => ({ id: s.id, type: 'shape' as const, x: s.x, y: s.y }))
+                ];
+
+                if (nextState) {
+                  allTables.sort((a, b) => {
+                    const dy = a.y - b.y;
+                    if (Math.abs(dy) < 200) return a.x - b.x;
+                    return dy;
+                  });
+                }
+
+                const updates = allTables.map((t, idx) => ({
+                  id: t.id,
+                  type: t.type,
+                  updates: { tableName: nextState ? String(startingNumber + idx) : undefined }
+                }));
+
+                if (updates.length > 0) {
+                  batchUpdateItems(updates);
+                  toast.success(nextState ? `Numbered ${updates.length} tables` : "Table numbers cleared");
+                }
+              }}
+              className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isNumberingEnabled ? 'bg-slate-900' : 'bg-slate-300'
+                }`}
+            >
+              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isNumberingEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-slate-600">Starting At</span>
+            <input
+              type="number"
+              value={startingNumber}
+              onChange={(e) => setStartingNumber(Math.max(1, parseInt(e.target.value) || 1))}
+              className="sidebar-input w-20 text-center"
+              min={1}
+            />
+          </div>
+
+          <p className="text-[9px] text-slate-400 mt-2 leading-tight">
+            Apply sequence based on spatial placement (top-left to bottom-right).
+          </p>
+        </div>
+      )}
+
       <ExportPanel />
     </aside >
   );

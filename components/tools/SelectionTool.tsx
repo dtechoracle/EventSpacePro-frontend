@@ -6,9 +6,10 @@ import { useProjectStore, Shape, Wall, Asset, Dimension, TextAnnotation, LabelAr
 
 interface SelectionToolProps {
     isActive: boolean;
+    viewportSize: { width: number; height: number };
 }
 
-export default function SelectionTool({ isActive }: SelectionToolProps) {
+export default function SelectionTool({ isActive, viewportSize }: SelectionToolProps) {
     const { selectedIds, screenToWorld, zoom, panX, panY, activeTool } = useEditorStore();
     const { snapToGridEnabled, gridSize } = useSceneStore();
     const { shapes, walls, assets, dimensions, textAnnotations, labelArrows, updateShape, updateWall, updateAsset, updateDimension, updateTextAnnotation, updateLabelArrow } = useProjectStore();
@@ -24,6 +25,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
         startY: number;
         groupBounds: { x: number, y: number, width: number, height: number, rotation: number };
     } | null>(null);
+    const [currentRotation, setCurrentRotation] = useState(0);
 
 
     // Populate selectedItems for logic below
@@ -124,20 +126,20 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
             }
         });
 
-        if (minX !== Infinity) {
+        if (minX !== Infinity && isFinite(minX) && isFinite(maxX) && isFinite(minY) && isFinite(maxY)) {
             if (selectedItems.length === 1) {
                 const item = selectedItems[0].object as any;
                 const type = selectedItems[0].type;
                 if (type === 'asset') {
-                    groupBounds = { x: item.x, y: item.y, width: item.width * (item.scale || 1), height: item.height * (item.scale || 1), rotation: item.rotation || 0 };
+                    groupBounds = { x: item.x || 0, y: item.y || 0, width: (item.width || 0) * (item.scale || 1), height: (item.height || 0) * (item.scale || 1), rotation: item.rotation || 0 };
                 } else if (type === 'shape') {
-                    groupBounds = { x: item.x, y: item.y, width: item.width, height: item.height, rotation: item.rotation || 0 };
+                    groupBounds = { x: item.x || 0, y: item.y || 0, width: item.width || 0, height: item.height || 0, rotation: item.rotation || 0 };
                 } else if (type === 'textAnnotation') {
-                    const width = (item.text.length || 1) * (item.fontSize || 14) * 0.6;
+                    const width = (item.text?.length || 1) * (item.fontSize || 14) * 0.6;
                     const height = (item.fontSize || 14) * 1.2;
-                    groupBounds = { x: item.x, y: item.y, width, height, rotation: item.rotation || 0 };
+                    groupBounds = { x: item.x || 0, y: item.y || 0, width, height, rotation: item.rotation || 0 };
                 } else {
-                    groupBounds = { x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY, rotation: singleRotation };
+                    groupBounds = { x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY, rotation: isFinite(singleRotation) ? singleRotation : 0 };
                 }
             } else {
                 groupBounds = { x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY, rotation: 0 };
@@ -157,6 +159,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
             startY: worldPos.y,
             groupBounds: { ...groupBounds }
         });
+        setCurrentRotation(0);
     }, [selectedIds, screenToWorld, groupBounds, selectedItems]);
 
 
@@ -230,6 +233,27 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
             return;
         }
 
+        // Vertex dragging support for polyline shapes
+        if (dragHandle.startsWith('vertex-')) {
+            const index = parseInt(dragHandle.split('-')[1]);
+            const batchUpdates: any[] = [];
+            initialState.items.forEach(item => {
+                const it = item.object as any;
+                if (item.type === 'shape' && it.points) {
+                    const newPoints = [...it.points];
+                    // Polyline points are local to (x, y); we apply dx/dy in rotated local space
+                    // But simplified here to global dx/dy since rotation isn't usually applied to polylines in this app's logic
+                    newPoints[index] = { 
+                        x: it.points[index].x + dx, 
+                        y: it.points[index].y + dy 
+                    };
+                    batchUpdates.push({ id: item.id, type: 'shape', updates: { points: newPoints } });
+                }
+            });
+            if (batchUpdates.length > 0) store.batchUpdateItems(batchUpdates, true);
+            return;
+        }
+
         // 2. Unified Rotation Logic
         if (dragHandle === 'rotate') {
             const centerX = initialState.groupBounds.x;
@@ -238,6 +262,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
             const startAngleRaw = Math.atan2(initialState.startY - centerY, initialState.startX - centerX);
             const deltaRad = angle - startAngleRaw;
             const deltaDeg = deltaRad * (180 / Math.PI);
+            setCurrentRotation(deltaDeg);
 
             const cosR = Math.cos(deltaRad);
             const sinR = Math.sin(deltaRad);
@@ -362,6 +387,7 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
     const handleMouseUp = useCallback(() => {
         setDragHandle(null);
         setInitialState(null);
+        setCurrentRotation(0);
 
         useSceneStore.getState().setSnapGuides([]);
     }, []);
@@ -379,22 +405,36 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
 
     if (!isActive || selectedItems.length === 0) return null;
 
-    const { x, y, width, height, rotation } = groupBounds;
+    // Only use initial state for Rotation to keep pivot stable.
+    // Movement and Resizing should use the live recalculated groupBounds from the store.
+    const activeGroupBounds = (dragHandle === 'rotate' && initialState) ? initialState.groupBounds : groupBounds;
+    const { x, y, width, height, rotation } = activeGroupBounds;
+    const effectiveRotation = (dragHandle === 'rotate') ? (rotation + currentRotation) : rotation;
+
     const halfW = width / 2;
     const halfH = height / 2;
-    const handleSizePx = 14;
-    const rotateHandleDistancePx = 30;
-    const rotateHandleRadiusPx = handleSizePx / 2;
-
+    
     const worldToScreenPoint = (wx: number, wy: number) => ({ x: wx * zoom + panX, y: wy * zoom + panY });
-    const cosR = Math.cos((rotation * Math.PI) / 180);
-    const sinR = Math.sin((rotation * Math.PI) / 180);
+    const cosR = Math.cos((effectiveRotation * Math.PI) / 180);
+    const sinR = Math.sin((effectiveRotation * Math.PI) / 180);
     const rotatePoint = (px: number, py: number) => ({ x: x + px * cosR - py * sinR, y: y + px * sinR + py * cosR });
 
-    const boxTopLeft = worldToScreenPoint(x - halfW * cosR + halfH * sinR, y - halfW * sinR - halfH * cosR);
-    const boxTopRight = worldToScreenPoint(x + halfW * cosR + halfH * sinR, y + halfW * sinR - halfH * cosR);
-    const boxBottomLeft = worldToScreenPoint(x - halfW * cosR - halfH * sinR, y - halfW * sinR + halfH * cosR);
-    const boxBottomRight = worldToScreenPoint(x + halfW * cosR - halfH * sinR, y + halfW * sinR + halfH * cosR);
+    const clampX = (val: number) => Math.max(-2000, Math.min((viewportSize?.width || 0) + 2000, val || 0));
+    const clampY = (val: number) => Math.max(-2000, Math.min((viewportSize?.height || 0) + 2000, val || 0));
+    
+    const p1w = rotatePoint(-halfW, -halfH);
+    const p2w = rotatePoint(halfW, -halfH);
+    const p3w = rotatePoint(-halfW, halfH);
+    const p4w = rotatePoint(halfW, halfH);
+
+    const boxTopLeft = { x: clampX(worldToScreenPoint(p1w.x, p1w.y).x), y: clampY(worldToScreenPoint(p1w.x, p1w.y).y) };
+    const boxTopRight = { x: clampX(worldToScreenPoint(p2w.x, p2w.y).x), y: clampY(worldToScreenPoint(p2w.x, p2w.y).y) };
+    const boxBottomLeft = { x: clampX(worldToScreenPoint(p3w.x, p3w.y).x), y: clampY(worldToScreenPoint(p3w.x, p3w.y).y) };
+    const boxBottomRight = { x: clampX(worldToScreenPoint(p4w.x, p4w.y).x), y: clampY(worldToScreenPoint(p4w.x, p4w.y).y) };
+
+    const isTooLarge = width > 50000 || height > 50000;
+    const overlayFill = isTooLarge ? "none" : "rgba(59, 130, 246, 0.05)";
+    const overlayDash = isTooLarge ? "2 2" : "none";
 
     const isSingleStraightLine = selectedItems.length === 1 && selectedItems[0].type === 'shape' && (((selectedItems[0].object as Shape).type === 'line' || (selectedItems[0].object as Shape).type === 'arrow') && !(selectedItems[0].object as Shape).points);
     const isSingleDimension = selectedItems.length === 1 && selectedItems[0].type === 'dimension';
@@ -429,16 +469,62 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
             <>
                 <line x1={ss.x} y1={ss.y} x2={es.x} y2={es.y} stroke="#3B82F6" strokeWidth={2} vectorEffect="non-scaling-stroke" />
                 <line x1={cs.x} y1={cs.y} x2={rp.x} y2={rp.y} stroke="#3B82F6" strokeWidth={2} vectorEffect="non-scaling-stroke" />
-                <rect x={ss.x - 7} y={ss.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-ew-resize" onMouseDown={(e) => handleMouseDown(e, 'w')} />
-                <rect x={es.x - 7} y={es.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-ew-resize" onMouseDown={(e) => handleMouseDown(e, 'e')} />
+                {/* For straight lines, these handles still scale the whole item relative to center/opposite */}
+                <rect x={ss.x - 7} y={ss.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-pointer" onMouseDown={(e) => handleMouseDown(e, 'w')} />
+                <rect x={es.x - 7} y={es.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-pointer" onMouseDown={(e) => handleMouseDown(e, 'e')} />
                 <circle cx={rp.x} cy={rp.y} r={7} fill="white" stroke="#3B82F6" strokeWidth={2} className="cursor-grab" onMouseDown={(e) => handleMouseDown(e, 'rotate')} />
             </>
         );
     }
 
+    // New: If single Polyline is selected, render vertex handles
+    const isSinglePolyline = selectedItems.length === 1 && selectedItems[0].type === 'shape' && (selectedItems[0].object as Shape).points;
+    if (isSinglePolyline) {
+        const shape = selectedItems[0].object as Shape;
+        if (shape.points) {
+            return (
+                <>
+                    {/* Bounding box for moving the whole thing */}
+                    <polygon 
+                        points={`${boxTopLeft.x},${boxTopLeft.y} ${boxTopRight.x},${boxTopRight.y} ${boxBottomRight.x},${boxBottomRight.y} ${boxBottomLeft.x},${boxBottomLeft.y}`} 
+                        fill={overlayFill} 
+                        stroke="#3B82F6" 
+                        strokeWidth={isTooLarge ? 1 : 2} 
+                        strokeDasharray={overlayDash}
+                        vectorEffect="non-scaling-stroke" 
+                        onMouseDown={(e) => handleMouseDown(e, 'move')} 
+                        style={{ cursor: 'move' }}
+                    />
+                    {shape.points.map((p, i) => {
+                        const pt = worldToScreenPoint(shape.x + p.x, shape.y + p.y);
+                        return (
+                            <rect 
+                                key={i} 
+                                x={pt.x - 5} y={pt.y - 5} width={10} height={10} 
+                                fill="white" stroke="#3b82f6" strokeWidth={1.5} 
+                                className="cursor-crosshair" 
+                                onMouseDown={(e) => handleMouseDown(e, `vertex-${i}`)} 
+                            />
+                        );
+                    })}
+                </>
+            );
+        }
+    }
+
     return (
         <>
-            <polygon points={`${boxTopLeft.x},${boxTopLeft.y} ${boxTopRight.x},${boxTopRight.y} ${boxBottomRight.x},${boxBottomRight.y} ${boxBottomLeft.x},${boxBottomLeft.y}`} fill="rgba(59, 130, 246, 0.05)" stroke="#3B82F6" strokeWidth={1.5} vectorEffect="non-scaling-stroke" onMouseDown={(e) => handleMouseDown(e, 'move')} className="cursor-move" />
+            {/* Move handle (transparent overlay) */}
+            <polygon 
+                points={`${boxTopLeft.x},${boxTopLeft.y} ${boxTopRight.x},${boxTopRight.y} ${boxBottomRight.x},${boxBottomRight.y} ${boxBottomLeft.x},${boxBottomLeft.y}`} 
+                fill={overlayFill} 
+                stroke="#3B82F6" 
+                strokeWidth={isTooLarge ? 1 : 2} 
+                strokeDasharray={overlayDash}
+                vectorEffect="non-scaling-stroke" 
+                onMouseDown={(e) => handleMouseDown(e, 'move')} 
+                style={{ cursor: 'move' }}
+            />
             
             {['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w'].map(h => {
                 const px = h.includes('w') ? -halfW : (h.includes('e') ? halfW : 0);
@@ -446,17 +532,29 @@ export default function SelectionTool({ isActive }: SelectionToolProps) {
                 const pos = worldToScreenPoint(rotatePoint(px, py).x, rotatePoint(px, py).y);
                 const cursors: Record<string, string> = { nw: 'nwse', ne: 'nesw', se: 'nwse', sw: 'nesw', n: 'ns', s: 'ns', e: 'ew', w: 'ew' };
                 return (
-                    <rect key={h} x={pos.x - 7} y={pos.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className={`cursor-${cursors[h]}-resize`} onMouseDown={(e) => handleMouseDown(e, h)} transform={`rotate(${rotation} ${pos.x} ${pos.y})`} />
+                    <rect 
+                        key={h} 
+                        x={pos.x - 7} y={pos.y - 7} 
+                        width={14} height={14} 
+                        fill="white" stroke="#3b82f6" strokeWidth={2} 
+                        style={{ cursor: `${cursors[h]}-resize` }}
+                        onMouseDown={(e) => handleMouseDown(e, h)} 
+                        transform={`rotate(${effectiveRotation} ${pos.x} ${pos.y})`} 
+                    />
                 );
             })}
 
             {(() => {
-                const sp = worldToScreenPoint(rotatePoint(0, -halfH).x, rotatePoint(0, -halfH).y);
-                const ep = worldToScreenPoint(rotatePoint(0, -halfH - 30 / zoom).x, rotatePoint(0, -halfH - 30 / zoom).y);
+                const sp_raw = worldToScreenPoint(rotatePoint(0, -halfH).x, rotatePoint(0, -halfH).y);
+                const ep_raw = worldToScreenPoint(rotatePoint(0, -halfH - Math.max(0, 30 / (zoom || 1))).x, rotatePoint(0, -halfH - Math.max(0, 30 / (zoom || 1))).y);
+                
+                const sp = { x: clampX(sp_raw.x), y: clampY(sp_raw.y) };
+                const ep = { x: clampX(ep_raw.x), y: clampY(ep_raw.y) };
+                
                 return (
                     <>
                         <line x1={sp.x} y1={sp.y} x2={ep.x} y2={ep.y} stroke="#3B82F6" strokeWidth={2} vectorEffect="non-scaling-stroke" />
-                        <circle cx={ep.x} cy={ep.y} r={7} fill="white" stroke="#3B82F6" strokeWidth={2} className="cursor-grab" onMouseDown={(e) => handleMouseDown(e, 'rotate')} />
+                        <circle cx={ep.x} cy={ep.y} r={7} fill="white" stroke="#3B82F6" strokeWidth={2} style={{ cursor: 'grab' }} onMouseDown={(e) => handleMouseDown(e, 'rotate')} />
                     </>
                 );
             })()}

@@ -151,10 +151,23 @@ const AssetRendererBase = ({ asset, isSelected, isHovered, isPreview, onMouseEnt
         }
     }, [svgContent]);
 
+    // Fill resolution logic
+    const currentFill = useMemo(() => {
+        let fill = asset.fillColor || 'none';
+        const a = asset as any;
+        if (a.fillType === 'texture' || a.fillType === 'hatch') {
+            const scale = a.fillTextureScale || 4;
+            const thickness = a.fillTextureThickness || 1;
+            if (a.fillTexture) {
+                return `url(#${a.fillTexture}-scale-${scale}-thick-${thickness})`;
+            }
+        }
+        return fill;
+    }, [asset.fillColor, (asset as any).fillType, (asset as any).fillTexture, (asset as any).fillTextureScale, (asset as any).fillTextureThickness]);
+
     const processedSvg = useMemo(() => {
         if (!baseSvg) return null;
 
-        const currentFill = asset.fillColor || 'none';
         const currentStroke = asset.strokeColor || '#000000';
         const defaultStrokeWidth = isPreview ? 0.4 : 0.5;
         const currentStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : defaultStrokeWidth;
@@ -170,7 +183,7 @@ const AssetRendererBase = ({ asset, isSelected, isHovered, isPreview, onMouseEnt
 
             return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="${asset.width || 100}" height="${asset.height || 100}" x="${-(asset.width || 0) / 2}" y="${-(asset.height || 0) / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none;">`;
         });
-    }, [baseSvg, asset.fillColor, asset.strokeColor, asset.strokeWidth, asset.width, asset.height, isPreview]);
+    }, [baseSvg, asset.fillColor, asset.strokeColor, asset.strokeWidth, asset.width, asset.height, isPreview, (asset as any).fillType, (asset as any).fillTexture, (asset as any).fillTextureScale, (asset as any).fillTextureThickness]);
 
     if (asset.isExploded) return null;
     const rotation = asset.rotation || 0;
@@ -178,11 +191,12 @@ const AssetRendererBase = ({ asset, isSelected, isHovered, isPreview, onMouseEnt
     const transform = `translate(${asset.x}, ${asset.y}) rotate(${rotation}) scale(${scale})`;
 
     return (
-        <g 
-            transform={transform} 
+        <g
+            transform={transform}
             style={{ cursor: 'pointer' }}
             onMouseEnter={() => definition && onMouseEnter?.(definition.label)}
             onMouseLeave={() => onMouseLeave?.()}
+            data-id={asset.id}
         >
             {processedSvg ? (
                 <g
@@ -218,17 +232,63 @@ const AssetRendererBase = ({ asset, isSelected, isHovered, isPreview, onMouseEnt
             />
 
             {!definition && (
-                <text
-                    x={0}
-                    y={0}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize={12}
-                    fill="#374151"
-                    pointerEvents="none"
-                >
-                    {asset.type}
-                </text>
+                <g>
+                    <rect
+                        x={-(asset.width || 100) / 2}
+                        y={-(asset.height || 100) / 2}
+                        width={asset.width || 100}
+                        height={asset.height || 100}
+                        fill={currentFill}
+                        stroke={asset.strokeColor || '#000000'}
+                        strokeWidth={asset.strokeWidth || 1}
+                        style={{
+                            filter: showHighlight ? `drop-shadow(0 0 6px ${highlightColor})` : 'none'
+                        }}
+                    />
+                    <text
+                        x={0}
+                        y={0}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fontSize={12}
+                        fill="#374151"
+                        pointerEvents="none"
+                        opacity={0.5}
+                    >
+                        {asset.type}
+                    </text>
+                </g>
+            )}
+
+            {asset.tableName && (
+                <g transform={`rotate(${-rotation})`}>
+                    {/* Size-proportional high-visibility background circle */}
+                    <circle
+                        cx={0}
+                        cy={0}
+                        r={Math.max(16, (asset.width || 100) * 0.12)}
+                        fill="white"
+                        strokeWidth={Math.max(1.5, (asset.width || 100) * 0.01)}
+                        pointerEvents="none"
+                        style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
+                    />
+                    <text
+                        x={0}
+                        y={0}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fontSize={Math.max(14, (asset.width || 100) * 0.14)}
+                        fill="#000000"
+                        fontWeight="900"
+                        pointerEvents="none"
+                        style={{
+                            userSelect: 'none',
+                            fontFamily: 'Inter, sans-serif'
+                        }}
+                    >
+                        {asset.tableName}
+                    </text>
+                </g>
             )}
         </g>
     );

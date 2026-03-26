@@ -102,9 +102,11 @@ const Projects = () => {
   }, [data?.data, allProjectEvents]);
 
   const filteredProjects = useMemo(() => {
-    if (!searchQuery) return projectsWithEvents;
+    const HIDDEN_PROJECT_NAME = "Personal Drafts";
+    const baseProjects = projectsWithEvents.filter(p => p.name !== HIDDEN_PROJECT_NAME);
+    if (!searchQuery) return baseProjects;
     const query = searchQuery.toLowerCase();
-    return projectsWithEvents.filter(project =>
+    return baseProjects.filter(project =>
       project.name?.toLowerCase().includes(query)
     );
   }, [projectsWithEvents, searchQuery]);

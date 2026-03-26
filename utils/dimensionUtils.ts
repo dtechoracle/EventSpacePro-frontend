@@ -1,7 +1,7 @@
 import { Wall, Shape, Asset, Dimension } from '../store/projectStore';
 
 export const MM_TO_PX = 2; // Used for export
-export const OFFSET = 3000; // Increased architectural separation (3 Meters) for large-scale venues.
+export const OFFSET = 200; // Professional architectural separation (1.2 Meters)
 
 // Helper to transform local point to world point
 export const transformPoint = (x: number, y: number, center: { x: number, y: number }, rotation: number) => {
@@ -30,7 +30,7 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
     const w = obj.width * scale;
     const h = obj.height * scale;
     const dimensionType = (obj as any).dimensionType || 'solid';
-    const dimensionFontSize = (obj as any).dimensionFontSize || 25000;
+    const dimensionFontSize = (obj as any).dimensionFontSize || 500; // Increased to 500mm for large plans
 
     // Common world points
     const tl = { x: -w / 2, y: -h / 2 };
@@ -73,7 +73,7 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
             startPoint: pTL,
             endPoint: pTR,
             value: Math.round(w),
-            offset: OFFSET,
+            offset: -OFFSET, // Move Top edge UP (negative Y in standard rotation)
             color: '#666666',
             fontSize: dimensionFontSize,
             zIndex: 100,
@@ -87,7 +87,7 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
             startPoint: pTR,
             endPoint: pBR,
             value: Math.round(h),
-            offset: OFFSET,
+            offset: -OFFSET, // Move Right edge RIGHT (outside)
             color: '#666666',
             fontSize: dimensionFontSize,
             zIndex: 100,
@@ -113,7 +113,7 @@ export const getDimensionsForWall = (wall: Wall): Dimension[] => {
             // Wall offset should be positive to be outside
             const wallOffset = OFFSET + (wallThickness / 2);
             const dimensionType = (wall as any).dimensionType || 'solid';
-            const dimensionFontSize = (wall as any).dimensionFontSize || 12;
+            const dimensionFontSize = (wall as any).dimensionFontSize || 450; 
             const lineStyle = getLineStyleFromType(dimensionType);
 
             dims.push({
@@ -121,7 +121,7 @@ export const getDimensionsForWall = (wall: Wall): Dimension[] => {
                 startPoint: { x: n1.x, y: n1.y },
                 endPoint: { x: n2.x, y: n2.y },
                 value: Math.round(len),
-                offset: wallOffset,
+                offset: -wallOffset, // Always negative for outside
                 color: '#666666',
                 type: 'aligned',
                 fontSize: dimensionFontSize,
@@ -166,7 +166,8 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
 
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
-    ctx.lineWidth = strokeWidth * 0.5 * MM_TO_PX;
+    // Calibrated for heavy architectural drafting (3.0mm)
+    ctx.lineWidth = 3.0 * MM_TO_PX;
     ctx.lineCap = 'round';
 
     if (isRadial) {
@@ -177,7 +178,7 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
         ctx.stroke();
 
         // Arrow at edge
-        const arrowSize = 100 * MM_TO_PX;
+        const arrowSize = 500 * MM_TO_PX;
         const ex = toCanvasX(endPoint.x);
         const ey = toCanvasY(endPoint.y);
 
@@ -234,14 +235,14 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
         ctx.setLineDash([]); // Reset
 
         // Arrows
-        const arrowSize = 100 * MM_TO_PX;
+        const arrowSize = 500 * MM_TO_PX;
         renderArrow(ctx, p1x, p1y, nx, ny, px, py, arrowSize);
         renderArrow(ctx, p2x, p2y, -nx, -ny, px, py, arrowSize);
 
         // Label
         const midX = (p1x + p2x) / 2;
         const midY = (p1y + p2y) / 2;
-        const label = `${Math.round(value || length)} mm`;
+        const label = `${Math.round(value || length)}`; // Removed hardcoded "mm"
         renderTextLabel(ctx, label, midX, midY, dy, dx, fontSize * MM_TO_PX, color);
     }
 };
@@ -267,7 +268,7 @@ const renderTextLabel = (ctx: CanvasRenderingContext2D, text: string, x: number,
     const w = metrics.width + 20;
     const h = size + 10;
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.fillStyle = 'white'; // Solid white for maximum contrast
     ctx.fillRect(-w / 2, -h / 2, w, h);
 
     ctx.fillStyle = color;

@@ -19,6 +19,7 @@ export type Tool =
   | 'trim'
   | 'trim-to-object'
   | 'trim-to-blend'
+  | 'rectangular-select'
   | 'pan';
 
 export type DimensionType = 'linear' | 'aligned' | 'angular' | 'radial';

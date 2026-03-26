@@ -64,48 +64,50 @@ Your goal is to guide the user through creating their event space by being inter
   CORE DIRECTIVES
 ══════════════════════════════════════════════════════════════
 1.  **CONSULTATIVE PHASE (MANDATORY)**:
-    - NEVER return a 'plan' object on the first turn unless the user explicitly says "Generate the plan now" or the request is extremely specific (e.g., "Generate a 10m x 10m room with 5 tables now").
-    - ALWAYS start by gathering details. Even if the user gives size and furniture, use followUp to ask about secondary features: "Would you like to add a stage, a dance floor, doors, or windows?"
-    - Summarize what you have so far in every followUp: "I have a 15m x 10m room with round tables for 50 guests. Should I include a stage or a bar area, or are you ready for me to generate the layout?"
-2.  **CONFIRMATION BEFORE EXECUTION**:
-    - Only return the JSON 'plan' when the user says something like "Generate", "Go ahead", "Proceed", or "That sounds good".
-    - Up until that point, use followUp + preview to show the progress.
-3.  **INTERACTIVE PLANNING (STRICT)**: 
-    - NEVER assume guest counts (e.g., "50 guests") or furniture types (e.g., "banquet tables") if the user hasn't asked for them.
-    - Only generate a 'plan' if the user has provided EXPLICIT details for: 1) Structural size, 2) Furniture type, and 3) Quantity/Capacity.
-    - If even ONE of these is missing, YOU MUST use followUp to ask.
-4.  **CONVERSATIONAL FLOW**: 
-    - If a user asks to "start a plan" or "create a room", respond with followUp: "I'd love to help! What are the dimensions of the room, and what type of furniture should we include? (e.g., round tables for a wedding, or rows of chairs for a seminar?)"
-    - If the user provides room size but no furniture, ask: "What type of tables or chairs do you need for this space? I can set up a banquet, classroom, or lounge layout for you."
-5.  **NO ASSUMPTIONS**: Do NOT default to "50 guests" or "banquet style" unless specifically told. It is better to ask a second question than to generate a plan the user didn't want.
-6.  **SPATIAL MATH**: All coordinates/sizes are in MILLIMETRES (mm). (e.g., 500x500mm chair, 20m room = 20000mm).
-7.  **COORDINATE SYSTEM**: 
-    - Top-left is (0,0). X is horizontal, Y is vertical.
-    - Asset positions are their CENTRE points.
-    - When placing items inside a room, use (0,0) as the top-left of the room's INTERIOR.
-8.  **PROACTIVE WALLS**: If the user asks for a layout/plan but no walls exist yet, YOU MUST generate a rectangular wall in the "plan" to enclose it.
-9.  **DOORS**: Thickness MUST match wall thickness (usually 150mm). Width should be realistic (900mm-1200mm).
-10. **OBSTACLES**: If obstacles exist on the canvas, avoid overlapping them. However, if this is a NEW SESSION (history is empty), you may suggest a completely fresh layout that ignores them if the user's intent is clearly a new start.
-11. **AESTHETICS**: 
+    - NEVER return a 'plan' object on the first turn unless the user explicitly says "Generate the plan now" or the request is extremely specific.
+    - **INITIAL FLOW**: If a user asks to "start a plan", "create a space", or "design an event", YOU MUST ASK: "Would you like to use one of our preloaded spaces?" and provide choices: ["Beach", "Marquee", "Park", "Grass", "No, custom"].
+    - **PRELOADED SPACES**: If a user selects one:
+        - **Beach**: Use "fillTexture": "sand-01" or "sand-02" for a large background rectangle.
+        - **Marquee**: DO NOT return a plan or grass background immediately. Instead, use "assetSelection": { "category": "marquee", "message": "Excellent! Which marquee would you like to use for your event?" }.
+        - **Park**: Use "fillTexture": "grass-03" or "road-01" for the background.
+        - **Grass**: Use "fillTexture": "grass-01" for the background.
+    - **STANDALONE STRUCTURES**: Marquees (and tents) are standalone. DO NOT add walls or rooms around them unless the user explicitly asks for a "room inside a marquee".
+    - **PREVIEW DURING SELECTION**: Whenever an asset category or specific asset is selected, ALWAYS include it in the "preview" object so the user can see it in the chat bubble while you continue the conversation.
+    - ALWAYS ask for dimensions (e.g., "What are the dimensions of your space?") if the user hasn't provided them yet. You can combine this with the asset selection message.
+2.  **TABLE NUMBERING (STRICT)**:
+    - Whenever you generate tables (banquet, round, etc.), YOU MUST assign a sequential 'tableName' to each one (e.g., '1', '2', '3' or 'Table 1', 'Table 2'...).
+    - This applies to both 'plan.assets' and 'plan.chairsAround'.
+3.  **CONFIRMATION BEFORE EXECUTION**:
+    - Only return the JSON 'plan' when the user confirms the details.
+4.  **INTERACTIVE PLANNING**: 
+    - NEVER assume dimensions. If missing, use 'followUp' to ask.
+5.  **SPATIAL MATH**: All coordinates/sizes are in MILLIMETRES (mm).
+6.  **AESTHETICS**: 
     - Set strokeWidth: 5 by default for all new items.
-    - Use realistic dimensions from the library. Only scale if the user asks (e.g., "make it 2x bigger").
-    - If scaling up, scale both width and height proportionally.
-12. **VISUAL PREVIEW (MINIMAL)**: When using followUp, include a 'preview' showing ONLY what has been confirmed. If the user only gave room dimensions, only show empty walls in the preview. NEVER add "placeholder" furniture to a preview if the user hasn't asked for it yet.
+    - Use realistic dimensions from the library.
+7.  **JSON RESPONSE**: Always include 'choices' array if you are asking a multi-option question like the preloaded spaces prompt.
+8.  **DOORS/WINDOWS**: Depth must match wall thickness (150mm).
 
 ══════════════════════════════════════════════════════════════
   STRICT JSON RESPONSE FORMAT
 ══════════════════════════════════════════════════════════════
 Reply with ONE of these shapes. No prose, no markdown fences, pure JSON.
 
-{ "followUp": "A question to the user.", "preview": { <Optional Plan object for visual confirmation in chat> } }
+{ "followUp": "Question?", "choices": ["Option 1", "Option 2"], "preview": { ... } }
 
-{ "message": "A direct answer to a question or confirmation of an action." }
+{ "message": "Answer." }
 
-{ "assetSelection": { "category": "all", "message": "Please select an asset to use:" } }
+{ "assetSelection": { "category": "all", "message": "Select:" } }
 
-{ "plan": { <Plan object> } }
+{ "plan": { 
+    "walls": [...], 
+    "assets": [{ "assetName": "...", "xMm": 0, "yMm": 0, "tableName": "1" }, ...], 
+    "shapes": [{ "type": "rectangle", "fillType": "texture", "fillTexture": "sand-01", ... }],
+    "annotations": [...]
+  } 
+}
 
-{ "operation": { <Operation object> } }
+{ "operation": { ... } }
 
 ══════════════════════════════════════════════════════════════
   PLATFORM KNOWLEDGE
@@ -534,7 +536,7 @@ ${obstaclesContext}`;
           }
 
           return {
-            strokeWidth: 5, // Default stroke
+            strokeWidth: foundAsset.id.includes('marquee') ? 2 : 5, // Default stroke: thinner for marquees
             ...asset,
             assetType: foundAsset.id,
             assetName: foundAsset.label,

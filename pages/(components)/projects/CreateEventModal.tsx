@@ -9,6 +9,7 @@ import { apiRequest } from "@/helpers/Config";
 import toast from "react-hot-toast";
 import { MARQUEES } from "@/lib/marquees";
 import InlineSvg from "@/components/tools/InlineSvg";
+import { FaUserPlus, FaChevronDown, FaPlus } from "react-icons/fa";
 
 interface ApiError {
   message: string;
@@ -33,6 +34,8 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
   const [selectedMarquee, setSelectedMarquee] = useState<any>(null);
   const [venueImage, setVenueImage] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [collabEmail, setCollabEmail] = useState("");
+  const [collabPermission, setCollabPermission] = useState("editor");
   const router = useRouter();
   const setCanvas = useSceneStore((s) => s.setCanvas);
   const lastCanvasDataRef = useRef<any>(null);
@@ -50,15 +53,33 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
 
   // Update selectedProjectId when projects load if not already set
   useEffect(() => {
-    if (slug) {
-      setSelectedProjectId(slug as string);
-    } else {
-      // Remove auto-default to force user to select a project
-      // if (!selectedProjectId && projectsList.length > 0) {
-      //   setSelectedProjectId(projectsList[0].slug);
-      // }
-    }
-  }, [slug, projects, selectedProjectId]);
+    const initProject = async () => {
+      if (slug) {
+        setSelectedProjectId(slug as string);
+        return;
+      }
+      
+      // If no slug (dashboard mode), find or create "Personal Drafts"
+      if (projects) {
+        const list = Array.isArray(projects) ? projects : (projects as any)?.data || [];
+        const HIDDEN_PROJECT_NAME = "Personal Drafts";
+        let target = list.find((p: any) => p.name === HIDDEN_PROJECT_NAME);
+        
+        if (target) {
+          setSelectedProjectId(target.slug);
+        } else {
+          try {
+            const res = await apiRequest("/projects", "POST", { name: HIDDEN_PROJECT_NAME }, true);
+            setSelectedProjectId(res.data.slug);
+          } catch (e) {
+            console.error("Failed to create default project", e);
+          }
+        }
+      }
+    };
+    
+    initProject();
+  }, [slug, projects]);
 
   const mutation = useMutation<{ message: string; data: { _id: string } }, ApiError>({
     mutationKey: ["create-event"],
@@ -163,6 +184,20 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
     },
     onSuccess: async (response) => {
       const eventId = response.data._id;
+
+      // Send collaborator invitation if email is provided
+      if (collabEmail && collabEmail.includes("@")) {
+        try {
+          await apiRequest(`/projects/${selectedProjectId}/invites`, "POST", {
+            email: collabEmail,
+            role: collabPermission
+          }, true);
+          toast.success(`Invitation sent to ${collabEmail}`);
+        } catch (e) {
+          console.error("Failed to send collaborator invitation", e);
+          toast.error("Event created but failed to send invitation");
+        }
+      }
 
       // Handle Template or Marquee Data Injection
       if (initialTemplateData || (venueType === 'marquee' && selectedMarquee)) {
@@ -318,6 +353,18 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                     className="w-full h-14 rounded-2xl text-white text-base font-medium bg-[var(--accent)] hover:opacity-90 transition-opacity"
                   >
                     Create Event with AI
+                  </button>
+                </div>
+
+                <div className="text-center mt-2 pb-2">
+                  <button 
+                    onClick={() => {
+                      router.push('/dashboard/projects');
+                      onClose();
+                    }}
+                    className="text-xs text-gray-400 hover:text-[var(--accent)] font-medium transition-all group inline-flex items-center justify-center gap-1.5 mx-auto"
+                  >
+                    <span>Create a project instead?</span>
                   </button>
                 </div>
               </motion.div>
@@ -649,8 +696,8 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                   </h2>
                 </div>
 
-                {/* Project Selection (if no slug) */}
-                {!slug && (
+                {/* Project Selection (only if inside a specific project already or if we want to change it) */}
+                {slug && (
                   <div className="flex flex-col gap-2">
                     <label className="text-sm font-medium text-gray-700">Project</label>
                     <select
@@ -675,7 +722,42 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                   autoFocus
                 />
 
+                <div className="flex flex-col gap-3 mt-2">
+                  <h3 className="text-sm font-bold text-[#272235] px-1">Invite Collaborators (Optional)</h3>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 relative">
+                      <input
+                        type="email"
+                        placeholder="Enter collaborator's email"
+                        value={collabEmail}
+                        onChange={(e) => setCollabEmail(e.target.value)}
+                        className="w-full h-14 rounded-2xl px-6 bg-[#0000000A] text-base outline-none focus:ring-2 ring-[var(--accent)]/10 transition-all font-medium text-[#272235]"
+                      />
+                    </div>
+                    <div className="relative group">
+                      <select 
+                        value={collabPermission}
+                        onChange={(e) => setCollabPermission(e.target.value)}
+                        className="h-14 rounded-2xl pl-5 pr-10 bg-[#0000000A] text-sm outline-none border-none cursor-pointer appearance-none font-bold text-[#272235] hover:bg-[#00000014] transition-all"
+                      >
+                        <option value="viewer">Viewer</option>
+                        <option value="editor">Editor</option>
+                        <option value="owner">Owner</option>
+                      </select>
+                      <FaChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none group-hover:text-gray-600 transition-all" size={12} />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-400 px-1">Collaborators will be added to the {slug || 'current'} project</p>
+                </div>
 
+                <div className="flex justify-center -mb-2">
+                  <button 
+                    onClick={() => router.push("/dashboard/projects")}
+                    className="text-xs text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+                  >
+                    Create a new project instead?
+                  </button>
+                </div>
 
                 <button
                   onClick={() => {
@@ -685,10 +767,20 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                       handleCreateEvent();
                     }
                   }}
-                  disabled={!eventName || !selectedProjectId || (venueType === 'outdoor' && (!outdoorWidth || !outdoorDepth))}
-                  className="w-full h-14 rounded-2xl text-white text-base font-medium bg-[var(--accent)] disabled:opacity-50"
+                  disabled={!eventName || !selectedProjectId || mutation.isPending || (venueType === 'outdoor' && (!outdoorWidth || !outdoorDepth))}
+                  className="w-full h-14 rounded-2xl text-white text-base font-bold bg-[var(--accent)] disabled:bg-gray-100 disabled:text-gray-400 disabled:opacity-100 shadow-lg shadow-[var(--accent)]/20 hover:shadow-[var(--accent)]/30 transition-all flex items-center justify-center gap-2"
                 >
-                  {venueType === 'preloaded' && creationType === 'manual' ? 'Next' : 'Create Event'}
+                  {mutation.isPending ? (
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                    >
+                      <FaPlus className="text-white" />
+                    </motion.div>
+                  ) : (
+                    <FaPlus size={18} />
+                  )}
+                  <span>{mutation.isPending ? 'Creating...' : venueType === 'preloaded' && creationType === 'manual' ? 'Next' : 'Create Event'}</span>
                 </button>
               </motion.div>
             )}

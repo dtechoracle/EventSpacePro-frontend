@@ -11,6 +11,7 @@ import { useProjectStore, Asset as ProjectAsset, Shape, Wall } from "@/store/pro
 import { useEditorStore } from "@/store/editorStore";
 import PlanPreview from "./dashboard/PlanPreview";
 import { ASSET_LIBRARY } from "@/lib/assets";
+import { texturePatterns } from "@/utils/texturePatterns";
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -20,6 +21,7 @@ export interface ChatMessage {
     message: string;
     options: { id: string; name: string; category: string; path: string }[];
   };
+  choices?: string[];
   previewData?: any[]; // Array of combined assets for PlanPreview
   planData?: any;
   rawPlan?: any;
@@ -30,7 +32,13 @@ export default function AiTrigger() {
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
   const user = useUserStore((s: any) => s.user);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { 
+      role: 'assistant', 
+      content: "Hello! I'm your EventSpacePro AI assistant. I'm here to help you design the perfect event layout. What would you like to do first?",
+      choices: ["I want to create a new layout", "Help me arrange my furniture", "Show me the basics"]
+    }
+  ]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesRef = useRef<HTMLDivElement | null>(null);
 
@@ -306,13 +314,46 @@ export default function AiTrigger() {
       else if (r.includes('stool')) id = 'cocktail-stool';
       else if (r.includes('marquee')) id = '12m-x-12m-marquee'; // Default fuzzy marquee
       else if (r.includes('chair') || r.includes('seat')) id = 'normal-chair';
+      else if (r && texturePatterns.some(p => r.includes(p.id) || p.id.includes(r))) {
+          // If it matches a texture ID (or substring), use it as the id directly
+          // This ensures it uses the fallback rect renderer in AssetRenderer
+          const pattern = texturePatterns.find(p => r.includes(p.id) || p.id.includes(r));
+          id = pattern?.id || r;
+      }
 
       const def = ASSET_LIBRARY.find(a => a.id === id);
-      return { id, width: def?.width || 600, height: def?.height || 600 };
+      return { id, width: def?.width || 800, height: def?.height || 800 };
     };
 
     // Thin wrapper for just the id (backwards compat)
     const resolveType = (raw: string) => resolveAsset(raw).id;
+
+    // Helper to resolve texture IDs from fill color/string
+    const isTextureId = (id: string): boolean => {
+      return texturePatterns.some(p => p.id === id);
+    };
+
+    // Helper to resolve the correct fill properties
+    const getResolvedFill = (item: any) => {
+      let fillType = item.fillType || 'solid';
+      let fillTexture = item.fillTexture;
+      let fillColor = item.fillColor || item.fill || 'transparent';
+
+      // Detect if fillColor is actually a texture ID
+      if (isTextureId(fillColor)) {
+        fillType = 'texture';
+        fillTexture = fillColor;
+        const scale = item.fillTextureScale || 4;
+        const thickness = item.fillTextureThickness || 1;
+        fillColor = `url(#${fillTexture}-scale-${scale}-thick-${thickness})`;
+      } else if (fillType === 'texture' && fillTexture) {
+        const scale = item.fillTextureScale || 4;
+        const thickness = item.fillTextureThickness || 1;
+        fillColor = `url(#${fillTexture}-scale-${scale}-thick-${thickness})`;
+      }
+
+      return { fillType, fillTexture, fillColor, fill: fillColor };
+    };
 
     // ─── 1. Parse Room ────────────────────────────────────────────────────────
     const WALL_THICKNESS = 150;
@@ -360,23 +401,31 @@ export default function AiTrigger() {
         }
         // Otherwise, generate a bounding rectangle
         else if (wIndex === 0) {
-          const nIds = ['rn-0', 'rn-1', 'rn-2', 'rn-3'];
-          generatedWalls.push({
-            id: 'wall-room',
-            nodes: [
-              { id: nIds[0], x: wallMinX, y: wallMinY },
-              { id: nIds[1], x: wallMaxX, y: wallMinY },
-              { id: nIds[2], x: wallMaxX, y: wallMaxY },
-              { id: nIds[3], x: wallMinX, y: wallMaxY },
-            ],
-            edges: [
-              { id: 're-0', nodeA: nIds[0], nodeB: nIds[1], thickness: WALL_THICKNESS },
-              { id: 're-1', nodeA: nIds[1], nodeB: nIds[2], thickness: WALL_THICKNESS },
-              { id: 're-2', nodeA: nIds[2], nodeB: nIds[3], thickness: WALL_THICKNESS },
-              { id: 're-3', nodeA: nIds[3], nodeB: nIds[0], thickness: WALL_THICKNESS },
-            ],
-            zIndex: 0, isClosed: true
-          });
+          // Check if we already have a marquee in the plan assets - if so, skip the room walls
+          const assets = Array.isArray(plan.assets) ? plan.assets : [];
+          const hasMarquee = assets.some((a: any) => 
+            (a.assetType || a.assetName || '').toLowerCase().includes('marquee')
+          );
+          
+          if (!hasMarquee) {
+            const nIds = ['rn-0', 'rn-1', 'rn-2', 'rn-3'];
+            generatedWalls.push({
+              id: 'wall-room',
+              nodes: [
+                { id: nIds[0], x: wallMinX, y: wallMinY },
+                { id: nIds[1], x: wallMaxX, y: wallMinY },
+                { id: nIds[2], x: wallMaxX, y: wallMaxY },
+                { id: nIds[3], x: wallMinX, y: wallMaxY },
+              ],
+              edges: [
+                { id: 're-0', nodeA: nIds[0], nodeB: nIds[1], thickness: WALL_THICKNESS },
+                { id: 're-1', nodeA: nIds[1], nodeB: nIds[2], thickness: WALL_THICKNESS },
+                { id: 're-2', nodeA: nIds[2], nodeB: nIds[3], thickness: WALL_THICKNESS },
+                { id: 're-3', nodeA: nIds[3], nodeB: nIds[0], thickness: WALL_THICKNESS },
+              ],
+              zIndex: 0, isClosed: true
+            });
+          }
         }
       });
     }
@@ -447,15 +496,19 @@ export default function AiTrigger() {
         usableMaxX = sx - sw / 2 - STAGE_GAP;
       }
 
+      // Resolve correct fill color/texture logic moved to the top
+      const fillProps = getResolvedFill(a);
+
       generatedAssets.push({
+        ...a, // Keep extra props
+        ...fillProps, // Override with resolved fill
         id: `stage-${idx}`,
         type: resolveType(a.assetType || a.assetName || 'stage'),
         x: sx, y: sy,
         width: a.widthMm || sw,
         height: a.heightMm || sh,
-        strokeWidth: a.strokeWidth || 5, // AI provided or natural 5
+        strokeWidth: a.strokeWidth || 5,
         strokeColor: a.strokeColor || '#1a1a1a',
-        fillColor: a.fillColor || 'transparent',   // No fill by default per user request
         scale: 1, zIndex: 3
       });
 
@@ -501,6 +554,9 @@ export default function AiTrigger() {
         let safeX = rawX;
         let safeY = rawY;
 
+        // Resolve correct fill color/texture
+        const fillProps = getResolvedFill(a);
+
         // Don't clamp doors/windows strictly inside, they belong on the wall edge or slightly intersecting!
         const isDoorWindow = rawType.includes('door') || rawType.includes('window');
         if (!isDoorWindow) {
@@ -510,6 +566,8 @@ export default function AiTrigger() {
         }
 
         generatedAssets.push({
+          ...a, // Keep extra props
+          ...fillProps, // Override with resolved fill
           id: `ai-explicit-asset-${idx}`,
           type: resolved.id,
           x: safeX,
@@ -518,22 +576,11 @@ export default function AiTrigger() {
           height: h,
           rotation: a.rotation || 0,
           strokeWidth: a.strokeWidth || 5, // Respect AI request
-          fillColor: a.fillColor || 'transparent', // No fill by default
+          tableName: a.tableName || a.name || a.label, // NEW: Table Numbering
           scale: 1,
           zIndex: rawType.includes('rug') || rawType.includes('carpet') ? 2 : 5
         });
 
-        const name = a.tableName || a.name || a.label;
-        if (name) {
-          generatedTextAnnotations.push({
-            id: `label-ai-explicit-${idx}`,
-            text: name,
-            x: a.xMm, y: a.yMm,
-            fontSize: 250,
-            color: '#111111', backgroundColor: '#ffffff',
-            type: 'text', zIndex: 200
-          });
-        }
         return; // Skip adding to grid engine
       }
 
@@ -573,13 +620,13 @@ export default function AiTrigger() {
         cx = Math.max(wallMinX + outR + margin, Math.min(wallMaxX - outR - margin, cx));
         cy = Math.max(wallMinY + outR + margin, Math.min(wallMaxY - outR - margin, cy));
 
-        // Add table
         generatedAssets.push({
           id: `ai-explicit-roundtable-${idx}`,
           type: resolved.id,
           x: cx, y: cy,
           width: tw, height: th,
           fillColor: 'transparent',
+          tableName: spec.tableName || spec.name, // NEW: Table Numbering
           scale: 1, zIndex: 5
         });
 
@@ -600,16 +647,6 @@ export default function AiTrigger() {
           });
         }
 
-        const name = spec.tableName || spec.name;
-        if (name) {
-          generatedTextAnnotations.push({
-            id: `label-ai-explicit-table-${idx}`,
-            text: name,
-            x: cx, y: cy, fontSize: 250,
-            color: '#111111', backgroundColor: '#ffffff',
-            type: 'text', zIndex: 200
-          });
-        }
         return; // Skip grid
       }
 
@@ -701,20 +738,9 @@ export default function AiTrigger() {
           strokeWidth: 5, // Natural mode default
           strokeColor: '#1a1a1a',
           fillColor: 'transparent', // No fill by default per user request
+          tableName: spec.name, // NEW: Table Numbering
           scale: 1, zIndex: 5
         });
-
-        // Label
-        if (spec.name) {
-          generatedTextAnnotations.push({
-            id: `label-table-${i}`,
-            text: spec.name,
-            x: tableCX, y: tableCY,
-            fontSize: Math.max(200, Math.round(380 * Math.min(scaleFactor, 1))),
-            color: '#111111', backgroundColor: '#ffffff',
-            type: 'text', zIndex: 200
-          });
-        }
 
         // ─── Chairs ──────────────────────────────────────────────────────────
         const cCount = spec.chairCount;
@@ -788,16 +814,20 @@ export default function AiTrigger() {
         if (typeof s.yMm === 'number') sy = wallMinY + s.yMm;
         else if (typeof s.y === 'number') sy = wallMinY + s.y;
 
+        const fillProps = getResolvedFill(s);
+
         generatedShapes.push({
+          ...s, // Preserve extra props
+          ...fillProps, // Override with resolved fill
           id: `ai-shape-${idx}`,
           type: s.type || 'rectangle',
           x: sx, y: sy,
-          width: s.widthMm ?? s.width ?? 1000,
-          height: s.heightMm ?? s.height ?? 1000,
-          fill: s.fillColor || s.fill || 'transparent',
-          stroke: s.strokeColor || s.stroke || '#000000',
-          strokeWidth: s.strokeWidth ?? 5,
-          rotation: s.rotation ?? 0,
+          width: Number(s.widthMm ?? s.width ?? 1000),
+          height: Number(s.heightMm ?? s.height ?? 1000),
+          stroke: s.stroke || s.strokeColor || '#000000',
+          strokeColor: s.stroke || s.strokeColor || '#000000',
+          strokeWidth: Number(s.strokeWidth ?? 5),
+          rotation: Number(s.rotation ?? 0),
           zIndex: 2,
         });
       });
@@ -1570,6 +1600,7 @@ export default function AiTrigger() {
   const handleSubmit = async (overridePrompt?: string) => {
     if (!inputValue.trim() && !overridePrompt) return;
     const prompt = overridePrompt || inputValue.trim();
+    setInputValue(""); // Clear immediately to prevent double-sends
     setMessages((m: any) => [...m, { role: 'user', content: prompt }]);
     setIsLoading(true);
 
@@ -1682,6 +1713,7 @@ export default function AiTrigger() {
           planData,
           rawPlan,
           previewData,
+          choices: data.choices, // FIX: Pass choices to state so buttons show
           rawAssistantMessage: JSON.stringify(data)
         }]);
       } else if (data.error) {
@@ -1693,10 +1725,16 @@ export default function AiTrigger() {
       console.error(e);
       setMessages((m: any) => [...m, { role: 'assistant', content: 'Sorry, I could not process that request.' }]);
     } finally {
-      setInputValue("");
       setIsLoading(false);
     }
   };
+
+  // Auto-submit initial greeting when modal opens and chat is empty
+  useEffect(() => {
+    if (isOpen && messages.length === 0 && !isLoading) {
+      handleSubmit("I want to create a new layout");
+    }
+  }, [isOpen, messages.length]);
 
   // Auto-scroll to bottom when messages change or modal opens
   useEffect(() => {
@@ -1760,6 +1798,15 @@ export default function AiTrigger() {
                         // 3. Clear Editor Store Selection (New Workspace)
                         const editor = useEditorStore.getState();
                         editor.clearSelection();
+
+                        // 4. Reset to initial greeting
+                        setMessages([
+                          { 
+                            role: 'assistant', 
+                            content: "Hello! I'm your EventSpacePro AI assistant. I'm here to help you design the perfect event layout. What would you like to do first?",
+                            choices: ["I want to create a new layout", "Help me arrange my furniture", "Show me the basics"]
+                          }
+                        ]);
 
                         // 4. Clear Global AI Selection Context
                         try { (window as any).__ESP_AI_SELECTED_IDS__ = undefined; } catch { }
@@ -1983,15 +2030,17 @@ export default function AiTrigger() {
                                 }}
                                 className="flex flex-col items-center p-2 rounded-md border border-gray-200 bg-white hover:border-[var(--accent)] hover:bg-blue-50 transition-all text-left"
                               >
-                                <div className="w-full h-16 bg-white rounded mb-2 overflow-hidden flex items-center justify-center p-2 border border-gray-100 shadow-sm group-hover:bg-blue-50 transition-colors">
+                                <div className="w-full h-16 bg-white rounded mb-2 overflow-hidden flex items-center justify-center p-2 border border-gray-100 shadow-sm group-hover:bg-blue-50 transition-colors relative">
+                                  {/* Contrast layer for white/transparent SVGs */}
+                                  <div className="absolute inset-0 bg-gray-50/30 pointer-events-none" />
                                   <img
-                                    src={option.path}
+                                    src={encodeURI(option.path)}
                                     alt={option.name}
-                                    className="max-w-full max-h-full object-contain"
+                                    className="max-w-full max-h-full object-contain relative z-10 filter drop-shadow-[0_0_0.5px_rgba(0,0,0,0.5)]"
                                   />
                                 </div>
-                                <span className="text-[10px] font-medium text-gray-700 line-clamp-1 w-full">{option.name}</span>
-                                <span className="text-[8px] text-gray-400 uppercase tracking-tighter w-full">{option.category}</span>
+                                <span className="text-[10px] font-bold text-slate-700 line-clamp-1 w-full">{option.name}</span>
+                                <span className="text-[8px] text-slate-400 uppercase tracking-widest w-full font-bold">{option.category}</span>
                               </button>
                             ))}
                           </div>
@@ -2011,6 +2060,29 @@ export default function AiTrigger() {
                       </span>
                     </div>
                   )}
+                  {/* Choices for the most recent assistant message */}
+                  {(() => {
+                    const lastMsg = messages[messages.length - 1];
+                    if (lastMsg && lastMsg.role === 'assistant' && lastMsg.choices && lastMsg.choices.length > 0) {
+                      return (
+                        <div className="flex flex-wrap gap-2 mt-4 ml-2">
+                           {lastMsg.choices.map((choice) => (
+                             <button
+                               key={choice}
+                               onClick={() => {
+                                 setInputValue(choice);
+                                 handleSubmit(choice);
+                               }}
+                               className="px-3 py-1.5 bg-white border border-blue-200 text-blue-600 rounded-full text-xs font-medium hover:bg-blue-50 hover:border-blue-300 transition-all shadow-sm"
+                             >
+                               {choice}
+                             </button>
+                           ))}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
 
@@ -2029,10 +2101,11 @@ export default function AiTrigger() {
                   type="text"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
-                  placeholder="What do you need help with?"
-                  className="w-full pl-14 pr-16 py-4 rounded-full placeholder:opacity-100 shadow-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] text-[var(--accent)] bg-white"
+                  placeholder={isLoading ? "AI is thinking..." : "What do you need help with?"}
+                  disabled={isLoading}
+                  className={`w-full pl-14 pr-16 py-4 rounded-full placeholder:opacity-100 shadow-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] text-[var(--accent)] bg-white ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
+                    if (e.key === 'Enter' && !isLoading) {
                       handleSubmit();
                     }
                   }}
@@ -2041,7 +2114,8 @@ export default function AiTrigger() {
                 {inputValue ? (
                   <button
                     onClick={() => handleSubmit()}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-[var(--accent)] text-white rounded-full p-2 hover:bg-[var(--accent)] transition"
+                    disabled={isLoading}
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 bg-[var(--accent)] text-white rounded-full p-2 hover:bg-[var(--accent)] transition ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <FaArrowUp className="w-3 h-3" />
                   </button>

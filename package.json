@@ -28,6 +28,10 @@
     "recharts": "^3.2.0",
     "socket.io-client": "^4.8.1",
     "three": "^0.181.0",
+    "y-protocols": "^1.0.7",
+    "y-webrtc": "^10.3.0",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.30",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

@@ -8,7 +8,7 @@ import { useProjectStore } from '@/store/projectStore';
  * Optimized for performance by using appropriate tiling and cache-friendly definitions.
  */
 export default function TexturePatternDefs() {
-    const { shapes, walls } = useProjectStore();
+    const { shapes, walls, assets } = useProjectStore();
 
     // Identify all unique scales used for each pattern ID in the scene
     const usedScales = useMemo(() => {
@@ -37,6 +37,14 @@ export default function TexturePatternDefs() {
             }
         });
 
+        // Check assets
+        assets.forEach(asset => {
+            const a = asset as any;
+            if ((a.fillType === 'texture' || a.fillType === 'hatch') && a.fillTexture) {
+                addParams(a.fillTexture, a.fillTextureScale, a.fillTextureThickness);
+            }
+        });
+
         // Check walls
         walls.forEach(wall => {
             if ((wall.fillType === 'texture' || wall.fillType === 'hatch') && wall.fillTexture) {
@@ -48,7 +56,7 @@ export default function TexturePatternDefs() {
         texturePatterns.forEach(p => addParams(p.id, 1, 1));
 
         return scales;
-    }, [shapes, walls]);
+    }, [shapes, walls, assets]);
 
     // Generate pattern variants
     const patternVariants = useMemo(() => {

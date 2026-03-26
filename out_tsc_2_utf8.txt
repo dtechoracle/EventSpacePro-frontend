@@ -1,0 +1,8 @@
+﻿components/renderers/DimensionRenderer.tsx(252,21): error TS2367: This comparison appears to be unintentional because the types '"inbetween" | "above"' and '"below"' have no overlap.
+components/Workspace2D.tsx(1023,54): error TS2367: This comparison appears to be unintentional because the types 'Tool' and '"rectangular-select"' have no overlap.
+components/Workspace2D.tsx(3207,45): error TS2367: This comparison appears to be unintentional because the types 'Tool' and '"rectangular-select"' have no overlap.
+pages/(components)/editor/ExportPanel.tsx(181,109): error TS2345: Argument of type '{ eventName: string; logo: null; panelPosition: "right"; panelColor: string; }' is not assignable to parameter of type '(ProfessionalDetails & { client?: string | undefined; date?: string | undefined; }) | (() => ProfessionalDetails & { client?: string | undefined; date?: string | undefined; })'.
+  Type '{ eventName: string; logo: null; panelPosition: "right"; panelColor: string; }' is not assignable to type 'ProfessionalDetails & { client?: string | undefined; date?: string | undefined; }'.
+    Type '{ eventName: string; logo: null; panelPosition: "right"; panelColor: string; }' is missing the following properties from type 'ProfessionalDetails': venue, sittingCode, guestAllocation
+pages/(components)/editor/ExportPanel.tsx(524,80): error TS2304: Cannot find name 'logoAreaHeight'.
+pages/(components)/editor/PropertiesSidebar.tsx(241,17): error TS7006: Parameter 'c' implicitly has an 'any' type.

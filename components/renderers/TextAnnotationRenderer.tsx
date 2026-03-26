@@ -22,7 +22,7 @@ export default function TextAnnotationRenderer({ annotation, zoom }: TextAnnotat
     const bgY = -bgHeight / 2;
 
     return (
-        <g transform={`translate(${annotation.x}, ${annotation.y}) rotate(${rotation})`}>
+        <g transform={`translate(${annotation.x}, ${annotation.y}) rotate(${rotation})`} data-id={annotation.id}>
             {annotation.backgroundColor && annotation.backgroundColor !== 'transparent' && (
                 <rect
                     x={bgX}

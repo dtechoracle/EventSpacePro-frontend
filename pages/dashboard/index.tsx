@@ -9,6 +9,7 @@ import { useRouter } from "next/router";
 import { motion } from "framer-motion";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
+import QuickCreateEventModal from "@/pages/(components)/projects/QuickCreateEventModal";
 import CreateProjectModal from "@/pages/(components)/projects/CreateProjectModal";
 import EventCard from "@/components/dashboard/EventCard"; // Switch to EventCard
 import { TEMPLATES } from "@/lib/templates";
@@ -55,7 +56,8 @@ const Dashboard = () => {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateEventModal, setShowCreateEventModal] = useState(false);
-  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false); // Added for New Project button
+  const [showQuickCreateModal, setShowQuickCreateModal] = useState(false);
+  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
 
   useEffect(() => {
@@ -158,9 +160,11 @@ const Dashboard = () => {
 
   // Filter projects by search query
   const filteredProjects = useMemo(() => {
-    if (!searchQuery) return projectsWithEvents;
+    const HIDDEN_PROJECT_NAME = "Personal Drafts";
+    const baseProjects = projectsWithEvents.filter(p => p.name !== HIDDEN_PROJECT_NAME);
+    if (!searchQuery) return baseProjects;
     const query = searchQuery.toLowerCase();
-    return projectsWithEvents.filter(project =>
+    return baseProjects.filter(project =>
       project.name?.toLowerCase().includes(query)
     );
   }, [projectsWithEvents, searchQuery]);
@@ -213,21 +217,15 @@ const Dashboard = () => {
                   placeholder="Search projects..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent w-64 bg-white/80"
+                  className="pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent w-64 bg-white/80"
                 />
               </div>
-              <select className="px-4 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--accent)] bg-white/80">
-                <option>Last modified ↓</option>
-                <option>Last modified ↑</option>
-                <option>Name A-Z</option>
-                <option>Name Z-A</option>
-              </select>
               <button
-                onClick={() => setShowCreateProjectModal(true)}
-                className="px-5 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-xl hover:opacity-90 flex items-center gap-2 shadow-md transition-opacity"
+                onClick={() => setShowQuickCreateModal(true)}
+                className="px-5 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-md hover:opacity-90 flex items-center gap-2 transition-opacity"
               >
                 <BsStars className="w-4 h-4" />
-                <span>New Project</span>
+                <span>New Event</span>
               </button>
             </div>
           </div>
@@ -235,6 +233,9 @@ const Dashboard = () => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-8 pb-32">
+          {showQuickCreateModal && (
+            <QuickCreateEventModal onClose={() => setShowQuickCreateModal(false)} />
+          )}
           {showCreateEventModal && (
             <CreateEventModal onClose={() => setShowCreateEventModal(false)} />
           )}
@@ -250,7 +251,7 @@ const Dashboard = () => {
 
           {/* Recent Events Section */}
           <section className="mb-16">
-            {!isLoading && (!data?.data || data.data.length === 0) && !searchQuery ? (
+            {!isLoading && (filteredProjects.length === 0) && !searchQuery ? (
               <div className="flex flex-col items-center justify-center h-full max-h-[60vh] text-center space-y-6 animate-in fade-in zoom-in duration-500">
                 <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mb-4 shadow-sm">
                   <svg className="w-10 h-10 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">

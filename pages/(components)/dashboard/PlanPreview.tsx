@@ -133,32 +133,29 @@ export default function PlanPreview({
         {/* Texture Library */}
         {texturePatterns.map(p => {
           // Find all unique scale/thickness combos used for THIS pattern in THIS preview
-          const usages = new Set<{ s: number, t: number }>();
+          const usages = new Set<string>();
           allItems.forEach((item: any) => {
             if (item && (item.fillType === 'texture' || item.fillType === 'hatch') && item.fillTexture === p.id) {
-              usages.add({ s: item.fillTextureScale || 4, t: item.fillTextureThickness || 1 });
+              usages.add(`${item.fillTextureScale || 4}-${item.fillTextureThickness || 1}`);
             }
           });
           // Also add default 1,1 for safety
-          usages.add({ s: 1, t: 1 });
-          // Deduplicate
-          const uniqueUsages = Array.from(usages).filter((v, i, a) => 
-            a.findIndex(t => t.s === v.s && t.t === v.t) === i
-          );
+          usages.add('1-1');
 
-          return uniqueUsages.map(usage => {
-            const scaledId = `${p.id}-scale-${usage.s}-thick-${usage.t}`;
+          return Array.from(usages).map(usageStr => {
+            const [s, t] = usageStr.split('-').map(Number);
+            const scaledId = `${p.id}-scale-${s}-thick-${t}`;
             if (p.isImage && p.path) {
               const size = p.tileSize || 1024;
               return (
-                <pattern key={scaledId} id={scaledId} patternUnits="userSpaceOnUse" width={p.tileSize || 1024} height={p.tileSize || 1024} patternTransform={`scale(${usage.s})`}>
+                <pattern key={scaledId} id={scaledId} patternUnits="userSpaceOnUse" width={p.tileSize || 1024} height={p.tileSize || 1024} patternTransform={`scale(${s})`}>
                   <image href={p.path} width={p.tileSize || 1024} height={p.tileSize || 1024} preserveAspectRatio="xMidYMid slice" />
                 </pattern>
               );
             } else if (p.svg) {
               // Same logic as TexturePatternDefs.tsx but simplified
               let svgStr = p.svg.replace(/id="[^"]*"/, `id="${scaledId}"`);
-              svgStr = svgStr.replace('<pattern', `<pattern patternTransform="scale(${usage.s})"`);
+              svgStr = svgStr.replace('<pattern', `<pattern patternTransform="scale(${s})"`);
               return <g key={scaledId} dangerouslySetInnerHTML={{ __html: svgStr }} />;
             }
             return null;
@@ -285,7 +282,7 @@ export default function PlanPreview({
           <foreignObject x={-w / 2} y={-h / 2} width={w} height={h}>
             <InlineSvg
               src={def.path}
-              fill={asset.fillColor}
+              fill={getFill(asset)}
               stroke={asset.strokeColor}
               strokeWidth={asset.strokeWidth}
               category={def.category}
@@ -300,7 +297,7 @@ export default function PlanPreview({
     const w = (asset.width ?? defShape?.width ?? 500) * (asset.scale || 1);
     const h = (asset.height ?? defShape?.height ?? 500) * (asset.scale || 1);
     const fill = getFill(asset);
-    const stroke = asset.strokeColor || '#000000';
+    const stroke = (asset as any).stroke || asset.strokeColor || '#000000';
     const strokeWidth = Math.max(1, (asset.strokeWidth || 1) * (asset.scale || 1));
 
     if (asset.type === 'circle' || asset.type === 'ellipse' || asset.type === 'round-table') {
@@ -319,7 +316,7 @@ export default function PlanPreview({
       );
     }
 
-    if (asset.type === 'rect' || asset.type === 'square' || asset.type?.includes('rectangular') || !asset.type) {
+    if (asset.type === 'rect' || asset.type === 'square' || asset.type?.includes('rectangular') || !asset.type || (asset as any).fillType === 'texture') {
       return (
         <rect
           key={asset.id}
@@ -412,6 +409,31 @@ export default function PlanPreview({
 
     if (asset.type === 'text' || asset.text !== undefined) {
       return renderText(asset);
+    }
+
+    // Add tableName (numbering) to preview if present
+    if ((asset as any).tableName) {
+      return (
+        <g key={`${asset.id}-labeled`}>
+          {renderAsset({ ...asset, tableName: undefined } as any)}
+          <text
+            x={asset.x}
+            y={asset.y}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={Math.max(12, 16 / (asset.scale || 1))}
+            fill="#111827"
+            fontWeight="bold"
+            pointerEvents="none"
+            style={{
+              textShadow: '0 0 4px white, 0 0 2px white',
+              userSelect: 'none'
+            }}
+          >
+            {(asset as any).tableName}
+          </text>
+        </g>
+      );
     }
 
     return null;

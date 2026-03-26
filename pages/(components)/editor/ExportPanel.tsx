@@ -1,1548 +1,957 @@
 "use client";
 
-import React, { useState, useRef, useMemo } from "react";
-import { Download, Upload, Plus, X, Minus } from "lucide-react";
-import { useSceneStore, AssetInstance } from "@/store/sceneStore";
+import React, { useState, useMemo, useEffect } from "react";
+import { FaDownload, FaExpand, FaTimes, FaPlus, FaUserCircle, FaCheckCircle, FaExclamationCircle } from "react-icons/fa";
+import { Download, Plus, X, Upload } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { useEditorStore } from "@/store/editorStore";
-import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas";
-import PlanPreview from "../dashboard/PlanPreview";
-import toast from "react-hot-toast";
+import { useSceneStore, AssetInstance } from "@/store/sceneStore";
 import { ASSET_LIBRARY } from "@/lib/assets";
-import { getDimensionsForObject, getDimensionsForWall, renderDimensionToCanvas } from "@/utils/dimensionUtils";
+import { PAPER_SIZES, PaperSize } from "@/lib/paperSizes";
+import jsPDF from "jspdf";
+import toast from "react-hot-toast";
+import { motion, AnimatePresence } from "framer-motion";
+import { getDimensionsForWall, getDimensionsForObject, renderDimensionToCanvas } from "@/utils/dimensionUtils";
+import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/router";
+import { apiRequest } from "@/helpers/Config";
+
+type ExportFormat = "pdf" | "png" | "jpg" | "jpeg";
 
 const svgCache: Record<string, string> = {};
+const typeIconCache: Record<string, HTMLImageElement> = {};
 
+const EXPORT_DPI = 300; 
+
+interface ExportOption {
+  id: string;
+  paperSize: PaperSize;
+  format: ExportFormat;
+  exportSelection: boolean;
+  isProfessional: boolean;
+}
+
+interface ProfessionalDetails {
+  eventName: string;
+  venue: string;
+  client?: string;
+  date?: string;
+  sittingCode: string;
+  guestAllocation: string;
+  logo: string | null;
+  panelPosition: 'left' | 'right';
+  panelColor?: string;
+}
+
+/**
+ * Robustly loads SVGs for export, applying real-time color/stroke overrides
+ */
 const loadSvgAssets = async (assets: AssetInstance[]) => {
   const loadedImages = new Map<string, HTMLImageElement>();
-
+  
   await Promise.all(assets.map(async (asset) => {
-    // Skip shapes/walls/freehand
-    const isShape = asset.type === 'circle' || asset.type === 'rect' || asset.type === 'ellipse' || asset.type === 'line' || asset.type === 'polyline';
+    const isShape = ['circle', 'rect', 'ellipse', 'line', 'polyline', 'square', 'rectangle', 'arc'].includes(asset.type);
     const isWall = asset.type === 'wall-segments';
     const isFreehand = asset.type === 'freehand';
-
     if (isShape || isWall || isFreehand) return;
 
-    // Find definition
     const definition = ASSET_LIBRARY.find(item => item.id === asset.type || item.name === asset.type);
-    if (!definition) return;
+    if (!definition) {
+      console.warn(`Definition not found for type: ${asset.type}`);
+      return;
+    }
 
     try {
       let svg = svgCache[definition.path];
       if (!svg) {
-        const res = await fetch(definition.path);
-        svg = await res.text();
-        svgCache[definition.path] = svg;
+        // Encode URI to handle spaces in filenames correctly
+        const encodedPath = encodeURI(definition.path);
+        const res = await fetch(encodedPath);
+        if (res.ok) {
+          svg = await res.text();
+          svgCache[definition.path] = svg;
+        }
       }
 
-      // Apply styles (Fill/Stroke/Color) - Matching AssetRenderer Logic
-      if (asset.fillColor) {
-        svg = svg.replace(/fill="([^"]*)"/gi, (match, value) => value === 'none' ? match : `fill="${asset.fillColor}"`);
-        svg = svg.replace(/fill='([^']*)'/gi, (match, value) => value === 'none' ? match : `fill='${asset.fillColor}'`);
-      }
-      if (asset.strokeColor) {
-        svg = svg.replace(/stroke="([^"]*)"/gi, (match, value) => value === 'none' ? match : `stroke="${asset.strokeColor}"`);
-        svg = svg.replace(/stroke='([^']*)'/gi, (match, value) => value === 'none' ? match : `stroke='${asset.strokeColor}'`);
-      }
-      if (asset.strokeWidth) {
-        svg = svg.replace(/stroke-width="([^"]*)"/gi, `stroke-width="${asset.strokeWidth}"`);
-        svg = svg.replace(/stroke-width='([^']*)'/gi, `stroke-width='${asset.strokeWidth}'`);
+      if (!svg) return;
+
+      let processedSvg = svg;
+      const fill = asset.fillColor || 'transparent';
+      const stroke = asset.strokeColor || '#000000';
+      const exportStrokeWidth = (asset.strokeWidth || 4.0) * 3.5; 
+
+      // ROBUST DOM-BASED PROCESSING (Matches AssetRenderer.tsx logic)
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(processedSvg, "image/svg+xml");
+        const svgEl = doc.querySelector("svg");
+        
+        if (svgEl) {
+          // Remove natural dimensions to let us control scaling
+          svgEl.removeAttribute("width");
+          svgEl.removeAttribute("height");
+          svgEl.setAttribute("preserveAspectRatio", "xMidYMid meet");
+          // Ensure it has a coordinate system we can reliably draw into
+          if (!svgEl.getAttribute("viewBox")) {
+             svgEl.setAttribute("width", "2000");
+             svgEl.setAttribute("height", "2000");
+          }
+
+          const allElements = Array.from(doc.querySelectorAll('*'));
+          allElements.forEach(el => {
+            const tag = el.tagName.toLowerCase();
+            if (tag === 'svg' || tag === 'style') return;
+
+            const fillAttr = el.getAttribute("fill");
+            const styleAttr = el.getAttribute("style");
+            const dAttr = el.getAttribute("d") || "";
+
+            const wasExplicitlyNone = fillAttr === 'none' || (styleAttr && /fill\s*:\s*none/i.test(styleAttr));
+            const isLineElement = tag === 'line' || tag === 'polyline';
+            const isClosed = dAttr.toLowerCase().includes('z');
+            const isOpenPath = tag === 'path' && !isClosed;
+
+            // Preserve transparency for structural lines and open paths
+            if (wasExplicitlyNone || isLineElement || isOpenPath) {
+              el.setAttribute("fill", "none");
+            } else {
+              el.setAttribute("fill", fill === 'transparent' ? 'none' : fill);
+            }
+
+            // Force high-contrast architectural strokes
+            el.setAttribute("stroke", stroke);
+            el.setAttribute("stroke-width", exportStrokeWidth.toString());
+            el.setAttribute("vector-effect", "non-scaling-stroke");
+            
+            // Cleanup internal styles that might override our baked attributes
+            if (styleAttr) {
+              const cleaned = styleAttr
+                .replace(/fill\s*:[^;]+;?/gi, "")
+                .replace(/stroke\s*:[^;]+;?/gi, "")
+                .replace(/stroke-width\s*:[^;]+;?/gi, "");
+              if (cleaned.trim()) el.setAttribute("style", cleaned);
+              else el.removeAttribute("style");
+            }
+          });
+
+          processedSvg = new XMLSerializer().serializeToString(doc);
+        }
+      } catch (err) {
+        console.error("DOM Processing failed, falling back to basic replace", err);
       }
 
-      // Inject root style (fallback & currentColor)
-      let style = "overflow: visible;";
-      if (asset.fillColor) style += ` fill: ${asset.fillColor};`;
-      if (asset.strokeColor) style += ` stroke: ${asset.strokeColor}; color: ${asset.strokeColor};`;
-
-      svg = svg.replace(/<svg([^>]*)>/, (match, attrs) => {
-        let newAttrs = attrs.replace(/\s(width|height|x|y|id)="[^"]*"/gi, '');
-        return `<svg${newAttrs} style="${style}" preserveAspectRatio="none">`;
-      });
-
-      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const blob = new Blob([processedSvg], { type: 'image/svg+xml' });
       const url = URL.createObjectURL(blob);
       const img = new Image();
-      img.src = url;
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
+      
+      const isOk = await new Promise((resolve) => {
+        const timeout = setTimeout(() => resolve(false), 5000);
+        img.onload = () => { clearTimeout(timeout); resolve(img.naturalWidth > 0 || img.width > 0); };
+        img.onerror = () => { clearTimeout(timeout); resolve(false); };
+        img.src = url; // MUST be set after onload wrapper
       });
-      loadedImages.set(asset.id, img);
+
+      if (isOk) {
+        loadedImages.set(asset.id, img);
+        if (!typeIconCache[asset.type]) typeIconCache[asset.type] = img;
+      } else {
+         console.warn(`Failed to process image for asset: ${asset.id} (${asset.type})`);
+      }
     } catch (err) {
-      console.error("Failed to load SVG for export", asset.type, err);
+      console.error(`Asset load error: ${asset.type}`, err);
     }
   }));
 
   return loadedImages;
 };
 
-
-type PaperSize = "A1" | "A2" | "A3" | "A4" | "A5";
-type ExportFormat = "pdf" | "png" | "jpeg";
-
-const PAPER_SIZES: Record<PaperSize, { width: number; height: number; label: string }> = {
-  A1: { width: 594, height: 841, label: "A1 (594 × 841 mm)" },
-  A2: { width: 420, height: 594, label: "A2 (420 × 594 mm)" },
-  A3: { width: 297, height: 420, label: "A3 (297 × 420 mm)" },
-  A4: { width: 210, height: 297, label: "A4 (210 × 297 mm)" },
-  A5: { width: 148, height: 210, label: "A5 (148 × 210 mm)" },
-};
-
-const EXPORT_DPI = 300; // High-resolution output so physical paper size is accurate when printed
-
-interface ExportOption {
-  id: string;
-  paperSize: PaperSize;
-  format: ExportFormat;
-  exportSelection: boolean; // Export selected items only, or entire canvas
-}
-
 export default function ExportPanel() {
-  // Get data from projectStore (where shapes, assets, walls are actually stored)
-  const { shapes, assets, walls } = useProjectStore();
-
-  // Get selection from both sceneStore (new editor) and editorStore (Workspace2D)
-  const selectedAssetId = useSceneStore((s) => s.selectedAssetId);
-  const selectedAssetIds = useSceneStore((s) => s.selectedAssetIds);
-  const editorSelectedIds = useEditorStore((s) => s.selectedIds);
-
-  const [isExpanded, setIsExpanded] = useState(true);
+  const { shapes, assets, walls, textAnnotations, labelArrows, dimensions, projectName } = useProjectStore();
+  const selectedIds = useEditorStore((s) => s.selectedIds);
   const [exportOptions, setExportOptions] = useState<ExportOption[]>([
-    { id: "1", paperSize: "A4", format: "pdf", exportSelection: false },
+    { id: "1", paperSize: "A4", format: "pdf", exportSelection: false, isProfessional: true },
   ]);
+  
+  const [showProfessionalModal, setShowProfessionalModal] = useState(false);
+  const [currentOption, setCurrentOption] = useState<ExportOption | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const router = useRouter();
+  const { slug } = router.query;
 
-  const selectedIds = useMemo(() => {
-    const idSet = new Set<string>();
-    if (selectedAssetId) {
-      idSet.add(selectedAssetId);
+  const { data: projectData } = useQuery({
+    queryKey: ["project-data", slug],
+    queryFn: async () => {
+      if (!slug) return null;
+      try {
+        const res = await apiRequest(`/projects/${slug}`, "GET", null, true).catch(async () => {
+          const allRes = await apiRequest("/projects", "GET", null, true);
+          return allRes.data.find((p: any) => p.slug === slug);
+        });
+        return res.data || res;
+      } catch (err) {
+        console.error("Failed to fetch project for export:", err);
+        return null;
+      }
+    },
+    enabled: !!slug,
+  });
+
+  const { setProjectName } = useProjectStore();
+
+  useEffect(() => {
+    if (projectData?.name) {
+      setProjectName(projectData.name);
+      setProfDetails(prev => ({ ...prev, eventName: projectData.name }));
     }
-    (selectedAssetIds || []).forEach((id) => idSet.add(id));
-    (editorSelectedIds || []).forEach((id) => idSet.add(id));
-    return Array.from(idSet);
-  }, [selectedAssetId, selectedAssetIds, editorSelectedIds]);
+  }, [projectData?.name, setProjectName]);
+
+  const [profDetails, setProfDetails] = useState<ProfessionalDetails & { client?: string; date?: string; }>({
+    eventName: projectName || "",
+    venue: "TBA",
+    sittingCode: "",
+    guestAllocation: "General Admission: TBA",
+    logo: null,
+    panelPosition: 'right',
+    panelColor: '#0056A9' // Firm Brand Blue default
+  });
+
+  useEffect(() => {
+    if (projectName && !profDetails.eventName) {
+      setProfDetails(prev => ({ ...prev, eventName: projectName }));
+    }
+  }, [projectName]);
 
   const hasSelection = selectedIds.length > 0;
 
-  // Convert shapes, assets, and walls to AssetInstance format for preview
-  const allItems: AssetInstance[] = [
-    // Shapes - map types correctly
-    ...shapes.map(s => ({
-      ...s,
-      // Map shape types to preview-compatible types
-      type: s.type === 'ellipse' ? 'circle' : s.type === 'rectangle' ? 'rect' : s.type,
-      backgroundColor: s.fill || '#e5e7eb',
-      strokeColor: s.stroke || '#000000',
-      strokeWidth: s.strokeWidth || 2,
-      scale: 1, // Shapes don't have scale, use 1
-    } as AssetInstance)),
-
-    // Assets - pass through as-is
-    ...assets.map(a => ({ ...a } as AssetInstance)),
-
-    // Walls - convert to wall-segments format with proper nodes and edges
-    ...walls.map(w => {
-      // Filter out edges that don't have valid nodes
-      const validEdges = w.edges.filter(edge => {
-        const hasNodeA = w.nodes.some(n => n.id === edge.nodeA);
-        const hasNodeB = w.nodes.some(n => n.id === edge.nodeB);
-        return hasNodeA && hasNodeB;
-      });
-
-      if (validEdges.length === 0) return null;
-
-      return {
-        id: w.id,
-        type: 'wall-segments' as const,
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
+  const allItems: AssetInstance[] = useMemo(() => {
+    const items: any[] = [
+      ...shapes.map(s => ({
+        ...s,
+        type: s.type === 'ellipse' ? 'circle' : (s.type === 'rectangle' ? 'rect' : s.type),
+        backgroundColor: s.fill || 'transparent',
+        strokeColor: s.stroke || '#000000',
+        strokeWidth: s.strokeWidth || 1,
         scale: 1,
-        rotation: 0,
-        wallNodes: w.nodes,
-        wallEdges: validEdges.map((edge) => ({
-          id: edge.id,
-          a: w.nodes.findIndex(n => n.id === edge.nodeA),
-          b: w.nodes.findIndex(n => n.id === edge.nodeB),
-          thickness: edge.thickness
-        })),
-        lineColor: '#000000',
-        wallThickness: validEdges[0]?.thickness || 150,
-        zIndex: w.zIndex || 0,
-      } as AssetInstance;
-    }).filter(Boolean) as AssetInstance[]
-  ];
-
-  const addExportOption = () => {
-    setExportOptions([
-      ...exportOptions,
-      { id: Date.now().toString(), paperSize: "A4", format: "pdf", exportSelection: false },
-    ]);
-  };
-
-  const removeExportOption = (id: string) => {
-    setExportOptions(exportOptions.filter((opt) => opt.id !== id));
-  };
-
-  const updateExportOption = (id: string, updates: Partial<ExportOption>) => {
-    setExportOptions(
-      exportOptions.map((opt) => (opt.id === id ? { ...opt, ...updates } : opt))
-    );
-  };
-
-  const exportAllAssetsDirectly = async (option: ExportOption) => {
-    // Use allItems which already has shapes/walls/assets unified and processed
-    const assetsToExport = allItems;
-
-    console.log("exportAllAssetsDirectly: Starting export", {
-      totalAssets: assetsToExport.length,
-      shapes: shapes.length,
-      assets: assets.length,
-      walls: walls.length,
-      option,
-    });
-
-    if (assetsToExport.length === 0) {
-      throw new Error("No assets found to export.");
-    }
-
-    // Calculate bounds for all assets (same logic as exportSelection)
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-    assetsToExport.forEach(asset => {
-      if (asset.type === 'wall-segments' && asset.wallNodes) {
-        asset.wallNodes.forEach(node => {
-          if (isFinite(node.x) && isFinite(node.y)) {
-            minX = Math.min(minX, node.x);
-            minY = Math.min(minY, node.y);
-            maxX = Math.max(maxX, node.x);
-            maxY = Math.max(maxY, node.y);
-          }
-        });
-      } else if (asset.wallSegments) {
-        asset.wallSegments.forEach(seg => {
-          const startX = seg.start.x + asset.x;
-          const startY = seg.start.y + asset.y;
-          const endX = seg.end.x + asset.x;
-          const endY = seg.end.y + asset.y;
-          if (isFinite(startX) && isFinite(startY) && isFinite(endX) && isFinite(endY)) {
-            minX = Math.min(minX, startX, endX);
-            minY = Math.min(minY, startY, endY);
-            maxX = Math.max(maxX, startX, endX);
-            maxY = Math.max(maxY, startY, endY);
-          }
-        });
-      } else if (asset.type === 'freehand' && (asset as any).points) {
-        const points = (asset as any).points;
-        if (Array.isArray(points)) {
-          points.forEach((p: any) => {
-            const px = p.x + asset.x;
-            const py = p.y + asset.y;
-            if (isFinite(px) && isFinite(py)) {
-              minX = Math.min(minX, px);
-              minY = Math.min(minY, py);
-              maxX = Math.max(maxX, px);
-              maxY = Math.max(maxY, py);
-            }
-          });
-        }
-      } else {
-        const w = (asset.width || 0) * (asset.scale || 1);
-        const h = (asset.height || 0) * (asset.scale || 1);
-        if (isFinite(asset.x) && isFinite(asset.y)) {
-          minX = Math.min(minX, asset.x - w / 2);
-          minY = Math.min(minY, asset.y - h / 2);
-          maxX = Math.max(maxX, asset.x + w / 2);
-          maxY = Math.max(maxY, asset.y + h / 2);
-        }
-      }
-    });
-
-    if (!isFinite(minX)) {
-      throw new Error("Could not calculate bounds for assets.");
-    }
-
-    console.log("exportAllAssetsDirectly: Calculated bounds", {
-      minX,
-      minY,
-      maxX,
-      maxY,
-      width: maxX - minX,
-      height: maxY - minY,
-    });
-
-    // Render to canvas (reuse exportSelection rendering logic)
-    const MM_TO_PX = 2;
-    const padding = 50;
-    const canvasWidth = (maxX - minX + padding * 2) * MM_TO_PX;
-    const canvasHeight = (maxY - minY + padding * 2) * MM_TO_PX;
-
-    if (!isFinite(canvasWidth) || !isFinite(canvasHeight) || canvasWidth <= 0 || canvasHeight <= 0) {
-      throw new Error(`Invalid canvas dimensions: ${canvasWidth}x${canvasHeight}`);
-    }
-
-    console.log("exportAllAssetsDirectly: Creating canvas", {
-      canvasWidth,
-      canvasHeight,
-      MM_TO_PX,
-      padding,
-    });
-
-    const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = Math.max(1, Math.round(canvasWidth));
-    exportCanvas.height = Math.max(1, Math.round(canvasHeight));
-    const ctx = exportCanvas.getContext('2d');
-    if (!ctx) {
-      throw new Error("Failed to get 2D context");
-    }
-
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
-
-    // Pre-load SVGs
-    const loadedImages = await loadSvgAssets(assetsToExport);
-
-    console.log("exportAllAssetsDirectly: Starting to render assets", {
-      assetCount: assetsToExport.length,
-    });
-
-    // Render all assets using the same logic as exportSelection
-    assetsToExport.forEach((asset, index) => {
-      console.log(`exportAllAssetsDirectly: Rendering asset ${index + 1}/${assetsToExport.length}`, {
-        id: asset.id,
-        type: asset.type,
-        x: asset.x,
-        y: asset.y,
-        width: asset.width,
-        height: asset.height,
-        scale: asset.scale,
-        backgroundColor: asset.backgroundColor || asset.fillColor,
-        strokeColor: asset.strokeColor,
-        strokeWidth: asset.strokeWidth,
-      });
-
-      // This is the same rendering code from exportSelection - walls, shapes, etc.
-      if (asset.type === 'wall-segments') {
-        if (asset.wallNodes && asset.wallEdges) {
-          asset.wallEdges.forEach(edge => {
-            const a = asset.wallNodes![edge.a];
-            const b = asset.wallNodes![edge.b];
-            if (!a || !b) return;
-
-            const dx = b.x - a.x;
-            const dy = b.y - a.y;
-            const len = Math.sqrt(dx * dx + dy * dy);
-            if (len === 0) return;
-
-            const thickness = Math.max(1, (asset.wallThickness || 150) * (asset.scale || 1));
-            const nx = (-dy / len) * (thickness / 2);
-            const ny = (dx / len) * (thickness / 2);
-
-            const p1x = (a.x + nx - minX + padding) * MM_TO_PX;
-            const p1y = (a.y + ny - minY + padding) * MM_TO_PX;
-            const p2x = (b.x + nx - minX + padding) * MM_TO_PX;
-            const p2y = (b.y + ny - minY + padding) * MM_TO_PX;
-            const p3x = (b.x - nx - minX + padding) * MM_TO_PX;
-            const p3y = (b.y - ny - minY + padding) * MM_TO_PX;
-            const p4x = (a.x - nx - minX + padding) * MM_TO_PX;
-            const p4y = (a.y - ny - minY + padding) * MM_TO_PX;
-
-            ctx.fillStyle = '#e5e7eb';
-            ctx.beginPath();
-            ctx.moveTo(p1x, p1y);
-            ctx.lineTo(p2x, p2y);
-            ctx.lineTo(p3x, p3y);
-            ctx.lineTo(p4x, p4y);
-            ctx.closePath();
-            ctx.fill();
-
-            ctx.strokeStyle = asset.lineColor || "#000000";
-            ctx.lineWidth = 2 * MM_TO_PX;
-            ctx.lineCap = 'square';
-            ctx.beginPath();
-            ctx.moveTo(p1x, p1y);
-            ctx.lineTo(p2x, p2y);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(p3x, p3y);
-            ctx.lineTo(p4x, p4y);
-            ctx.stroke();
-          });
-        } else if (asset.wallSegments) {
-          ctx.strokeStyle = asset.lineColor || "#000000";
-          ctx.lineWidth = (asset.wallThickness || 2) * MM_TO_PX;
-          ctx.lineCap = 'round';
-          asset.wallSegments.forEach(seg => {
-            ctx.beginPath();
-            ctx.moveTo((seg.start.x + asset.x - minX + padding) * MM_TO_PX, (seg.start.y + asset.y - minY + padding) * MM_TO_PX);
-            ctx.lineTo((seg.end.x + asset.x - minX + padding) * MM_TO_PX, (seg.end.y + asset.y - minY + padding) * MM_TO_PX);
-            ctx.stroke();
-          });
-        }
-      } else if (asset.type === 'freehand') {
-        const freehandAsset = asset as any;
-        if (freehandAsset.points && Array.isArray(freehandAsset.points) && freehandAsset.points.length > 1) {
-          ctx.strokeStyle = asset.strokeColor || freehandAsset.stroke || "#000000";
-          ctx.lineWidth = Math.max(1, (asset.strokeWidth || 2) * (asset.scale || 1)) * MM_TO_PX;
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-          ctx.beginPath();
-          const startX = (freehandAsset.points[0].x + asset.x - minX + padding) * MM_TO_PX;
-          const startY = (freehandAsset.points[0].y + asset.y - minY + padding) * MM_TO_PX;
-          ctx.moveTo(startX, startY);
-          for (let i = 1; i < freehandAsset.points.length; i++) {
-            const px = (freehandAsset.points[i].x + asset.x - minX + padding) * MM_TO_PX;
-            const py = (freehandAsset.points[i].y + asset.y - minY + padding) * MM_TO_PX;
-            ctx.lineTo(px, py);
-          }
-          ctx.stroke();
-        }
-      } else {
-        const w = (asset.width || 0) * (asset.scale || 1);
-        const h = (asset.height || 0) * (asset.scale || 1);
-        const x = (asset.x - minX + padding) * MM_TO_PX;
-        const y = (asset.y - minY + padding) * MM_TO_PX;
-
-        ctx.save();
-        ctx.translate(x, y);
-        if (asset.rotation) {
-          ctx.rotate((asset.rotation * Math.PI) / 180);
-        }
-
-        const img = loadedImages.get(asset.id);
-
-        if (img) {
-          // Render SVG Asset
-          ctx.drawImage(img, -w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
-        } else if (asset.type === 'circle') {
-          const fillColor = (asset as any).fillType === 'none' ? 'transparent' : (asset.backgroundColor || asset.fillColor || "#e5e7eb");
-          const strokeColor = asset.strokeColor || "#000000";
-          const strokeWidth = (asset.strokeWidth || 2) * MM_TO_PX;
-          const rx = Math.max(0, Math.abs(w * MM_TO_PX / 2));
-          const ry = Math.max(0, Math.abs(h * MM_TO_PX / 2));
-
-          ctx.fillStyle = fillColor;
-          ctx.strokeStyle = strokeColor;
-          ctx.lineWidth = strokeWidth;
-
-          if ((asset as any).strokeDasharray) {
-            ctx.setLineDash((asset as any).strokeDasharray.split(',').map((v: string) => parseFloat(v) * MM_TO_PX));
-          }
-
-          ctx.beginPath();
-          ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-          if (fillColor !== 'transparent') ctx.fill();
-          ctx.stroke();
-          ctx.setLineDash([]);
-        } else if (asset.type === 'arc' && (asset as any).points) {
-          const pts = (asset as any).points;
-          ctx.strokeStyle = asset.strokeColor || "#000000";
-          ctx.lineWidth = (asset.strokeWidth || 2) * MM_TO_PX;
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-
-          if ((asset as any).strokeDasharray) {
-            ctx.setLineDash((asset as any).strokeDasharray.split(',').map((v: string) => parseFloat(v) * MM_TO_PX));
-          }
-
-          if (pts.length === 3) {
-            const [p1, p2, p3] = pts;
-            const qcx = 2 * p3.x - (p1.x + p2.x) / 2;
-            const qcy = 2 * p3.y - (p1.y + p2.y) / 2;
-            ctx.beginPath();
-            ctx.moveTo((p1.x) * MM_TO_PX, (p1.y) * MM_TO_PX);
-            ctx.quadraticCurveTo((qcx) * MM_TO_PX, (qcy) * MM_TO_PX, (p2.x) * MM_TO_PX, (p2.y) * MM_TO_PX);
-            ctx.stroke();
-          } else if (pts.length > 3) {
-            ctx.beginPath();
-            ctx.moveTo((pts[0].x) * MM_TO_PX, (pts[0].y) * MM_TO_PX);
-            for (let i = 1; i < pts.length; i += 2) {
-              const next = pts[i + 1];
-              const passThrough = pts[i];
-              if (!next) break;
-              const qcx = 2 * passThrough.x - (pts[i - 1].x + next.x) / 2;
-              const qcy = 2 * passThrough.y - (pts[i - 1].y + next.y) / 2;
-              ctx.quadraticCurveTo((qcx) * MM_TO_PX, (qcy) * MM_TO_PX, (next.x) * MM_TO_PX, (next.y) * MM_TO_PX);
-            }
-            ctx.stroke();
-          }
-          ctx.setLineDash([]);
-        } else {
-          const fillColor = (asset as any).fillType === 'none' ? 'transparent' : (asset.backgroundColor || asset.fillColor || "#e5e7eb");
-          const strokeColor = asset.strokeColor || "#000000";
-          const strokeWidth = (asset.strokeWidth || 1) * MM_TO_PX;
-
-          ctx.fillStyle = fillColor;
-          ctx.strokeStyle = strokeColor;
-          ctx.lineWidth = strokeWidth;
-
-          if ((asset as any).strokeDasharray) {
-            ctx.setLineDash((asset as any).strokeDasharray.split(',').map((v: string) => parseFloat(v) * MM_TO_PX));
-          }
-
-          if (fillColor !== 'transparent') ctx.fillRect(-w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
-          ctx.strokeRect(-w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
-          ctx.setLineDash([]);
-        }
-        ctx.restore();
-      }
-    });
-
-    // --- Render Dimensions ---
-    console.log("exportAllAssetsDirectly: Rendering dimensions");
-    const dimensions: any[] = [];
-    walls.forEach(w => dimensions.push(...getDimensionsForWall(w)));
-    shapes.forEach(s => {
-      if ((s as any).showDimensions) dimensions.push(...getDimensionsForObject(s, `auto-dim-${s.id}`));
-    });
-    assets.forEach(a => {
-      if ((a as any).showDimensions) dimensions.push(...getDimensionsForObject(a, `auto-dim-${a.id}`));
-    });
-
-    dimensions.forEach(dim => {
-      renderDimensionToCanvas(ctx, dim, minX, minY, padding, MM_TO_PX);
-    });
-
-    // Validate that something was actually drawn
-    const imageData = ctx.getImageData(0, 0, Math.min(100, exportCanvas.width), Math.min(100, exportCanvas.height));
-    const pixels = imageData.data;
-    let hasContent = false;
-    for (let i = 0; i < pixels.length; i += 4) {
-      // Check if pixel is not white (255, 255, 255)
-      if (pixels[i] !== 255 || pixels[i + 1] !== 255 || pixels[i + 2] !== 255) {
-        hasContent = true;
-        break;
-      }
-    }
-
-    if (!hasContent && exportCanvas.width > 100 && exportCanvas.height > 100) {
-      console.warn("exportAllAssetsDirectly: Canvas appears to be blank after rendering");
-      // Check a larger sample
-      const largerSample = ctx.getImageData(0, 0, exportCanvas.width, exportCanvas.height);
-      const largerPixels = largerSample.data;
-      let hasContentLarge = false;
-      for (let i = 0; i < largerPixels.length; i += 4) {
-        if (largerPixels[i] !== 255 || largerPixels[i + 1] !== 255 || largerPixels[i + 2] !== 255) {
-          hasContentLarge = true;
-          break;
-        }
-      }
-      if (!hasContentLarge) {
-        throw new Error("Failed to render any content to canvas. Please check that your assets are visible on the canvas.");
-      }
-    }
-
-    console.log("exportAllAssetsDirectly: Rendering complete, scaling to paper size", {
-      canvasWidth: exportCanvas.width,
-      canvasHeight: exportCanvas.height,
-      hasContent,
-    });
-
-    // Scale to paper size and save
-    await scaleToPaperSize(exportCanvas, option);
-
-    console.log("exportAllAssetsDirectly: Export complete");
-  };
-
-
-  const exportSelection = async (option: ExportOption) => {
-    // Use allItems which already has shapes/walls/assets unified and processed
-    const selectedAssets = allItems.filter(item => selectedIds.includes(item.id));
-
-    if (selectedAssets.length === 0) {
-      throw new Error("No items selected for export.");
-    }
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-    selectedAssets.forEach(asset => {
-      if (asset.type === 'wall-segments' && asset.wallNodes) {
-        asset.wallNodes.forEach(node => {
-          if (isFinite(node.x) && isFinite(node.y)) {
-            minX = Math.min(minX, node.x);
-            minY = Math.min(minY, node.y);
-            maxX = Math.max(maxX, node.x);
-            maxY = Math.max(maxY, node.y);
-          }
-        });
-      } else if (asset.wallSegments) {
-        asset.wallSegments.forEach(seg => {
-          const startX = seg.start.x + asset.x;
-          const startY = seg.start.y + asset.y;
-          const endX = seg.end.x + asset.x;
-          const endY = seg.end.y + asset.y;
-          if (isFinite(startX) && isFinite(startY) && isFinite(endX) && isFinite(endY)) {
-            minX = Math.min(minX, startX, endX);
-            minY = Math.min(minY, startY, endY);
-            maxX = Math.max(maxX, startX, endX);
-            maxY = Math.max(maxY, startY, endY);
-          }
-        });
-      } else if (asset.type === 'freehand' && (asset as any).points) {
-        const points = (asset as any).points;
-        if (Array.isArray(points)) {
-          points.forEach((p: any) => {
-            const px = p.x + asset.x;
-            const py = p.y + asset.y;
-            if (isFinite(px) && isFinite(py)) {
-              minX = Math.min(minX, px);
-              minY = Math.min(minY, py);
-              maxX = Math.max(maxX, px);
-              maxY = Math.max(maxY, py);
-            }
-          });
-        }
-      } else {
-        const w = (asset.width || 0) * (asset.scale || 1);
-        const h = (asset.height || 0) * (asset.scale || 1);
-        if (isFinite(asset.x) && isFinite(asset.y)) {
-          minX = Math.min(minX, asset.x - w / 2);
-          minY = Math.min(minY, asset.y - h / 2);
-          maxX = Math.max(maxX, asset.x + w / 2);
-          maxY = Math.max(maxY, asset.y + h / 2);
-        }
-      }
-    });
-
-    if (!isFinite(minX)) {
-      throw new Error("Could not calculate selection bounds for selected items.");
-    }
-
-    // Create a temporary container with just the selected items
-    const tempContainer = document.createElement('div');
-    tempContainer.style.position = 'absolute';
-    tempContainer.style.left = '-9999px';
-    tempContainer.style.width = `${maxX - minX}px`;
-    tempContainer.style.height = `${maxY - minY}px`;
-    tempContainer.style.backgroundColor = '#ffffff';
-    document.body.appendChild(tempContainer);
-
-    try {
-      // Render selected assets to canvas
-      const MM_TO_PX = 2;
-      const exportCanvas = document.createElement('canvas');
-      const padding = 50; // mm
-      const canvasWidth = (maxX - minX + padding * 2) * MM_TO_PX;
-      const canvasHeight = (maxY - minY + padding * 2) * MM_TO_PX;
-
-      // Validate dimensions
-      if (!isFinite(canvasWidth) || !isFinite(canvasHeight) || canvasWidth <= 0 || canvasHeight <= 0) {
-        throw new Error(`Invalid canvas dimensions for selection export: ${canvasWidth}x${canvasHeight}`);
-      }
-
-      exportCanvas.width = Math.max(1, Math.round(canvasWidth));
-      exportCanvas.height = Math.max(1, Math.round(canvasHeight));
-      const ctx = exportCanvas.getContext('2d');
-      if (!ctx) {
-        throw new Error("Failed to get 2D context for selection export canvas");
-      }
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
-
-      // Pre-load SVGs
-      const loadedImages = await loadSvgAssets(selectedAssets);
-
-      // Render selected assets
-      selectedAssets.forEach(asset => {
-        if (asset.type === 'wall-segments') {
-          if (asset.wallNodes && asset.wallEdges) {
-            asset.wallEdges.forEach(edge => {
-              const a = asset.wallNodes![edge.a];
-              const b = asset.wallNodes![edge.b];
-              if (!a || !b) return;
-
-              // Calculate wall vector
-              const dx = b.x - a.x;
-              const dy = b.y - a.y;
-              const len = Math.sqrt(dx * dx + dy * dy);
-              if (len === 0) return;
-
-              // Calculate normal vector for thickness
-              const thickness = Math.max(1, (asset.wallThickness || 150) * (asset.scale || 1));
-              const nx = (-dy / len) * (thickness / 2);
-              const ny = (dx / len) * (thickness / 2);
-
-              // Calculate corner points relative to canvas
-              const p1x = (a.x + nx - minX + padding) * MM_TO_PX;
-              const p1y = (a.y + ny - minY + padding) * MM_TO_PX;
-              const p2x = (b.x + nx - minX + padding) * MM_TO_PX;
-              const p2y = (b.y + ny - minY + padding) * MM_TO_PX;
-              const p3x = (b.x - nx - minX + padding) * MM_TO_PX;
-              const p3y = (b.y - ny - minY + padding) * MM_TO_PX;
-              const p4x = (a.x - nx - minX + padding) * MM_TO_PX;
-              const p4y = (a.y - ny - minY + padding) * MM_TO_PX;
-
-              // Draw filled wall (lighter for double-line look)
-              ctx.fillStyle = '#e5e7eb';
-              ctx.beginPath();
-              ctx.moveTo(p1x, p1y);
-              ctx.lineTo(p2x, p2y);
-              ctx.lineTo(p3x, p3y);
-              ctx.lineTo(p4x, p4y);
-              ctx.closePath();
-              ctx.fill();
-
-              // Draw outlines (Explicit double lines)
-              ctx.strokeStyle = asset.lineColor || "#000000";
-              ctx.lineWidth = 2 * MM_TO_PX; // Thicker outline
-              ctx.lineCap = 'square';
-
-              // Line 1
-              ctx.beginPath();
-              ctx.moveTo(p1x, p1y);
-              ctx.lineTo(p2x, p2y);
-              ctx.stroke();
-
-              // Line 2
-              ctx.beginPath();
-              ctx.moveTo(p3x, p3y);
-              ctx.lineTo(p4x, p4y);
-              ctx.stroke();
-            });
-          } else if (asset.wallSegments) {
-            // Legacy wall segments support
-            ctx.strokeStyle = asset.lineColor || "#000000";
-            ctx.lineWidth = (asset.wallThickness || 2) * MM_TO_PX;
-            ctx.lineCap = 'round';
-            asset.wallSegments.forEach(seg => {
-              ctx.beginPath();
-              ctx.moveTo((seg.start.x + asset.x - minX + padding) * MM_TO_PX, (seg.start.y + asset.y - minY + padding) * MM_TO_PX);
-              ctx.lineTo((seg.end.x + asset.x - minX + padding) * MM_TO_PX, (seg.end.y + asset.y - minY + padding) * MM_TO_PX);
-              ctx.stroke();
-            });
-          }
-        } else if (asset.type === 'freehand') {
-          const freehandAsset = asset as any;
-          if (freehandAsset.points && Array.isArray(freehandAsset.points) && freehandAsset.points.length > 1) {
-            ctx.strokeStyle = asset.strokeColor || freehandAsset.stroke || "#000000";
-            ctx.lineWidth = Math.max(1, (asset.strokeWidth || 2) * (asset.scale || 1)) * MM_TO_PX;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-
-            ctx.beginPath();
-            const startX = (freehandAsset.points[0].x + asset.x - minX + padding) * MM_TO_PX;
-            const startY = (freehandAsset.points[0].y + asset.y - minY + padding) * MM_TO_PX;
-            ctx.moveTo(startX, startY);
-
-            for (let i = 1; i < freehandAsset.points.length; i++) {
-              const px = (freehandAsset.points[i].x + asset.x - minX + padding) * MM_TO_PX;
-              const py = (freehandAsset.points[i].y + asset.y - minY + padding) * MM_TO_PX;
-              ctx.lineTo(px, py);
-            }
-            ctx.stroke();
-          }
-        } else {
-          const w = (asset.width || 0) * (asset.scale || 1);
-          const h = (asset.height || 0) * (asset.scale || 1);
-          const x = (asset.x - minX + padding) * MM_TO_PX;
-          const y = (asset.y - minY + padding) * MM_TO_PX;
-
-          ctx.save();
-          ctx.translate(x, y);
-          if (asset.rotation) {
-            ctx.rotate((asset.rotation * Math.PI) / 180);
-          }
-
-          const img = loadedImages.get(asset.id);
-
-          if (img) {
-            // Render SVG Asset
-            ctx.drawImage(img, -w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
-          } else if (asset.type === 'circle') {
-            const fillColor = (asset as any).fillType === 'none' ? 'transparent' : (asset.backgroundColor || asset.fillColor || "#e5e7eb");
-            const strokeColor = asset.strokeColor || "#000000";
-            const strokeWidth = (asset.strokeWidth || 2) * MM_TO_PX;
-            const rx = Math.max(0, Math.abs(w * MM_TO_PX / 2));
-            const ry = Math.max(0, Math.abs(h * MM_TO_PX / 2));
-
-            ctx.fillStyle = fillColor;
-            ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = strokeWidth;
-
-            if ((asset as any).strokeDasharray) {
-              ctx.setLineDash((asset as any).strokeDasharray.split(',').map((v: string) => parseFloat(v) * MM_TO_PX));
-            }
-
-            ctx.beginPath();
-            ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-            if (fillColor !== 'transparent') ctx.fill();
-            ctx.stroke();
-            ctx.setLineDash([]);
-          } else if (asset.type === 'arc' && (asset as any).points) {
-            const pts = (asset as any).points;
-            ctx.strokeStyle = asset.strokeColor || "#000000";
-            ctx.lineWidth = (asset.strokeWidth || 2) * MM_TO_PX;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-
-            if ((asset as any).strokeDasharray) {
-              ctx.setLineDash((asset as any).strokeDasharray.split(',').map((v: string) => parseFloat(v) * MM_TO_PX));
-            }
-
-            if (pts.length === 3) {
-              const [p1, p2, p3] = pts;
-              const qcx = 2 * p3.x - (p1.x + p2.x) / 2;
-              const qcy = 2 * p3.y - (p1.y + p2.y) / 2;
-              ctx.beginPath();
-              ctx.moveTo((p1.x) * MM_TO_PX, (p1.y) * MM_TO_PX);
-              ctx.quadraticCurveTo((qcx) * MM_TO_PX, (qcy) * MM_TO_PX, (p2.x) * MM_TO_PX, (p2.y) * MM_TO_PX);
-              ctx.stroke();
-            } else if (pts.length > 3) {
-              ctx.beginPath();
-              ctx.moveTo((pts[0].x) * MM_TO_PX, (pts[0].y) * MM_TO_PX);
-              for (let i = 1; i < pts.length; i += 2) {
-                const next = pts[i + 1];
-                const passThrough = pts[i];
-                if (!next) break;
-                const qcx = 2 * passThrough.x - (pts[i - 1].x + next.x) / 2;
-                const qcy = 2 * passThrough.y - (pts[i - 1].y + next.y) / 2;
-                ctx.quadraticCurveTo((qcx) * MM_TO_PX, (qcy) * MM_TO_PX, (next.x) * MM_TO_PX, (next.y) * MM_TO_PX);
-              }
-              ctx.stroke();
-            }
-            ctx.setLineDash([]);
-          } else {
-            const fillColor = (asset as any).fillType === 'none' ? 'transparent' : (asset.backgroundColor || asset.fillColor || "#e5e7eb");
-            const strokeColor = asset.strokeColor || "#000000";
-            const strokeWidth = (asset.strokeWidth || 1) * MM_TO_PX;
-
-            ctx.fillStyle = fillColor;
-            ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = strokeWidth;
-
-            if ((asset as any).strokeDasharray) {
-              ctx.setLineDash((asset as any).strokeDasharray.split(',').map((v: string) => parseFloat(v) * MM_TO_PX));
-            }
-
-            if (fillColor !== 'transparent') ctx.fillRect(-w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
-            ctx.strokeRect(-w * MM_TO_PX / 2, -h * MM_TO_PX / 2, w * MM_TO_PX, h * MM_TO_PX);
-            ctx.setLineDash([]);
-          }
-          ctx.restore();
-        }
-
-      });
-
-      // --- Render Dimensions for Selection ---
-      console.log("exportSelection: Rendering dimensions for selection");
-      const selectedDimensions: any[] = [];
-
-      // Walls in selection
-      walls.filter(w => selectedIds.includes(w.id)).forEach(w => {
-        selectedDimensions.push(...getDimensionsForWall(w));
-      });
-      // Shapes in selection
-      shapes.filter(s => selectedIds.includes(s.id)).forEach(s => {
-        if ((s as any).showDimensions) selectedDimensions.push(...getDimensionsForObject(s, `auto-dim-${s.id}`));
-      });
-      // Assets in selection
-      assets.filter(a => selectedIds.includes(a.id)).forEach(a => {
-        if ((a as any).showDimensions) selectedDimensions.push(...getDimensionsForObject(a, `auto-dim-${a.id}`));
-      });
-
-      selectedDimensions.forEach(dim => {
-        renderDimensionToCanvas(ctx, dim, minX, minY, padding, MM_TO_PX);
-      });
-
-      // Scale to paper size and save
-      await scaleToPaperSize(exportCanvas, option);
-    } catch (error) {
-      // Re-throw with better context
-      if (error instanceof Error) {
-        throw new Error(`Selection export failed: ${error.message}`);
-      }
-      throw new Error(`Selection export failed: ${String(error)}`);
-    } finally {
-      // Clean up temporary container
-      if (document.body.contains(tempContainer)) {
-        document.body.removeChild(tempContainer);
-      }
-    }
-  };
-
-  const scaleToPaperSize = async (sourceCanvas: HTMLCanvasElement, option: ExportOption) => {
-    try {
-      // Validate source canvas
-      if (!sourceCanvas || sourceCanvas.width <= 0 || sourceCanvas.height <= 0) {
-        throw new Error(`Invalid source canvas dimensions: ${sourceCanvas?.width || 0}x${sourceCanvas?.height || 0}`);
-      }
-
-      const paperSizeInfo = PAPER_SIZES[option.paperSize];
-      const mmToPx = EXPORT_DPI / 25.4;
-      const paperWidthPx = paperSizeInfo.width * mmToPx;
-      const paperHeightPx = paperSizeInfo.height * mmToPx;
-
-      // Validate paper dimensions
-      if (!isFinite(paperWidthPx) || !isFinite(paperHeightPx) || paperWidthPx <= 0 || paperHeightPx <= 0) {
-        throw new Error(`Invalid paper dimensions: ${paperWidthPx}x${paperHeightPx}`);
-      }
-
-      const canvasAspect = sourceCanvas.width / sourceCanvas.height;
-      const paperAspect = paperWidthPx / paperHeightPx;
-
-      if (!isFinite(canvasAspect) || canvasAspect <= 0) {
-        throw new Error(`Invalid canvas aspect ratio: ${canvasAspect}`);
-      }
-
-      let finalWidth: number;
-      let finalHeight: number;
-      let offsetX = 0;
-      let offsetY = 0;
-
-      if (canvasAspect > paperAspect) {
-        finalWidth = paperWidthPx;
-        finalHeight = paperWidthPx / canvasAspect;
-        offsetY = (paperHeightPx - finalHeight) / 2;
-      } else {
-        finalHeight = paperHeightPx;
-        finalWidth = paperHeightPx * canvasAspect;
-        offsetX = (paperWidthPx - finalWidth) / 2;
-      }
-
-      // Validate final dimensions
-      if (!isFinite(finalWidth) || !isFinite(finalHeight) || finalWidth <= 0 || finalHeight <= 0) {
-        throw new Error(`Invalid calculated dimensions: ${finalWidth}x${finalHeight}`);
-      }
-
-      const finalCanvas = document.createElement('canvas');
-      finalCanvas.width = Math.max(1, Math.round(paperWidthPx));
-      finalCanvas.height = Math.max(1, Math.round(paperHeightPx));
-      const ctx = finalCanvas.getContext('2d');
-      if (!ctx) {
-        throw new Error("Failed to get 2D context for final canvas");
-      }
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
-
-      // Draw the source canvas onto the final canvas
-      try {
-        ctx.drawImage(
-          sourceCanvas,
-          Math.round(offsetX),
-          Math.round(offsetY),
-          Math.round(finalWidth),
-          Math.round(finalHeight)
-        );
-      } catch (drawError) {
-        console.error("drawImage error in scaleToPaperSize:", drawError);
-        throw new Error(`Failed to draw image: ${drawError instanceof Error ? drawError.message : 'Unknown error'}`);
-      }
-
-      await saveCanvas(finalCanvas, option);
-    } catch (error) {
-      console.error("scaleToPaperSize error:", error);
-      if (error instanceof Error) {
-        throw new Error(`Failed to scale to paper size: ${error.message}`);
-      }
-      throw new Error(`Failed to scale to paper size: ${String(error)}`);
-    }
-  };
-
-  const saveCanvas = async (canvas: HTMLCanvasElement, option: ExportOption): Promise<void> => {
-    const fileName = `canvas-export-${Date.now()}.${option.format}`;
-    const paperSizeInfo = PAPER_SIZES[option.paperSize];
-
-    // Validate canvas has content before attempting to save
-    console.log("saveCanvas: Validating canvas content", {
-      width: canvas.width,
-      height: canvas.height,
-      format: option.format,
-    });
-
-    // Check if canvas has any non-white pixels
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      throw new Error("Failed to get canvas context for validation");
-    }
-
-    const sampleSize = Math.max(1, Math.min(200, canvas.width, canvas.height));
-    const samplePositions = [
-      { x: 0, y: 0 },
-      { x: Math.max(0, canvas.width - sampleSize), y: 0 },
-      { x: 0, y: Math.max(0, canvas.height - sampleSize) },
-      { x: Math.max(0, canvas.width - sampleSize), y: Math.max(0, canvas.height - sampleSize) },
-      {
-        x: Math.max(0, Math.floor(canvas.width / 2 - sampleSize / 2)),
-        y: Math.max(0, Math.floor(canvas.height / 2 - sampleSize / 2)),
-      },
+        zIndex: s.zIndex || (s.type === 'rectangle' ? -1 : 0),
+      })),
+      ...walls.map(w => {
+        const validEdges = w.edges.filter(e => w.nodes.find(n => n.id === e.nodeA) && w.nodes.find(n => n.id === e.nodeB));
+        if (validEdges.length === 0) return null;
+        return {
+          id: w.id,
+          type: 'wall-segments' as const,
+          x: 0, y: 0, width: 0, height: 0, scale: 1, rotation: 0,
+          wallNodes: w.nodes,
+          wallEdges: validEdges.map(e => ({ id: e.id, a: w.nodes.findIndex(n => n.id === e.nodeA), b: w.nodes.findIndex(n => n.id === e.nodeB) })),
+          lineColor: '#000000',
+          wallThickness: validEdges[0]?.thickness || 150,
+          zIndex: w.zIndex || 0,
+          showDimensions: w.showDimensions,
+        };
+      }).filter(Boolean),
+      ...assets.map(a => ({ ...a })),
+      ...textAnnotations.map(t => ({ ...t, type: 'text-annotation' })),
+      ...labelArrows.map(la => ({ ...la, type: 'label-arrow' })),
+      ...dimensions.map(d => ({ ...d, type: 'dimension' }))
     ];
+    return items.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  }, [shapes, assets, walls, textAnnotations, labelArrows, dimensions]);
 
-    const hasNonWhitePixels = (x: number, y: number, width: number, height: number) => {
-      if (width <= 0 || height <= 0) return false;
-      const imageData = ctx.getImageData(x, y, width, height);
-      const pixels = imageData.data;
-      for (let i = 0; i < pixels.length; i += 4) {
-        if (pixels[i] !== 255 || pixels[i + 1] !== 255 || pixels[i + 2] !== 255) {
-          return true;
+  const renderAssetToCanvas = (
+    ctx: CanvasRenderingContext2D,
+    asset: AssetInstance,
+    minX: number,
+    minY: number,
+    padding: number,
+    contentShift: number,
+    MM_TO_PX: number,
+    loadedImages: Map<string, HTMLImageElement>
+  ) => {
+    const worldX = asset.x - minX + padding + (contentShift / MM_TO_PX);
+    const worldY = asset.y - minY + padding;
+    const cx = worldX * MM_TO_PX;
+    const cy = worldY * MM_TO_PX;
+
+    if (asset.type === 'wall-segments') {
+      const strokeColor = asset.lineColor || "#000000";
+      // Use workspace-native wall stroke width
+      const wallThickness = (asset.wallThickness || 150) * (asset.scale || 1);
+      
+      if (asset.wallNodes && asset.wallEdges) {
+        asset.wallEdges.forEach(edge => {
+          const a = asset.wallNodes![edge.a];
+          const b = asset.wallNodes![edge.b];
+          if (!a || !b) return;
+          const dx = b.x - a.x; const dy = b.y - a.y;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len === 0) return;
+          const nx = (-dy / len) * (wallThickness / 2);
+          const ny = (dx / len) * (wallThickness / 2);
+
+          const pts = [
+            { x: a.x + nx, y: a.y + ny }, { x: b.x + nx, y: b.y + ny },
+            { x: b.x - nx, y: b.y - ny }, { x: a.x - nx, y: a.y - ny }
+          ].map(p => ({
+            x: (p.x - minX + padding + (contentShift / MM_TO_PX)) * MM_TO_PX,
+            y: (p.y - minY + padding) * MM_TO_PX
+          }));
+
+          ctx.fillStyle = '#f1f5f9';
+          ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); pts.forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = strokeColor;
+          // Use heavy-duty architectural line weight for structural walls (3.0mm)
+          ctx.lineWidth = (asset.strokeWidth || 3.0) * MM_TO_PX;
+          ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[1].x, pts[1].y); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(pts[2].x, pts[2].y); ctx.lineTo(pts[3].x, pts[3].y); ctx.stroke();
+        });
+      }
+    } else if (asset.type === 'freehand') {
+      const points = (asset as any).points;
+      if (points?.length > 1) {
+        ctx.strokeStyle = asset.strokeColor || "#000000";
+        // Freehand path: ensure it's visible but not chunky
+        ctx.lineWidth = Math.max(1, (asset.strokeWidth || 1) * 0.2 * MM_TO_PX);
+        ctx.beginPath();
+        const startX = (points[0].x + asset.x - minX + padding + (contentShift / MM_TO_PX)) * MM_TO_PX;
+        const startY = (points[0].y + asset.y - minY + padding) * MM_TO_PX;
+        ctx.moveTo(startX, startY);
+        points.forEach((p: any) => ctx.lineTo((p.x + asset.x - minX + padding + (contentShift / MM_TO_PX)) * MM_TO_PX, (p.y + asset.y - minY + padding) * MM_TO_PX));
+        ctx.stroke();
+      }
+    } else if (asset.type === 'dimension') {
+      renderDimensionToCanvas(ctx, asset as any, minX - padding - (contentShift / MM_TO_PX), minY - padding, 0, MM_TO_PX);
+    } else if (asset.type === 'text-annotation') {
+      const fs = ((asset as any).fontSize || 16) * MM_TO_PX;
+      ctx.font = `bold ${Math.round(fs)}px Inter, sans-serif`;
+      ctx.fillStyle = (asset as any).color || '#000000';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText((asset as any).text || "", cx, cy);
+    } else if (asset.type === 'label-arrow') {
+      // Basic label arrow export
+      const la = asset as any;
+      const startX = (la.startPoint.x - minX + padding + (contentShift / MM_TO_PX)) * MM_TO_PX;
+      const startY = (la.startPoint.y - minY + padding) * MM_TO_PX;
+      const endX = (la.endPoint.x - minX + padding + (contentShift / MM_TO_PX)) * MM_TO_PX;
+      const endY = (la.endPoint.y - minY + padding) * MM_TO_PX;
+      
+      ctx.strokeStyle = la.color || "#000000";
+      ctx.lineWidth = 1 * MM_TO_PX;
+      ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(endX, endY); ctx.stroke();
+      
+      // Arrow head (simple)
+      const angle = Math.atan2(endY - startY, endX - startX);
+      const headLen = 10 * MM_TO_PX;
+      ctx.beginPath();
+      ctx.moveTo(endX, endY);
+      ctx.lineTo(endX - headLen * Math.cos(angle - Math.PI / 6), endY - headLen * Math.sin(angle - Math.PI / 6));
+      ctx.moveTo(endX, endY);
+      ctx.lineTo(endX - headLen * Math.cos(angle + Math.PI / 6), endY - headLen * Math.sin(angle + Math.PI / 6));
+      ctx.stroke();
+
+      if (la.label) {
+        ctx.font = `${8 * MM_TO_PX}px Inter, sans-serif`;
+        ctx.fillStyle = la.color || "#000000";
+        ctx.fillText(la.label, startX, startY - 5 * MM_TO_PX);
+      }
+    } else {
+      const w = (asset.width || 0) * (asset.scale || 1);
+      const h = (asset.height || 0) * (asset.scale || 1);
+      ctx.save();
+      ctx.translate(cx, cy);
+      if (asset.rotation) ctx.rotate((asset.rotation * Math.PI) / 180);
+
+      const img = loadedImages.get(asset.id);
+      if (img && (img.naturalWidth > 0 || img.width > 0)) {
+        ctx.drawImage(img, -w*MM_TO_PX/2, -h*MM_TO_PX/2, w*MM_TO_PX, h*MM_TO_PX);
+      } else if (asset.type === 'text') {
+        const fs = (asset.fontSize || 16) * MM_TO_PX;
+        ctx.font = `${Math.round(fs)}px ${asset.fontFamily || 'Inter'}`;
+        ctx.fillStyle = asset.textColor || '#000000';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(asset.text || "", 0, 0);
+      } else {
+        const fill = asset.backgroundColor || asset.fillColor || (asset.type.includes('table') ? '#f8fafc' : 'transparent');
+        ctx.fillStyle = fill;
+        ctx.strokeStyle = asset.strokeColor || '#000000';
+        // Shapes get a 3.0mm minimum stroke for maximum clarity on full-plan prints
+        ctx.lineWidth = (asset.strokeWidth || 3.0) * MM_TO_PX;
+        
+        // ONLY draw primitive circles if the type is explicitly circle/ellipse
+        if (asset.type === 'circle' || asset.type === 'ellipse') {
+          ctx.beginPath(); ctx.ellipse(0, 0, Math.abs(w*MM_TO_PX/2), Math.abs(h*MM_TO_PX/2), 0, 0, Math.PI*2);
+          if (fill !== 'transparent') ctx.fill(); ctx.stroke();
+        } else {
+           // Fallback for missing furniture assets: use a visible structural outline
+          ctx.strokeStyle = '#000000'; // Hard force black for visibility if asset failed
+          ctx.lineWidth = 2 * MM_TO_PX;
+          if (fill !== 'transparent') ctx.fill();
+          ctx.strokeRect(-w*MM_TO_PX/2, -h*MM_TO_PX/2, w*MM_TO_PX, h*MM_TO_PX);
+          
+          // Cross-hatch to signal internal error but keep plan readable
+          ctx.beginPath();
+          ctx.moveTo(-w*MM_TO_PX/2, -h*MM_TO_PX/2); ctx.lineTo(w*MM_TO_PX/2, h*MM_TO_PX/2);
+          ctx.moveTo(w*MM_TO_PX/2, -h*MM_TO_PX/2); ctx.lineTo(-w*MM_TO_PX/2, h*MM_TO_PX/2);
+          ctx.stroke();
         }
       }
-      return false;
+
+      // Add high-visibility Table Name (Numbering) Label if present
+      if ((asset as any).tableName) {
+        ctx.rotate(-((asset.rotation || 0) * Math.PI) / 180); // Un-rotate text so it's always upright
+        
+        const label = (asset as any).tableName;
+        // Match proportional size logic from editor
+        const size = Math.max(14, (asset.width || 100) * 0.14);
+        const circleR = Math.max(16, (asset.width || 100) * 0.12);
+        
+        // Use a high-quality circular background
+        ctx.shadowColor = 'rgba(0,0,0,0.2)';
+        ctx.shadowBlur = 4 * MM_TO_PX;
+        ctx.shadowOffsetY = 2 * MM_TO_PX;
+        
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(0, 0, circleR * MM_TO_PX, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Reset shadow for text
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+        
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1, (asset.width || 100) * 0.01) * MM_TO_PX;
+        ctx.stroke();
+
+        ctx.font = `900 ${size * MM_TO_PX}px Inter, sans-serif`;
+        ctx.fillStyle = '#000000';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, 0, 0);
+      }
+      ctx.restore();
+    }
+
+    // Show auto-dimensions if enabled (Applies to all types including Walls)
+    if ((asset as any).showDimensions) {
+      const autoDims = getDimensionsForObject(asset as any, `export-auto-${asset.id}`);
+      autoDims.forEach(ad => {
+        renderDimensionToCanvas(ctx, ad, minX - padding - (contentShift / MM_TO_PX), minY - padding, 0, MM_TO_PX);
+      });
+    }
+  };
+
+  const drawProfessionalPanel = async (
+    ctx: CanvasRenderingContext2D, 
+    width: number, 
+    height: number, 
+    details: ProfessionalDetails, 
+    assetsToCount: AssetInstance[], 
+    panelWidthPx: number,
+    xOffset: number
+  ) => {
+    const PANEL_WIDTH = panelWidthPx;
+    // Base all dimensions internally on the PANEL_WIDTH to ensure it looks 
+    // exactly the same proportion regardless of the canvas size
+    const padding = PANEL_WIDTH * 0.05; 
+    const isLeft = details.panelPosition === 'left';
+    const xBase = xOffset;
+    const dividerColor = '#f1f5f9';
+    const textColor = '#1e293b';
+    const headerBg = details.panelColor || '#0056A9'; 
+    
+    // Fill background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(xBase, 0, PANEL_WIDTH, height);
+    
+    // Draw a border between panel and canvas
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = Math.max(1, PANEL_WIDTH * 0.005);
+    ctx.beginPath();
+    ctx.moveTo(isLeft ? xBase + PANEL_WIDTH : xBase, 0);
+    ctx.lineTo(isLeft ? xBase + PANEL_WIDTH : xBase, height);
+    ctx.stroke();
+
+    let y = 0;
+
+    // Relative font size definitions
+    const headerFont = Math.max(12, PANEL_WIDTH * 0.055);
+    const rowFontBase = Math.max(10, PANEL_WIDTH * 0.045);
+    const rowFontLarge = Math.max(12, PANEL_WIDTH * 0.05);
+    
+    // Heights
+    const headerHeight = PANEL_WIDTH * 0.12;
+    const rowHeight = PANEL_WIDTH * 0.1;
+
+    // Helper functions for sections
+    const drawHeader = (title: string) => {
+      ctx.fillStyle = headerBg;
+      ctx.fillRect(xBase, y, PANEL_WIDTH, headerHeight);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${headerFont}px Inter, sans-serif`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      ctx.fillText(title.toUpperCase(), xBase + padding, y + (headerHeight / 2));
+      y += headerHeight;
     };
 
-    let hasContent = false;
-    for (const pos of samplePositions) {
-      const sampleWidth = Math.min(sampleSize, canvas.width - pos.x);
-      const sampleHeight = Math.min(sampleSize, canvas.height - pos.y);
-      if (hasNonWhitePixels(pos.x, pos.y, sampleWidth, sampleHeight)) {
-        hasContent = true;
-        break;
+    const drawRow = (label: string, value: string, isBold: boolean = false, isLast: boolean = false) => {
+      ctx.fillStyle = textColor;
+      ctx.font = isBold ? `bold ${rowFontLarge}px Inter, sans-serif` : `${rowFontBase}px Inter, sans-serif`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      
+      const maxW = PANEL_WIDTH - padding * 2;
+      const metrics = ctx.measureText(value);
+      
+      if (metrics.width > maxW) {
+        const words = value.split(' ');
+        let line = '';
+        for(let word of words) {
+          const test = line + word + ' ';
+          if (ctx.measureText(test).width > maxW && line.length > 0) {
+            ctx.fillText(line, xBase + padding, y + (rowHeight / 2));
+            y += rowHeight;
+            line = word + ' ';
+          } else {
+            line = test;
+          }
+        }
+        ctx.fillText(line, xBase + padding, y + (rowHeight / 2));
+        y += rowHeight;
+      } else {
+        ctx.fillText(value, xBase + padding, y + (rowHeight / 2));
+        y += rowHeight;
       }
+
+      if (!isLast) {
+        ctx.strokeStyle = dividerColor;
+        ctx.lineWidth = Math.max(1, PANEL_WIDTH * 0.002);
+        ctx.beginPath(); ctx.moveTo(xBase, y); ctx.lineTo(xBase + PANEL_WIDTH, y); ctx.stroke();
+      }
+    };
+
+    const drawTableEntry = (label: string, value: string) => {
+      ctx.fillStyle = textColor;
+      ctx.font = `${rowFontBase}px Inter, sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label.toUpperCase(), xBase + padding, y + rowHeight / 2);
+      
+      if (value) {
+        ctx.textAlign = 'right';
+        ctx.font = `bold ${rowFontBase}px Inter, sans-serif`;
+        ctx.fillText(value, xBase + PANEL_WIDTH - padding, y + rowHeight / 2);
+      }
+      y += rowHeight;
+      ctx.strokeStyle = dividerColor;
+      ctx.lineWidth = Math.max(1, PANEL_WIDTH * 0.002);
+      ctx.beginPath(); ctx.moveTo(xBase, y); ctx.lineTo(xBase + PANEL_WIDTH, y); ctx.stroke();
+    };
+
+    // 1. EVENT INFO
+    drawHeader('EVENT');
+    drawRow('', details.eventName || "Untitled Project", true);
+
+    if (details.client) {
+      drawHeader('CLIENT');
+      drawRow('', details.client, false);
     }
 
-    if (!hasContent) {
-      // Fallback: inspect entire canvas before declaring blank
-      hasContent = hasNonWhitePixels(0, 0, canvas.width, canvas.height);
+    if (details.date) {
+      drawHeader('DATE');
+      drawRow('', details.date, false);
     }
 
-    console.log("saveCanvas: Content validation result", {
-      hasContent,
-      sampleSize,
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
+    // 2. VENUE
+    drawHeader('VENUE');
+    drawRow('', details.venue || "TBA", false);
+
+    // 3. SITTING CODE (Inventory)
+    drawHeader('SITTING CODE');
+    const inventory = new Map<string, number>();
+    assetsToCount.forEach(a => {
+      if(!['wall-segments', 'freehand', 'line', 'polyline', 'text', 'rect', 'circle', 'ellipse'].includes(a.type)) {
+        inventory.set(a.type, (inventory.get(a.type) || 0) + 1);
+      }
     });
 
-    if (!hasContent) {
-      throw new Error("Canvas appears to be blank. No content was rendered. Please ensure your selection contains visible elements.");
+    if (inventory.size === 0) {
+      drawTableEntry('No items found', '');
+    } else {
+      let totalItems = 0;
+      inventory.forEach((count, type) => {
+        totalItems += count;
+        const name = ASSET_LIBRARY.find(l => l.id === type)?.name || type;
+        drawTableEntry(name, String(count));
+      });
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(xBase, y, PANEL_WIDTH, rowHeight);
+      ctx.fillStyle = textColor;
+      ctx.font = `bold ${rowFontLarge}px Inter, sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.fillText('TOTAL', xBase + padding, y + rowHeight / 2);
+      ctx.textAlign = 'right';
+      ctx.fillText(String(totalItems), xBase + PANEL_WIDTH - padding, y + rowHeight / 2);
+      y += rowHeight;
     }
 
-    try {
-      if (option.format === "pdf") {
-        try {
-          const pdf = new jsPDF({
-            orientation: paperSizeInfo.width > paperSizeInfo.height ? "landscape" : "portrait",
-            unit: "mm",
-            format: option.paperSize.toLowerCase(),
-          });
-
-          // Validate canvas before converting to data URL
-          if (canvas.width <= 0 || canvas.height <= 0) {
-            throw new Error("Canvas has invalid dimensions for PDF export");
-          }
-
-          const imgData = canvas.toDataURL("image/png", 1.0);
-          if (!imgData || imgData === "data:,") {
-            throw new Error("Failed to convert canvas to image data");
-          }
-
-          pdf.addImage(imgData, "PNG", 0, 0, paperSizeInfo.width, paperSizeInfo.height, undefined, "FAST");
-          pdf.save(fileName);
-        } catch (pdfError) {
-          console.error("PDF export error:", pdfError);
-          throw new Error(`Failed to create PDF: ${pdfError instanceof Error ? pdfError.message : 'Unknown error'}`);
+    // 4. GUESTS ALLOCATION
+    drawHeader('GUESTS ALLOCATION');
+    const allocationLines = (details.guestAllocation || "").split('\n').filter(l => l.trim().length > 0);
+    if (allocationLines.length === 0) {
+       drawTableEntry('General Admission', 'TBA');
+    } else {
+      allocationLines.forEach(line => {
+        if (line.includes(':')) {
+          const [label, count] = line.split(':');
+          drawTableEntry(label.trim(), count.trim());
+        } else {
+          drawTableEntry(line.trim(), '');
         }
-      } else {
-        const mimeType = option.format === "png" ? "image/png" : "image/jpeg";
-
-        // Validate canvas before converting to blob
-        if (canvas.width <= 0 || canvas.height <= 0) {
-          throw new Error("Canvas has invalid dimensions for image export");
-        }
-
-        return new Promise<void>((resolve, reject) => {
-          try {
-            canvas.toBlob(
-              (blob) => {
-                try {
-                  if (!blob) {
-                    reject(new Error("Failed to create image blob"));
-                    return;
-                  }
-
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = fileName;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(url);
-                  resolve();
-                } catch (downloadError) {
-                  console.error("Download error:", downloadError);
-                  reject(new Error(`Failed to download file: ${downloadError instanceof Error ? downloadError.message : 'Unknown error'}`));
-                }
-              },
-              mimeType,
-              option.format === "jpeg" ? 0.95 : 1.0
-            );
-          } catch (blobError) {
-            console.error("toBlob error:", blobError);
-            reject(new Error(`Failed to convert canvas to blob: ${blobError instanceof Error ? blobError.message : 'Unknown error'}`));
-          }
-        });
-      }
-    } catch (error) {
-      console.error("saveCanvas error:", error);
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error(`Failed to save canvas: ${String(error)}`);
-    }
-  };
-
-  const exportCanvas = async (element: HTMLElement, option: ExportOption) => {
-    // Hide UI elements that shouldn't be in export
-    const uiElements = document.querySelectorAll('[data-export-hide]');
-    uiElements.forEach((el) => {
-      (el as HTMLElement).style.display = 'none';
-    });
-
-    try {
-      // Validate element dimensions
-      const rect = element.getBoundingClientRect();
-      const scrollWidth = element.scrollWidth || rect.width;
-      const scrollHeight = element.scrollHeight || rect.height;
-
-      if (scrollWidth <= 0 || scrollHeight <= 0) {
-        throw new Error(`Invalid canvas dimensions: ${scrollWidth}x${scrollHeight}. Please ensure the canvas is visible.`);
-      }
-
-      // Use html2canvas to capture the canvas exactly as it appears
-      let canvas: HTMLCanvasElement | null = null;
-      try {
-        // Try to find the inner canvas div if we're on the outer container
-        let targetElement = element;
-        const innerCanvas = element.querySelector('[data-canvas-container]') as HTMLElement;
-        if (innerCanvas) {
-          const innerRect = innerCanvas.getBoundingClientRect();
-          if (innerRect.width > 0 && innerRect.height > 0) {
-            targetElement = innerCanvas;
-            console.log("Using inner canvas element for export");
-          }
-        }
-
-        // Limit dimensions to prevent memory issues
-        const maxDimension = 10000; // pixels
-        const exportWidth = Math.min(maxDimension, Math.max(1, scrollWidth));
-        const exportHeight = Math.min(maxDimension, Math.max(1, scrollHeight));
-
-        console.log("html2canvas config:", {
-          element: targetElement.tagName,
-          width: exportWidth,
-          height: exportHeight,
-          scrollWidth: targetElement.scrollWidth,
-          scrollHeight: targetElement.scrollHeight,
-          clientWidth: targetElement.clientWidth,
-          clientHeight: targetElement.clientHeight,
-        });
-
-        canvas = await html2canvas(targetElement, {
-          backgroundColor: '#ffffff',
-          scale: 1, // Reduced from 2 to prevent memory issues
-          useCORS: true,
-          allowTaint: true, // Changed to true to allow cross-origin images
-          logging: true, // Enable logging to see what's happening
-          width: exportWidth,
-          height: exportHeight,
-          x: 0,
-          y: 0,
-          scrollX: 0,
-          scrollY: 0,
-          windowWidth: exportWidth,
-          windowHeight: exportHeight,
-          removeContainer: false,
-          imageTimeout: 15000,
-          ignoreElements: (el) => {
-            // Skip elements that might have unsupported color formats or are hidden
-            try {
-              const computedStyle = window.getComputedStyle(el);
-              const bgColor = computedStyle.backgroundColor;
-              const color = computedStyle.color;
-              const display = computedStyle.display;
-              const visibility = computedStyle.visibility;
-
-              // Skip hidden elements
-              if (display === 'none' || visibility === 'hidden') {
-                return true;
-              }
-
-              // Check if color uses lab() or other unsupported formats
-              return bgColor?.includes('lab(') || color?.includes('lab(') ||
-                bgColor?.includes('lch(') || color?.includes('lch(');
-            } catch (e) {
-              // If we can't get computed style, skip the element
-              return true;
-            }
-          },
-          onclone: (clonedDoc, element) => {
-            // Fix any potential issues in the cloned document
-            const clonedElement = element as HTMLElement;
-            if (clonedElement) {
-              // Ensure the cloned element is visible
-              clonedElement.style.visibility = 'visible';
-              clonedElement.style.display = 'block';
-            }
-          },
-        });
-
-        // Check if the captured canvas is blank (all white pixels)
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          const imageData = ctx.getImageData(0, 0, Math.min(100, canvas.width), Math.min(100, canvas.height));
-          const pixels = imageData.data;
-          let allWhite = true;
-          for (let i = 0; i < pixels.length; i += 4) {
-            // Check if pixel is not white (255, 255, 255)
-            if (pixels[i] !== 255 || pixels[i + 1] !== 255 || pixels[i + 2] !== 255) {
-              allWhite = false;
-              break;
-            }
-          }
-          if (allWhite && canvas.width > 100 && canvas.height > 100) {
-            console.warn("html2canvas captured a blank canvas, falling back to direct rendering");
-            throw new Error("Captured canvas appears to be blank");
-          }
-        }
-      } catch (html2canvasError) {
-        console.error("html2canvas error details:", {
-          error: html2canvasError,
-          message: html2canvasError instanceof Error ? html2canvasError.message : String(html2canvasError),
-          stack: html2canvasError instanceof Error ? html2canvasError.stack : undefined,
-          name: html2canvasError instanceof Error ? html2canvasError.name : undefined,
-        });
-
-        // Try with simpler options as fallback
-        let fallbackSucceeded = false;
-        try {
-          console.log("Attempting fallback capture with simpler options...");
-          const fallbackCanvas = await html2canvas(element, {
-            backgroundColor: '#ffffff',
-            scale: 1,
-            useCORS: false,
-            allowTaint: true,
-            logging: true,
-          });
-
-          // Check if fallback canvas is also blank
-          const fallbackCtx = fallbackCanvas.getContext('2d');
-          if (fallbackCtx) {
-            const imageData = fallbackCtx.getImageData(0, 0, Math.min(100, fallbackCanvas.width), Math.min(100, fallbackCanvas.height));
-            const pixels = imageData.data;
-            let allWhite = true;
-            for (let i = 0; i < pixels.length; i += 4) {
-              if (pixels[i] !== 255 || pixels[i + 1] !== 255 || pixels[i + 2] !== 255) {
-                allWhite = false;
-                break;
-              }
-            }
-            if (!allWhite || fallbackCanvas.width <= 100) {
-              canvas = fallbackCanvas;
-              fallbackSucceeded = true;
-              console.log("Fallback capture succeeded");
-            } else {
-              console.warn("Fallback canvas is also blank");
-            }
-          }
-        } catch (fallbackError) {
-          console.error("Fallback capture also failed:", fallbackError);
-        }
-
-        // If html2canvas failed or produced blank canvas, use direct rendering
-        if (!fallbackSucceeded) {
-          console.log("html2canvas failed or produced blank canvas, using direct asset rendering instead...");
-          try {
-            // Export all assets using the direct rendering method
-            await exportAllAssetsDirectly(option);
-            return; // Success, exit early - don't continue with html2canvas path
-          } catch (directRenderError) {
-            console.error("Direct rendering also failed:", directRenderError);
-            const errorMessage = html2canvasError instanceof Error
-              ? html2canvasError.message
-              : String(html2canvasError);
-            throw new Error(
-              `Failed to export canvas. ` +
-              `html2canvas error: ${errorMessage}. ` +
-              `Direct rendering error: ${directRenderError instanceof Error ? directRenderError.message : String(directRenderError)}. ` +
-              `Please try using "Export selected items only" or refresh the page and try again.`
-            );
-          }
-        }
-      }
-
-      // Validate captured canvas
-      if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
-        // If we have a blank/invalid canvas, try direct rendering
-        console.log("Invalid canvas from html2canvas, using direct rendering...");
-        await exportAllAssetsDirectly(option);
-        return;
-      }
-
-      // Ensure canvas is defined before proceeding
-      if (!canvas) {
-        throw new Error("Canvas capture failed");
-      }
-
-      // Get paper size dimensions in mm
-      const paperSizeInfo = PAPER_SIZES[option.paperSize];
-
-      // Calculate scaling to fit paper size
-      // Convert mm to pixels at 96 DPI (standard screen DPI)
-      const mmToPx = 96 / 25.4; // 96 DPI = 3.779527559 pixels per mm
-      const paperWidthPx = paperSizeInfo.width * mmToPx;
-      const paperHeightPx = paperSizeInfo.height * mmToPx;
-
-      // Calculate scale to fit canvas content to paper while maintaining aspect ratio
-      const canvasAspect = canvas.width / canvas.height;
-      const paperAspect = paperWidthPx / paperHeightPx;
-
-      let finalWidth: number;
-      let finalHeight: number;
-      let offsetX = 0;
-      let offsetY = 0;
-
-      if (canvasAspect > paperAspect) {
-        // Canvas is wider - fit to paper width
-        finalWidth = paperWidthPx;
-        finalHeight = paperWidthPx / canvasAspect;
-        offsetY = (paperHeightPx - finalHeight) / 2;
-      } else {
-        // Canvas is taller - fit to paper height
-        finalHeight = paperHeightPx;
-        finalWidth = paperHeightPx * canvasAspect;
-        offsetX = (paperWidthPx - finalWidth) / 2;
-      }
-
-      // Validate final dimensions
-      if (!isFinite(finalWidth) || !isFinite(finalHeight) || finalWidth <= 0 || finalHeight <= 0) {
-        throw new Error(`Invalid calculated dimensions: ${finalWidth}x${finalHeight}`);
-      }
-
-      // Create final canvas at paper size
-      const finalCanvas = document.createElement('canvas');
-      finalCanvas.width = Math.max(1, Math.round(paperWidthPx));
-      finalCanvas.height = Math.max(1, Math.round(paperHeightPx));
-      const ctx = finalCanvas.getContext('2d');
-      if (!ctx) {
-        throw new Error('Failed to get 2D context for final canvas');
-      }
-
-      // Fill with white background
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
-
-      // Draw the captured canvas centered on paper
-      try {
-        ctx.drawImage(canvas, Math.round(offsetX), Math.round(offsetY), Math.round(finalWidth), Math.round(finalHeight));
-      } catch (drawError) {
-        console.error("drawImage error:", drawError);
-        throw new Error(`Failed to draw image to canvas: ${drawError instanceof Error ? drawError.message : 'Unknown error'}`);
-      }
-
-      // Export based on format
-      await saveCanvas(finalCanvas, option);
-    } catch (error) {
-      // Re-throw with better context
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error(`Export failed: ${String(error)}`);
-    } finally {
-      // Restore UI elements
-      uiElements.forEach((el) => {
-        (el as HTMLElement).style.display = '';
       });
     }
+
+    // 5. EVENT BY (Branding)
+    const logoBlockH = PANEL_WIDTH * 0.4;
+    const blockStartY = height - logoBlockH;
+    y = blockStartY;
+    drawHeader('EVENT BY');
+    
+    if (details.logo) {
+      const img = new Image(); img.src = details.logo;
+      await new Promise(r => { img.onload = r; img.onerror = r; });
+      if (img.naturalWidth > 0) {
+        // Precise vertical centering in the area remaining after the 'EVENT BY' header
+        const availableH = logoBlockH - headerHeight;
+        const maxW = PANEL_WIDTH * 0.8;
+        const maxH = availableH * 0.8;
+
+        let tw = img.naturalWidth;
+        let th = img.naturalHeight;
+        const scale = Math.min(maxW / tw, maxH / th);
+        tw *= scale; th *= scale;
+
+        const lx = xBase + (PANEL_WIDTH - tw) / 2;
+        const ly = blockStartY + headerHeight + (availableH - th) / 2;
+        
+        ctx.drawImage(img, lx, ly, tw, th);
+      }
+    } else {
+      const availableH = logoBlockH - headerHeight;
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = `italic ${rowFontBase}px Inter, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('Professional Layout Design', xBase + PANEL_WIDTH / 2, y + headerHeight + (availableH / 2));
+    }
   };
 
-  const handleExport = async (option: ExportOption) => {
+
+  const handleExport = async (option: ExportOption, details?: ProfessionalDetails) => {
     setIsExporting(true);
     try {
-      // If exporting selection only, we need to create a custom export
-      if (option.exportSelection && hasSelection) {
-        await exportSelection(option);
-        return;
-      }
+      const assetsToExport = option.exportSelection ? allItems.filter(i => selectedIds.includes(i.id)) : allItems;
+      if (assetsToExport.length === 0) throw new Error("Nothing to export.");
 
-      // For full canvas export, use direct rendering by default since it's more reliable
-      // than html2canvas which has issues with transformed containers and complex SVG rendering
-      console.log("Starting full canvas export using direct rendering...");
+      // 1. Calculate Bounding Box of content in mm (Include ALL types to prevent clipping)
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      const OFFSET = 200; // Architectural dimension offset from dimensionUtils
 
-      // Use direct rendering for full canvas export (more reliable than html2canvas)
-      await exportAllAssetsDirectly(option);
-    } catch (error) {
-      console.error("Export error:", error);
-      let errorMessage = 'Unknown error';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      } else {
-        try {
-          errorMessage = JSON.stringify(error);
-        } catch (e) {
-          errorMessage = 'Non-serializable error';
+      assetsToExport.forEach(a => {
+        if (a.type === 'wall-segments' && a.wallNodes) {
+          a.wallNodes.forEach(n => { 
+            minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); 
+            maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); 
+          });
+        } else if (a.type === 'dimension') {
+          const d = a as any;
+          minX = Math.min(minX, d.startPoint.x, d.endPoint.x);
+          minY = Math.min(minY, d.startPoint.y, d.endPoint.y);
+          maxX = Math.max(maxX, d.startPoint.x, d.endPoint.x);
+          maxY = Math.max(maxY, d.startPoint.y, d.endPoint.y);
+          // Account for dimension offset
+          if (d.offset) {
+             const dx = d.endPoint.x - d.startPoint.x;
+             const dy = d.endPoint.y - d.startPoint.y;
+             const len = Math.sqrt(dx*dx + dy*dy);
+             if (len > 0) {
+               const nx = -dy/len; const ny = dx/len;
+               const px = d.startPoint.x + nx * d.offset;
+               const py = d.startPoint.y + ny * d.offset;
+               minX = Math.min(minX, px); minY = Math.min(minY, py);
+               maxX = Math.max(maxX, px); maxY = Math.max(maxY, py);
+             }
+          }
+        } else if (a.type === 'label-arrow') {
+          const la = a as any;
+          minX = Math.min(minX, la.startPoint.x, la.endPoint.x);
+          minY = Math.min(minY, la.startPoint.y, la.endPoint.y);
+          maxX = Math.max(maxX, la.startPoint.x, la.endPoint.x);
+          maxY = Math.max(maxY, la.startPoint.y, la.endPoint.y);
+        } else {
+          const w = (a.width || 0) * (a.scale || 1); 
+          const h = (a.height || 0) * (a.scale || 1);
+          
+          // Basic bounds
+          minX = Math.min(minX, a.x - w/2); minY = Math.min(minY, a.y - h/2);
+          maxX = Math.max(maxX, a.x + w/2); maxY = Math.max(maxY, a.y + h/2);
+
+          // Add extra space for auto-dimensions if enabled
+          if ((a as any).showDimensions) {
+            minX = Math.min(minX, a.x - w/2 - OFFSET - 100);
+            minY = Math.min(minY, a.y - h/2 - OFFSET - 100);
+            maxX = Math.max(maxX, a.x + w/2 + OFFSET + 100);
+            maxY = Math.max(maxY, a.y + h/2 + OFFSET + 100);
+          }
         }
+      });
+
+      const mmPadding = 400; // Increased to 400mm (40cm) for better architectural breathing room
+      const contentW_mm = (maxX - minX) + mmPadding * 2;
+      const contentH_mm = (maxY - minY) + mmPadding * 2;
+
+      // 2. Set up Final Paper dimensions
+      const p = PAPER_SIZES[option.paperSize];
+      const paperPx = EXPORT_DPI / 25.4;
+      // Force landscape if professional layout to fit the panel nicely on the side
+      const targetW = (option.isProfessional ? Math.max(p.width, p.height) : p.width) * paperPx;
+      const targetH = (option.isProfessional ? Math.min(p.width, p.height) : p.height) * paperPx;
+
+      const finalCanvas = document.createElement('canvas');
+      finalCanvas.width = targetW; 
+      finalCanvas.height = targetH;
+      const fctx = finalCanvas.getContext('2d');
+      if (!fctx) throw new Error("Final context error");
+
+      fctx.fillStyle = '#ffffff'; 
+      fctx.fillRect(0, 0, targetW, targetH);
+
+      // 3. Define mapping zones on the paper
+      let panelW_px = 0;
+      let mapW_px = targetW;
+      let mapH_px = targetH;
+      const PANEL_RATIO = 0.22; // 22% of paper width goes to panel
+
+      if (option.isProfessional) {
+        panelW_px = targetW * PANEL_RATIO;
+        mapW_px = targetW - panelW_px;
       }
-      alert(`Export failed: ${errorMessage}`);
+
+      // 4. Calculate scaling from MM to PX to fit within mapW_px x mapH_px
+      const sAspect = contentW_mm / contentH_mm;
+      const tAspect = mapW_px / mapH_px;
+      
+      let finalContentW, finalContentH;
+      if (sAspect > tAspect) {
+        // Fits width perfectly
+        finalContentW = mapW_px;
+        finalContentH = mapW_px / sAspect;
+      } else {
+        // Fits height perfectly
+        finalContentH = mapH_px;
+        finalContentW = mapH_px * sAspect;
+      }
+      
+      const MM_TO_PX = finalContentW / contentW_mm;
+
+      // 5. Draw the actual floorplan content into a perfectly isolated canvas
+      const sourceCanvas = document.createElement('canvas');
+      sourceCanvas.width = finalContentW;
+      sourceCanvas.height = finalContentH;
+      const ctx = sourceCanvas.getContext('2d');
+      if (!ctx) throw new Error("Canvas context error");
+      ctx.fillStyle = '#ffffff'; 
+      ctx.fillRect(0, 0, sourceCanvas.width, sourceCanvas.height);
+
+      const loadedImages = await loadSvgAssets(assetsToExport);
+
+      // Draw all assets on sourceCanvas
+      assetsToExport.forEach(a => renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages));
+
+      // 6. Draw sourceCanvas onto final paper, centered inside the map zone
+      const ox = (details?.panelPosition === 'left' && option.isProfessional) 
+                  ? panelW_px + (mapW_px - finalContentW) / 2 
+                  : (mapW_px - finalContentW) / 2;
+      const oy = (targetH - finalContentH) / 2;
+      
+      fctx.drawImage(sourceCanvas, ox, oy, finalContentW, finalContentH);
+
+      // 7. Draw professional panel squarely on the remaining real estate of final canvas
+      if (option.isProfessional && details) {
+        const panelX = details.panelPosition === 'left' ? 0 : mapW_px;
+        await drawProfessionalPanel(fctx, targetW, targetH, details, assetsToExport, panelW_px, panelX);
+      }
+
+      // 8. Output
+      const fileName = `export-${Date.now()}.${option.format}`;
+      if (option.format === 'pdf') {
+        const doc = new jsPDF({ orientation: (targetW > targetH ? 'l' : 'p'), unit: 'mm', format: option.paperSize.toLowerCase() });
+        const dataUrl = finalCanvas.toDataURL('image/png', 1.0);
+        doc.addImage(dataUrl, 'PNG', 0, 0, (targetW/paperPx), (targetH/paperPx), undefined, 'FAST');
+        doc.save(fileName);
+      } else {
+        const a = document.createElement('a'); 
+        a.download = fileName; 
+        a.href = finalCanvas.toDataURL(`image/${option.format}`, 1.0); 
+        a.click();
+      }
+      toast.success("Export finished!");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Export failed");
     } finally {
       setIsExporting(false);
     }
   };
 
-  const handleImport = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const data = JSON.parse(event.target?.result as string);
-          const { shapes, assets, walls } = useProjectStore.getState();
-
-          // Import shapes
-          if (data.shapes && Array.isArray(data.shapes)) {
-            data.shapes.forEach((shape: any) => {
-              useProjectStore.getState().addShape(shape);
-            });
-          }
-
-          // Import assets
-          if (data.assets && Array.isArray(data.assets)) {
-            data.assets.forEach((asset: any) => {
-              useProjectStore.getState().addAsset(asset);
-            });
-          }
-
-          // Import walls
-          if (data.walls && Array.isArray(data.walls)) {
-            data.walls.forEach((wall: any) => {
-              useProjectStore.getState().addWall(wall);
-            });
-          }
-
-          toast.success('Project imported successfully!');
-        } catch (error) {
-          toast.error('Failed to import project. Invalid file format.');
-          console.error('Import error:', error);
-        }
-      };
-      reader.readAsText(file);
-    };
-    input.click();
-  };
-
   return (
-    <div className="border-t border-gray-200 pt-4 mt-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-900">Export / Import</h3>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="p-1 hover:bg-gray-100 rounded transition-colors"
-          title={isExpanded ? "Collapse export options" : "Expand export options"}
-        >
-          {isExpanded ? (
-            <Minus className="w-4 h-4 text-gray-600" />
-          ) : (
-            <Plus className="w-4 h-4 text-gray-600" />
-          )}
-        </button>
+    <div className="border-t border-gray-100 pt-6 mt-6 font-sans">
+      <div className="mb-4">
+        <h3 className="text-sm font-bold text-gray-900 flex items-center justify-between">
+          Export / Import
+          <button onClick={() => setIsExpanded(!isExpanded)} className="p-1 hover:bg-gray-100 rounded transition-colors">
+            {isExpanded ? <FaTimes size={10} className="text-gray-400" /> : <FaPlus size={10} className="text-gray-400" />}
+          </button>
+        </h3>
       </div>
 
       {isExpanded && (
-        <>
-          <div className="space-y-3">
-            {exportOptions.map((option) => (
-              <div
-                key={option.id}
-                className="border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-2"
+        <div className="space-y-4">
+          {exportOptions.map(opt => (
+            <div key={opt.id} className="p-3 bg-gray-50 border border-gray-100 rounded-xl hover:border-slate-300 transition-all group relative">
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <select className="bg-white border-gray-200 text-[10px] p-1.5 rounded-lg font-bold text-gray-700 outline-none" value={opt.paperSize} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, paperSize: e.target.value as PaperSize}:o))}>
+                  {Object.keys(PAPER_SIZES).map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select className="bg-white border-gray-200 text-[10px] p-1.5 rounded-lg font-bold text-slate-800 outline-none" value={opt.format} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, format: e.target.value as ExportFormat}:o))}>
+                  <option value="pdf">PDF</option>
+                  <option value="png">PNG</option>
+                  <option value="jpg">JPG</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1 mb-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={opt.exportSelection} disabled={!hasSelection} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, exportSelection: e.target.checked}:o))} className="w-3 h-3 rounded border-gray-300 text-slate-800"/>
+                  <span className={`text-[10px] font-bold ${!hasSelection ? 'text-gray-300' : 'text-gray-600'}`}>Current Selection</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={opt.isProfessional} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, isProfessional: e.target.checked}:o))} className="w-3 h-3 rounded border-gray-300 text-slate-800"/>
+                  <span className="text-[10px] font-bold text-slate-800">Professional Layout</span>
+                </label>
+              </div>
+
+              <button 
+                onClick={() => {
+                  if (opt.isProfessional) { setCurrentOption(opt); setShowProfessionalModal(true); }
+                  else handleExport(opt);
+                }}
+                disabled={isExporting}
+                className="w-full h-11 border-2 border-[var(--accent)] text-[var(--accent)] rounded-xl text-xs font-bold hover:bg-[var(--accent)] hover:text-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-600">Export {option.id}</span>
-                  {exportOptions.length > 1 && (
-                    <button
-                      onClick={() => removeExportOption(option.id)}
-                      className="p-1 hover:bg-gray-200 rounded transition-colors"
-                    >
-                      <X className="w-3 h-3 text-gray-500" />
-                    </button>
+                {isExporting ? <FaExpand className="animate-spin" size={12}/> : <FaDownload size={12}/>}
+                {isExporting ? 'Exporting...' : `Export ${opt.format.toUpperCase()}`}
+              </button>
+            </div>
+          ))}
+          
+          <button onClick={() => setExportOptions([...exportOptions, { id: `${exportOptions.length+1}`, paperSize: 'A4', format: 'pdf', exportSelection: false, isProfessional: true }])} className="w-full py-2 border border-dashed border-gray-200 rounded-lg text-[10px] font-bold text-gray-400 hover:text-slate-800 hover:border-slate-300 transition-all">
+            + New Layout Config
+          </button>
+        </div>
+      )}
+
+      {/* Professional Export Modal - Align with Share UI */}
+      {showProfessionalModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 backdrop-blur-sm bg-black/30" onClick={() => setShowProfessionalModal(false)}>
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 30 }} 
+            animate={{ opacity: 1, scale: 1, y: 0 }} 
+            className="w-[32rem] bg-white rounded-[2.25rem] shadow-2xl overflow-hidden relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={`p-8 text-white text-center transition-colors duration-300`} style={{ backgroundColor: profDetails.panelColor }}>
+              <h2 className="text-2xl font-black tracking-tight">Export Panel</h2>
+              <p className="opacity-70 text-[10px] uppercase font-bold tracking-[0.2em] mt-2">Professional Layout Details</p>
+            </div>
+
+            <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              {/* Logo Upload Section */}
+              <div className="flex flex-col items-center gap-3">
+                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Project Logo</label>
+                <div className="relative group">
+                  <div className="w-24 h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-slate-400">
+                    {profDetails.logo ? (
+                      <img src={profDetails.logo} className="w-full h-full object-cover" />
+                    ) : (
+                      <Upload className="text-slate-300 group-hover:text-slate-500 transition-colors" size={24} />
+                    )}
+                    <input type="file" accept="image/*" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setProfDetails({...profDetails, logo: ev.target?.result as string});
+                        reader.readAsDataURL(file);
+                      }
+                    }} className="absolute inset-0 opacity-0 cursor-pointer" />
+                  </div>
+                  {profDetails.logo && (
+                    <button onClick={() => setProfDetails({...profDetails, logo: null})} className="absolute -top-2 -right-2 w-6 h-6 bg-white border border-slate-100 rounded-full shadow-md flex items-center justify-center text-slate-400 hover:text-red-500 transition-all"><X size={12}/></button>
                   )}
                 </div>
-
-                {/* Export Selection Toggle */}
-                <div className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    id={`export-selection-${option.id}`}
-                    checked={option.exportSelection}
-                    onChange={(e) =>
-                      updateExportOption(option.id, { exportSelection: e.target.checked })
-                    }
-                    disabled={!hasSelection}
-                    className="rounded"
-                  />
-                  <label
-                    htmlFor={`export-selection-${option.id}`}
-                    className={hasSelection ? "text-gray-700" : "text-gray-400"}
-                  >
-                    Export selected items only
-                  </label>
-                </div>
-
-                {/* Selection Preview */}
-                {hasSelection && (
-                  <div className="border-2 border-blue-300 rounded overflow-hidden bg-white">
-                    <PlanPreview
-                      assets={allItems.filter(item => selectedIds.includes(item.id))}
-                      width={250}
-                      height={140}
-                    />
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-2">
-                  <select
-                    value={option.paperSize}
-                    onChange={(e) =>
-                      updateExportOption(option.id, { paperSize: e.target.value as PaperSize })
-                    }
-                    className="text-xs border border-gray-300 rounded px-2 py-1.5 bg-white"
-                  >
-                    {Object.entries(PAPER_SIZES).map(([size, info]) => (
-                      <option key={size} value={size}>
-                        {size} - {info.label}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={option.format}
-                    onChange={(e) =>
-                      updateExportOption(option.id, { format: e.target.value as ExportFormat })
-                    }
-                    className="text-xs border border-gray-300 rounded px-2 py-1.5 bg-white uppercase"
-                  >
-                    <option value="pdf">PDF</option>
-                    <option value="png">PNG</option>
-                    <option value="jpeg">JPEG</option>
-                  </select>
-                </div>
-
-                <button
-                  onClick={() => handleExport(option)}
-                  disabled={isExporting}
-                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded border transition-colors ${isExporting
-                    ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                    : "border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
-                    }`}
-                >
-
-                  <Download className="w-3 h-3" />
-                  {isExporting ? "Exporting..." : `Export ${option.format.toUpperCase()}`}
-                </button>
               </div>
-            ))}
 
-          </div>
-        </>
+              {/* Theme Selection */}
+              <div className="space-y-3 text-center">
+                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Panel Theme</label>
+                <div className="flex justify-center gap-3">
+                  {['#0056A9', '#1e293b', '#0f172a', '#334155', '#272235', '#dc3545'].map(color => (
+                    <button 
+                      key={color}
+                      onClick={() => setProfDetails({...profDetails, panelColor: color})}
+                      className={`w-8 h-8 rounded-full border-4 transition-all ${profDetails.panelColor === color ? 'border-slate-200 scale-125' : 'border-white hover:scale-110'}`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Event Name</label>
+                  <input className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" value={profDetails.eventName} onChange={e=>setProfDetails({...profDetails, eventName: e.target.value})}/>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Client</label>
+                  <input className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" placeholder="Client Name" value={profDetails.client} onChange={e=>setProfDetails({...profDetails, client: e.target.value})}/>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Venue</label>
+                  <input className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" value={profDetails.venue} onChange={e=>setProfDetails({...profDetails, venue: e.target.value})}/>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Date</label>
+                  <input className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" value={profDetails.date} onChange={e=>setProfDetails({...profDetails, date: e.target.value})}/>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Position</label>
+                <div className="flex gap-3">
+                  <button onClick={()=>setProfDetails({...profDetails, panelPosition: 'left'})} className={`flex-1 h-12 text-sm font-bold rounded-2xl border-2 transition-all ${profDetails.panelPosition==='left'?'bg-[var(--accent)] border-[var(--accent)] text-white shadow-xl translate-y-[-2px]':'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}>Left Side</button>
+                  <button onClick={()=>setProfDetails({...profDetails, panelPosition: 'right'})} className={`flex-1 h-12 text-sm font-bold rounded-2xl border-2 transition-all ${profDetails.panelPosition==='right'?'bg-[var(--accent)] border-[var(--accent)] text-white shadow-xl translate-y-[-2px]':'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}>Right Side</button>
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button onClick={() => setShowProfessionalModal(false)} className="flex-1 h-14 rounded-[1.25rem] bg-slate-50 font-bold text-slate-400 hover:bg-slate-100 transition-all">Cancel</button>
+                <button onClick={() => { setShowProfessionalModal(false); if(currentOption) handleExport(currentOption, profDetails); }} className="flex-1 h-14 rounded-[1.25rem] bg-[var(--accent)] text-white font-bold shadow-2xl shadow-slate-200 hover:opacity-90 transition-all">Start Export</button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
       )}
     </div>
   );

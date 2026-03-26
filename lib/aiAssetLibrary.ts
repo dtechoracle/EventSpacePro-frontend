@@ -18,8 +18,10 @@ export const AI_ASSET_KNOWLEDGE: AIAssetKnowledge[] = ASSET_LIBRARY.map((asset) 
     const tags: string[] = [];
     const name = asset.label.toLowerCase();
 
+    const isMarquee = asset.category === 'Marquee';
+
     // Extract common patterns and create aliases
-    if (name.includes('table')) {
+    if (!isMarquee && name.includes('table')) {
         tags.push('table', 'furniture', 'tables');
         if (name.includes('round')) aliases.push('circular table', 'round table');
         if (name.includes('rectangular')) aliases.push('rect table', 'rectangle table');
@@ -27,7 +29,7 @@ export const AI_ASSET_KNOWLEDGE: AIAssetKnowledge[] = ASSET_LIBRARY.map((asset) 
         if (name.includes('coffee')) aliases.push('low table', 'lounge table');
     }
 
-    if (name.includes('chair') || name.includes('stool') || name.includes('sofa') || name.includes('seating')) {
+    if (!isMarquee && (name.includes('chair') || name.includes('stool') || name.includes('sofa') || name.includes('seating'))) {
         tags.push('chair', 'seating', 'furniture', 'seat', 'sitting');
         if (name.includes('office')) aliases.push('desk chair', 'work chair');
         if (name.includes('event')) aliases.push('banquet chair', 'conference chair');
@@ -51,6 +53,11 @@ export const AI_ASSET_KNOWLEDGE: AIAssetKnowledge[] = ASSET_LIBRARY.map((asset) 
 
     if (name.includes('door')) {
         tags.push('door', 'entrance', 'exit', 'wall item');
+    }
+
+    if (isMarquee || name.includes('marquee') || name.includes('tent')) {
+        tags.push('marquee', 'tent', 'structural', 'outdoor');
+        aliases.push('tent', 'canopy');
     }
 
     // Seating style patterns (now all under 'Layouts')

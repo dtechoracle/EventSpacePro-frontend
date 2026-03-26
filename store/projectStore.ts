@@ -89,6 +89,9 @@ export type Shape = {
     dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
     dimensionFontSize?: number;
     dimensionTextPosition?: 'inbetween' | 'above';
+    borderRadius?: number;
+    tableName?: string;
+    showTableName?: boolean;
 };
 
 export type Asset = {
@@ -96,6 +99,8 @@ export type Asset = {
     name?: string;
     groupId?: string;
     type: string; // e.g., 'chair', 'table', 'door', 'window'
+    tableName?: string; // e.g., 'Table 1' or '1'
+    showTableName?: boolean;
     x: number;
     y: number;
     width: number;
@@ -138,7 +143,8 @@ export type Asset = {
     showDimensions?: boolean;
     dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
     dimensionFontSize?: number;
-    dimensionTextPosition?: 'inbetween' | 'above';
+    dimensionTextPosition?: 'inbetween' | 'above' | 'below';
+    borderRadius?: number;
 };
 
 export type Wall = {
@@ -159,7 +165,7 @@ export type Wall = {
     showDimensions?: boolean;
     dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
     dimensionFontSize?: number;
-    dimensionTextPosition?: 'inbetween' | 'above';
+    dimensionTextPosition?: 'inbetween' | 'above' | 'below';
 };
 
 export type Layer = {
@@ -195,7 +201,7 @@ export interface Dimension {
     fontSize?: number;
     strokeWidth?: number;
     lineStyle?: 'solid' | 'dashed' | 'dotted' | 'double';
-    textPosition?: 'inbetween' | 'above';
+    textPosition?: 'inbetween' | 'above' | 'below';
 
     zIndex?: number;
     groupId?: string;
@@ -265,6 +271,8 @@ export type ProjectState = {
     // Project metadata
     projectId: string | null;
     projectName: string;
+    setProjectName: (name: string) => void;
+    setEventName?: (name: string) => void; // Added for flexibility
 
     // Canvas
     canvas: Canvas;
@@ -449,6 +457,7 @@ export const useProjectStore = create<ProjectState>()(
             // Initial state
             projectId: null,
             projectName: 'Untitled Project',
+            setProjectName: (name) => set({ projectName: name }),
             canvas: DEFAULT_CANVAS,
             walls: [],
             wallSegments: [], // New wall engine segments
