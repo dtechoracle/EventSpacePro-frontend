@@ -30,7 +30,10 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
     const w = obj.width * scale;
     const h = obj.height * scale;
     const dimensionType = (obj as any).dimensionType || 'solid';
-    const dimensionFontSize = (obj as any).dimensionFontSize || 500; // Increased to 500mm for large plans
+    const dimensionFontSize = (obj as any).dimensionFontSize || 12; // Used to be 500, dropping to 12
+    const dimensionOffset = (obj as any).dimensionOffset !== undefined ? (obj as any).dimensionOffset : OFFSET;
+    const dimensionColor = (obj as any).dimensionColor || '#666666';
+    const dimensionStrokeWidth = (obj as any).dimensionStrokeWidth !== undefined ? (obj as any).dimensionStrokeWidth : undefined;
 
     // Common world points
     const tl = { x: -w / 2, y: -h / 2 };
@@ -60,7 +63,8 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
             },
             value: Math.round(radius),
             offset: 0,
-            color: '#666666',
+            color: dimensionColor,
+            strokeWidth: dimensionStrokeWidth,
             fontSize: dimensionFontSize,
             zIndex: 100,
             lineStyle
@@ -73,8 +77,9 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
             startPoint: pTL,
             endPoint: pTR,
             value: Math.round(w),
-            offset: -OFFSET, // Move Top edge UP (negative Y in standard rotation)
-            color: '#666666',
+            offset: -dimensionOffset, // Move Top edge UP (negative Y in standard rotation)
+            color: dimensionColor,
+            strokeWidth: dimensionStrokeWidth,
             fontSize: dimensionFontSize,
             zIndex: 100,
             lineStyle
@@ -87,8 +92,9 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
             startPoint: pTR,
             endPoint: pBR,
             value: Math.round(h),
-            offset: -OFFSET, // Move Right edge RIGHT (outside)
-            color: '#666666',
+            offset: -dimensionOffset, // Move Right edge RIGHT (outside)
+            color: dimensionColor,
+            strokeWidth: dimensionStrokeWidth,
             fontSize: dimensionFontSize,
             zIndex: 100,
             lineStyle
@@ -111,9 +117,12 @@ export const getDimensionsForWall = (wall: Wall): Dimension[] => {
             const len = Math.hypot(n2.x - n1.x, n2.y - n1.y);
             const wallThickness = edge.thickness || 75;
             // Wall offset should be positive to be outside
-            const wallOffset = OFFSET + (wallThickness / 2);
+            const baseOffset = (wall as any).dimensionOffset !== undefined ? (wall as any).dimensionOffset : OFFSET;
+            const wallOffset = baseOffset + (wallThickness / 2);
             const dimensionType = (wall as any).dimensionType || 'solid';
-            const dimensionFontSize = (wall as any).dimensionFontSize || 450; 
+            const dimensionFontSize = (wall as any).dimensionFontSize || 12; 
+            const dimensionColor = (wall as any).dimensionColor || '#666666';
+            const dimensionStrokeWidth = (wall as any).dimensionStrokeWidth !== undefined ? (wall as any).dimensionStrokeWidth : undefined;
             const lineStyle = getLineStyleFromType(dimensionType);
 
             dims.push({
@@ -122,7 +131,8 @@ export const getDimensionsForWall = (wall: Wall): Dimension[] => {
                 endPoint: { x: n2.x, y: n2.y },
                 value: Math.round(len),
                 offset: -wallOffset, // Always negative for outside
-                color: '#666666',
+                color: dimensionColor,
+                strokeWidth: dimensionStrokeWidth,
                 type: 'aligned',
                 fontSize: dimensionFontSize,
                 zIndex: 100,

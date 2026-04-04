@@ -3,11 +3,11 @@ import { Shape } from '@/store/projectStore';
 
 interface FreehandRendererProps {
     shape: Shape;
-    isSelected: boolean;
-    isHovered: boolean;
+    isSelected?: boolean;
+    isHovered?: boolean;
 }
 
-export default function FreehandRenderer({ shape, isSelected, isHovered }: FreehandRendererProps) {
+export default function FreehandRenderer({ shape, isSelected = false, isHovered = false }: FreehandRendererProps) {
     if (shape.type !== 'freehand' || !shape.points || shape.points.length < 2) return null;
 
     // Construct path data relative to shape center (x, y)

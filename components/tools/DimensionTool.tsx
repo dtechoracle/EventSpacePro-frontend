@@ -113,7 +113,7 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
                             endPoint,
                             offset,
                             zIndex: getNextZIndex(),
-                            strokeWidth: 10,
+                            strokeWidth: 1.5,
                             color: '#000000',
                             fontSize: 18,
                         });
@@ -148,7 +148,7 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
                         endPoint: snapped,
                         offset: radius, // Radius
                         zIndex: getNextZIndex(),
-                        strokeWidth: 10,
+                        strokeWidth: 1.5,
                         color: '#000000',
                         fontSize: 18,
                     });
@@ -179,7 +179,7 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
                         offset: 0,
                         value: Math.round(radius),
                         zIndex: getNextZIndex(),
-                        strokeWidth: 10,
+                        strokeWidth: 1.5,
                         color: '#000000',
                         fontSize: 18,
                     });

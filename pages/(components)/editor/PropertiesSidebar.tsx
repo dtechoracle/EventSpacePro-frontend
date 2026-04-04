@@ -26,8 +26,15 @@ export default function PropertiesSidebar(): React.JSX.Element {
     updateShape, updateAsset, updateWall, updateTextAnnotation, updateLabelArrow, updateDimension,
     updateShapeBatch, updateAssetBatch, updateWallBatch, batchUpdateItems,
     isSaving, lastSaved, saveEvent, hasUnsavedChanges,
-    projectName, setProjectName
+    projectName, setProjectName,
+    globalTableNumberingPosition, globalTableNumberingOrientation, 
+    setGlobalTableNumberingPosition, setGlobalTableNumberingOrientation
   } = useProjectStore();
+
+  const [startingNumber, setStartingNumber] = useState(1);
+  const [isNumberingEnabled, setIsNumberingEnabled] = useState(false);
+  const [numberingDirection, setNumberingDirection] = useState<'left-to-right' | 'right-to-left' | 'top-to-bottom' | 'bottom-to-top' | 'snake'>('left-to-right');
+  const [numberingStartingPoint, setNumberingStartingPoint] = useState<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center' | 'left' | 'right' | 'top' | 'bottom'>('top-left');
 
   // Resolve the single selected item
   const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
@@ -138,6 +145,95 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const unitSystem = useSceneStore((s) => s.unitSystem) || 'metric-mm';
   const unitLabel = getUnitLabel(unitSystem);
 
+  // ── AUTO-NUMBERING EFFECT ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isNumberingEnabled) return;
+
+    // Identify all table-like assets and shapes
+    const tableAssets = assets.filter(a => (a.type || "").toLowerCase().includes('table'));
+    const tableShapes = shapes.filter(s => (s.name || "").toLowerCase().includes('table'));
+
+    const allTables = [
+      ...tableAssets.map(a => ({ id: a.id, type: 'asset' as const, x: a.x, y: a.y, name: a.tableName })),
+      ...tableShapes.map(s => ({ id: s.id, type: 'shape' as const, x: s.x, y: s.y, name: s.tableName }))
+    ];
+
+    if (allTables.length === 0) return;
+
+    // Calculate bounding box of all tables to find corners and center
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    allTables.forEach(t => {
+      minX = Math.min(minX, t.x); minY = Math.min(minY, t.y);
+      maxX = Math.max(maxX, t.x); maxY = Math.max(maxY, t.y);
+    });
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    allTables.sort((a, b) => {
+      if (numberingStartingPoint === 'center') {
+        const distA = Math.sqrt(Math.pow(a.x - centerX, 2) + Math.pow(a.y - centerY, 2));
+        const distB = Math.sqrt(Math.pow(b.x - centerX, 2) + Math.pow(b.y - centerY, 2));
+        return distA - distB;
+      }
+
+      // A. Start Point defines the Origin (Positive or Negative multipliers)
+      // B. Direction defines the Flow (Row-first vs Column-first)
+      
+      const clusterSize = 1000; 
+      
+      // Calculate a "Sort Index" for each table based on clustering and multipliers
+      const getSortValue = (t: {x: number, y: number}) => {
+        let primary: number, secondary: number;
+        let pM: number, sM: number;
+
+        if (numberingDirection === 'left-to-right' || numberingDirection === 'right-to-left') {
+          // Horizontal Flow: Group by Rows (Y), Sort by X
+          primary = t.y; secondary = t.x;
+          sM = (numberingDirection === 'left-to-right') ? 1 : -1;
+          pM = (numberingStartingPoint.includes('bottom') || numberingStartingPoint === 'bottom') ? -1 : 1;
+        } else {
+          // Vertical Flow: Group by Columns (X), Sort by Y
+          primary = t.x; secondary = t.y;
+          sM = (numberingDirection === 'top-to-bottom') ? 1 : -1;
+          pM = (numberingStartingPoint.includes('right') || numberingStartingPoint === 'right') ? -1 : 1;
+        }
+        
+        // Bucket index for the "Scan Order" (Rows/Cols)
+        const bucket = Math.round(primary / clusterSize);
+        
+        // Return a composite score:
+        // Huge weight on bucket (Scan Order) * pM
+        // Regular weight on secondary (Flow) * sM
+        // We use pM on the bucket to determine if we go Row 1 -> Row 2 or Row 10 -> Row 9
+        return (bucket * 1000000 * pM) + (secondary * sM);
+      };
+
+      return getSortValue(a) - getSortValue(b);
+    });
+
+    // Only apply if the current numbering differs from the intended one
+    const updates = allTables.map((t, idx) => {
+      const expectedName = String(startingNumber + idx);
+      if (t.name !== expectedName) {
+        return { id: t.id, type: t.type, updates: { tableName: expectedName } };
+      }
+      return null;
+    }).filter(u => u !== null) as any[];
+
+    if (updates.length > 0) {
+      batchUpdateItems(updates);
+    }
+  }, [
+    isNumberingEnabled, 
+    numberingDirection, 
+    numberingStartingPoint, 
+    startingNumber, 
+    assets.length, 
+    shapes.length,
+    batchUpdateItems
+  ]);
+
   const editorStore = useEditorStore();
 
   const handleToggleGrid = () => {
@@ -178,8 +274,6 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [modelName, setModelName] = useState<string>("");
   const [targetProjectSlug, setTargetProjectSlug] = useState('');
-  const [startingNumber, setStartingNumber] = useState(1);
-  const [isNumberingEnabled, setIsNumberingEnabled] = useState(false);
   const open3D = useSceneStore((s) => s.open3DOverlay);
 
   const [distributeSpacing, setDistributeSpacing] = useState(100);
@@ -282,7 +376,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
           <div className="flex -space-x-3 transition-all duration-300">
             {/* Current User */}
             <div
-              className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-[#272235] flex items-center justify-center text-white text-xs font-bold z-40 shadow-sm relative transition-transform group-hover:scale-105"
+              className="inline-block h-5 w-5 rounded-full ring-2 ring-white bg-[#272235] flex items-center justify-center text-white text-xs font-bold z-40 shadow-sm relative transition-transform group-hover:scale-105"
               title={`${userName} (You)`}
             >
               {user?.avatar ? (
@@ -367,8 +461,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
       {/* Grouping Controls Removed as per request (moved to Context Menu) */}
 
-      {/* Dimension Tool Properties - Show when tool is active OR a dimension is selected */}
-      {(editorStore.activeTool === 'dimension' || itemType === 'dimension') && (
+      {/* Dimension Tool Properties - Show when tool is active */}
+      {editorStore.activeTool === 'dimension' && (
         <div className="mb-6 p-4 bg-white rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
             Line Style
@@ -857,6 +951,67 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           />
                         </div>
 
+                        {/* Gap/Offset */}
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Dimension Gap</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="500000"
+                            value={(selectedItem as any).dimensionOffset !== undefined ? (selectedItem as any).dimensionOffset : 200}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionOffset: val });
+                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionOffset: val });
+                            }}
+                            className="sidebar-input w-16 text-center"
+                          />
+                        </div>
+
+                        {/* Line Weight */}
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Line Weight</span>
+                          <input
+                            type="number"
+                            min="0.2"
+                            step="0.1"
+                            value={(selectedItem as any).dimensionStrokeWidth || 1.5}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionStrokeWidth: Math.max(0.2, val) });
+                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionStrokeWidth: Math.max(0.2, val) });
+                            }}
+                            className="sidebar-input w-16 text-center"
+                          />
+                        </div>
+
+                        {/* Color */}
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Color</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={(selectedItem as any).dimensionColor || '#666666'}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (itemType === 'shape') updateShape(selectedItem.id, { dimensionColor: val });
+                                if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionColor: val });
+                              }}
+                              className="sidebar-input w-20 text-xs"
+                            />
+                            <input
+                              type="color"
+                              value={(selectedItem as any).dimensionColor || '#666666'}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (itemType === 'shape') updateShape(selectedItem.id, { dimensionColor: val });
+                                if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionColor: val });
+                              }}
+                              className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                            />
+                          </div>
+                        </div>
+
                         {/* Text Position */}
                         <div className="flex justify-between items-center">
                           <span className="text-gray-500 text-xs">Text Position</span>
@@ -929,6 +1084,51 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             onChange={(e) => updateWall(selectedItem.id, { dimensionFontSize: Number(e.target.value) })}
                             className="sidebar-input w-16 text-center"
                           />
+                        </div>
+
+                        {/* Gap/Offset */}
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Dimension Gap</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="500000"
+                            value={(selectedItem as any).dimensionOffset !== undefined ? (selectedItem as any).dimensionOffset : 200}
+                            onChange={(e) => updateWall(selectedItem.id, { dimensionOffset: Number(e.target.value) })}
+                            className="sidebar-input w-16 text-center"
+                          />
+                        </div>
+
+                        {/* Line Weight */}
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Line Weight</span>
+                          <input
+                            type="number"
+                            min="0.2"
+                            step="0.1"
+                            value={(selectedItem as any).dimensionStrokeWidth || 1.5}
+                            onChange={(e) => updateWall(selectedItem.id, { dimensionStrokeWidth: Math.max(0.2, Number(e.target.value)) })}
+                            className="sidebar-input w-16 text-center"
+                          />
+                        </div>
+
+                        {/* Color */}
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Color</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={(selectedItem as any).dimensionColor || '#666666'}
+                              onChange={(e) => updateWall(selectedItem.id, { dimensionColor: e.target.value })}
+                              className="sidebar-input w-20 text-xs"
+                            />
+                            <input
+                              type="color"
+                              value={(selectedItem as any).dimensionColor || '#666666'}
+                              onChange={(e) => updateWall(selectedItem.id, { dimensionColor: e.target.value })}
+                              className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                            />
+                          </div>
                         </div>
 
                         {/* Text Position */}
@@ -1083,16 +1283,12 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     </div>
                   </div>
                 )}
-
-
-
-
-                {/* Table Numbering (Manual Override) */}
-                {(itemType === 'shape' || itemType === 'asset') &&
-                  (((selectedItem as any).type || "").toLowerCase().includes('table') ||
+                {/* Table Numbering (Manual Override) */}
+                {(itemType === 'shape' || itemType === 'asset') && 
+                  (((selectedItem as any).type || "").toLowerCase().includes('table') || 
                     ((selectedItem as any).name || "").toLowerCase().includes('table')) && (
                     <div className="mt-3 pt-3 border-t border-gray-100">
-                      <div className="text-xs font-semibold mb-2 text-gray-600 uppercase tracking-tight">Numbering</div>
+                      <div className="text-xs font-semibold mb-2 text-gray-600 uppercase tracking-tight">Label Override</div>
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-gray-500 text-xs">Label / Number</span>
                         <input
@@ -1639,6 +1835,35 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         </>
                       )}
                     </div>
+                    
+                    {/* Text Alignment */}
+                    <div className="flex justify-between items-center mb-4 mt-3">
+                      <span className="text-gray-500">Alignment</span>
+                      <div className="flex gap-1 bg-white p-0.5 rounded border">
+                        <button
+                          onClick={() => updateTextAnnotation(selectedTextAnnotation.id, { textAlign: 'left' })}
+                          className={`p-1.5 rounded transition-colors ${selectedTextAnnotation.textAlign === 'left' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                          title="Align Left"
+                        >
+                          <FaAlignLeft size={12} />
+                        </button>
+                        <button
+                          onClick={() => updateTextAnnotation(selectedTextAnnotation.id, { textAlign: 'center' })}
+                          className={`p-1.5 rounded transition-colors ${selectedTextAnnotation.textAlign === 'center' || !selectedTextAnnotation.textAlign ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                          title="Align Center"
+                        >
+                          <FaAlignCenter size={12} />
+                        </button>
+                        <button
+                          onClick={() => updateTextAnnotation(selectedTextAnnotation.id, { textAlign: 'right' })}
+                          className={`p-1.5 rounded transition-colors ${selectedTextAnnotation.textAlign === 'right' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                          title="Align Right"
+                        >
+                          <FaAlignRight size={12} />
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Text Styling */}
                     <div className="flex justify-between items-center mb-4 mt-3">
                       <span className="text-gray-500">Style</span>
@@ -1810,24 +2035,6 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   <div className="mt-3 pt-3 border-t border-gray-100">
                     <div className="text-xs font-semibold mb-2 text-gray-600">Dimension Properties</div>
 
-                    {/* Dimension Type */}
-                    <div className="mb-3">
-                      <span className="text-gray-500 text-xs mb-1 block">Type</span>
-                      <div className="grid grid-cols-2 gap-1">
-                        {(['linear', 'aligned', 'angular', 'radial'] as const).map((type) => (
-                          <button
-                            key={type}
-                            onClick={() => updateDimension(selectedDimension.id, { type })}
-                            className={`px-2 py-1 text-xs rounded border transition-colors ${selectedDimension.type === type
-                              ? "bg-blue-50 border-blue-300 text-blue-600 font-medium"
-                              : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                              }`}
-                          >
-                            {type.charAt(0).toUpperCase() + type.slice(1)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
 
                     {/* Value Override */}
                     <div className="mb-2">
@@ -1844,6 +2051,21 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       />
                     </div>
 
+                    {/* Style / Type */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500 text-xs">Line Style</span>
+                      <select
+                        value={selectedDimension.lineStyle || 'solid'}
+                        onChange={(e) => updateDimension(selectedDimension.id, { lineStyle: e.target.value as any })}
+                        className="text-xs border rounded px-2 py-1 bg-white w-32"
+                      >
+                        <option value="solid">Solid</option>
+                        <option value="dashed">Dashed</option>
+                        <option value="dotted">Dotted</option>
+                        <option value="double">Double</option>
+                      </select>
+                    </div>
+
                     {/* Font Size */}
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-gray-500">Font Size</span>
@@ -1852,11 +2074,11 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         value={selectedDimension.fontSize || 12}
                         onChange={(e) => {
                           const val = Number(e.target.value);
-                          updateDimension(selectedDimension.id, { fontSize: Math.max(6, Math.min(72, val)) });
+                          updateDimension(selectedDimension.id, { fontSize: Math.max(6, val) });
                         }}
                         className="sidebar-input w-16 text-center"
                         min={6}
-                        max={72}
+                        max={500000}
                       />
                     </div>
 
@@ -1908,12 +2130,12 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       </select>
                     </div>
 
-                    {/* Offset */}
+                    {/* Dimension Gap */}
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Offset</span>
+                      <span className="text-gray-500">Dimension Gap</span>
                       <input
                         type="number"
-                        value={selectedDimension.offset || 20}
+                        value={selectedDimension.offset || 0}
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           updateDimension(selectedDimension.id, { offset: val });
@@ -2428,49 +2650,18 @@ export default function PropertiesSidebar(): React.JSX.Element {
         )}
       </div>
 
-      {/* Table Numbering Section (Global Tool for Workspace) */}
+      {/* Workspace Numbering Section */}
       {assets.some(a => (a.type || "").toLowerCase().includes('table')) && (
         <div className="mx-4 mb-6">
-          <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-4">
+          <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-2">
             Workspace Numbering
           </div>
 
           <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200/50">
-            <span className="text-xs font-medium text-slate-700">Enable Table Numbers</span>
+            <span className="text-xs font-semibold text-slate-700">Auto-Numbering</span>
             <button
-              onClick={() => {
-                const nextState = !isNumberingEnabled;
-                setIsNumberingEnabled(nextState);
-
-                // Identify all table-like assets and shapes
-                const tableAssets = assets.filter(a => (a.type || "").toLowerCase().includes('table'));
-                const tableShapes = shapes.filter(s => (s.name || "").toLowerCase().includes('table'));
-
-                const allTables = [
-                  ...tableAssets.map(a => ({ id: a.id, type: 'asset' as const, x: a.x, y: a.y })),
-                  ...tableShapes.map(s => ({ id: s.id, type: 'shape' as const, x: s.x, y: s.y }))
-                ];
-
-                if (nextState) {
-                  allTables.sort((a, b) => {
-                    const dy = a.y - b.y;
-                    if (Math.abs(dy) < 200) return a.x - b.x;
-                    return dy;
-                  });
-                }
-
-                const updates = allTables.map((t, idx) => ({
-                  id: t.id,
-                  type: t.type,
-                  updates: { tableName: nextState ? String(startingNumber + idx) : undefined }
-                }));
-
-                if (updates.length > 0) {
-                  batchUpdateItems(updates);
-                  toast.success(nextState ? `Numbered ${updates.length} tables` : "Table numbers cleared");
-                }
-              }}
-              className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isNumberingEnabled ? 'bg-slate-900' : 'bg-slate-300'
+              onClick={() => setIsNumberingEnabled(!isNumberingEnabled)}
+              className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isNumberingEnabled ? 'bg-blue-600' : 'bg-slate-300'
                 }`}
             >
               <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isNumberingEnabled ? 'translate-x-5' : 'translate-x-0'
@@ -2478,22 +2669,101 @@ export default function PropertiesSidebar(): React.JSX.Element {
             </button>
           </div>
 
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-600">Starting At</span>
-            <input
-              type="number"
-              value={startingNumber}
-              onChange={(e) => setStartingNumber(Math.max(1, parseInt(e.target.value) || 1))}
-              className="sidebar-input w-20 text-center"
-              min={1}
-            />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-600">Start At</span>
+              <input
+                type="number"
+                value={startingNumber}
+                onChange={(e) => setStartingNumber(Math.max(1, parseInt(e.target.value) || 1))}
+                className="sidebar-input w-20 text-center text-xs"
+                min={1}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-600">Direction</span>
+              <select
+                value={numberingDirection}
+                onChange={(e) => setNumberingDirection(e.target.value as any)}
+                className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-28 focus:ring-1 focus:ring-blue-500 outline-none"
+              >
+                <option value="left-to-right">Left → Right</option>
+                <option value="right-to-left">Right → Left</option>
+                <option value="top-to-bottom">Top ↓ Bottom</option>
+                <option value="bottom-to-top">Bottom ↑ Top</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-600">Start Point</span>
+              <select
+                value={numberingStartingPoint}
+                onChange={(e) => setNumberingStartingPoint(e.target.value as any)}
+                className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-28 focus:ring-1 focus:ring-blue-500 outline-none"
+              >
+                <option value="top-left">Top Left</option>
+                <option value="top-right">Top Right</option>
+                <option value="bottom-left">Bottom Left</option>
+                <option value="bottom-right">Bottom Right</option>
+                <option value="top">Top</option>
+                <option value="bottom">Bottom</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+                <option value="center">Center (Out)</option>
+              </select>
+            </div>
+
+            {/* Position commented out per user request
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-600 font-medium">Position</span>
+              <select
+                value={globalTableNumberingPosition}
+                onChange={(e) => setGlobalTableNumberingPosition(e.target.value as any, true)}
+                className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-28 focus:ring-1 focus:ring-blue-500 outline-none"
+              >
+                <option value="center">Center</option>
+                <option value="top">Top</option>
+                <option value="bottom">Bottom</option>
+                <option value="top-left">Top Left</option>
+                <option value="top-right">Top Right</option>
+                <option value="bottom-left">Bottom Left</option>
+                <option value="bottom-right">Bottom Right</option>
+                <option value="middle-left">Middle Left</option>
+                <option value="middle-right">Middle Right</option>
+              </select>
+            </div>
+            */}
+
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-600 font-medium">Orientation</span>
+              <div className="flex bg-slate-200/50 rounded p-0.5">
+                {[
+                  { id: 'horizontal', label: 'H' },
+                  { id: 'vertical', label: 'V' }
+                ].map(mode => (
+                  <button
+                    key={mode.id}
+                    onClick={() => setGlobalTableNumberingOrientation(mode.id as any, true)}
+                    className={`px-3 py-0.5 text-[10px] rounded transition-all ${
+                      globalTableNumberingOrientation === mode.id
+                        ? 'bg-white shadow-sm text-blue-600 font-bold'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <p className="text-[9px] text-slate-400 mt-2 leading-tight">
-            Apply sequence based on spatial placement (top-left to bottom-right).
+          <p className="text-[9px] text-slate-400 mt-2 leading-tight italic">
+            * Global position and orientation settings for all tables.
           </p>
         </div>
       )}
+
 
       <ExportPanel />
     </aside >

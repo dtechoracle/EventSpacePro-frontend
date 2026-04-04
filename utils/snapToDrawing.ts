@@ -31,7 +31,10 @@ function rotatePoint(x: number, y: number, cx: number, cy: number, angleDeg: num
 /**
  * Get all potential snap points for an element
  */
-export function getSnapPoints(element: SnapTarget): SnapPoint[] {
+/**
+ * Get all potential snap points for an element
+ */
+export function getSnapPoints(element: SnapTarget, vertices: { x: number; y: number }[] = []): SnapPoint[] {
     const snapPoints: SnapPoint[] = [];
 
     // Handle Shapes
@@ -108,14 +111,28 @@ export function getSnapPoints(element: SnapTarget): SnapPoint[] {
         const rot = asset.rotation || 0;
 
         const rawPoints = [
+            // Corners
             { x: asset.x - halfW, y: asset.y - halfH, type: 'corner' as const },
             { x: asset.x + halfW, y: asset.y - halfH, type: 'corner' as const },
             { x: asset.x + halfW, y: asset.y + halfH, type: 'corner' as const },
             { x: asset.x - halfW, y: asset.y + halfH, type: 'corner' as const },
-            { x: asset.x, y: asset.y - halfH, type: 'midpoint' as const },
-            { x: asset.x + halfW, y: asset.y, type: 'midpoint' as const },
-            { x: asset.x, y: asset.y + halfH, type: 'midpoint' as const },
-            { x: asset.x - halfW, y: asset.y, type: 'midpoint' as const },
+            // Top side: Q1 (25%), midpoint (50%), Q3 (75%)
+            { x: asset.x - halfW / 2, y: asset.y - halfH, type: 'midpoint' as const },
+            { x: asset.x,             y: asset.y - halfH, type: 'midpoint' as const },
+            { x: asset.x + halfW / 2, y: asset.y - halfH, type: 'midpoint' as const },
+            // Bottom side: Q1, midpoint, Q3
+            { x: asset.x - halfW / 2, y: asset.y + halfH, type: 'midpoint' as const },
+            { x: asset.x,             y: asset.y + halfH, type: 'midpoint' as const },
+            { x: asset.x + halfW / 2, y: asset.y + halfH, type: 'midpoint' as const },
+            // Left side: Q1, midpoint, Q3
+            { x: asset.x - halfW, y: asset.y - halfH / 2, type: 'midpoint' as const },
+            { x: asset.x - halfW, y: asset.y,             type: 'midpoint' as const },
+            { x: asset.x - halfW, y: asset.y + halfH / 2, type: 'midpoint' as const },
+            // Right side: Q1, midpoint, Q3
+            { x: asset.x + halfW, y: asset.y - halfH / 2, type: 'midpoint' as const },
+            { x: asset.x + halfW, y: asset.y,             type: 'midpoint' as const },
+            { x: asset.x + halfW, y: asset.y + halfH / 2, type: 'midpoint' as const },
+            // Center
             { x: asset.x, y: asset.y, type: 'center' as const }
         ];
 
@@ -123,6 +140,18 @@ export function getSnapPoints(element: SnapTarget): SnapPoint[] {
             const rotated = rotatePoint(p.x, p.y, asset.x, asset.y, rot);
             snapPoints.push({ ...rotated, type: p.type, elementId: asset.id });
         });
+
+        // Marquee Vertex Snapping integration
+        if (vertices && vertices.length > 0) {
+            vertices.forEach(v => {
+                snapPoints.push({
+                    x: v.x,
+                    y: v.y,
+                    type: 'corner',
+                    elementId: asset.id
+                });
+            });
+        }
     }
     // Handle Walls
     else if ('nodes' in element && 'edges' in element) {
@@ -202,9 +231,10 @@ function getClosestPointOnSegment(px: number, py: number, x1: number, y1: number
 export function findClosestSnapPoint(
     cursorPos: { x: number; y: number },
     element: SnapTarget,
-    snapThreshold: number = 20
+    snapThreshold: number = 20,
+    vertices: { x: number; y: number }[] = []
 ): SnapPoint | null {
-    const snapPoints = getSnapPoints(element);
+    const snapPoints = getSnapPoints(element, vertices);
 
     // 1. Check discrete snap points first (corners, midpoints, centers)
     let closestPoint: SnapPoint | null = null;
@@ -300,13 +330,15 @@ export function findClosestSnapPoint(
 export function findSnapPointInShapes(
     cursorPos: { x: number; y: number },
     elements: SnapTarget[],
-    snapThreshold: number = 20
+    snapThreshold: number = 20,
+    verticesMap: Record<string, { x: number; y: number }[]> = {}
 ): SnapPoint | null {
     let closestPoint: SnapPoint | null = null;
     let closestDistance = snapThreshold;
 
     for (const element of elements) {
-        const snapPoint = findClosestSnapPoint(cursorPos, element, snapThreshold);
+        const vertices = verticesMap[element.id] || [];
+        const snapPoint = findClosestSnapPoint(cursorPos, element, snapThreshold, vertices);
         if (snapPoint) {
             const distance = Math.hypot(cursorPos.x - snapPoint.x, cursorPos.y - snapPoint.y);
             if (distance < closestDistance) {

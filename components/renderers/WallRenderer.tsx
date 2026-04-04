@@ -9,11 +9,12 @@ import { calculateAllCutouts, getCutoutsForEdge } from '@/utils/wallCutouts';
 
 interface WallRendererProps {
     wall: Wall;
-    isSelected: boolean;
-    isHovered: boolean;
+    isSelected?: boolean;
+    isHovered?: boolean;
+    isHighlightOnly?: boolean;
 }
 
-const WallRenderer = ({ wall, isSelected, isHovered }: WallRendererProps) => {
+const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlightOnly = false }: WallRendererProps) => {
     const { nodes, edges } = wall;
     const selectedEdgeId = useEditorStore(s => s.selectedEdgeId);
     const setSelectedEdgeId = useEditorStore(s => s.setSelectedEdgeId);
@@ -246,45 +247,22 @@ const WallRenderer = ({ wall, isSelected, isHovered }: WallRendererProps) => {
 
     return (
         <g className="wall" data-wall-id={wall.id} data-id={wall.id}>
-            {/* Render wall segments with openings */}
+            {/* Render only the layers requested */}
             {edges.map((edge) => {
                 const nodeA = nodeMap.get(edge.nodeA);
                 const nodeB = nodeMap.get(edge.nodeB);
-
                 if (!nodeA || !nodeB) return null;
 
-                // Get junction points for this edge at both nodes
                 const junctionA = junctions.get(edge.nodeA)?.[edge.id];
                 let junctionB = junctions.get(edge.nodeB)?.[edge.id];
-
                 if (!junctionA || !junctionB) return null;
-
-                // junctionB calculated from nodeB looking towards nodeA, swap left/right
                 junctionB = { left: junctionB.right, right: junctionB.left };
-
-                // Shared junctions logic - only wall with smaller ID draws inner line
-                const otherWallsAtNodeA = allWalls.filter(otherWall =>
-                    otherWall.id !== wall.id &&
-                    otherWall.nodes.some(n => Math.abs(n.x - nodeA.x) < 0.1 && Math.abs(n.y - nodeA.y) < 0.1)
-                );
-                const otherWallsAtNodeB = allWalls.filter(otherWall =>
-                    otherWall.id !== wall.id &&
-                    otherWall.nodes.some(n => Math.abs(n.x - nodeB.x) < 0.1 && Math.abs(n.y - nodeB.y) < 0.1)
-                );
-
-                const shouldDrawInnerAtNodeA = otherWallsAtNodeA.length === 0 ||
-                    otherWallsAtNodeA.every(otherWall => wall.id < otherWall.id);
-
-                const shouldDrawInnerAtNodeB = otherWallsAtNodeB.length === 0 ||
-                    otherWallsAtNodeB.every(otherWall => wall.id < otherWall.id);
 
                 const openings = edgeOpenings.get(edge.id) || [];
                 const isEdgeSelected = selectedEdgeId === edge.id;
-
                 const lineStrokeWidth = wall.strokeWidth !== undefined ? wall.strokeWidth : 2;
                 const strokeColor = wall.stroke || (isEdgeSelected ? '#2563eb' : isSelected ? '#3b82f6' : isHovered ? '#60a5fa' : '#1f2937');
 
-                // Build segments
                 const segments: Array<{ startT: number; endT: number }> = [];
                 let currentT = 0;
                 for (const opening of openings) {
@@ -299,13 +277,10 @@ const WallRenderer = ({ wall, isSelected, isHovered }: WallRendererProps) => {
                             const getPointsAtT = (t: number) => {
                                 if (t <= 0.001) return junctionA;
                                 if (t >= 0.999) return junctionB;
-                                const dx = nodeB.x - nodeA.x;
-                                const dy = nodeB.y - nodeA.y;
+                                const dx = nodeB.x - nodeA.x; const dy = nodeB.y - nodeA.y;
                                 const len = Math.sqrt(dx * dx + dy * dy);
-                                const px = nodeA.x + dx * t;
-                                const py = nodeA.y + dy * t;
-                                const nx = -dy / len;
-                                const ny = dx / len;
+                                const px = nodeA.x + dx * t; const py = nodeA.y + dy * t;
+                                const nx = -dy / len; const ny = dx / len;
                                 const halfThick = (edge.thickness || 150) / 2;
                                 return {
                                     left: { x: px + nx * halfThick, y: py + ny * halfThick },
@@ -315,21 +290,33 @@ const WallRenderer = ({ wall, isSelected, isHovered }: WallRendererProps) => {
 
                             const startPoints = getPointsAtT(segment.startT);
                             const endPoints = getPointsAtT(segment.endT);
+                            const p1 = startPoints.left; const p2 = endPoints.left;
+                            const p3 = endPoints.right; const p4 = startPoints.right;
+                            const fillPath = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y} L ${p3.x} ${p3.y} L ${p4.x} ${p4.y} Z`;
 
-                            const p1 = startPoints.left;
-                            const p2 = endPoints.left;
-                            const p3 = endPoints.right;
-                            const p4 = startPoints.right;
+                            if (isHighlightOnly) {
+                                return (isSelected || isHovered || isEdgeSelected) ? (
+                                    <path
+                                        key={`highlight-segment-${idx}`}
+                                        d={fillPath}
+                                        fill="#3b82f6"
+                                        fillOpacity={isEdgeSelected ? 0.3 : (isSelected ? 0.2 : 0.1)}
+                                        stroke="none"
+                                        style={{ pointerEvents: 'none' }}
+                                    />
+                                ) : null;
+                            }
 
                             const isAtStartJunction = segment.startT === 0;
                             const isAtEndJunction = segment.endT === 1;
-                            const canDrawAtStart = !isAtStartJunction || shouldDrawInnerAtNodeA;
-                            const canDrawAtEnd = !isAtEndJunction || shouldDrawInnerAtNodeB;
-                            const shouldDrawInnerLine = canDrawAtStart && canDrawAtEnd;
+                            const otherWallsAtNodeA = allWalls.filter(w => w.id !== wall.id && w.nodes.some(n => Math.abs(n.x - nodeA.x) < 0.1 && Math.abs(n.y - nodeA.y) < 0.1));
+                            const otherWallsAtNodeB = allWalls.filter(w => w.id !== wall.id && w.nodes.some(n => Math.abs(n.x - nodeB.x) < 0.1 && Math.abs(n.y - nodeB.y) < 0.1));
+                            const shouldDrawInnerAtNodeA = otherWallsAtNodeA.length === 0 || otherWallsAtNodeA.every(w => wall.id < w.id);
+                            const shouldDrawInnerAtNodeB = otherWallsAtNodeB.length === 0 || otherWallsAtNodeB.every(w => wall.id < w.id);
+                            const shouldDrawInnerLine = (!isAtStartJunction || shouldDrawInnerAtNodeA) && (!isAtEndJunction || shouldDrawInnerAtNodeB);
 
-                            let fillPath = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y} L ${p3.x} ${p3.y} L ${p4.x} ${p4.y} Z`;
-                            let outerPath = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
-                            let innerPath = shouldDrawInnerLine ? `M ${p4.x} ${p4.y} L ${p3.x} ${p3.y}` : '';
+                            const outerPath = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
+                            const innerPath = shouldDrawInnerLine ? `M ${p4.x} ${p4.y} L ${p3.x} ${p3.y}` : '';
 
                             return (
                                 <g key={`segment-${idx}`}>
@@ -340,94 +327,14 @@ const WallRenderer = ({ wall, isSelected, isHovered }: WallRendererProps) => {
                                             : (wall.fill || '#ffffff')}
                                         stroke="none"
                                     />
-                                    {(isSelected || isHovered || isEdgeSelected) && (
-                                        <path
-                                            d={fillPath}
-                                            fill="#3b82f6"
-                                            fillOpacity={isEdgeSelected ? 0.15 : (isSelected ? 0.1 : 0.05)}
-                                            stroke="none"
-                                            style={{ pointerEvents: 'none' }}
-                                        />
-                                    )}
-                                    <path
-                                        d={outerPath}
-                                        fill="none"
-                                        stroke={strokeColor}
-                                        strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth}
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        vectorEffect="non-scaling-stroke"
-                                    />
-                                    {shouldDrawInnerLine && innerPath && (
-                                        <path
-                                            d={innerPath}
-                                            fill="none"
-                                            stroke={strokeColor}
-                                            strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth}
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            vectorEffect="non-scaling-stroke"
-                                        />
-                                    )}
+                                    <path d={outerPath} fill="none" stroke={strokeColor} strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                                    {shouldDrawInnerLine && innerPath && <path d={innerPath} fill="none" stroke={strokeColor} strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
                                 </g>
                             );
                         })}
 
-                        {openings.map((opening, openingIdx) => {
-                            if (opening.type !== 'door-window') return null;
-                            const startJunction = interpolateJunction(junctionA, junctionB, opening.startT);
-                            const endJunction = interpolateJunction(junctionA, junctionB, opening.endT);
-                            let sLeftX = startJunction.left.x, sLeftY = startJunction.left.y;
-                            let sRightX = startJunction.right.x, sRightY = startJunction.right.y;
-                            let eLeftX = endJunction.left.x, eLeftY = endJunction.left.y;
-                            let eRightX = endJunction.right.x, eRightY = endJunction.right.y;
-
-                            const edgeDx = nodeB.x - nodeA.x, edgeDy = nodeB.y - nodeA.y;
-                            const absDx = Math.abs(edgeDx), absDy = Math.abs(edgeDy);
-                            const isHorizontalLike = absDx > 0 && absDy / absDx < 0.01;
-                            const isVerticalLike = absDy > 0 && absDx / absDy < 0.01;
-
-                            if (isHorizontalLike) {
-                                const sMidX = (sLeftX + sRightX) / 2; sLeftX = sMidX; sRightX = sMidX;
-                                const eMidX = (eLeftX + eRightX) / 2; eLeftX = eMidX; eRightX = eMidX;
-                            } else if (isVerticalLike) {
-                                const sMidY = (sLeftY + sRightY) / 2; sLeftY = sMidY; sRightY = sMidY;
-                                const eMidY = (eLeftY + eRightY) / 2; eLeftY = eMidY; eRightY = eMidY;
-                            }
-
-                            return (
-                                <g key={`cutout-cap-${openingIdx}`}>
-                                    <line x1={sLeftX} y1={sLeftY} x2={sRightX} y2={sRightY} stroke={strokeColor} strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth} strokeLinecap="butt" vectorEffect="non-scaling-stroke" />
-                                    <line x1={eLeftX} y1={eLeftY} x2={eRightX} y2={eRightY} stroke={strokeColor} strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth} strokeLinecap="butt" vectorEffect="non-scaling-stroke" />
-                                </g>
-                            );
-                        })}
-
-                        <line x1={nodeA.x} y1={nodeA.y} x2={nodeB.x} y2={nodeB.y} stroke="transparent" strokeWidth={20} style={{ cursor: 'pointer' }} />
-                    </g>
-                );
-            })}
-
-            {edges.map((edge) => {
-                const nodeA = nodeMap.get(edge.nodeA);
-                const nodeB = nodeMap.get(edge.nodeB);
-                if (!nodeA || !nodeB) return null;
-                const junctionA = junctions.get(edge.nodeA)?.[edge.id];
-                const junctionB = junctions.get(edge.nodeB)?.[edge.id];
-                if (!junctionA || !junctionB) return null;
-
-                const nodeAEdges = edges.filter(e => e.nodeA === edge.nodeA || e.nodeB === edge.nodeA);
-                const isNodeAShared = allWalls.some(w => w.id !== wall.id && w.nodes.some(n => Math.abs(n.x - nodeA.x) < 0.1 && Math.abs(n.y - nodeA.y) < 0.1));
-                const nodeAIsEndpoint = nodeAEdges.length === 1 && !isNodeAShared;
-
-                const nodeBEdges = edges.filter(e => e.nodeA === edge.nodeB || e.nodeB === edge.nodeB);
-                const isNodeBShared = allWalls.some(w => w.id !== wall.id && w.nodes.some(n => Math.abs(n.x - nodeB.x) < 0.1 && Math.abs(n.y - nodeB.y) < 0.1));
-                const nodeBIsEndpoint = nodeBEdges.length === 1 && !isNodeBShared;
-
-                return (
-                    <g key={`cap-${edge.id}`}>
-                        {nodeAIsEndpoint && <line x1={junctionA.left.x} y1={junctionA.left.y} x2={junctionA.right.x} y2={junctionA.right.y} stroke={wall.stroke || (isSelected ? '#3b82f6' : '#1f2937')} strokeWidth={wall.strokeWidth || 2} strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
-                        {nodeBIsEndpoint && <line x1={junctionB.left.x} y1={junctionB.left.y} x2={junctionB.right.x} y2={junctionB.right.y} stroke={wall.stroke || (isSelected ? '#3b82f6' : '#1f2937')} strokeWidth={wall.strokeWidth || 2} strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
+                        {/* Rendering interaction lines (transparent but wide for clicking) */}
+                        {!isHighlightOnly && <line x1={nodeA.x} y1={nodeA.y} x2={nodeB.x} y2={nodeB.y} stroke="transparent" strokeWidth={20} style={{ cursor: 'pointer' }} />}
                     </g>
                 );
             })}

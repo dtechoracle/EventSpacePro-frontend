@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
-import { BsStars, BsSend, BsRobot, BsPerson } from "react-icons/bs";
+import { BsStars, BsSend, BsRobot, BsPerson, BsPlusCircle } from "react-icons/bs";
 import { motion, AnimatePresence } from "framer-motion";
 import { convertPlanToCanvasData } from "@/helpers/aiHelper";
 import toast from "react-hot-toast";
@@ -12,11 +12,13 @@ interface Message {
   content: string;
   plan?: any;
   canvasData?: any;
+  choices?: string[];
+  followUp?: string;
 }
 
 const AiAssistant = () => {
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: "Hi! I'm your AI event planner. detailed Describe the event you want to create (e.g., 'A wedding reception with 10 round tables and a head table'), and I'll generate a layout for you." }
+    { role: 'assistant', content: "Hi! I'm your AI event planner. Describe the event you want to create (e.g., 'A wedding reception with 10 round tables and a head table'), and I'll generate a layout for you." }
   ]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -32,11 +34,12 @@ const AiAssistant = () => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputValue.trim() || isLoading) return;
+  const handleSubmit = async (e?: React.FormEvent, overrideText?: string) => {
+    if (e) e.preventDefault();
+    const textToSubmit = overrideText || inputValue;
+    if (!textToSubmit.trim() || isLoading) return;
 
-    const userMsg = inputValue.trim();
+    const userMsg = textToSubmit.trim();
     setInputValue("");
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setIsLoading(true);
@@ -64,6 +67,13 @@ const AiAssistant = () => {
           plan: data.plan,
           canvasData
         }]);
+      } else if (data.followUp) {
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: data.followUp, 
+          choices: data.choices,
+          followUp: data.followUp
+        }]);
       } else {
         setMessages(prev => [...prev, { role: 'assistant', content: data.message || "I'm not sure how to help with that yet, but I'm learning!" }]);
       }
@@ -80,6 +90,10 @@ const AiAssistant = () => {
   const handleCreateEvent = (canvasData: any) => {
     setSelectedTemplateData(canvasData);
     setShowCreateModal(true);
+  };
+
+  const handleChoiceClick = (choice: string) => {
+    handleSubmit(undefined, choice);
   };
 
   return (
@@ -118,7 +132,22 @@ const AiAssistant = () => {
                     ? 'bg-[var(--accent)] text-white rounded-br-none'
                     : 'bg-white text-gray-800 border border-gray-100 rounded-bl-none'
                   }`}>
-                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                  <p className="whitespace-pre-wrap leading-relaxed font-medium">{msg.content}</p>
+
+                  {/* Options/Choices for Follow-ups */}
+                  {msg.choices && msg.choices.length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {msg.choices.map((choice, i) => (
+                        <button
+                          key={i}
+                          onClick={() => handleChoiceClick(choice)}
+                          className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-full text-xs font-semibold border border-blue-100 transition-all flex items-center gap-1.5"
+                        >
+                          {choice}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   {msg.canvasData && (
                     <div className="mt-4 pt-4 border-t border-gray-100">
@@ -127,13 +156,13 @@ const AiAssistant = () => {
                           <BsStars className="text-yellow-500" /> Plan Generated
                         </div>
                         <p className="text-xs text-gray-500 mb-3">
-                          Includes {msg.canvasData.assets.length} items (tables, chairs, walls).
+                          Includes {msg.canvasData.assets?.length || 0} items (tables, chairs, walls).
                         </p>
                         <button
                           onClick={() => handleCreateEvent(msg.canvasData)}
-                          className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                          className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
                         >
-                          View & Create Event
+                          <BsPlusCircle className="w-4 h-4" /> View & Create Event
                         </button>
                       </div>
                     </div>
@@ -168,7 +197,7 @@ const AiAssistant = () => {
 
         {/* Input Area */}
         <div className="p-4 bg-white border-t border-gray-200">
-          <form onSubmit={handleSubmit} className="max-w-4xl mx-auto relative">
+          <form onSubmit={(e) => handleSubmit(e)} className="max-w-4xl mx-auto relative focus-within:transform focus-within:-translate-y-0.5 transition-transform duration-200">
             <input
               type="text"
               value={inputValue}
@@ -180,7 +209,7 @@ const AiAssistant = () => {
             <button
               type="submit"
               disabled={!inputValue.trim() || isLoading}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 bg-[var(--accent)] text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 bg-[var(--accent)] text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
             >
               <BsSend className="w-4 h-4" />
             </button>

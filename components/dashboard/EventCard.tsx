@@ -1,4 +1,4 @@
-import { BsStars, BsClock, BsStar, BsStarFill, BsThreeDotsVertical, BsPencilSquare, BsTrash } from "react-icons/bs";
+import { BsStars, BsClock, BsStar, BsStarFill, BsThreeDotsVertical, BsPencilSquare, BsTrash, BsFiles } from "react-icons/bs";
 import { useRouter } from "next/router";
 import WorkspacePreview from "@/components/WorkspacePreview";
 import { useState, useRef, useEffect } from "react";
@@ -100,6 +100,44 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
         }
     };
 
+    const handleDuplicate = async (e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        setShowMenu(false);
+        setIsLoading(true);
+        const loadingToast = toast.loading("Duplicating event...");
+
+        try {
+            // 1. Get full event data
+            const fullRes = await apiRequest(`/projects/${event.projectSlug}/events/${event._id}`, "GET", null, true);
+            const eventData = fullRes.data || fullRes;
+
+            // 2. Prepare duplicate data
+            const duplicateData = {
+                name: `${eventData.name} (Copy)`,
+                type: eventData.type,
+                canvases: eventData.canvases || [{ size: "layout", width: 10000, height: 10000 }],
+                canvasData: eventData.canvasData
+            };
+
+            // 3. Create new event
+            await apiRequest(`/projects/${event.projectSlug}/events`, "POST", duplicateData, true);
+            
+            toast.success(`"${eventData.name}" duplicated!`, { id: loadingToast });
+            
+            // Refresh the page or list
+            if (onDelete) {
+                onDelete(); // Triggers refetch in the parent component
+            } else {
+                window.location.reload();
+            }
+        } catch (err) {
+            console.error("Failed to duplicate event", err);
+            toast.error("Failed to duplicate event", { id: loadingToast });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const getTimeAgo = (dateString: string | undefined) => {
         if (!dateString) return "Recently";
         const now = new Date();
@@ -158,6 +196,14 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
                             >
                                 <BsPencilSquare className="w-4 h-4 text-gray-400" />
                                 Rename
+                            </button>
+                            <button
+                                onClick={handleDuplicate}
+                                className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-2.5 text-gray-700 font-medium"
+                                disabled={isLoading}
+                            >
+                                <BsFiles className="w-4 h-4 text-gray-400" />
+                                Duplicate
                             </button>
                             <button
                                 onClick={toggleFavorite}

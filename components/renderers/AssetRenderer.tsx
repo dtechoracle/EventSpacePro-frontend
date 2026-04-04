@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSceneStore } from '@/store/sceneStore';
-import { Asset } from '@/store/projectStore';
+import { Asset, useProjectStore } from '@/store/projectStore';
 import { ASSET_LIBRARY } from '@/lib/assets';
 
 // Global cache for SVGs - defined at module top level to prevent ReferenceErrors during evaluation
@@ -30,16 +30,21 @@ function getSvgSize(svgText: string) {
 
 interface AssetRendererProps {
     asset: Asset;
-    isSelected: boolean;
-    isHovered: boolean;
+    isSelected?: boolean;
+    isHovered?: boolean;
+    isHighlightOnly?: boolean;
     isPreview?: boolean;
     onMouseEnter?: (name: string) => void;
     onMouseLeave?: () => void;
 }
 
-const AssetRendererBase = ({ asset, isSelected, isHovered, isPreview, onMouseEnter, onMouseLeave }: AssetRendererProps) => {
+const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHighlightOnly = false, isPreview, onMouseEnter, onMouseLeave }: AssetRendererProps) => {
     const [svgContent, setSvgContent] = useState<string | null>(null);
     const updateAsset = useSceneStore(s => s.updateAsset);
+    
+    // Global numbering settings from store
+    const globalPos = useProjectStore(s => s.globalTableNumberingPosition);
+    const globalOrientation = useProjectStore(s => s.globalTableNumberingOrientation);
 
     // Find the definition for this asset type
     const definition = ASSET_LIBRARY.find(item => item.id === asset.type);
@@ -137,6 +142,26 @@ const AssetRendererBase = ({ asset, isSelected, isHovered, isPreview, onMouseEnt
                 }
             });
 
+            // ── Z-ORDER FIX ─────────────────────────────────────────────────────────
+            // Some CAD-exported SVGs (e.g. QCAD) emit chair detail stroke-groups
+            // BEFORE the chair seat closed-path. When the seat gets a fill colour it
+            // paints over the earlier detail strokes. To always keep detail/stroke-only
+            // elements visible, gather every fill-none-el leaf element and move it into
+            // a single new <g> appended LAST inside the root SVG group — so they always
+            // render on top of any filled shapes regardless of source order.
+            const rootGroup = svg.querySelector('g');
+            if (rootGroup) {
+                const strokeOnlyEls = Array.from(rootGroup.querySelectorAll('.fill-none-el'));
+                if (strokeOnlyEls.length > 0) {
+                    const topLayer = doc.createElementNS("http://www.w3.org/2000/svg", "g");
+                    topLayer.setAttribute("class", "stroke-top-layer");
+                    strokeOnlyEls.forEach(el => topLayer.appendChild(el));
+                    rootGroup.appendChild(topLayer);
+                }
+            }
+            // ────────────────────────────────────────────────────────────────────────
+
+
             svg.removeAttribute("style");
             svg.removeAttribute("fill");
             svg.removeAttribute("stroke");
@@ -198,97 +223,132 @@ const AssetRendererBase = ({ asset, isSelected, isHovered, isPreview, onMouseEnt
             onMouseLeave={() => onMouseLeave?.()}
             data-id={asset.id}
         >
-            {processedSvg ? (
-                <g
-                    dangerouslySetInnerHTML={{ __html: processedSvg }}
-                    style={{
-                        filter: showHighlight ? `drop-shadow(0 0 6px ${highlightColor}) drop-shadow(0 0 3px ${highlightColor}) drop-shadow(0 0 1px ${highlightColor})` : 'none'
-                    }}
-                />
-            ) : (
-                definition?.path && (
-                    <image
-                        href={definition.path}
-                        x={-asset.width / 2}
-                        y={-asset.height / 2}
-                        width={asset.width}
-                        height={asset.height}
-                        style={{
-                            outline: 'none',
-                            filter: showHighlight ? `drop-shadow(0 0 6px ${highlightColor}) drop-shadow(0 0 3px ${highlightColor}) drop-shadow(0 0 1px ${highlightColor})` : 'none'
-                        }}
-                    />
-                )
-            )}
-
-            <rect
-                x={-(asset.width || 100) / 2}
-                y={-(asset.height || 100) / 2}
-                width={asset.width || 100}
-                height={asset.height || 100}
-                fill="transparent"
-                stroke="none"
-                pointerEvents="all"
-            />
-
-            {!definition && (
-                <g>
+            {/* IN HIGHLIGHT ONLY MODE: Skip expensive SVG logic, just render the glow */}
+            {isHighlightOnly ? (
+                showHighlight && (
                     <rect
                         x={-(asset.width || 100) / 2}
                         y={-(asset.height || 100) / 2}
                         width={asset.width || 100}
                         height={asset.height || 100}
-                        fill={currentFill}
-                        stroke={asset.strokeColor || '#000000'}
-                        strokeWidth={asset.strokeWidth || 1}
+                        fill="none"
+                        stroke={highlightColor}
+                        strokeWidth={2}
+                        rx={8}
                         style={{
-                            filter: showHighlight ? `drop-shadow(0 0 6px ${highlightColor})` : 'none'
+                            filter: `drop-shadow(0 0 6px ${highlightColor}) drop-shadow(0 0 2px ${highlightColor})`
                         }}
                     />
-                    <text
-                        x={0}
-                        y={0}
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        fontSize={12}
-                        fill="#374151"
-                        pointerEvents="none"
-                        opacity={0.5}
-                    >
-                        {asset.type}
-                    </text>
-                </g>
-            )}
+                )
+            ) : (
+                <>
+                    {processedSvg ? (
+                        <g
+                            dangerouslySetInnerHTML={{ __html: processedSvg }}
+                            style={{ filter: 'none' }}
+                        />
+                    ) : (
+                        definition?.path && (
+                            <image
+                                href={definition.path}
+                                x={-asset.width / 2}
+                                y={-asset.height / 2}
+                                width={asset.width}
+                                height={asset.height}
+                                style={{ outline: 'none', filter: 'none' }}
+                            />
+                        )
+                    )}
 
-            {asset.tableName && (
-                <g transform={`rotate(${-rotation})`}>
-                    {/* Size-proportional high-visibility background circle */}
-                    <circle
-                        cx={0}
-                        cy={0}
-                        r={Math.max(16, (asset.width || 100) * 0.12)}
-                        fill="white"
-                        strokeWidth={Math.max(1.5, (asset.width || 100) * 0.01)}
-                        pointerEvents="none"
-                        style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
+                    <rect
+                        x={-(asset.width || 100) / 2}
+                        y={-(asset.height || 100) / 2}
+                        width={asset.width || 100}
+                        height={asset.height || 100}
+                        fill="transparent"
+                        stroke="none"
+                        pointerEvents="all"
                     />
-                    <text
-                        x={0}
-                        y={0}
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        fontSize={Math.max(14, (asset.width || 100) * 0.14)}
-                        fill="#000000"
-                        fontWeight="900"
-                        pointerEvents="none"
-                        style={{
-                            userSelect: 'none',
-                            fontFamily: 'Inter, sans-serif'
-                        }}
-                    >
-                        {asset.tableName}
-                    </text>
-                </g>
+
+                    {!definition && (
+                        <g>
+                            <rect
+                                x={-(asset.width || 100) / 2}
+                                y={-(asset.height || 100) / 2}
+                                width={asset.width || 100}
+                                height={asset.height || 100}
+                                fill={currentFill}
+                                stroke={asset.strokeColor || '#000000'}
+                                strokeWidth={asset.strokeWidth || 1}
+                                style={{ filter: 'none' }}
+                            />
+                            <text
+                                x={0}
+                                y={0}
+                                textAnchor="middle"
+                                dominantBaseline="middle"
+                                fontSize={12}
+                                fill="#374151"
+                                pointerEvents="none"
+                                opacity={0.5}
+                            >
+                                {asset.type}
+                            </text>
+                        </g>
+                    )}
+
+                    {asset.tableName && (
+                        (() => {
+                            const pos = (asset as any).tableNumberingPosition || globalPos || 'center';
+                            const orientation = (asset as any).tableNumberingOrientation || globalOrientation || 'horizontal';
+                            const circleR = Math.max(16, (asset.width || 100) * 0.12);
+                            const padding = circleR * 1.5;
+                            const halfW = (asset.width || 100) / 2;
+                            const halfH = (asset.height || 100) / 2;
+
+                            let tx = 0;
+                            let ty = 0;
+
+                            switch (pos) {
+                                case 'top': ty = -halfH - padding; break;
+                                case 'bottom': ty = halfH + padding; break;
+                                case 'top-left': tx = -halfW; ty = -halfH - padding; break;
+                                case 'top-right': tx = halfW; ty = -halfH - padding; break;
+                                case 'bottom-left': tx = -halfW; ty = halfH + padding; break;
+                                case 'bottom-right': tx = halfW; ty = halfH + padding; break;
+                                case 'middle-left': tx = -halfW - padding; break;
+                                case 'middle-right': tx = halfW + padding; break;
+                                default: break; // center
+                            }
+
+                            let finalRotation = -rotation;
+                            if (orientation === 'vertical') {
+                                finalRotation += 90;
+                            }
+
+                            return (
+                                <g transform={`translate(${tx}, ${ty}) rotate(${finalRotation})`}>
+                                    <text
+                                        x={0}
+                                        y={0}
+                                        textAnchor="middle"
+                                        dominantBaseline="middle"
+                                        fontSize={Math.max(14, (asset.width || 100) * 0.14)}
+                                        fill="#000000"
+                                        fontWeight="900"
+                                        pointerEvents="none"
+                                        style={{
+                                            userSelect: 'none',
+                                            fontFamily: 'Inter, sans-serif'
+                                        }}
+                                    >
+                                        {asset.tableName}
+                                    </text>
+                                </g>
+                            );
+                        })()
+                    )}
+                </>
             )}
         </g>
     );

@@ -6,11 +6,12 @@ import { useEditorStore } from '@/store/editorStore';
 
 interface ShapeRendererProps {
     shape: Shape;
-    isSelected: boolean;
-    isHovered: boolean;
+    isSelected?: boolean;
+    isHovered?: boolean;
+    isHighlightOnly?: boolean;
 }
 
-const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => {
+const ShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHighlightOnly = false }: ShapeRendererProps) => {
     // Use selector for zoom to prevent re-renders on other editor store changes
     const zoom = useEditorStore(s => s.zoom);
     const activeTool = useEditorStore(s => s.activeTool);
@@ -702,41 +703,46 @@ const ShapeRenderer = ({ shape, isSelected, isHovered }: ShapeRendererProps) => 
                 }}
                 data-id={shape.id}
             >
-                {/* Render highlight behind the shape */}
-                {showHighlight && renderPrimitive(true)}
-                {/* Render actual shape */}
-                {renderPrimitive(false)}
+                {/* Render only the component requested by the layer */}
+                {isHighlightOnly ? (
+                    showHighlight && renderPrimitive(true)
+                ) : (
+                    <>
+                        {/* Render actual shape */}
+                        {renderPrimitive(false)}
 
-                {/* Table Numbering / Labeling (Billboarded) */}
-                {shape.tableName && (
-                    <g transform={`rotate(${-shape.rotation})`}>
-                        <circle
-                            cx={0}
-                            cy={0}
-                            r={Math.max(16, (shape.width || 100) * 0.12)}
-                            fill="white"
-                            stroke="#000000"
-                            strokeWidth={Math.max(1.5, (shape.width || 100) * 0.01)}
-                            pointerEvents="none"
-                            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
-                        />
-                        <text
-                            x={0}
-                            y={0}
-                            textAnchor="middle"
-                            dominantBaseline="middle"
-                            fontSize={Math.max(14, (shape.width || 100) * 0.14)}
-                            fill="#000000"
-                            fontWeight="900"
-                            pointerEvents="none"
-                            style={{
-                                userSelect: 'none',
-                                fontFamily: 'Inter, sans-serif'
-                            }}
-                        >
-                            {shape.tableName}
-                        </text>
-                    </g>
+                        {/* Table Numbering / Labeling (Billboarded) */}
+                        {shape.tableName && (
+                            <g transform={`rotate(${-shape.rotation})`}>
+                                <circle
+                                    cx={0}
+                                    cy={0}
+                                    r={Math.max(16, (shape.width || 100) * 0.12)}
+                                    fill="white"
+                                    stroke="#000000"
+                                    strokeWidth={Math.max(1.5, (shape.width || 100) * 0.01)}
+                                    pointerEvents="none"
+                                    style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
+                                />
+                                <text
+                                    x={0}
+                                    y={0}
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                    fontSize={Math.max(14, (shape.width || 100) * 0.14)}
+                                    fill="#000000"
+                                    fontWeight="900"
+                                    pointerEvents="none"
+                                    style={{
+                                        userSelect: 'none',
+                                        fontFamily: 'Inter, sans-serif'
+                                    }}
+                                >
+                                    {shape.tableName}
+                                </text>
+                            </g>
+                        )}
+                    </>
                 )}
             </g>
         </>

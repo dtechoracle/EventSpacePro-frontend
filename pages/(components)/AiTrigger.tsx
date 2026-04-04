@@ -538,6 +538,39 @@ export default function AiTrigger() {
     // From assets
     nonStageItems.forEach((a: any, idx: number) => {
       const rawType = (a.assetType || a.assetName || '').toLowerCase();
+
+      // SPECIAL CASE: Aisle should be a rectangle (as requested by user)
+      if (rawType.includes('aisle')) {
+        const sw = Number(a.widthMm || a.width || 1200);
+        const sh = Number(a.heightMm || a.height || 6000);
+        const fillProps = getResolvedFill(a);
+
+        // Calculate position - default to center if none provided
+        let ax = roomCX;
+        let ay = roomCY;
+        if (typeof a.xMm === 'number') ax = wallMinX + a.xMm;
+        else if (typeof a.x === 'number') ax = wallMinX + (a.x < 100 ? a.x * 1000 : a.x); // guess meters or mm
+
+        if (typeof a.yMm === 'number') ay = wallMinY + a.yMm;
+        else if (typeof a.y === 'number') ay = wallMinY + (a.y < 100 ? a.y * 1000 : a.y);
+
+        generatedShapes.push({
+          ...a,
+          ...fillProps,
+          id: `ai-aisle-${idx}`,
+          type: 'rectangle', // Force to rectangle shape
+          x: ax,
+          y: ay,
+          width: sw,
+          height: sh,
+          stroke: a.strokeColor || '#b8b8b8',
+          strokeWidth: a.strokeWidth || 3,
+          rotation: a.rotation || 0,
+          zIndex: 1, // Draw below furniture but above floor
+        });
+        return;
+      }
+
       const resolved = resolveAsset(a.assetType || a.assetName || '6-seater-rectangular-table-6');
       const libDef = ASSET_LIBRARY.find(x => x.id === resolved.id);
       const tw = libDef?.width || 823;
@@ -867,6 +900,61 @@ export default function AiTrigger() {
           });
         }
       });
+    }
+
+    // ─── 7. Seating Layouts (Theater, Classroom, etc.) ───────────────────────
+    if (Array.isArray(plan.seatingLayout)) {
+        plan.seatingLayout.forEach((layout: any, lIdx: number) => {
+            const resolved = resolveAsset(layout.assetName || 'normal-chair');
+            const libDef = ASSET_LIBRARY.find(x => x.id === resolved.id);
+            const aw = libDef?.width || 500;
+            const ah = libDef?.height || 500;
+            
+            const count = Number(layout.count || 20);
+            const orientation = layout.orientation || 'horizontal';
+            const type = layout.type || 'theater';
+            
+            // Spacing defaults
+            const rowSpacing = layout.rowSpacingMm || (type === 'classroom' ? 1500 : 1000);
+            const colSpacing = layout.colSpacingMm || (aw + 200);
+            
+            const cols = layout.columns || (orientation === 'horizontal' ? Math.ceil(Math.sqrt(count * 1.5)) : Math.ceil(Math.sqrt(count / 1.5)));
+            const rowsCount = Math.ceil(count / cols);
+            
+            const layoutWidth = (cols - 1) * colSpacing;
+            const layoutHeight = (rowsCount - 1) * rowSpacing;
+            
+            const startX = wallMinX + (layout.centerX || (roomW / 2)) - (layoutWidth / 2);
+            const startY = wallMinY + (layout.centerY || (roomH / 2)) - (layoutHeight / 2);
+            
+            for (let i = 0; i < count; i++) {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                
+                const x = startX + col * colSpacing;
+                const y = startY + row * rowSpacing;
+                
+                // For classroom style, we add a table for every N chairs, or similar
+                // But for now, let's just place the requested asset correctly in rows
+                generatedAssets.push({
+                    id: `seating-${lIdx}-${i}`,
+                    type: resolved.id,
+                    x: x,
+                    y: y,
+                    width: aw,
+                    height: ah,
+                    rotation: orientation === 'horizontal' ? 0 : 90,
+                    scale: 1,
+                    zIndex: 10
+                });
+                
+                // If classroom, add tables in front of rows
+                if (type === 'classroom' && col === 0) {
+                    // Add one long table or individual tables
+                    // This is a complex case, but for now we focus on the chairs stacking fix
+                }
+            }
+        });
     }
 
     return {

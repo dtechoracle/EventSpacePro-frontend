@@ -32,7 +32,9 @@ type AssetRendererProps = {
   onAssetContextMenu: (e: React.MouseEvent, assetId: string) => void;
 };
 
-export default function AssetRenderer({
+import { useProjectStore } from "@/store/projectStore";
+
+export const AssetRenderer = React.memo(({
   asset,
   updateAsset,
   isSelected,
@@ -51,7 +53,9 @@ export default function AssetRenderer({
   onScaleHandleMouseDown,
   onRotationHandleMouseDown,
   onAssetContextMenu,
-}: AssetRendererProps) {
+  globalPos,
+  globalOrientation,
+}: AssetRendererProps & { globalPos?: string, globalOrientation?: string }) => {
   // Early return if asset is undefined (prevents SSR errors)
   if (!asset) {
     return null;
@@ -700,16 +704,49 @@ export default function AssetRenderer({
           <div
             style={{
               position: "absolute",
-              left: leftPx,
-              top: topPx,
-              transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
-              color: "#1e293b",
-              fontSize: `${Math.max(10, 12 * asset.scale)}px`,
-              fontWeight: "bold",
+              left: "50%",
+              top: "50%",
+              transform: (() => {
+                const pos = (asset as any).tableNumberingPosition || globalPos || 'center';
+                const orientation = (asset as any).tableNumberingOrientation || globalOrientation || 'horizontal';
+                const circleR = Math.max(16, (asset.width || 100) * 0.12);
+                const padding = circleR * 1.5;
+                const halfW = (asset.width || 100) / 2;
+                const halfH = (asset.height || 100) / 2;
+
+                let tx = 0;
+                let ty = 0;
+
+                switch (pos) {
+                  case 'top': ty = -halfH - padding; break;
+                  case 'bottom': ty = halfH + padding; break;
+                  case 'top-left': tx = -halfW; ty = -halfH - padding; break;
+                  case 'top-right': tx = halfW; ty = -halfH - padding; break;
+                  case 'bottom-left': tx = -halfW; ty = halfH + padding; break;
+                  case 'bottom-right': tx = halfW; ty = halfH + padding; break;
+                  case 'middle-left': tx = -halfW - padding; break;
+                  case 'middle-right': tx = halfW + padding; break;
+                  default: break;
+                }
+
+                let rotationStr = `rotate(${-totalRotation}deg)`;
+                if (orientation === 'vertical') {
+                  rotationStr += ` rotate(90deg)`;
+                }
+
+                return `translate(-50%, -50%) translate(${tx}px, ${ty}px) ${rotationStr}`;
+              })(),
+              color: "#000000",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: `${Math.max(12, (asset.width || 100) * 0.14)}px`,
+              fontWeight: "900",
               pointerEvents: "none",
-              textShadow: "0 0 4px white, 0 0 2px white",
               whiteSpace: "nowrap",
               zIndex: (asset.zIndex || 0) + 2,
+              userSelect: 'none',
+              fontFamily: 'Inter, sans-serif'
             }}
           >
             {(asset as any).tableName}
@@ -814,4 +851,6 @@ export default function AssetRenderer({
       )}
     </div>
   );
-}
+});
+
+export default AssetRenderer;

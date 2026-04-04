@@ -114,9 +114,9 @@ const Sidebar = () => {
           <div className={`w-full flex ${isCollapsed ? 'justify-center' : 'justify-start px-3'} mb-8`}>
             <Image
               alt="Logo"
-              src={"/assets/mainLogo.svg"}
-              width={isCollapsed ? 40 : 130}
-              height={isCollapsed ? 40 : 40}
+              src={isCollapsed ? "/assets/small-logo.png" : "/assets/mainLogo.svg"}
+              width={isCollapsed ? 32 : 130}
+              height={isCollapsed ? 32 : 40}
               className="object-contain"
             />
           </div>

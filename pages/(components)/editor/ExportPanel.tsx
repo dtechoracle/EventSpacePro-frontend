@@ -36,9 +36,12 @@ interface ProfessionalDetails {
   venue: string;
   client?: string;
   date?: string;
+  eventPlanner?: string;
   sittingCode: string;
   guestAllocation: string;
   logo: string | null;
+  logo2: string | null; // Added for second event logo
+  byLogo: string | null; // Added for branding
   panelPosition: 'left' | 'right';
   panelColor?: string;
 }
@@ -98,6 +101,25 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
           }
 
           const allElements = Array.from(doc.querySelectorAll('*'));
+          const circles = allElements.filter(el => el.tagName.toLowerCase() === 'circle');
+          const innerCircles = new Set<Element>();
+          if (circles.length > 1) {
+              circles.forEach(c1 => {
+                  const cx1 = c1.getAttribute('cx');
+                  const cy1 = c1.getAttribute('cy');
+                  const r1 = parseFloat(c1.getAttribute('r') || '0');
+                  circles.forEach(c2 => {
+                      if (c1 === c2) return;
+                      const cx2 = c2.getAttribute('cx');
+                      const cy2 = c2.getAttribute('cy');
+                      const r2 = parseFloat(c2.getAttribute('r') || '0');
+                      if (cx1 === cx2 && cy1 === cy2) {
+                          if (r1 < r2) innerCircles.add(c1);
+                      }
+                  });
+              });
+          }
+
           allElements.forEach(el => {
             const tag = el.tagName.toLowerCase();
             if (tag === 'svg' || tag === 'style') return;
@@ -108,11 +130,22 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
 
             const wasExplicitlyNone = fillAttr === 'none' || (styleAttr && /fill\s*:\s*none/i.test(styleAttr));
             const isLineElement = tag === 'line' || tag === 'polyline';
-            const isClosed = dAttr.toLowerCase().includes('z');
+            
+            // Ported closed-path detection from InlineSvg.tsx
+            const dClean = dAttr.trim();
+            const isZClosed = dClean.toLowerCase().includes('z');
+            let isCoordClosed = false;
+            if (!isZClosed && dClean.startsWith('M')) {
+                const firstMatch = dClean.match(/^M\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)/i);
+                const lastMatch = dClean.match(/(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/);
+                if (firstMatch && lastMatch) isCoordClosed = firstMatch[1] === lastMatch[1] && firstMatch[2] === lastMatch[2];
+            }
+            const isClosed = isZClosed || isCoordClosed;
             const isOpenPath = tag === 'path' && !isClosed;
+            const isConsentricOuter = tag === 'circle' && circles.length > 1 && !innerCircles.has(el);
 
             // Preserve transparency for structural lines and open paths
-            if (wasExplicitlyNone || isLineElement || isOpenPath) {
+            if (wasExplicitlyNone || isLineElement || isOpenPath || isConsentricOuter) {
               el.setAttribute("fill", "none");
             } else {
               el.setAttribute("fill", fill === 'transparent' ? 'none' : fill);
@@ -131,6 +164,15 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
                 .replace(/stroke-width\s*:[^;]+;?/gi, "");
               if (cleaned.trim()) el.setAttribute("style", cleaned);
               else el.removeAttribute("style");
+            }
+          });
+
+          // Reorder: Structural outlines MUST be on top of solid fills
+          // We move all 'fill="none"' paths (outlines) to be the last children of their respective parent
+          const structuralElements = Array.from(doc.querySelectorAll('[fill="none"]'));
+          structuralElements.forEach(el => {
+            if (el.parentNode && el.parentNode.nodeType === 1) { // 1 is ELEMENT_NODE
+              el.parentNode.appendChild(el);
             }
           });
 
@@ -166,7 +208,10 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
 };
 
 export default function ExportPanel() {
-  const { shapes, assets, walls, textAnnotations, labelArrows, dimensions, projectName } = useProjectStore();
+  const { 
+    shapes, assets, walls, textAnnotations, labelArrows, dimensions, projectName,
+    globalTableNumberingPosition, globalTableNumberingOrientation
+  } = useProjectStore();
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const [exportOptions, setExportOptions] = useState<ExportOption[]>([
     { id: "1", paperSize: "A4", format: "pdf", exportSelection: false, isProfessional: true },
@@ -206,12 +251,15 @@ export default function ExportPanel() {
     }
   }, [projectData?.name, setProjectName]);
 
-  const [profDetails, setProfDetails] = useState<ProfessionalDetails & { client?: string; date?: string; }>({
+  const [profDetails, setProfDetails] = useState<ProfessionalDetails>({
     eventName: projectName || "",
-    venue: "TBA",
+    venue: "",
+    eventPlanner: "",
     sittingCode: "",
-    guestAllocation: "General Admission: TBA",
+    guestAllocation: "",
     logo: null,
+    logo2: null,
+    byLogo: null,
     panelPosition: 'right',
     panelColor: '#0056A9' // Firm Brand Blue default
   });
@@ -228,9 +276,10 @@ export default function ExportPanel() {
     const items: any[] = [
       ...shapes.map(s => ({
         ...s,
-        type: s.type === 'ellipse' ? 'circle' : (s.type === 'rectangle' ? 'rect' : s.type),
-        backgroundColor: s.fill || 'transparent',
-        strokeColor: s.stroke || '#000000',
+        id: s.id,
+        type: s.type === 'ellipse' ? 'circle' : (s as any).type, 
+        backgroundColor: (s as any).fill || (s as any).fillColor || (s as any).backgroundColor || 'transparent',
+        strokeColor: (s as any).stroke || (s as any).strokeColor || '#000000',
         strokeWidth: s.strokeWidth || 1,
         scale: 1,
         zIndex: s.zIndex || (s.type === 'rectangle' ? -1 : 0),
@@ -371,63 +420,108 @@ export default function ExportPanel() {
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(asset.text || "", 0, 0);
       } else {
-        const fill = asset.backgroundColor || asset.fillColor || (asset.type.includes('table') ? '#f8fafc' : 'transparent');
+        const fill = asset.backgroundColor || asset.fillColor || asset.fill || (asset.type.includes('table') ? '#f8fafc' : 'transparent');
         ctx.fillStyle = fill;
         ctx.strokeStyle = asset.strokeColor || '#000000';
-        // Shapes get a 3.0mm minimum stroke for maximum clarity on full-plan prints
-        ctx.lineWidth = (asset.strokeWidth || 3.0) * MM_TO_PX;
+        ctx.lineWidth = (asset.strokeWidth || 1.5) * MM_TO_PX;
         
-        // ONLY draw primitive circles if the type is explicitly circle/ellipse
-        if (asset.type === 'circle' || asset.type === 'ellipse') {
-          ctx.beginPath(); ctx.ellipse(0, 0, Math.abs(w*MM_TO_PX/2), Math.abs(h*MM_TO_PX/2), 0, 0, Math.PI*2);
-          if (fill !== 'transparent') ctx.fill(); ctx.stroke();
+        // Handle all primitive shapes (Circle, Ellipse, Rect, Rectangle, Square, Polygon)
+        const typeLower = (asset.type || '').toLowerCase();
+        const isPrimitive = ['circle', 'ellipse', 'rect', 'rectangle', 'square', 'polygon'].includes(typeLower) || asset.id.includes('shape');
+
+        if (isPrimitive) {
+          ctx.beginPath();
+          if (typeLower === 'circle' || typeLower === 'ellipse') {
+            ctx.ellipse(0, 0, Math.abs(w*MM_TO_PX/2), Math.abs(h*MM_TO_PX/2), 0, 0, Math.PI*2);
+          } else if (typeLower === 'polygon' && (asset as any).points) {
+            const pts = (asset as any).points;
+            if (pts.length > 0) {
+              ctx.moveTo(pts[0].x * MM_TO_PX, pts[0].y * MM_TO_PX);
+              for (let i = 1; i < pts.length; i++) {
+                ctx.lineTo(pts[i].x * MM_TO_PX, pts[i].y * MM_TO_PX);
+              }
+              ctx.closePath();
+            }
+          } else {
+            // Rect / Rectangle / Square / Fallback
+            ctx.rect(-w*MM_TO_PX/2, -h*MM_TO_PX/2, w*MM_TO_PX, h*MM_TO_PX);
+          }
+          
+          if (fill !== 'transparent') ctx.fill(); 
+          ctx.stroke();
         } else {
            // Fallback for missing furniture assets: use a visible structural outline
-          ctx.strokeStyle = '#000000'; // Hard force black for visibility if asset failed
-          ctx.lineWidth = 2 * MM_TO_PX;
-          if (fill !== 'transparent') ctx.fill();
-          ctx.strokeRect(-w*MM_TO_PX/2, -h*MM_TO_PX/2, w*MM_TO_PX, h*MM_TO_PX);
+          ctx.strokeStyle = '#000000'; 
+          ctx.lineWidth = 1 * MM_TO_PX;
           
-          // Cross-hatch to signal internal error but keep plan readable
+          // Ensure we have a path to fill/stroke
           ctx.beginPath();
-          ctx.moveTo(-w*MM_TO_PX/2, -h*MM_TO_PX/2); ctx.lineTo(w*MM_TO_PX/2, h*MM_TO_PX/2);
-          ctx.moveTo(w*MM_TO_PX/2, -h*MM_TO_PX/2); ctx.lineTo(-w*MM_TO_PX/2, h*MM_TO_PX/2);
+          ctx.rect(-w*MM_TO_PX/2, -h*MM_TO_PX/2, w*MM_TO_PX, h*MM_TO_PX);
+          if (fill !== 'transparent') ctx.fill();
           ctx.stroke();
+          
+          // Cross-hatch ONLY for complex assets that definitely failed to load an image
+          // and are not intended to be simple shapes.
+          // ONLY draw cross-hatch for complex furniture assets that failed to load
+          // NEVER draw for basic shapes (rect, square, circle, etc)
+          const isBasicShape = typeLower === 'rect' || typeLower === 'rectangle' || typeLower === 'square' || typeLower === 'circle' || typeLower === 'ellipse' || typeLower === 'polygon' || asset.id.includes('shape');
+          
+          if (!isBasicShape) {
+            ctx.beginPath();
+            ctx.moveTo(-w*MM_TO_PX/2, -h*MM_TO_PX/2); ctx.lineTo(w*MM_TO_PX/2, h*MM_TO_PX/2);
+            ctx.moveTo(w*MM_TO_PX/2, -h*MM_TO_PX/2); ctx.lineTo(-w*MM_TO_PX/2, h*MM_TO_PX/2);
+            ctx.stroke();
+          }
         }
       }
 
       // Add high-visibility Table Name (Numbering) Label if present
       if ((asset as any).tableName) {
-        ctx.rotate(-((asset.rotation || 0) * Math.PI) / 180); // Un-rotate text so it's always upright
-        
         const label = (asset as any).tableName;
-        // Match proportional size logic from editor
+        const pos = (asset as any).tableNumberingPosition || globalTableNumberingPosition || 'center';
+        const orientation = (asset as any).tableNumberingOrientation || globalTableNumberingOrientation || 'horizontal';
+        
+        ctx.save();
+        
+        // Base sizes
         const size = Math.max(14, (asset.width || 100) * 0.14);
         const circleR = Math.max(16, (asset.width || 100) * 0.12);
         
-        // Use a high-quality circular background
-        ctx.shadowColor = 'rgba(0,0,0,0.2)';
-        ctx.shadowBlur = 4 * MM_TO_PX;
-        ctx.shadowOffsetY = 2 * MM_TO_PX;
+        // Calculate Offset based on position
+        let offsetX = 0;
+        let offsetY = 0;
+        const padding = circleR * 1.5;
+        const halfW = (asset.width || 100) / 2;
+        const halfH = (asset.height || 100) / 2;
         
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.arc(0, 0, circleR * MM_TO_PX, 0, Math.PI * 2);
-        ctx.fill();
+        switch (pos) {
+          case 'top': offsetY = -halfH - padding; break;
+          case 'bottom': offsetY = halfH + padding; break;
+          case 'top-left': offsetX = -halfW; offsetY = -halfH - padding; break;
+          case 'top-right': offsetX = halfW; offsetY = -halfH - padding; break;
+          case 'bottom-left': offsetX = -halfW; offsetY = halfH + padding; break;
+          case 'bottom-right': offsetX = halfW; offsetY = halfH + padding; break;
+          case 'middle-left': offsetX = -halfW - padding; break;
+          case 'middle-right': offsetX = halfW + padding; break;
+          default: break; // center
+        }
+
+        ctx.translate(offsetX * MM_TO_PX, offsetY * MM_TO_PX);
+        ctx.rotate(-((asset.rotation || 0) * Math.PI) / 180); // Ensure text is base-upright
+
+        if (orientation === 'vertical') {
+          ctx.rotate(Math.PI / 2);
+        }
         
-        // Reset shadow for text
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetY = 0;
-        
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = Math.max(1, (asset.width || 100) * 0.01) * MM_TO_PX;
-        ctx.stroke();
+        ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+
 
         ctx.font = `900 ${size * MM_TO_PX}px Inter, sans-serif`;
         ctx.fillStyle = '#000000';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(label, 0, 0);
+        ctx.restore();
       }
       ctx.restore();
     }
@@ -567,83 +661,162 @@ export default function ExportPanel() {
     drawHeader('VENUE');
     drawRow('', details.venue || "TBA", false);
 
-    // 3. SITTING CODE (Inventory)
-    drawHeader('SITTING CODE');
-    const inventory = new Map<string, number>();
+    // 3. SITTING & INVENTORY (Seating-only items)
+    drawHeader('SITTING');
+    
+    let grandSeatingTotal = 0;
+    const sittingInventory = new Map<string, { count: number; capacity: number }>();
+    const otherInventory = new Map<string, number>();
+    
+    if (details.sittingCode) {
+        drawRow('Sitting Reference', details.sittingCode, true);
+    }
+
+    const isStructural = (a: AssetInstance) => 
+        ['wall-segments', 'freehand', 'line', 'polyline', 'text', 'rect', 'circle', 'ellipse', 'arch', 'window', 'door'].includes(a.type.toLowerCase());
+
+    const isSittingCategory = (a: AssetInstance) => {
+        const libItem = ASSET_LIBRARY.find(l => l.id === a.type);
+        const name = (libItem?.name || a.type).toLowerCase();
+        const category = libItem?.category;
+        
+        // Strictly Seating / Tables keyword check
+        const sittingKeywords = ['chair', 'table', 'stool', 'sofa', 'bench', 'seater'];
+        const matchesKeyword = sittingKeywords.some(kw => name.includes(kw));
+        
+        // Only include in SITTING if it's furniture that matches keyword.
+        // Sitting Styles (complex layouts like Classroom) go to OTHER ITEMS.
+        return category === 'Furniture' && matchesKeyword && !isStructural(a);
+    };
+
     assetsToCount.forEach(a => {
-      if(!['wall-segments', 'freehand', 'line', 'polyline', 'text', 'rect', 'circle', 'ellipse'].includes(a.type)) {
-        inventory.set(a.type, (inventory.get(a.type) || 0) + 1);
-      }
+        if (isStructural(a)) return;
+        
+        const type = a.type;
+        const libItem = ASSET_LIBRARY.find(l => l.id === type);
+        const name = libItem?.name || type;
+        
+        if (isSittingCategory(a)) {
+            // Capacity logic
+            let capacity = 1;
+            const seaterMatch = name.match(/(\d+)\s*(?:seater|Seater)/);
+            if (seaterMatch) {
+                capacity = parseInt(seaterMatch[1]);
+            } else if (name.toLowerCase().includes('cocktail table')) {
+                capacity = 4;
+            } else if (name.toLowerCase().includes('table')) { // Standard table default
+                capacity = 1; 
+            }
+            const current = sittingInventory.get(type) || { count: 0, capacity };
+            sittingInventory.set(type, { count: current.count + 1, capacity: current.capacity });
+        } else {
+            // Other items category (Decorations, Equipment, or Complex Sitting Styles)
+            const count = otherInventory.get(name) || 0;
+            otherInventory.set(name, count + 1);
+        }
     });
 
-    if (inventory.size === 0) {
-      drawTableEntry('No items found', '');
+    if (sittingInventory.size === 0 && !details.sittingCode) {
+      drawTableEntry('No sitting items found', '');
     } else {
-      let totalItems = 0;
-      inventory.forEach((count, type) => {
-        totalItems += count;
+      sittingInventory.forEach((data, type) => {
+        const { count, capacity } = data;
+        const subtotal = count * capacity;
+        grandSeatingTotal += subtotal;
         const name = ASSET_LIBRARY.find(l => l.id === type)?.name || type;
-        drawTableEntry(name, String(count));
-      });
-      ctx.fillStyle = '#f8fafc';
-      ctx.fillRect(xBase, y, PANEL_WIDTH, rowHeight);
-      ctx.fillStyle = textColor;
-      ctx.font = `bold ${rowFontLarge}px Inter, sans-serif`;
-      ctx.textAlign = 'left';
-      ctx.fillText('TOTAL', xBase + padding, y + rowHeight / 2);
-      ctx.textAlign = 'right';
-      ctx.fillText(String(totalItems), xBase + PANEL_WIDTH - padding, y + rowHeight / 2);
-      y += rowHeight;
-    }
-
-    // 4. GUESTS ALLOCATION
-    drawHeader('GUESTS ALLOCATION');
-    const allocationLines = (details.guestAllocation || "").split('\n').filter(l => l.trim().length > 0);
-    if (allocationLines.length === 0) {
-       drawTableEntry('General Admission', 'TBA');
-    } else {
-      allocationLines.forEach(line => {
-        if (line.includes(':')) {
-          const [label, count] = line.split(':');
-          drawTableEntry(label.trim(), count.trim());
+        
+        if (capacity > 1) {
+            drawTableEntry(`${name} ${capacity} x ${count} = ${subtotal}`, "");
         } else {
-          drawTableEntry(line.trim(), '');
+            drawTableEntry(name, String(count));
         }
       });
+      
+      if (grandSeatingTotal > 0) {
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(xBase, y, PANEL_WIDTH, rowHeight);
+        ctx.fillStyle = textColor;
+        ctx.font = `bold ${rowFontLarge}px Inter, sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.fillText('TOTAL GUESTS', xBase + padding, y + rowHeight / 2);
+        ctx.textAlign = 'right';
+        ctx.fillText(String(grandSeatingTotal), xBase + PANEL_WIDTH - padding, y + rowHeight / 2);
+        y += rowHeight;
+      }
     }
 
-    // 5. EVENT BY (Branding)
-    const logoBlockH = PANEL_WIDTH * 0.4;
-    const blockStartY = height - logoBlockH;
-    y = blockStartY;
+    // 4. OTHER ITEMS (Decorations, Layouts, Equipment)
+    if (otherInventory.size > 0) {
+        drawHeader('OTHER ITEMS');
+        otherInventory.forEach((count, name) => {
+            drawTableEntry(name, String(count));
+        });
+    }
+
+    // 4. GUESTS ALLOCATION (Optional - Hide if empty)
+    const allocationLines = (details.guestAllocation || "").split('\n').filter(l => l.trim().length > 0);
+    
+    if (allocationLines.length > 0) {
+        drawHeader('GUESTS ALLOCATION');
+        allocationLines.forEach(line => {
+          if (line.includes(':')) {
+            const [label, count] = line.split(':');
+            drawTableEntry(label.trim(), count.trim());
+          } else {
+            drawTableEntry(line.trim(), '');
+          }
+        });
+    }
+
+    // 5. EVENT LOGO (Dedicated Section)
+    if (details.logo || details.logo2 || details.byLogo) {
+      drawHeader('EVENT LOGO');
+      const logoPadding = PANEL_WIDTH * 0.1;
+      const availableLogoH = PANEL_WIDTH * 0.35;
+      
+      const drawSingleLogo = async (logoUrl: string) => {
+        const img = new Image(); img.src = logoUrl;
+        await new Promise(r => { img.onload = r; img.onerror = r; });
+        if (img.naturalWidth > 0) {
+          const maxW = PANEL_WIDTH - logoPadding * 2;
+          const maxH = availableLogoH - logoPadding;
+          let tw = img.naturalWidth;
+          let th = img.naturalHeight;
+          const scale = Math.min(maxW / tw, maxH / th);
+          tw *= scale; th *= scale;
+          const lx = xBase + (PANEL_WIDTH - tw) / 2;
+          const ly = y + (availableLogoH - th) / 2;
+          ctx.drawImage(img, lx, ly, tw, th);
+          y += availableLogoH;
+        }
+      };
+
+      if (details.logo) await drawSingleLogo(details.logo);
+      if (details.logo2) await drawSingleLogo(details.logo2);
+      if (details.byLogo) await drawSingleLogo(details.byLogo);
+    }
+
+    // 6. EVENT BY (Branding with Planner)
+    const BRANDING_SECTION_HEIGHT = PANEL_WIDTH * 0.3;
+    const footerStartY = height - BRANDING_SECTION_HEIGHT;
+    
+    y = footerStartY;
     drawHeader('EVENT BY');
     
-    if (details.logo) {
-      const img = new Image(); img.src = details.logo;
-      await new Promise(r => { img.onload = r; img.onerror = r; });
-      if (img.naturalWidth > 0) {
-        // Precise vertical centering in the area remaining after the 'EVENT BY' header
-        const availableH = logoBlockH - headerHeight;
-        const maxW = PANEL_WIDTH * 0.8;
-        const maxH = availableH * 0.8;
-
-        let tw = img.naturalWidth;
-        let th = img.naturalHeight;
-        const scale = Math.min(maxW / tw, maxH / th);
-        tw *= scale; th *= scale;
-
-        const lx = xBase + (PANEL_WIDTH - tw) / 2;
-        const ly = blockStartY + headerHeight + (availableH - th) / 2;
-        
-        ctx.drawImage(img, lx, ly, tw, th);
-      }
-    } else {
-      const availableH = logoBlockH - headerHeight;
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = `italic ${rowFontBase}px Inter, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText('Professional Layout Design', xBase + PANEL_WIDTH / 2, y + headerHeight + (availableH / 2));
+    // Planner Name if present
+    if (details.eventPlanner) {
+        ctx.fillStyle = textColor;
+        ctx.font = `bold ${headerFont * 0.9}px Inter, sans-serif`; 
+        ctx.textAlign = 'center';
+        ctx.fillText(details.eventPlanner, xBase + PANEL_WIDTH / 2, y + rowHeight * 0.8);
+        y += rowHeight * 0.8;
     }
+    
+    // Professional Services text
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = `italic ${rowFontBase}px Inter, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('Professional Design Services', xBase + PANEL_WIDTH / 2, y + ((height - y) / 2));
   };
 
 
@@ -876,29 +1049,77 @@ export default function ExportPanel() {
 
             <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
               {/* Logo Upload Section */}
-              <div className="flex flex-col items-center gap-3">
-                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Project Logo</label>
-                <div className="relative group">
-                  <div className="w-24 h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-slate-400">
-                    {profDetails.logo ? (
-                      <img src={profDetails.logo} className="w-full h-full object-cover" />
-                    ) : (
-                      <Upload className="text-slate-300 group-hover:text-slate-500 transition-colors" size={24} />
+                <div className="flex-1 flex flex-col items-center gap-3">
+                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Event Logo 1</label>
+                  <div className="relative group w-full">
+                    <div className="w-full h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-slate-400">
+                      {profDetails.logo ? (
+                        <img src={profDetails.logo} className="w-full h-full object-contain p-2" />
+                      ) : (
+                        <Upload className="text-slate-300 group-hover:text-slate-500 transition-colors" size={24} />
+                      )}
+                      <input type="file" accept="image/*" onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setProfDetails({...profDetails, logo: ev.target?.result as string});
+                          reader.readAsDataURL(file);
+                        }
+                      }} className="absolute inset-0 opacity-0 cursor-pointer" />
+                    </div>
+                    {profDetails.logo && (
+                      <button onClick={() => setProfDetails({...profDetails, logo: null})} className="absolute -top-2 -right-2 w-6 h-6 bg-white border border-slate-100 rounded-full shadow-md flex items-center justify-center text-slate-400 hover:text-red-500 transition-all"><X size={12}/></button>
                     )}
-                    <input type="file" accept="image/*" onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (ev) => setProfDetails({...profDetails, logo: ev.target?.result as string});
-                        reader.readAsDataURL(file);
-                      }
-                    }} className="absolute inset-0 opacity-0 cursor-pointer" />
                   </div>
-                  {profDetails.logo && (
-                    <button onClick={() => setProfDetails({...profDetails, logo: null})} className="absolute -top-2 -right-2 w-6 h-6 bg-white border border-slate-100 rounded-full shadow-md flex items-center justify-center text-slate-400 hover:text-red-500 transition-all"><X size={12}/></button>
-                  )}
                 </div>
-              </div>
+
+                <div className="flex-1 flex flex-col items-center gap-3">
+                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Event Logo 2</label>
+                  <div className="relative group w-full">
+                    <div className="w-full h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-slate-400">
+                      {profDetails.logo2 ? (
+                        <img src={profDetails.logo2} className="w-full h-full object-contain p-2" />
+                      ) : (
+                        <Upload className="text-slate-300 group-hover:text-slate-500 transition-colors" size={24} />
+                      )}
+                      <input type="file" accept="image/*" onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setProfDetails({...profDetails, logo2: ev.target?.result as string});
+                          reader.readAsDataURL(file);
+                        }
+                      }} className="absolute inset-0 opacity-0 cursor-pointer" />
+                    </div>
+                    {profDetails.logo2 && (
+                      <button onClick={() => setProfDetails({...profDetails, logo2: null})} className="absolute -top-2 -right-2 w-6 h-6 bg-white border border-slate-100 rounded-full shadow-md flex items-center justify-center text-slate-400 hover:text-red-500 transition-all"><X size={12}/></button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 flex flex-col items-center gap-3">
+                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">By Logo</label>
+                  <div className="relative group w-full">
+                    <div className="w-full h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-slate-400">
+                      {profDetails.byLogo ? (
+                        <img src={profDetails.byLogo} className="w-full h-full object-contain p-2" />
+                      ) : (
+                        <Upload className="text-slate-300 group-hover:text-slate-500 transition-colors" size={24} />
+                      )}
+                      <input type="file" accept="image/*" onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setProfDetails({...profDetails, byLogo: ev.target?.result as string});
+                          reader.readAsDataURL(file);
+                        }
+                      }} className="absolute inset-0 opacity-0 cursor-pointer" />
+                    </div>
+                    {profDetails.byLogo && (
+                      <button onClick={() => setProfDetails({...profDetails, byLogo: null})} className="absolute -top-2 -right-2 w-6 h-6 bg-white border border-slate-100 rounded-full shadow-md flex items-center justify-center text-slate-400 hover:text-red-500 transition-all"><X size={12}/></button>
+                    )}
+                  </div>
+                </div>
 
               {/* Theme Selection */}
               <div className="space-y-3 text-center">
@@ -932,13 +1153,29 @@ export default function ExportPanel() {
                   <input className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" value={profDetails.venue} onChange={e=>setProfDetails({...profDetails, venue: e.target.value})}/>
                 </div>
                 <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Event Planner</label>
+                  <input className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" placeholder="Planner Name" value={profDetails.eventPlanner} onChange={e=>setProfDetails({...profDetails, eventPlanner: e.target.value})}/>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Sitting Code</label>
+                  <input className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" placeholder="Code (optional)" value={profDetails.sittingCode} onChange={e=>setProfDetails({...profDetails, sittingCode: e.target.value})}/>
+                </div>
+                <div className="space-y-2">
                   <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Date</label>
-                  <input className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" value={profDetails.date} onChange={e=>setProfDetails({...profDetails, date: e.target.value})}/>
+                  <input type="date" className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" value={profDetails.date} onChange={e=>setProfDetails({...profDetails, date: e.target.value})}/>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Position</label>
+                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Guest Allocation (Optional)</label>
+                <textarea rows={3} className="w-full bg-slate-50/50 rounded-2xl p-4 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none resize-none" placeholder="e.g. Tables: 20\nChairs: 200" value={profDetails.guestAllocation} onChange={e=>setProfDetails({...profDetails, guestAllocation: e.target.value})}/>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Panel Position</label>
                 <div className="flex gap-3">
                   <button onClick={()=>setProfDetails({...profDetails, panelPosition: 'left'})} className={`flex-1 h-12 text-sm font-bold rounded-2xl border-2 transition-all ${profDetails.panelPosition==='left'?'bg-[var(--accent)] border-[var(--accent)] text-white shadow-xl translate-y-[-2px]':'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}>Left Side</button>
                   <button onClick={()=>setProfDetails({...profDetails, panelPosition: 'right'})} className={`flex-1 h-12 text-sm font-bold rounded-2xl border-2 transition-all ${profDetails.panelPosition==='right'?'bg-[var(--accent)] border-[var(--accent)] text-white shadow-xl translate-y-[-2px]':'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}>Right Side</button>

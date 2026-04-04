@@ -38,12 +38,28 @@ export const useUserStore = create<UserState>()(
                     const userData = response.data;
 
                     set((state) => {
+                        // If we don't have a user in state yet, try to see if it's in localStorage 
+                        // (though Zustand should have rehydrated it already)
+                        let localAvatar = state.user?.avatar;
+                        
+                        // Fallback: Check localStorage manually if state is empty 
+                        // This handles cases where fetchUser runs before rehydration finishes
+                        if (!localAvatar && typeof window !== "undefined") {
+                            try {
+                                const stored = localStorage.getItem("user-storage");
+                                if (stored) {
+                                    const parsed = JSON.parse(stored);
+                                    localAvatar = parsed.state?.user?.avatar;
+                                }
+                            } catch (e) {}
+                        }
+
                         const combinedUser = state.user ? { ...state.user, ...userData } : userData;
 
-                        // "Local Storage for Now": If backend returns no avatar but we have a local one, 
+                        // "Local Storage for Now": If backend returns no avatar but we have one locally,
                         // explicitly preserve our local Base64 image.
-                        if (state.user?.avatar && !userData.avatar) {
-                            combinedUser.avatar = state.user.avatar;
+                        if (localAvatar && !userData.avatar) {
+                            combinedUser.avatar = localAvatar;
                         }
 
                         return {

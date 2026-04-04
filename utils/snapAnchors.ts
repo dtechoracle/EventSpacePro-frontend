@@ -9,7 +9,11 @@ export type AnchorType =
     | 'right-center'
     | 'bottom-left'
     | 'bottom-center'
-    | 'bottom-right';
+    | 'bottom-right'
+    | 'top-q1' | 'top-q3'
+    | 'bottom-q1' | 'bottom-q3'
+    | 'left-q1' | 'left-q3'
+    | 'right-q1' | 'right-q3';
 
 export interface AnchorPoint {
     id: AnchorType;
@@ -72,13 +76,25 @@ export function calculateAssetAnchors(asset: Asset): AnchorPoint[] {
 
     const anchors: { id: AnchorType; label: string; x: number; y: number }[] = [
         { id: 'top-left', label: 'Top-Left Corner', x: asset.x - halfW, y: asset.y - halfH },
+        { id: 'top-q1', label: 'Top 1/4', x: asset.x - halfW/2, y: asset.y - halfH },
         { id: 'top-center', label: 'Top Center', x: asset.x, y: asset.y - halfH },
+        { id: 'top-q3', label: 'Top 3/4', x: asset.x + halfW/2, y: asset.y - halfH },
         { id: 'top-right', label: 'Top-Right Corner', x: asset.x + halfW, y: asset.y - halfH },
+        
+        { id: 'left-q1', label: 'Left 1/4', x: asset.x - halfW, y: asset.y - halfH/2 },
         { id: 'left-center', label: 'Left Center', x: asset.x - halfW, y: asset.y },
+        { id: 'left-q3', label: 'Left 3/4', x: asset.x - halfW, y: asset.y + halfH/2 },
+        
         { id: 'center', label: 'Center', x: asset.x, y: asset.y },
+        
+        { id: 'right-q1', label: 'Right 1/4', x: asset.x + halfW, y: asset.y - halfH/2 },
         { id: 'right-center', label: 'Right Center', x: asset.x + halfW, y: asset.y },
+        { id: 'right-q3', label: 'Right 3/4', x: asset.x + halfW, y: asset.y + halfH/2 },
+        
         { id: 'bottom-left', label: 'Bottom-Left Corner', x: asset.x - halfW, y: asset.y + halfH },
+        { id: 'bottom-q1', label: 'Bottom 1/4', x: asset.x - halfW/2, y: asset.y + halfH },
         { id: 'bottom-center', label: 'Bottom Center', x: asset.x, y: asset.y + halfH },
+        { id: 'bottom-q3', label: 'Bottom 3/4', x: asset.x + halfW/2, y: asset.y + halfH },
         { id: 'bottom-right', label: 'Bottom-Right Corner', x: asset.x + halfW, y: asset.y + halfH },
     ];
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useMemo } from 'react';
 
 interface GridRendererProps {
     gridSize: number;
@@ -11,102 +11,100 @@ interface GridRendererProps {
     unitSystem?: 'metric-mm' | 'metric-m' | 'imperial-ft';
 }
 
+/**
+ * GridRenderer - Uses a performance-optimized pattern-based approach 
+ * to render the background grid. This prevents lag by avoiding thousands
+ * of individual SVG line elements in the DOM.
+ */
 export default function GridRenderer({ gridSize, viewportSize, zoom, panX, panY, unitSystem = 'metric-mm' }: GridRendererProps) {
-    // Calculate visible area in world coordinates
-    const worldLeft = -panX / zoom;
-    const worldTop = -panY / zoom;
-    const worldRight = (viewportSize.width - panX) / zoom;
-    const worldBottom = (viewportSize.height - panY) / zoom;
-
-    // Snap to grid
-    const startX = Math.floor(worldLeft / gridSize) * gridSize;
-    const startY = Math.floor(worldTop / gridSize) * gridSize;
-    const endX = Math.ceil(worldRight / gridSize) * gridSize;
-    const endY = Math.ceil(worldBottom / gridSize) * gridSize;
-
-    // Generate grid lines
-    const verticalLines: number[] = [];
-    const horizontalLines: number[] = [];
-
-    for (let x = startX; x <= endX; x += gridSize) {
-        verticalLines.push(x);
-    }
-
-    for (let y = startY; y <= endY; y += gridSize) {
-        horizontalLines.push(y);
-    }
+    // Determine major/minor grid line spacing
+    // Minor lines = gridSize, Major lines = gridSize * 5
+    const majorGridSize = gridSize * 5;
 
     // Convert grid size for display based on unit system
-    let displayText = '';
-    if (unitSystem === 'imperial-ft') {
-        const feet = gridSize / 304.8; // mm to feet
-        const rounded = feet >= 10 ? feet.toFixed(0) : feet.toFixed(1);
-        displayText = `${rounded}ft`;
-    } else if (unitSystem === 'metric-m') {
-        const gridSizeInMeters = gridSize / 1000;
-        displayText = `${gridSizeInMeters}m`;
-    } else {
-        // metric-mm or fallback
-        displayText = `${gridSize}mm`;
-    }
+    const displayText = useMemo(() => {
+        if (unitSystem === 'imperial-ft') {
+            const feet = gridSize / 304.8; // mm to feet
+            const rounded = feet >= 10 ? feet.toFixed(0) : feet.toFixed(1);
+            return `${rounded}ft`;
+        } else if (unitSystem === 'metric-m') {
+            const gridSizeInMeters = gridSize / 1000;
+            return `${gridSizeInMeters}m`;
+        }
+        return `${gridSize}mm`;
+    }, [gridSize, unitSystem]);
 
-    // Calculate position for grid size label (top-left in world coordinates)
-    const labelX = worldLeft + 20 / zoom;
-    const labelY = worldTop + 30 / zoom;
+    // Calculate grid label position (fixed viewport but stays at edge)
+    const labelX = (20 - panX) / zoom;
+    const labelY = (30 - panY) / zoom;
 
     return (
-        <g className="grid-layer">
-            {/* Grid lines with high visibility */}
-            <g opacity={0.8}>
-                {/* Vertical lines */}
-                {verticalLines.map((x) => (
-                    <line
-                        key={`v-${x}`}
-                        x1={x}
-                        y1={startY}
-                        x2={x}
-                        y2={endY}
-                        stroke="#cbd5e1" // Subtle slate-300
-                        strokeWidth={x % (gridSize * 5) === 0 ? 0.4 : 0.15}
+        <g className="grid-layer pointer-events-none" style={{ pointerEvents: 'none' }}>
+            <defs>
+                {/* Minor grid pattern */}
+                <pattern
+                    id="grid-minor"
+                    x="0"
+                    y="0"
+                    width={gridSize}
+                    height={gridSize}
+                    patternUnits="userSpaceOnUse"
+                >
+                    <path
+                        d={`M ${gridSize} 0 L 0 0 0 ${gridSize}`}
+                        fill="none"
+                        stroke="#e2e8f0" // slate-200
+                        strokeWidth="1"
                         vectorEffect="non-scaling-stroke"
                     />
-                ))}
-
-                {/* Horizontal lines */}
-                {horizontalLines.map((y) => (
-                    <line
-                        key={`h-${y}`}
-                        x1={startX}
-                        y1={y}
-                        x2={endX}
-                        y2={y}
-                        stroke="#cbd5e1" // Subtle slate-300
-                        strokeWidth={y % (gridSize * 5) === 0 ? 0.4 : 0.15}
+                </pattern>
+                {/* Major grid pattern */}
+                <pattern
+                    id="grid-major"
+                    x="0"
+                    y="0"
+                    width={majorGridSize}
+                    height={majorGridSize}
+                    patternUnits="userSpaceOnUse"
+                >
+                    <rect width={majorGridSize} height={majorGridSize} fill="url(#grid-minor)" />
+                    <path
+                        d={`M ${majorGridSize} 0 L 0 0 0 ${majorGridSize}`}
+                        fill="none"
+                        stroke="#cbd5e1" // slate-300
+                        strokeWidth="2"
                         vectorEffect="non-scaling-stroke"
                     />
-                ))}
-            </g>
+                </pattern>
+            </defs>
 
-            {/* Grid size label */}
-            <g>
-                {/* Background for label */}
+            {/* Performant background grid using the patterns defined above */}
+            {/* We draw a huge rectangle covers the world or at least a large area around the viewport */}
+            <rect
+                x={-500000} // Very large area to avoid edges 
+                y={-500000}
+                width={1000000}
+                height={1000000}
+                fill="url(#grid-major)"
+            />
+
+            {/* Grid size label - positioned relative to viewport but drawn in world space */}
+            <g transform={`translate(${labelX}, ${labelY})`}>
                 <rect
-                    x={labelX - 5 / zoom}
-                    y={labelY - 20 / zoom}
+                    x={-5 / zoom}
+                    y={-18 / zoom}
                     width={80 / zoom}
-                    height={25 / zoom}
-                    fill="rgba(255, 255, 255, 0.9)"
-                    stroke="none"
+                    height={24 / zoom}
+                    fill="rgba(255, 255, 255, 0.85)"
                     rx={4 / zoom}
                 />
-                {/* Label text */}
                 <text
-                    x={labelX}
-                    y={labelY}
-                    fill="#1e293b"
-                    fontSize={14 / zoom}
+                    x={0}
+                    y={0}
+                    fill="#475569"
+                    fontSize={12 / zoom}
                     fontWeight="600"
-                    fontFamily="system-ui, -apple-system, sans-serif"
+                    fontFamily="Inter, system-ui, sans-serif"
                 >
                     Grid: {displayText}
                 </text>

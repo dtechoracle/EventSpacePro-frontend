@@ -100,9 +100,9 @@ export default function DashboardSidebar() {
           />
         ) : (
           <img 
-            src="/assets/mainLogo.svg" 
+            src="/assets/small-logo.png" 
             alt="Logo" 
-            className="w-10 h-auto object-contain" 
+            className="w-8 h-8 object-contain" 
           />
         )}
       </div>

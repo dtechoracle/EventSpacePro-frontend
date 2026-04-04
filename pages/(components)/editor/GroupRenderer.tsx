@@ -26,7 +26,7 @@ interface GroupRendererProps {
   selectedAssetIds: string[];
 }
 
-const GroupRenderer: React.FC<GroupRendererProps> = ({
+const GroupRenderer = React.memo(({
   group,
   leftPx,
   topPx,
@@ -47,7 +47,7 @@ const GroupRenderer: React.FC<GroupRendererProps> = ({
   onRotationHandleMouseDown,
   selectedAssetId,
   selectedAssetIds,
-}) => {
+}: GroupRendererProps) => {
   if (!group || !group.isGroup || !group.groupAssets) return null;
 
   // Only show group container when group itself is selected
@@ -156,6 +156,6 @@ const GroupRenderer: React.FC<GroupRendererProps> = ({
       )}
     </>
   );
-};
+});
 
 export default GroupRenderer;

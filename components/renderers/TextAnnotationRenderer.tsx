@@ -34,7 +34,7 @@ export default function TextAnnotationRenderer({ annotation, zoom }: TextAnnotat
                 />
             )}
             <text
-                x="0"
+                x={annotation.textAlign === 'left' ? bgX + padding : annotation.textAlign === 'right' ? bgX + bgWidth - padding : "0"}
                 y="0"
                 fontSize={fontSize}
                 fill={annotation.color || '#000000'}
@@ -43,7 +43,7 @@ export default function TextAnnotationRenderer({ annotation, zoom }: TextAnnotat
                 fontStyle={annotation.fontStyle || 'normal'}
                 textDecoration={annotation.textDecoration || 'none'}
                 dominantBaseline="middle"
-                textAnchor="middle"
+                textAnchor={annotation.textAlign === 'left' ? 'start' : annotation.textAlign === 'right' ? 'end' : 'middle'}
                 style={{ cursor: 'pointer', pointerEvents: 'all' }}
             >
                 {annotation.text}

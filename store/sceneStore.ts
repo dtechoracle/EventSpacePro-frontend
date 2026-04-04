@@ -6,6 +6,7 @@ import { calculateShapeAnchors, calculateAssetAnchors, AnchorType } from "@/util
 import { ASSET_LIBRARY } from "@/lib/assets";
 
 export type AssetInstance = {
+  fill?: string;
   id: string;
   type: string;
   x: number;
@@ -55,6 +56,8 @@ export type AssetInstance = {
 
   // Table properties
   tableName?: string; // for manual/auto table numbering
+  tableNumberingPosition?: 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'top' | 'bottom' | 'middle-left' | 'middle-right';
+  tableNumberingOrientation?: 'horizontal' | 'vertical';
 
   // UI State properties
   showDimensions?: boolean; // toggle dimension display for walls/shapes
@@ -410,7 +413,7 @@ export const useSceneStore = create<SceneState>()(
         const state = get();
         // Prevent any non-wall asset creation while wall drawing is active (avoids ghost assets)
         if (state.wallDrawingMode && type !== "wall-segments") return;
-        const id = `${type}-${Date.now()}`;
+        const id = `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
         // Get the next zIndex (highest existing zIndex + 1, or 1 if no assets exist)
         const nextZIndex = state.assets.length > 0
@@ -2070,7 +2073,15 @@ export const useSceneStore = create<SceneState>()(
           }
 
           // Add current state
-          newHistory.push([...currentAssets]);
+          // Add deep copy of assets to prevent mutation of nested arrays (like wallNodes) from affecting history
+          const assetsClone = currentAssets.map(a => ({
+            ...a,
+            wallNodes: a.wallNodes ? [...a.wallNodes] : undefined,
+            wallEdges: a.wallEdges ? [...a.wallEdges] : undefined,
+            groupAssets: a.groupAssets ? [...a.groupAssets] : undefined
+          }));
+          
+          newHistory.push(assetsClone);
 
           // Trim history if it exceeds max size
           if (newHistory.length > MAX_HISTORY_SIZE) {
@@ -2742,6 +2753,7 @@ export const useSceneStore = create<SceneState>()(
           // Clear history on rehydration to prevent storage issues
           state.history = [];
           state.historyIndex = -1;
+          state.hasHydrated = true;
         }
       },
     }

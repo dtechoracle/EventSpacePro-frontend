@@ -16,7 +16,15 @@ interface ApiError {
   errors?: { path: string; message: string; code: string }[];
 }
 
-export default function CreateEventModal({ onClose, initialTemplateData }: { onClose: () => void, initialTemplateData?: any }) {
+export default function CreateEventModal({ 
+  onClose, 
+  initialTemplateData,
+  preSelectedMode
+}: { 
+  onClose: () => void, 
+  initialTemplateData?: any,
+  preSelectedMode?: 'manual' | 'ai'
+}) {
   const [step, setStep] = useState<'initial' | 'venue-selection' | 'outdoor-selection' | 'outdoor-dimensions' | 'marquee-selection' | 'event-details' | 'upload-image'>('initial');
 
   useEffect(() => {
@@ -25,7 +33,7 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
     }
   }, [initialTemplateData]);
 
-  const [creationType, setCreationType] = useState<'manual' | 'ai'>('manual');
+  const [creationType, setCreationType] = useState<'manual' | 'ai'>(preSelectedMode || 'manual');
   const [venueType, setVenueType] = useState<'preloaded' | 'custom' | 'marquee' | 'outdoor'>('custom');
   const [outdoorType, setOutdoorType] = useState<'beach' | 'field' | 'parking-lot' | null>(null);
   const [outdoorWidth, setOutdoorWidth] = useState(20);
@@ -69,10 +77,13 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
           setSelectedProjectId(target.slug);
         } else {
           try {
-            const res = await apiRequest("/projects", "POST", { name: HIDDEN_PROJECT_NAME }, true);
+            // Include isHidden: true if the backend supports it, otherwise just use the name
+            const res = await apiRequest("/projects", "POST", { name: HIDDEN_PROJECT_NAME, description: "Your private workspace for drafts" }, true);
             setSelectedProjectId(res.data.slug);
           } catch (e) {
             console.error("Failed to create default project", e);
+            // Fallback to the first available project if creation fails
+            if (list.length > 0) setSelectedProjectId(list[0].slug);
           }
         }
       }
@@ -696,7 +707,7 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                   </h2>
                 </div>
 
-                {/* Project Selection (only if inside a specific project already or if we want to change it) */}
+                {/* Project Selection (only if inside a specific project already) */}
                 {slug && (
                   <div className="flex flex-col gap-2">
                     <label className="text-sm font-medium text-gray-700">Project</label>
@@ -768,7 +779,7 @@ export default function CreateEventModal({ onClose, initialTemplateData }: { onC
                     }
                   }}
                   disabled={!eventName || !selectedProjectId || mutation.isPending || (venueType === 'outdoor' && (!outdoorWidth || !outdoorDepth))}
-                  className="w-full h-14 rounded-2xl text-white text-base font-bold bg-[var(--accent)] disabled:bg-gray-100 disabled:text-gray-400 disabled:opacity-100 shadow-lg shadow-[var(--accent)]/20 hover:shadow-[var(--accent)]/30 transition-all flex items-center justify-center gap-2"
+                  className="w-full h-14 rounded-2xl text-white text-base font-bold bg-[#3b82f6] hover:bg-blue-600 disabled:bg-gray-100 disabled:text-gray-400 disabled:opacity-100 transition-all flex items-center justify-center gap-2"
                 >
                   {mutation.isPending ? (
                     <motion.div

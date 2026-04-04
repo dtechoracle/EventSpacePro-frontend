@@ -1,6 +1,7 @@
 "use client";
 
 import { BsStars, BsSearch } from "react-icons/bs";
+import { FaPlus } from "react-icons/fa";
 import { useUserStore } from "@/store/userStore";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -56,6 +57,7 @@ const Dashboard = () => {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateEventModal, setShowCreateEventModal] = useState(false);
+  const [createEventMode, setCreateEventMode] = useState<'manual' | 'ai'>('manual');
   const [showQuickCreateModal, setShowQuickCreateModal] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
@@ -221,10 +223,12 @@ const Dashboard = () => {
                 />
               </div>
               <button
-                onClick={() => setShowQuickCreateModal(true)}
-                className="px-5 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-md hover:opacity-90 flex items-center gap-2 transition-opacity"
+                onClick={() => {
+                  setShowCreateEventModal(true);
+                }}
+                className="px-5 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-md hover:opacity-90 flex items-center gap-2 transition-all"
               >
-                <BsStars className="w-4 h-4" />
+                <FaPlus size={14} />
                 <span>New Event</span>
               </button>
             </div>
@@ -237,7 +241,10 @@ const Dashboard = () => {
             <QuickCreateEventModal onClose={() => setShowQuickCreateModal(false)} />
           )}
           {showCreateEventModal && (
-            <CreateEventModal onClose={() => setShowCreateEventModal(false)} />
+            <CreateEventModal 
+              onClose={() => setShowCreateEventModal(false)} 
+              preSelectedMode={createEventMode}
+            />
           )}
           {showCreateProjectModal && (
             <CreateProjectModal onClose={() => setShowCreateProjectModal(false)} />

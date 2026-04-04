@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useSceneStore, AssetInstance } from "@/store/sceneStore";
 import { PaperSize } from "@/lib/paperSizes";
 import { PAPER_SIZES } from "@/lib/paperSizes";
@@ -19,33 +19,71 @@ import { useCanvasMouseHandlers } from "@/hooks/useCanvasMouseHandlers";
 import { useCanvasKeyboardHandlers } from "@/hooks/useCanvasKeyboardHandlers";
 import { useAssetHandlers } from "@/hooks/useAssetHandlers";
 import { useDrawingLogic } from "@/hooks/useDrawingLogic";
-import { motion } from "framer-motion";
-import { calculateShapeAnchors, calculateAssetAnchors, findContainingObjects, AnchorType } from "@/utils/snapAnchors";
-
-// Type for API response that wraps EventData
-// type EventDataResponse = {
-//   data: EventData;
-// } | EventData;
+import { motion, AnimatePresence } from "framer-motion";
+import { calculateShapeAnchors, calculateAssetAnchors, AnchorType } from "@/utils/snapAnchors";
+import { useProjectStore } from "@/store/projectStore";
+import React from "react";
 
 type CanvasProps = {
   canvas?: { size: string; width: number; height: number } | null;
   assets?: AssetInstance[];
 };
 
+// Moved outside to avoid re-renders
+const SnapGuidesRenderer = React.memo(({ mmToPx, workspaceZoom }: { mmToPx: number, workspaceZoom: number }) => {
+  const snapGuides = useSceneStore((s) => s.snapGuides);
+  if (!snapGuides || snapGuides.length === 0) return null;
+
+  return (
+    <>
+      {snapGuides.map((guide, i) => {
+        const isVertical = guide.type === 'vertical';
+        const x1 = guide.x1 * mmToPx;
+        const y1 = guide.y1 * mmToPx;
+        const x2 = guide.x2 * mmToPx;
+        const y2 = guide.y2 * mmToPx;
+
+        const style: React.CSSProperties = {
+          position: 'absolute',
+          pointerEvents: 'none',
+          zIndex: 99999,
+          backgroundColor: isVertical ? '#ff0000' : '#00ff00',
+        };
+
+        if (isVertical) {
+          style.left = x1;
+          style.top = y1;
+          style.width = Math.max(1, 1.5 / workspaceZoom);
+          style.height = (y2 - y1) || 1;
+        } else {
+          style.left = x1;
+          style.top = y1;
+          style.width = (x2 - x1) || 1;
+          style.height = Math.max(1, 1.5 / workspaceZoom);
+        }
+
+        return <div key={i} style={style} />;
+      })}
+    </>
+  );
+});
+
+SnapGuidesRenderer.displayName = "SnapGuidesRenderer";
+
 export default function Canvas({
   canvas: propCanvas,
   assets: propAssets,
 }: CanvasProps) {
   // Workspace (viewport) transform
-  const MM_TO_PX = 2; // keep consistent with other components
+  const MM_TO_PX = 2; 
   const ZOOM_SENSITIVITY = 0.001;
-  const MIN_ZOOM_BASE = 0.000001; // Allow zooming out to 0.0001%
-  const MIN_ZOOM_PADDING = 1; // No padding restriction
+  const MIN_ZOOM_BASE = 0.000001; 
+  const MIN_ZOOM_PADDING = 1; 
   const EDGE_PADDING_MM = 10;
 
-  // Large virtual scene so the user can pan/scroll comfortably
-  const SCENE_W_MM = 100000; // 100 meters
-  const SCENE_H_MM = 100000; // 100 meters
+  // Large virtual scene
+  const SCENE_W_MM = 100000; 
+  const SCENE_H_MM = 100000; 
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -56,119 +94,40 @@ export default function Canvas({
   const lastPanPos = useRef({ x: 0, y: 0 });
   const [canvasPos, setCanvasPos] = useState<{ x: number; y: number }>({ x: 200, y: 150 });
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; assetId: string } | null>(null);
-  // Use store data for rendering (synced from props)
-  const canvas = useSceneStore((s) => s.canvas);
-  const assets = useSceneStore((s) => s.assets);
 
-  const addAsset = useSceneStore((s) => s.addAsset);
-  const addAssetObject = useSceneStore((s) => s.addAssetObject);
-  const reset = useSceneStore((s) => s.reset);
-  const markAsSaved = useSceneStore((s) => s.markAsSaved);
-  const showGrid = useSceneStore((s) => s.showGrid);
-  const gridSize = useSceneStore((s) => s.gridSize);
-  const isPenMode = useSceneStore((s) => s.isPenMode);
-  const isWallMode = useSceneStore((s) => s.isWallMode);
-  const wallType = useSceneStore((s) => s.wallType);
-  const wallTool = useSceneStore((s) => s.wallTool);
-  const isDrawing = useSceneStore((s) => s.isDrawing);
-  // const currentPath = useSceneStore((s) => s.currentPath);
-  const tempPath = useSceneStore((s) => s.tempPath);
-  const wallDrawingMode = useSceneStore((s) => s.wallDrawingMode);
-  const currentWallSegments = useSceneStore((s) => s.currentWallSegments);
-  const currentWallStart = useSceneStore((s) => s.currentWallStart);
-  const currentWallTempEnd = useSceneStore((s) => s.currentWallTempEnd);
-  const selectedAssetId = useSceneStore((s) => s.selectedAssetId);
-  const chairSettings = useSceneStore((s) => s.chairSettings) || { numChairs: 8, radius: 80 };
-  const selectAsset = useSceneStore((s) => s.selectAsset);
-  const updateAsset = useSceneStore((s) => s.updateAsset);
-  const clearSelection = useSceneStore((s) => s.clearSelection);
-  // const setPenMode = useSceneStore((s) => s.setPenMode);
-  // const setWallMode = useSceneStore((s) => s.setWallMode);
-  const setIsDrawing = useSceneStore((s) => s.setIsDrawing);
-  const setCurrentPath = useSceneStore((s) => s.setCurrentPath);
-  const setTempPath = useSceneStore((s) => s.setTempPath);
-  const shapeMode = useSceneStore((s) => s.shapeMode);
-  const shapeStart = useSceneStore((s) => s.shapeStart);
-  const shapeTempEnd = useSceneStore((s) => s.shapeTempEnd);
-  const startShape = useSceneStore((s) => s.startShape);
-  const finishShape = useSceneStore((s) => s.finishShape);
-  const updateShapeTempEnd = useSceneStore((s) => s.updateShapeTempEnd);
-  const startWallSegment = useSceneStore((s) => s.startWallSegment);
-  const updateWallTempEnd = useSceneStore((s) => s.updateWallTempEnd);
-  const commitWallSegment = useSceneStore((s) => s.commitWallSegment);
-  const finishWallDrawing = useSceneStore((s) => s.finishWallDrawing);
-  const setWallDrawingMode = useSceneStore((s) => s.setWallDrawingMode);
-  const createCrossAt = useSceneStore((s) => s.createCrossAt);
+  const sceneState = useSceneStore();
+  const {
+    canvas, assets, showGrid, gridSize, isPenMode, isWallMode, isDrawing, 
+    tempPath, wallDrawingMode, currentWallSegments, currentWallStart, 
+    currentWallTempEnd, selectedAssetId, selectedAssetIds, chairSettings,
+    snapToAnchorMode, snapSourceAssetId, snapSourceAnchor, snapTargetAssetId, 
+    snapTargetAnchor, isRectangularSelectionMode, rectangularSelectionStart,
+    rectangularSelectionEnd,
+    addAsset, addAssetObject, reset, markAsSaved, selectAsset, updateAsset, 
+    clearSelection, setIsDrawing, setCurrentPath, setTempPath, shapeMode, 
+    shapeStart, shapeTempEnd, startShape, finishShape, updateShapeTempEnd, 
+    startWallSegment, updateWallTempEnd, commitWallSegment, finishWallDrawing, 
+    setWallDrawingMode, setSnapGuides, setSnapSource, setSnapTarget, 
+    performSnapToAnchor, clearSnapToAnchor, setSnapToAnchorMode,
+    startRectangularSelectionDrag, updateRectangularSelectionDrag, finishRectangularSelectionDrag
+  } = sceneState;
 
-  // Derived state for ANY drawing interaction (fixes issue where store.isDrawing might be false for shapes)
   const isDrawingActive = isPenMode || isWallMode || wallDrawingMode || shapeMode;
-  const snapToAnchorMode = useSceneStore((s) => s.snapToAnchorMode);
-  const snapTargetAssetId = useSceneStore((s) => s.snapTargetAssetId);
-  const snapTargetAnchor = useSceneStore((s) => s.snapTargetAnchor);
-  const snapSourceAssetId = useSceneStore((s) => s.snapSourceAssetId);
-  const snapSourceAnchor = useSceneStore((s) => s.snapSourceAnchor);
-  const setSnapTarget = useSceneStore((s) => s.setSnapTarget);
-  const setSnapSource = useSceneStore((s) => s.setSnapSource);
-  const performSnapToAnchor = useSceneStore((s) => s.performSnapToAnchor);
-  const clearSnapToAnchor = useSceneStore((s) => s.clearSnapToAnchor);
-  const setSnapToAnchorMode = useSceneStore((s) => s.setSnapToAnchorMode);
-  const startRectangularSelection = useSceneStore(
-    (s) => s.startRectangularSelection
-  );
-  const selectedAssetIds = useSceneStore((s) => s.selectedAssetIds);
-  const isRectangularSelectionMode = useSceneStore(
-    (s) => s.isRectangularSelectionMode
-  );
 
-  const rectangularSelectionStart = useSceneStore(
-    (s) => s.rectangularSelectionStart
-  );
-  const rectangularSelectionEnd = useSceneStore(
-    (s) => s.rectangularSelectionEnd
-  );
-  const startRectangularSelectionDrag = useSceneStore(
-    (s) => s.startRectangularSelectionDrag
-  );
-  const updateRectangularSelectionDrag = useSceneStore(
-    (s) => s.updateRectangularSelectionDrag
-  );
-  const finishRectangularSelectionDrag = useSceneStore(
-    (s) => s.finishRectangularSelectionDrag
-  );
-
-  // Visual Snap Guides State (Global from Store now)
-  const snapGuides = useSceneStore((s) => s.snapGuides);
-  const setSnapGuides = useSceneStore((s) => s.setSnapGuides);
-
-  // Sync props data to store when props change (only once per data change)
+  // Sync props data to store
   const hasSyncedRef = useRef(false);
   const lastAssetIdsRef = useRef<string>("");
 
   useEffect(() => {
     if (propCanvas && propAssets) {
-      // Create a stable key based on IDs to detect structural changes
       const assetIdsKey = propAssets.map(a => a.id).sort().join(",");
-
-      // Sync structural changes (new assets, deleted assets)
       if (!hasSyncedRef.current || assetIdsKey !== lastAssetIdsRef.current) {
-        // Reset store and populate with current props data
         reset();
-
-        // Set canvas only if size is a known PaperSize (A1–A5)
-        const isKnownSize = !!(
-          propCanvas.size &&
-          (propCanvas.size as keyof typeof PAPER_SIZES) in PAPER_SIZES
-        );
+        const isKnownSize = !!(propCanvas.size && (propCanvas.size as keyof typeof PAPER_SIZES) in PAPER_SIZES);
         if (isKnownSize) {
-          const setCanvas = useSceneStore.getState().setCanvas;
-          setCanvas(propCanvas.size as PaperSize);
+          useSceneStore.getState().setCanvas(propCanvas.size as PaperSize);
         }
-
-        // Add assets
-        propAssets.forEach((asset) => {
-          addAssetObject(asset);
-        });
-
+        propAssets.forEach(addAssetObject);
         markAsSaved();
         lastAssetIdsRef.current = assetIdsKey;
         hasSyncedRef.current = true;
@@ -179,42 +138,48 @@ export default function Canvas({
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const currentDrawingPath = useRef<{ x: number; y: number }[]>([]);
   const lastMousePosition = useRef({ x: 0, y: 0 });
-
   const [rotation, setRotation] = useState<number>(0);
 
-  // Single-canvas mode: use the large scene as the canvas
-  const effectiveWidthMm = SCENE_W_MM;
-  const effectiveHeightMm = SCENE_H_MM;
   const mmToPx = MM_TO_PX;
   const workspaceZoom = zoom;
-  const canvasPxW = effectiveWidthMm * mmToPx; // paper size in px
-  const canvasPxH = effectiveHeightMm * mmToPx; // paper size in px
-  const scenePxWNoZoom = SCENE_W_MM * mmToPx; // virtual scene size (no zoom)
+  const scenePxWNoZoom = SCENE_W_MM * mmToPx;
   const scenePxHNoZoom = SCENE_H_MM * mmToPx;
 
-  // Create coordinate transformation function
-  // Create coordinate transformation function
-  const clientToCanvasMM = useCallback(
-    (clientX: number, clientY: number) => {
-      // Use canvasRef (inner transformed element) to get exact visual bounds.
-      // This automatically accounts for offset, zoom, and any parent transforms.
-      if (!canvasRef.current) return { x: 0, y: 0 };
+  const clientToCanvasMM = useCallback((clientX: number, clientY: number) => {
+    if (!canvasRef.current) return { x: 0, y: 0 };
+    const rect = canvasRef.current.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left) / (mmToPx * workspaceZoom),
+      y: (clientY - rect.top) / (mmToPx * workspaceZoom),
+    };
+  }, [workspaceZoom, mmToPx]);
 
-      const rect = canvasRef.current.getBoundingClientRect();
+  const clampOffset = useCallback((offsetCandidate: { x: number; y: number }, zoomVal: number, allowOverscroll = false) => {
+    const el = containerRef.current;
+    if (!el) return offsetCandidate;
+    const rect = el.getBoundingClientRect();
+    const vw = rect.width;
+    const vh = rect.height;
+    const sceneW = SCENE_W_MM * mmToPx;
+    const sceneH = SCENE_H_MM * mmToPx;
+    const padPx = EDGE_PADDING_MM * mmToPx * zoomVal;
+    
+    // Bounds for 100m x 100m scene
+    const minOffsetX = vw - padPx - sceneW * zoomVal;
+    const maxOffsetX = padPx;
+    const minOffsetY = vh - padPx - sceneH * zoomVal;
+    const maxOffsetY = padPx;
 
-      // rect.left/top is the visual position of the scene's (0,0) point.
-      // clientX - rect.left is the distance in VISUAL pixels from the left edge.
-      // We divide by (mmToPx * workspaceZoom) to get back to Scene MM.
-      const xMm = (clientX - rect.left) / (mmToPx * workspaceZoom);
-      const yMm = (clientY - rect.top) / (mmToPx * workspaceZoom);
+    let x = offsetCandidate.x;
+    if (minOffsetX > maxOffsetX) x = vw / 2 - (sceneW / 2) * zoomVal;
+    else if (!allowOverscroll) x = Math.min(maxOffsetX, Math.max(minOffsetX, x));
 
-      return { x: xMm, y: yMm };
-    },
-    [
-      workspaceZoom,
-      mmToPx,
-    ]
-  );
+    let y = offsetCandidate.y;
+    if (minOffsetY > maxOffsetY) y = vh / 2 - (sceneH / 2) * zoomVal;
+    else if (!allowOverscroll) y = Math.min(maxOffsetY, Math.max(minOffsetY, y));
+
+    return { x, y };
+  }, [mmToPx]);
 
   // Smooth zoom/offset animation loop
   useEffect(() => {
@@ -231,112 +196,77 @@ export default function Canvas({
         if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) {
           return clampOffset(targetOffset.current, targetZoom.current, false);
         }
-        const candidate = { x: o.x + dx * 0.2, y: o.y + dy * 0.2 };
-        return clampOffset(candidate, targetZoom.current, false);
+        return clampOffset({ x: o.x + dx * 0.2, y: o.y + dy * 0.2 }, targetZoom.current, false);
       });
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [clampOffset]);
 
-  // Cursor-centered zoom with dynamic min zoom
+  // Wheel handler for zoom/pan
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const computeMinZoom = (): number => {
-      const rect = el.getBoundingClientRect();
-      // ensure the entire viewport is always covered by the SCENE, not just the paper
-      if (!scenePxWNoZoom || !scenePxHNoZoom) return MIN_ZOOM_BASE;
-      // With effectively infinite zoom, we don't strictly enforce covering the viewport with the scene
-      // allowing the user to zoom out as much as they want.
-      return MIN_ZOOM_BASE;
-    };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-
-      // Heuristic: distinguish trackpad vs mouse wheel.
-      // - Trackpad events are usually DOM_DELTA_PIXEL with small deltas.
-      // - Mouse wheels are often line-based / large deltas.
       const isPixelMode = e.deltaMode === WheelEvent.DOM_DELTA_PIXEL;
       const absDeltaY = Math.abs(e.deltaY);
       const absDeltaX = Math.abs(e.deltaX);
       const isTrackpadLike = isPixelMode && absDeltaY < 80 && absDeltaX < 80;
-
-      const shouldZoom =
-        // Pinch gesture: ctrl/meta + wheel
-        e.ctrlKey ||
-        e.metaKey ||
-        // External mouse wheel (non‑trackpad) should zoom vertically
-        (!isTrackpadLike && absDeltaY > absDeltaX && absDeltaY > 0);
+      const shouldZoom = e.ctrlKey || e.metaKey || (!isTrackpadLike && absDeltaY > absDeltaX && absDeltaY > 0);
 
       if (shouldZoom) {
         const rect = el.getBoundingClientRect();
         const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
         const sceneX = (cursor.x - targetOffset.current.x) / targetZoom.current;
         const sceneY = (cursor.y - targetOffset.current.y) / targetZoom.current;
-        // Flip so pinch-in (positive deltaY on most trackpads) zooms OUT, pinch-out zooms IN.
         const delta = -e.deltaY * 0.001;
-        const desired = targetZoom.current + delta;
-        const minZoom = MIN_ZOOM_BASE;
-        // Allow effectively infinite zoom (1000000 = 100,000,000%)
-        const newZoom = Math.min(1000000, Math.max(minZoom, desired));
-
-        const newOffset = {
+        const newZoom = Math.min(1000000, Math.max(MIN_ZOOM_BASE, targetZoom.current + delta));
+        
+        targetZoom.current = newZoom;
+        targetOffset.current = clampOffset({
           x: cursor.x - sceneX * newZoom,
           y: cursor.y - sceneY * newZoom,
-        };
-        targetZoom.current = newZoom;
-        targetOffset.current = clampOffset(newOffset, newZoom, false);
+        }, newZoom, false);
         return;
       }
 
-      // Two-finger scroll on trackpad: pan (both vertical and horizontal)
-      const panSpeed = 1;
-      const newOffset = {
-        x: targetOffset.current.x - e.deltaX * panSpeed,
-        y: targetOffset.current.y - e.deltaY * panSpeed,
-      };
-      targetOffset.current = clampOffset(newOffset, targetZoom.current, false);
+      targetOffset.current = clampOffset({
+        x: targetOffset.current.x - e.deltaX,
+        y: targetOffset.current.y - e.deltaY,
+      }, targetZoom.current, false);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [effectiveWidthMm, effectiveHeightMm, mmToPx]);
+  }, [clampOffset]);
 
-  // Enforce minimum zoom on mount/resize and center scene
+  // Initial centering and resize handling
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const enforceMin = () => {
       const rect = el.getBoundingClientRect();
-      if (!scenePxWNoZoom || !scenePxHNoZoom) return;
       const minW = rect.width / scenePxWNoZoom;
       const minH = rect.height / scenePxHNoZoom;
       const minZoom = Math.min(minW, minH) * MIN_ZOOM_PADDING;
-      const clampedMin = Math.min(3, Math.max(MIN_ZOOM_BASE, minZoom));
+      const clampedMin = Math.max(MIN_ZOOM_BASE, Math.min(3, minZoom));
+      
       if (targetZoom.current < clampedMin) {
         targetZoom.current = clampedMin;
-        const centeredOffset = {
+        targetOffset.current = clampOffset({
           x: rect.width / 2 - (scenePxWNoZoom * clampedMin) / 2,
           y: rect.height / 2 - (scenePxHNoZoom * clampedMin) / 2,
-        };
-        targetOffset.current = clampOffset(centeredOffset, clampedMin, false);
+        }, clampedMin, false);
       } else {
-        // Ensure current offset is within strict bounds at current zoom
         targetOffset.current = clampOffset(targetOffset.current, targetZoom.current, false);
       }
     };
     enforceMin();
     window.addEventListener("resize", enforceMin);
     return () => window.removeEventListener("resize", enforceMin);
-  }, [scenePxWNoZoom, scenePxHNoZoom, mmToPx]);
+  }, [scenePxWNoZoom, scenePxHNoZoom, clampOffset]);
 
-  // Strictly snap targetOffset to bounds when dependencies change
-  useEffect(() => {
-    targetOffset.current = clampOffset(targetOffset.current, targetZoom.current, false);
-  }, [scenePxWNoZoom, scenePxHNoZoom, canvasPos.x, canvasPos.y, mmToPx]);
-
-  // Middle-mouse/spacebar drag panning
   const isSpaceDown = useRef(false);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => { if (e.code === "Space") isSpaceDown.current = true; };
@@ -346,45 +276,8 @@ export default function Canvas({
     return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); };
   }, []);
 
-  const clampOffset = (
-    offsetCandidate: { x: number; y: number },
-    zoomVal: number,
-    allowOverscroll = false
-  ) => {
-    const el = containerRef.current;
-    if (!el) return offsetCandidate;
-    const rect = el.getBoundingClientRect();
-    const vw = rect.width;
-    const vh = rect.height;
-    // Use the large SCENE as bounds
-    const sceneW = SCENE_W_MM * mmToPx; // scene px (no zoom)
-    const sceneH = SCENE_H_MM * mmToPx;
-    const leftScene = 0; // scene starts at 0,0
-    const topScene = 0;
-    const padPx = EDGE_PADDING_MM * mmToPx * zoomVal;
-    const minOffsetX = vw - padPx - (leftScene + sceneW) * zoomVal;
-    const maxOffsetX = padPx - leftScene * zoomVal;
-    let x = offsetCandidate.x;
-    if (minOffsetX > maxOffsetX) {
-      x = vw / 2 - (leftScene + sceneW / 2) * zoomVal;
-    } else if (!allowOverscroll) {
-      x = Math.min(maxOffsetX, Math.max(minOffsetX, x));
-    }
-    const minOffsetY = vh - padPx - (topScene + sceneH) * zoomVal;
-    const maxOffsetY = padPx - topScene * zoomVal;
-    let y = offsetCandidate.y;
-    if (minOffsetY > maxOffsetY) {
-      y = vh / 2 - (topScene + sceneH / 2) * zoomVal;
-    } else if (!allowOverscroll) {
-      y = Math.min(maxOffsetY, Math.max(minOffsetY, y));
-    }
-    return { x, y };
-  };
-
   const handlePointerDown = (e: React.MouseEvent) => {
-    if (contextMenu) {
-      closeContextMenu();
-    }
+    if (contextMenu) setContextMenu(null);
     if (e.button === 1 || isSpaceDown.current) {
       e.preventDefault();
       isPanning.current = true;
@@ -394,14 +287,12 @@ export default function Canvas({
         const dx = ev.clientX - lastPanPos.current.x;
         const dy = ev.clientY - lastPanPos.current.y;
         lastPanPos.current = { x: ev.clientX, y: ev.clientY };
-        const candidate = { x: targetOffset.current.x + dx, y: targetOffset.current.y + dy };
-        const clamped = clampOffset(candidate, targetZoom.current, false);
+        const clamped = clampOffset({ x: targetOffset.current.x + dx, y: targetOffset.current.y + dy }, targetZoom.current, false);
         setOffset(clamped);
         targetOffset.current = clamped;
       };
       const onDocUp = () => {
         isPanning.current = false;
-        targetOffset.current = clampOffset(targetOffset.current, targetZoom.current, false);
         document.removeEventListener("mousemove", onDocMove);
         document.removeEventListener("mouseup", onDocUp);
       };
@@ -410,33 +301,17 @@ export default function Canvas({
     }
   };
 
-  // Use custom hooks
   const { straightenPath } = useDrawingLogic();
-  // Shared ref for group-scale operations (avoids circular hook dependency)
   const groupScaleCenterRef = useRef<{ x: number; y: number } | null>(null);
   const mouseRefs = useCanvasMouseHandlers({
-    workspaceZoom,
-    mmToPx,
-    canvasPos,
-    setCanvasPos,
-    canvas,
-    clientToCanvasMM,
-    straightenPath,
-    groupScaleCenterRef,
+    workspaceZoom, mmToPx, canvasPos, setCanvasPos, canvas, clientToCanvasMM, straightenPath, groupScaleCenterRef
   });
   const { copiedAssetId } = useCanvasKeyboardHandlers();
-  const assetHandlers = useAssetHandlers({
-    clientToCanvasMM,
-    mouseRefs,
-    groupScaleCenterRef,
-  });
-
+  const assetHandlers = useAssetHandlers({ clientToCanvasMM, mouseRefs, groupScaleCenterRef });
+  
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
-
   const handleAssetContextMenu = useCallback((e: React.MouseEvent, assetId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, assetId });
+    e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, assetId });
   }, []);
 
   const anchorMenuOptions: { id: AnchorType; label: string }[] = [
@@ -451,92 +326,27 @@ export default function Canvas({
     { id: "bottom-right", label: "↘ Bottom-Right" },
   ];
 
-  const handleSnapMenuSelect = useCallback(
-    (anchorId: AnchorType) => {
-      if (!contextMenu) return;
-
-      const hasSourceAndAnchor =
-        !!snapSourceAssetId && !!snapSourceAnchor;
-
-      // Phase 1: choose SOURCE + its anchor
-      if (!hasSourceAndAnchor || contextMenu.assetId === snapSourceAssetId) {
-        // Treat this asset as the source and store its anchor
-        setSnapSource(contextMenu.assetId, anchorId);
-        // Clear any previous target
-        setSnapTarget(null, null);
-        setSnapToAnchorMode(true);
-        console.log(
-          "Snap source set via context menu:",
-          contextMenu.assetId,
-          "anchor:",
-          anchorId
-        );
-      } else {
-        // Phase 2: choose TARGET + its anchor, then snap immediately
-        if (contextMenu.assetId === snapSourceAssetId) {
-          console.warn(
-            "Cannot use the same asset as both source and target for snap"
-          );
-          closeContextMenu();
-          return;
-        }
-
-        setSnapTarget(contextMenu.assetId, anchorId);
-        console.log(
-          "Snap target set via context menu:",
-          contextMenu.assetId,
-          "anchor:",
-          anchorId,
-          "source:",
-          snapSourceAssetId,
-          "sourceAnchor:",
-          snapSourceAnchor
-        );
-
-        // Perform the snap and clear mode/state
-        performSnapToAnchor();
-        clearSnapToAnchor();
-        setSnapToAnchorMode(false);
-      }
-
-      closeContextMenu();
-    },
-    [
-      contextMenu,
-      snapSourceAssetId,
-      snapSourceAnchor,
-      setSnapSource,
-      setSnapTarget,
-      setSnapToAnchorMode,
-      performSnapToAnchor,
-      clearSnapToAnchor,
-      closeContextMenu,
-    ]
-  );
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        closeContextMenu();
-      }
-    };
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [closeContextMenu]);
+  const handleSnapMenuSelect = useCallback((anchorId: AnchorType) => {
+    if (!contextMenu) return;
+    if (!snapSourceAssetId || !snapSourceAnchor || contextMenu.assetId === snapSourceAssetId) {
+      setSnapSource(contextMenu.assetId, anchorId);
+      setSnapTarget(null, null);
+      setSnapToAnchorMode(true);
+    } else {
+      setSnapTarget(contextMenu.assetId, anchorId);
+      performSnapToAnchor();
+      clearSnapToAnchor();
+      setSnapToAnchorMode(false);
+    }
+    closeContextMenu();
+  }, [contextMenu, snapSourceAssetId, snapSourceAnchor, setSnapSource, setSnapTarget, setSnapToAnchorMode, performSnapToAnchor, clearSnapToAnchor, closeContextMenu]);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const type = e.dataTransfer.getData("assetType");
     if (!type || !canvasRef.current) return;
-
-    // Get dimensions if available
-    const widthStr = e.dataTransfer.getData("assetWidth");
-    const heightStr = e.dataTransfer.getData("assetHeight");
-    const width = widthStr ? parseFloat(widthStr) : undefined;
-    const height = heightStr ? parseFloat(heightStr) : undefined;
-
-    console.log("[Canvas] Drop event:", { type, widthStr, heightStr, width, height });
-
+    const width = parseFloat(e.dataTransfer.getData("assetWidth") || "800");
+    const height = parseFloat(e.dataTransfer.getData("assetHeight") || "800");
     const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
     addAsset(type, x, y, width, height);
   };
@@ -544,922 +354,334 @@ export default function Canvas({
   const rotateCW = () => setRotation((r) => (r + 90) % 360);
   const rotateCCW = () => setRotation((r) => (r - 90 + 360) % 360);
 
-  // Handle clicks in snap mode at the container level to catch all clicks
-  const handleContainerMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
+  // High-performance move handler
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onMouseMove = (e: MouseEvent) => {
+      lastMousePosition.current = { x: e.clientX, y: e.clientY };
+      const state = useSceneStore.getState();
+      const drawingActive = state.isPenMode || state.isWallMode || state.wallDrawingMode || state.shapeMode;
+      const rectSelectionMode = state.isRectangularSelectionMode;
 
-    // In snap mode, handle all clicks here
-    if (snapToAnchorMode) {
-      // Let the canvas handler process it
-      handlePointerDown(e);
-    }
-  }, [snapToAnchorMode, handlePointerDown]);
+      if (!drawingActive && !rectSelectionMode) return;
+
+      const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+
+      if (rectSelectionMode && state.rectangularSelectionStart) {
+        state.updateRectangularSelectionDrag(x, y);
+      }
+
+      if (drawingActive) {
+        const SNAP_THRESHOLD = 5;
+        let snappedX = x;
+        let snappedY = y;
+        let snapGuides: any[] = [];
+
+        if (state.assets.length > 0) {
+          const candidatesX = [SCENE_W_MM / 2];
+          const candidatesY = [SCENE_H_MM / 2];
+          state.assets.forEach(a => {
+            candidatesX.push(a.x); candidatesY.push(a.y);
+            const hw = ((a.width || 0) * (a.scale || 1)) / 2;
+            const hh = ((a.height || 0) * (a.scale || 1)) / 2;
+            candidatesX.push(a.x - hw, a.x + hw);
+            candidatesY.push(a.y - hh, a.y + hh);
+          });
+
+          let bestX = Infinity, bestY = Infinity;
+          let matchedX: number | null = null, matchedY: number | null = null;
+          candidatesX.forEach(cx => {
+            const d = Math.abs(x - cx);
+            if (d < SNAP_THRESHOLD && d < bestX) { bestX = d; matchedX = cx; }
+          });
+          candidatesY.forEach(cy => {
+            const d = Math.abs(y - cy);
+            if (d < SNAP_THRESHOLD && d < bestY) { bestY = d; matchedY = cy; }
+          });
+
+          if (matchedX !== null) {
+            snappedX = matchedX;
+            snapGuides.push({ x1: matchedX, y1: 0, x2: matchedX, y2: SCENE_H_MM, type: 'vertical' });
+          }
+          if (matchedY !== null) {
+            snappedY = matchedY;
+            snapGuides.push({ x1: 0, y1: matchedY, x2: SCENE_W_MM, y2: matchedY, type: 'horizontal' });
+          }
+        }
+        state.setSnapGuides(snapGuides);
+
+        if (state.shapeMode && state.shapeStart) {
+          let end = { x: snappedX, y: snappedY };
+          if (e.shiftKey && (state.shapeMode === "rectangle" || state.shapeMode === "ellipse")) {
+            const dx = end.x - state.shapeStart.x;
+            const dy = end.y - state.shapeStart.y;
+            const size = Math.max(Math.abs(dx), Math.abs(dy));
+            end = { x: state.shapeStart.x + Math.sign(dx || 1) * size, y: state.shapeStart.y + Math.sign(dy || 1) * size };
+          }
+          state.updateShapeTempEnd(end);
+        }
+
+        if ((state.wallDrawingMode || state.isWallMode) && state.currentWallStart) {
+          let wX = snappedX, wY = snappedY;
+          if (state.currentWallSegments?.length > 0) {
+            const first = state.currentWallSegments[0].start;
+            if (Math.hypot(wX - first.x, wY - first.y) <= 6) { wX = first.x; wY = first.y; }
+          }
+          state.updateWallTempEnd({ x: wX, y: wY });
+        }
+      }
+    };
+    el.addEventListener("mousemove", onMouseMove);
+    return () => el.removeEventListener("mousemove", onMouseMove);
+  }, [clientToCanvasMM]);
+
+  const globalPos = useProjectStore(s => s.globalTableNumberingPosition);
+  const globalOrientation = useProjectStore(s => s.globalTableNumberingOrientation);
+
+  // Optimized asset list with culling
+  const MemoizedAssetList = useMemo(() => {
+    const viewportPad = 1000;
+    const vLeft = (-offset.x / zoom) / mmToPx - viewportPad;
+    const vTop = (-offset.y / zoom) / mmToPx - viewportPad;
+    const vRight = ((-offset.x + (containerRef.current?.offsetWidth || 2000)) / zoom) / mmToPx + viewportPad;
+    const vBottom = ((-offset.y + (containerRef.current?.offsetHeight || 2000)) / zoom) / mmToPx + viewportPad;
+
+    const visibleAssets = assets.filter(a => a.x > vLeft && a.x < vRight && a.y > vTop && a.y < vBottom);
+
+    return visibleAssets
+      .slice()
+      .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
+      .map(asset => {
+        const isSelected = asset.id === selectedAssetId;
+        const isMultiSelected = selectedAssetIds.includes(asset.id);
+        const isCopied = asset.id === copiedAssetId;
+        const leftPx = asset.x * mmToPx;
+        const topPx = asset.y * mmToPx;
+
+        return (
+          <div key={asset.id} style={{ pointerEvents: isDrawingActive ? 'none' : 'auto' }}>
+            {asset.isGroup ? (
+              <GroupRenderer
+                group={asset} isSelected={isSelected} isMultiSelected={isMultiSelected}
+                leftPx={leftPx} topPx={topPx} mmToPx={mmToPx}
+                onAssetClick={selectAsset}
+                onAssetDoubleClick={(id) => {
+                  const a = assets.find(x => x.id === id);
+                  if (a?.isGroup) updateAsset(id, { groupExpanded: !a.groupExpanded });
+                }}
+                onAssetMouseDown={assetHandlers.onAssetMouseDown}
+                onAssetMouseMove={() => {}}
+                onAssetMouseUp={() => {}}
+                onAssetMouseLeave={() => {}}
+                onAssetMouseEnter={() => {}}
+                onAssetMouseOver={() => {}}
+                onAssetMouseOut={() => {}}
+                onAssetContextMenu={handleAssetContextMenu}
+                onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
+                onRotationHandleMouseDown={assetHandlers.onRotationHandleMouseDown}
+                selectedAssetId={selectedAssetId}
+                selectedAssetIds={selectedAssetIds}
+              />
+            ) : (
+              <AssetRenderer
+                asset={asset} updateAsset={updateAsset} isSelected={isSelected} isMultiSelected={isMultiSelected}
+                isCopied={isCopied} leftPx={leftPx} topPx={topPx} totalRotation={asset.rotation}
+                editingTextId={assetHandlers.editingTextId} editingText={assetHandlers.editingText}
+                onAssetMouseDown={assetHandlers.onAssetMouseDown}
+                onTextDoubleClick={assetHandlers.onTextDoubleClick}
+                onTextEditKeyDown={assetHandlers.onTextEditKeyDown}
+                onTextEditBlur={assetHandlers.onTextEditBlur}
+                onTextEditChange={assetHandlers.setEditingText}
+                onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
+                onRotationHandleMouseDown={assetHandlers.onRotationHandleMouseDown}
+                onAssetContextMenu={handleAssetContextMenu}
+                globalPos={globalPos} globalOrientation={globalOrientation}
+              />
+            )}
+          </div>
+        );
+      });
+  }, [assets, offset, zoom, mmToPx, selectedAssetId, selectedAssetIds, copiedAssetId, isDrawingActive, assetHandlers, selectAsset, updateAsset, handleAssetContextMenu, globalPos, globalOrientation]);
 
   return (
     <div
       ref={containerRef}
       className="w-full h-full overflow-hidden bg-gray-50"
-      onMouseDown={snapToAnchorMode ? handleContainerMouseDown : handlePointerDown}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        closeContextMenu();
+      onMouseDown={(e) => {
+        if (e.button !== 0) return;
+        if (isDrawingActive) {
+          e.stopPropagation();
+          const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+          if (isPenMode) {
+            currentDrawingPath.current = [{ x, y }];
+            setIsDrawing(true); setCurrentPath([{ x, y }]); setTempPath([{ x, y }]);
+          } else if (isWallMode || wallDrawingMode) {
+            if (!currentWallStart) {
+              let startPoint = { x, y };
+              const wallAssets = assets.filter(a => a.wallSegments?.length);
+              let closest = null, closestDist = Infinity;
+              wallAssets.forEach(a => a.wallSegments!.forEach(seg => {
+                const absS = { x: seg.start.x + a.x, y: seg.start.y + a.y };
+                const absE = { x: seg.end.x + a.x, y: seg.end.y + a.y };
+                const dS = Math.hypot(x - absS.x, y - absS.y);
+                const dE = Math.hypot(x - absE.x, y - absE.y);
+                if (dS < closestDist) { closestDist = dS; closest = absS; }
+                if (dE < closestDist) { closestDist = dE; closest = absE; }
+              }));
+              if (closest && closestDist <= 6) startPoint = closest;
+              startWallSegment(startPoint);
+            }
+          } else if (shapeMode) {
+            startShape({ x, y });
+          }
+          return;
+        }
+        
+        if (snapToAnchorMode) {
+          e.stopPropagation(); e.preventDefault();
+          const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+          let clickedAnchor = null;
+          for (const asset of assets) {
+            const anchors = asset.type === "square" || asset.type === "circle" 
+              ? calculateShapeAnchors({ x: asset.x, y: asset.y, width: asset.width || 0, height: asset.height || 0 } as any)
+              : calculateAssetAnchors({ x: asset.x, y: asset.y, width: asset.width || 0, height: asset.height || 0, scale: asset.scale || 1 } as any);
+            for (const anchor of anchors) {
+              if (Math.hypot(anchor.x - x, anchor.y - y) <= 15) { clickedAnchor = { asset, anchor }; break; }
+            }
+            if (clickedAnchor) break;
+          }
+
+          if (clickedAnchor) {
+            const { asset, anchor } = clickedAnchor;
+            if (snapSourceAssetId && asset.id === snapSourceAssetId && !snapSourceAnchor) {
+              setSnapSource(asset.id, anchor.id); return;
+            }
+            if (snapSourceAssetId && snapSourceAnchor && snapTargetAssetId && asset.id === snapTargetAssetId && !snapTargetAnchor) {
+              setSnapTarget(asset.id, anchor.id); performSnapToAnchor(); setSnapToAnchorMode(false); return;
+            }
+            return;
+          }
+
+          const clickedAsset = assets.find(a => {
+            const hw = ((a.width || 0) * (a.scale || 1)) / 2;
+            const hh = ((a.height || 0) * (a.scale || 1)) / 2;
+            return x >= a.x - hw && x <= a.x + hw && y >= a.y - hh && y <= a.y + hh;
+          });
+
+          if (clickedAsset) {
+            if (!snapSourceAssetId) {
+              setSnapSource(clickedAsset.id, null); return;
+            }
+            if (snapSourceAssetId && snapSourceAnchor && !snapTargetAssetId && clickedAsset.id !== snapSourceAssetId) {
+              const anchors = clickedAsset.type === "square" || clickedAsset.type === "circle"
+                ? calculateShapeAnchors({ x: clickedAsset.x, y: clickedAsset.y, width: clickedAsset.width, height: clickedAsset.height } as any)
+                : calculateAssetAnchors({ x: clickedAsset.x, y: clickedAsset.y, width: clickedAsset.width, height: clickedAsset.height, scale: clickedAsset.scale } as any);
+              const anchor = anchors.find(a => a.id === "center") || anchors[0];
+              if (anchor) { setSnapTarget(clickedAsset.id, anchor.id); performSnapToAnchor(); setSnapToAnchorMode(false); }
+              return;
+            }
+          }
+          return;
+        }
+
+        if (isRectangularSelectionMode) {
+          const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
+          startRectangularSelectionDrag(x, y); return;
+        }
+
+        clearSelection();
+        handlePointerDown(e);
       }}
+      onContextMenu={(e) => { e.preventDefault(); closeContextMenu(); }}
       data-export-id="canvas-container"
     >
       <div
         className="relative w-full h-full"
         ref={canvasRef}
-        style={{
-          transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-          transformOrigin: "0 0" // Explicit 0 0 to be absolute certain
-        }}
+        style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`, transformOrigin: "0 0" }}
       >
-        {/* Virtual Scene */}
-        <div
-          className="relative"
-          style={{ width: scenePxWNoZoom, height: scenePxHNoZoom }}
-        >
-          {/* Grid Overlay covering the entire scene so no whitespace shows */}
+        <div className="relative" style={{ width: scenePxWNoZoom, height: scenePxHNoZoom }}>
           <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 1 }}>
-            <GridOverlay
-              showGrid={showGrid}
-              canvasPxW={scenePxWNoZoom}
-              canvasPxH={scenePxHNoZoom}
-              mmToPx={mmToPx}
-              gridSize={gridSize}
-            />
+            <GridOverlay showGrid={showGrid} canvasPxW={scenePxWNoZoom} canvasPxH={scenePxHNoZoom} mmToPx={mmToPx} gridSize={gridSize} />
           </div>
 
-          {/* (Moved to bottom for Z-index safety) */}
-
-          {/* Unified wall rendering (boolean union of all wall polygons incl. preview) */}
           <div className={`absolute inset-0 ${isDrawingActive ? "pointer-events-none" : ""}`}>
             <UnifiedWallRendering mmToPx={mmToPx} />
           </div>
 
-          {/* Drawing Path (Shapes, Pen) */}
           <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 50 }}>
             <DrawingPath
-              isDrawing={isDrawing}
-              tempPath={tempPath}
-              wallDrawingMode={wallDrawingMode}
-              currentWallSegments={currentWallSegments}
-              currentWallStart={currentWallStart}
-              currentWallTempEnd={currentWallTempEnd}
-              assets={assets}
-              canvasPxW={scenePxWNoZoom}
-              canvasPxH={scenePxHNoZoom}
-              mmToPx={mmToPx}
-              lastMousePosition={lastMousePosition.current}
-              clientToCanvasMM={clientToCanvasMM}
-              isRectangularSelectionMode={isRectangularSelectionMode}
-              rectangularSelectionStart={rectangularSelectionStart}
-              rectangularSelectionEnd={rectangularSelectionEnd}
+              isDrawing={isDrawing} tempPath={tempPath} wallDrawingMode={wallDrawingMode} currentWallSegments={currentWallSegments}
+              currentWallStart={currentWallStart} currentWallTempEnd={currentWallTempEnd} assets={assets} 
+              canvasPxW={scenePxWNoZoom} canvasPxH={scenePxHNoZoom} mmToPx={mmToPx} lastMousePosition={lastMousePosition.current}
+              clientToCanvasMM={clientToCanvasMM} isRectangularSelectionMode={isRectangularSelectionMode}
+              rectangularSelectionStart={rectangularSelectionStart} rectangularSelectionEnd={rectangularSelectionEnd}
             />
           </div>
 
-          {/* Single Canvas (the scene itself) */}
           <div
             data-canvas-container="true"
-            className={`relative ${isDrawingActive ||
-              isRectangularSelectionMode
-              ? "cursor-crosshair"
-              : ""
-              }`}
-            style={{
-              width: scenePxWNoZoom,
-              height: scenePxHNoZoom,
-              cursor: isRectangularSelectionMode ? "crosshair" : isDrawingActive ? "crosshair !important" : undefined,
-            }}
+            className={`relative ${isDrawingActive || isRectangularSelectionMode ? "cursor-crosshair" : ""}`}
+            style={{ width: scenePxWNoZoom, height: scenePxHNoZoom, cursor: isRectangularSelectionMode ? "crosshair" : isDrawingActive ? "crosshair !important" : undefined }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
-            onMouseMove={(e) => {
-              // DEBUG: Log coordinates and state
-              let { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-              // console.log('MouseMove:', { isDrawingActive, shapeMode, x, y });
-
-              // --- SNAP TO OBJECT LOGIC (AXIS ALIGNED) ---
-              if (isDrawingActive) {
-                // Calculate threshold based on screen pixels for consistent "magnetic" feel
-                // INCREASED THRESHOLD FOR DEBUGGING
-                const SNAP_THRESHOLD = 50 / workspaceZoom;
-
-                let snapX: number | null = null;
-                let snapY: number | null = null;
-                let minXDist = SNAP_THRESHOLD;
-                let minYDist = SNAP_THRESHOLD;
-
-                // Check against all assets
-                assets.forEach(asset => {
-                  // Allow snapping to groups and other assets
-                  // if (asset.type === 'group') return;
-
-                  // Get dimensions robustly
-                  // For shapes (rectangle/ellipse), width/height are authoritative
-
-                  let w = 50;
-                  let h = 50;
-
-                  // Use explicit width/height if available, otherwise default
-                  if (typeof asset.width === 'number' && asset.width > 0) {
-                    w = asset.width * (asset.scale ?? 1);
-                  }
-                  if (typeof asset.height === 'number' && asset.height > 0) {
-                    h = asset.height * (asset.scale ?? 1);
-                  }
-
-                  const halfW = w / 2;
-                  const halfH = h / 2;
-
-                  // X-Axis Candidates: Center, Left, Right
-                  const xCandidates = [asset.x, asset.x - halfW, asset.x + halfW];
-
-                  xCandidates.forEach(targetX => {
-                    const dx = Math.abs(targetX - x);
-                    if (dx < minXDist) {
-                      minXDist = dx;
-                      snapX = targetX;
-                    }
-                  });
-
-                  // Y-Axis Candidates: Center, Top, Bottom
-                  const yCandidates = [asset.y, asset.y - halfH, asset.y + halfH];
-
-                  yCandidates.forEach(targetY => {
-                    const dy = Math.abs(targetY - y);
-                    if (dy < minYDist) {
-                      minYDist = dy;
-                      snapY = targetY;
-                    }
-                  });
-                });
-
-                // Apply Snap
-                if (snapX !== null) x = snapX;
-                if (snapY !== null) y = snapY;
-
-                if (snapX !== null || snapY !== null) {
-                  const newGuides = [];
-                  if (snapX !== null) {
-                    newGuides.push({
-                      x1: snapX, y1: 0, x2: snapX, y2: scenePxHNoZoom / mmToPx, type: 'vertical'
-                    } as any);
-                  }
-                  if (snapY !== null) {
-                    newGuides.push({
-                      x1: 0, y1: snapY, x2: scenePxWNoZoom / mmToPx, y2: snapY, type: 'horizontal'
-                    } as any);
-                  }
-                  setSnapGuides(newGuides);
-                  // console.log('Snap Guides Set:', newGuides);
-                } else {
-                  setSnapGuides([]);
-                }
-              }
-              // ----------------------------
-              // const rect = canvasRef.current?.getBoundingClientRect();
-              // console.log(`Mouse: ${e.clientX.toFixed(0)},${e.clientY.toFixed(0)} | RectL: ${rect?.left.toFixed(0)} | Zoom: ${workspaceZoom.toFixed(3)} | Canvas: ${x.toFixed(1)},${y.toFixed(1)}`);
-
-              // Only process rectangular selection if not in drawing modes
-              // Drawing modes take absolute priority - rectangular selection should never activate during drawing
-              if (
-                isRectangularSelectionMode &&
-                rectangularSelectionStart &&
-                !isPenMode &&
-                !isWallMode &&
-                !wallDrawingMode &&
-                !shapeMode &&
-                !snapToAnchorMode
-              ) {
-                const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-                updateRectangularSelectionDrag(x, y);
-              }
-              // Update wall preview while drawing
-              if ((wallDrawingMode || isWallMode) && currentWallStart) {
-                // Snap preview to the very first start point to allow clean closure
-                if (currentWallSegments && currentWallSegments.length > 0) {
-                  const first = currentWallSegments[0].start;
-                  const closeTol = 6; // mm
-                  if (Math.hypot(x - first.x, y - first.y) <= closeTol) {
-                    x = first.x; y = first.y;
-                  }
-                }
-                updateWallTempEnd({ x, y });
-              } else if ((wallDrawingMode || isWallMode) && !currentWallStart) {
-                // If wall mode is active but no segment started yet, update temp end on first point
-                // This ensures preview shows even before first click
-                // Use SNAPPED x,y
-              }
-              // Update shape preview while drawing
-              if (shapeMode && shapeStart) {
-                // --- SNAP TO OBJECT LOGIC FOR DRAWING ---
-                let snappedX = x;
-                let snappedY = y;
-                const SNAP_THRESHOLD = 5;
-                const newGuides: any[] = [];
-                let snapX: number | null = null;
-                let snapY: number | null = null;
-
-                // Find potential horizontal/vertical snaps against other assets
-                if (assets.length > 0) {
-                  // Candidates: edges and centers of all other assets
-                  const candidatesX: number[] = [];
-                  const candidatesY: number[] = [];
-
-                  // Add canvas center
-                  candidatesX.push(scenePxWNoZoom / mmToPx / 2);
-                  candidatesY.push(scenePxHNoZoom / mmToPx / 2);
-
-                  assets.forEach(a => {
-                    const xx = a.x; // Center X (mm)
-                    const yy = a.y; // Center Y (mm)
-
-                    // Simple logic: Snap to center of assets
-                    candidatesX.push(xx);
-                    candidatesY.push(yy);
-
-                    // Add edges if simple shape
-                    const halfW = ((a.width || 0) * (a.scale || 1)) / 2;
-                    const halfH = ((a.height || 0) * (a.scale || 1)) / 2;
-                    candidatesX.push(xx - halfW, xx + halfW);
-                    candidatesY.push(yy - halfH, yy + halfH);
-                  });
-
-                  // Find closest X
-                  let bestDistX = Infinity;
-                  candidatesX.forEach(cx => {
-                    const dist = Math.abs(x - cx);
-                    if (dist < SNAP_THRESHOLD && dist < bestDistX) {
-                      bestDistX = dist;
-                      snapX = cx;
-                    }
-                  });
-
-                  // Find closest Y
-                  let bestDistY = Infinity;
-                  candidatesY.forEach(cy => {
-                    const dist = Math.abs(y - cy);
-                    if (dist < SNAP_THRESHOLD && dist < bestDistY) {
-                      bestDistY = dist;
-                      snapY = cy;
-                    }
-                  });
-
-                  // Apply snap
-                  if (snapX !== null) snappedX = snapX;
-                  if (snapY !== null) snappedY = snapY;
-
-                  // Create guides
-                  if (snapX !== null) {
-                    newGuides.push({
-                      x1: snapX, y1: 0, x2: snapX, y2: scenePxHNoZoom / mmToPx, type: 'vertical'
-                    });
-                  }
-                  if (snapY !== null) {
-                    newGuides.push({
-                      x1: 0, y1: snapY, x2: scenePxWNoZoom / mmToPx, y2: snapY, type: 'horizontal'
-                    });
-                  }
-
-                  if (newGuides.length > 0) {
-                    setSnapGuides(newGuides);
-                  } else {
-                    setSnapGuides([]);
-                  }
-                } else {
-                  setSnapGuides([]);
-                }
-
-                // Use the snapped coordinates
-                let end = { x: snappedX, y: snappedY };
-
-                // Apply Shift key constraint for perfect squares/circles
-                if (e.shiftKey && (shapeMode === "rectangle" || shapeMode === "ellipse")) {
-                  const dx = end.x - shapeStart.x;
-                  const dy = end.y - shapeStart.y;
-                  const size = Math.max(Math.abs(dx), Math.abs(dy));
-                  end = {
-                    x: shapeStart.x + Math.sign(dx || 1) * size,
-                    y: shapeStart.y + Math.sign(dy || 1) * size,
-                  };
-                }
-
-                updateShapeTempEnd(end);
-              }
-            }}
             onMouseUp={(e) => {
-              // Only finish rectangular selection if not in drawing modes
-              if (
-                isRectangularSelectionMode &&
-                rectangularSelectionStart &&
-                !isPenMode &&
-                !isWallMode &&
-                !wallDrawingMode &&
-                !shapeMode
-              ) {
-                finishRectangularSelectionDrag();
-                return;
+              if (isRectangularSelectionMode && rectangularSelectionStart) {
+                finishRectangularSelectionDrag(); return;
               }
-              // Commit wall segment on click release in wall mode
               if ((wallDrawingMode || isWallMode) && currentWallStart) {
-                // Auto-close if we're near the first point
                 const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-                if (currentWallSegments && currentWallSegments.length > 0) {
+                if (currentWallSegments?.length > 0) {
                   const first = currentWallSegments[0].start;
-                  const closeTol = 6; // mm
-                  if (Math.hypot(x - first.x, y - first.y) <= closeTol) {
-                    updateWallTempEnd({ x: first.x, y: first.y });
-                    commitWallSegment();
-                    finishWallDrawing();
-                    return;
-                  }
+                  if (Math.hypot(x - first.x, y - first.y) <= 6) { commitWallSegment(); finishWallDrawing(); return; }
                 }
                 commitWallSegment();
               }
-              // Finish shape drawing on mouse up
-              if (shapeMode && shapeStart) {
-                setSnapGuides([]); // Clear guides
-                finishShape();
-              }
-            }}
-            onMouseDown={(e) => {
-              if (e.button !== 0) return;
-
-              // --- PRIORITY DRAWING MODE CHECK ---
-              // If we are in a drawing mode, we capture the click immediately,
-              // ignoring whether we clicked on an asset or not.
-              // We stop propagation so asset handlers don't fire.
-              if (isPenMode || isWallMode || wallDrawingMode || shapeMode) {
-                e.stopPropagation();
-                // Continue to logic below...
-              }
-              // -----------------------------------
-
-              // In snap-to-anchor mode, handle ALL clicks (on canvas, assets, or anywhere)
-              // The asset handlers will let clicks through in snap mode
-              if (snapToAnchorMode) {
-                // Always handle snap mode clicks, regardless of target
-                // This ensures clicks on assets are processed
-              } else if (e.target !== canvasRef.current &&
-                !(canvasRef.current && canvasRef.current.contains(e.target as Node)) &&
-                !isPenMode && !isWallMode && !wallDrawingMode && !shapeMode) {
-                // ^ Added check: Only bail out if NOT in drawing mode
-                // Not in snap mode and click is not on canvas - let asset handlers deal with it
-                return;
-              }
-
-              if (e.target === canvasRef.current || snapToAnchorMode ||
-                (canvasRef.current && canvasRef.current.contains(e.target as Node)) ||
-                isPenMode || isWallMode || wallDrawingMode || shapeMode) {
-                // ^ Added drawing modes to condition to ensure entry
-
-                // Drawing modes take absolute priority - check them FIRST
-                // If in any drawing mode, rectangular selection should NEVER activate
-                if (isPenMode) {
-                  e.stopPropagation();
-                  const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-
-                  // Start pen path
-                  currentDrawingPath.current = [{ x, y }];
-                  setIsDrawing(true);
-                  setCurrentPath([{ x, y }]);
-                  setTempPath([{ x, y }]);
-                  return; // Prevent canvas movement when in drawing modes
-                } else if (isWallMode || wallDrawingMode) {
-                  // Check if the click is within the canvas area (including child elements)
-                  // Allow clicks on canvas or any child element within the canvas
-                  const isCanvasClick = e.target === canvasRef.current ||
-                    (canvasRef.current && canvasRef.current.contains(e.target as Node));
-
-                  if (!isCanvasClick) {
-                    return;
-                  }
-
-                  // Ensure wallDrawingMode is set if isWallMode is true
-                  if (isWallMode && !wallDrawingMode) {
-                    setWallDrawingMode(true);
-                  }
-
-                  e.stopPropagation();
-                  const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-
-                  // For very large canvas, allow wall creation anywhere
-                  // No bounds checking needed for large canvas
-
-                  if (!currentWallStart) {
-                    // Start new wall segment, snapping to nearest existing wall endpoint if close
-                    let startPoint = { x, y };
-                    const snapThreshold = 6; // mm
-                    // Look for nearest endpoint among existing wall assets
-                    const wallAssets = assets.filter(
-                      (a) => a.wallSegments && a.wallSegments.length > 0
-                    );
-                    let closest: { x: number; y: number } | null = null;
-                    let closestDist = Infinity;
-                    for (const a of wallAssets) {
-                      for (const seg of a.wallSegments!) {
-                        const absStart = {
-                          x: seg.start.x + a.x,
-                          y: seg.start.y + a.y,
-                        };
-                        const absEnd = { x: seg.end.x + a.x, y: seg.end.y + a.y };
-                        const dxS = x - absStart.x;
-                        const dyS = y - absStart.y;
-                        const distS = Math.sqrt(dxS * dxS + dyS * dyS);
-                        if (distS < closestDist) {
-                          closestDist = distS;
-                          closest = absStart;
-                        }
-                        const dxE = x - absEnd.x;
-                        const dyE = y - absEnd.y;
-                        const distE = Math.sqrt(dxE * dxE + dyE * dyE);
-                        if (distE < closestDist) {
-                          closestDist = distE;
-                          closest = absEnd;
-                        }
-                      }
-                    }
-                    if (closest && closestDist <= snapThreshold) {
-                      startPoint = closest;
-                    }
-                    startWallSegment(startPoint);
-                  } else {
-                    // This will be handled by the mouse up event to commit the current segment
-                  }
-                  return; // Prevent canvas movement when in wall mode
-                } else if (shapeMode) {
-                  e.stopPropagation();
-                  const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-                  startShape({ x, y });
-                  return;
-                } else if (snapToAnchorMode) {
-                  // Snap to anchor mode: 4-step process
-                  // Step 1: Click on source item (what to snap) - highlights in green
-                  // Step 2: Click on anchor on source item (which anchor to use)
-                  // Step 3: Click on target item (where to snap to) - highlights in blue
-                  // Step 4: Click on anchor on target item (which anchor to snap to) - performs snap
-                  e.stopPropagation();
-                  e.preventDefault();
-                  const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-                  console.log('Snap mode click at:', x, y, 'Current state - source:', snapSourceAssetId, 'sourceAnchor:', snapSourceAnchor, 'target:', snapTargetAssetId, 'targetAnchor:', snapTargetAnchor);
-
-                  // First, check if click is directly on an anchor point (within 15mm threshold for easier clicking)
-                  const ANCHOR_CLICK_THRESHOLD = 15; // mm - increased for easier clicking
-                  let clickedAnchor: { asset: AssetInstance; anchor: any } | null = null;
-
-                  // Check all assets for anchor points near the click
-                  for (const asset of assets) {
-                    const isShape = asset.type === "square" || asset.type === "circle";
-                    const anchors = isShape
-                      ? calculateShapeAnchors({
-                        x: asset.x,
-                        y: asset.y,
-                        width: asset.width || 0,
-                        height: asset.height || 0,
-                      } as any)
-                      : calculateAssetAnchors({
-                        x: asset.x,
-                        y: asset.y,
-                        width: asset.width || 0,
-                        height: asset.height || 0,
-                        scale: asset.scale || 1,
-                      } as any);
-
-                    // Check if click is directly on any anchor
-                    for (const anchor of anchors) {
-                      const dist = Math.hypot(anchor.x - x, anchor.y - y);
-                      if (dist <= ANCHOR_CLICK_THRESHOLD) {
-                        clickedAnchor = { asset, anchor };
-                        break;
-                      }
-                    }
-                    if (clickedAnchor) break;
-                  }
-
-                  // If clicked directly on an anchor, handle anchor selection
-                  if (clickedAnchor) {
-                    const { asset, anchor } = clickedAnchor;
-
-                    // Step 2: Select anchor on source item
-                    if (snapSourceAssetId && asset.id === snapSourceAssetId && !snapSourceAnchor) {
-                      setSnapSource(asset.id, anchor.id);
-                      console.log('Selected source anchor:', anchor.id, 'on asset:', asset.id);
-                      return;
-                    }
-
-                    // Step 4: Select anchor on target item and perform snap
-                    if (snapSourceAssetId && snapSourceAnchor && snapTargetAssetId && asset.id === snapTargetAssetId && !snapTargetAnchor) {
-                      setSnapTarget(asset.id, anchor.id);
-                      console.log('Selected target anchor:', anchor.id, 'on asset:', asset.id, '- performing snap');
-                      performSnapToAnchor();
-                      // Clear snap mode after snapping
-                      useSceneStore.getState().setSnapToAnchorMode(false);
-                      return;
-                    }
-
-                    // If clicking on an anchor but not in the right state, ignore
-                    return;
-                  }
-
-                  // Otherwise, find the asset at the click position
-                  const clickedAsset = assets.find((asset) => {
-                    if (asset.type === "square" || asset.type === "circle") {
-                      const halfW = (asset.width || 0) / 2;
-                      const halfH = (asset.height || 0) / 2;
-                      return (
-                        x >= asset.x - halfW &&
-                        x <= asset.x + halfW &&
-                        y >= asset.y - halfH &&
-                        y <= asset.y + halfH
-                      );
-                    } else {
-                      const halfW = ((asset.width || 0) * (asset.scale || 1)) / 2;
-                      const halfH = ((asset.height || 0) * (asset.scale || 1)) / 2;
-                      return (
-                        x >= asset.x - halfW &&
-                        x <= asset.x + halfW &&
-                        y >= asset.y - halfH &&
-                        y <= asset.y + halfH
-                      );
-                    }
-                  });
-
-                  if (!clickedAsset) return;
-
-                  // Step 1: Select source item (what to snap)
-                  if (!snapSourceAssetId) {
-                    // Only clear any previous TARGET selection; don't wipe existing source state
-                    const currentState = useSceneStore.getState();
-                    if (currentState.snapTargetAssetId || currentState.snapTargetAnchor) {
-                      console.log('Clearing previous target before setting new source');
-                      currentState.setSnapTarget(null, null);
-                    }
-                    setSnapSource(clickedAsset.id, null);
-                    console.log('Step 1: Selected SOURCE item (should be GREEN):', clickedAsset.id, clickedAsset.type);
-                    return;
-                  }
-
-                  // Step 3: Select target item (where to snap to) - only if source anchor is already selected
-                  if (snapSourceAssetId && snapSourceAnchor && !snapTargetAssetId) {
-                    // Make sure we're not clicking on the same asset
-                    if (clickedAsset.id === snapSourceAssetId) {
-                      console.log('❌ Cannot select the same asset as both source and target');
-                      return;
-                    }
-
-                    // Choose a target anchor on the clicked asset:
-                    // Prefer its CENTER anchor so you can click anywhere inside the rectangle
-                    // and still snap to its center; otherwise fall back to the nearest anchor
-                    const isShape = clickedAsset.type === "square" || clickedAsset.type === "circle";
-                    const anchors = isShape
-                      ? calculateShapeAnchors({
-                        x: clickedAsset.x,
-                        y: clickedAsset.y,
-                        width: clickedAsset.width || 0,
-                        height: clickedAsset.height || 0,
-                      } as any)
-                      : calculateAssetAnchors({
-                        x: clickedAsset.x,
-                        y: clickedAsset.y,
-                        width: clickedAsset.width || 0,
-                        height: clickedAsset.height || 0,
-                        scale: clickedAsset.scale || 1,
-                      } as any);
-
-                    let chosenAnchor = anchors.find((a) => a.id === "center");
-                    if (!chosenAnchor && anchors.length > 0) {
-                      // Fall back to nearest anchor to the click position
-                      let minDist = Infinity;
-                      anchors.forEach((anchor) => {
-                        const dist = Math.hypot(anchor.x - x, anchor.y - y);
-                        if (dist < minDist) {
-                          minDist = dist;
-                          chosenAnchor = anchor;
-                        }
-                      });
-                    }
-
-                    if (!chosenAnchor) {
-                      console.warn("Snap-to-anchor: no anchors found on target asset", clickedAsset.id);
-                      return;
-                    }
-
-                    // Set target asset + anchor and perform the snap immediately
-                    setSnapTarget(clickedAsset.id, chosenAnchor.id);
-                    console.log('✅ Step 3: Selected TARGET item (BLUE) and anchor:', chosenAnchor.id, 'asset:', clickedAsset.id);
-                    performSnapToAnchor();
-                    useSceneStore.getState().setSnapToAnchorMode(false);
-                    return;
-                  }
-
-                  // If source is selected but no anchor yet, remind user to select anchor
-                  if (snapSourceAssetId && !snapSourceAnchor) {
-                    console.log('⚠️ Source item selected but no anchor chosen yet. Click on an anchor point on the source item.');
-                    return;
-                  }
-
-                  // If we get here, something unexpected happened
-                  console.log('⚠️ Unexpected state in snap mode:', {
-                    snapSourceAssetId,
-                    snapSourceAnchor,
-                    snapTargetAssetId,
-                    snapTargetAnchor,
-                    clickedAssetId: clickedAsset.id
-                  });
-
-                  return;
-                } else {
-                  // Handle rectangular selection ONLY if explicitly selected and no drawing modes are active
-                  // This must come AFTER all drawing mode checks to prevent interference
-                  if (
-                    isRectangularSelectionMode &&
-                    !isPenMode &&
-                    !isWallMode &&
-                    !wallDrawingMode &&
-                    !shapeMode &&
-                    !snapToAnchorMode
-                  ) {
-                    const { x, y } = clientToCanvasMM(e.clientX, e.clientY);
-                    startRectangularSelectionDrag(x, y);
-                    return;
-                  }
-
-                  // Clear selection when clicking on empty workspace (not in active drawing modes)
-                  if (!isPenMode && !isWallMode && !wallDrawingMode && !shapeMode && !snapToAnchorMode && !isRectangularSelectionMode) {
-                    clearSelection();
-                  }
-                  e.stopPropagation();
-                  mouseRefs.isMovingCanvas.current = true;
-                  mouseRefs.lastCanvasPointer.current = {
-                    x: e.clientX,
-                    y: e.clientY,
-                  };
-                }
-              }
+              if (shapeMode && shapeStart) { setSnapGuides([]); finishShape(); }
             }}
           >
-            {/* Grid Overlay moved to scene-level */}
+            {MemoizedAssetList}
 
-            {/* Drawing Path */}
-            <DrawingPath
-              isDrawing={isDrawing}
-              tempPath={tempPath}
-              wallDrawingMode={wallDrawingMode || isWallMode}
-              currentWallSegments={currentWallSegments}
-              currentWallStart={currentWallStart}
-              currentWallTempEnd={currentWallTempEnd}
-              assets={assets}
-              canvasPxW={canvasPxW}
-              canvasPxH={canvasPxH}
-              mmToPx={mmToPx}
-              lastMousePosition={lastMousePosition.current}
-              clientToCanvasMM={clientToCanvasMM}
-              isRectangularSelectionMode={isRectangularSelectionMode}
-              rectangularSelectionStart={rectangularSelectionStart}
-              rectangularSelectionEnd={rectangularSelectionEnd}
-            />
-
-            {/* Canvas Controls */}
-            <CanvasControls
-              selectedAssetId={selectedAssetId}
-              onRotateCW={rotateCW}
-              onRotateCCW={rotateCCW}
-              canvas={canvas}
-            />
-
-            {/* Pattern Indicator */}
+            <CanvasControls selectedAssetId={selectedAssetId} onRotateCW={rotateCW} onRotateCCW={rotateCCW} canvas={canvas} />
             <PatternIndicator />
-
-            {/* Live wall measurement (meters) */}
-            {wallDrawingMode && currentWallStart && currentWallTempEnd && (
-              <div className='absolute top-4 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-3 py-1 rounded text-xs shadow z-50'>
-                {(() => {
-                  const dx = currentWallTempEnd.x - currentWallStart.x;
-                  const dy = currentWallTempEnd.y - currentWallStart.y;
-                  const lengthMm = Math.sqrt(dx * dx + dy * dy);
-                  const lengthM = lengthMm / 1000;
-                  return `${lengthM.toFixed(2)} m`;
-                })()}
-              </div>
-            )}
-
-            {/* Rectangular Selection Status */}
-            {isRectangularSelectionMode && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                className='absolute top-4 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap z-50'
-              >
-                Click and drag to select multiple assets
-                <div className='absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-blue-600'></div>
-              </motion.div>
-            )}
-
-            {/* Snap to Anchor Status */}
-            {snapToAnchorMode && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                className='absolute top-4 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap z-50'
-              >
-                {!snapSourceAssetId
-                  ? "Step 1: Click on the source item (what to snap)"
-                  : !snapSourceAnchor
-                    ? "Step 2: Click on an anchor on the source item"
-                    : !snapTargetAssetId
-                      ? "Step 3: Click on the target item (where to snap to)"
-                      : !snapTargetAnchor
-                        ? "Step 4: Click on an anchor on the target item"
-                        : "Ready to snap"}
-                <div className='absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-green-600'></div>
-              </motion.div>
-            )}
-
-            {/* Selection Box */}
-            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 10 }}>
-              <SelectionBox mmToPx={mmToPx} />
-            </div>
-
-            {/* Anchor Highlights for Snap to Anchor */}
-            <AnchorHighlights mmToPx={mmToPx} />
-
-            {/* Context menu for snap-to-anchor */}
-            {contextMenu && (
-              <div
-                className="fixed z-50 bg-white border border-gray-200 rounded-md shadow-xl text-sm min-w-[180px]"
-                style={{ top: contextMenu.y, left: contextMenu.x }}
-              >
-                <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100 uppercase">
-                  {snapSourceAssetId && snapSourceAnchor ? "Use as Anchor" : "Snap to Anchor"}
-                </div>
-                {anchorMenuOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    className="w-full px-3 py-2 text-left hover:bg-gray-100 text-gray-800"
-                    onClick={() => handleSnapMenuSelect(option.id)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Chair Radius Preview */}
-            {selectedAssetId && assets.find(a => a.id === selectedAssetId)?.type.includes('table') && (
-              <div
-                className="absolute pointer-events-none"
-                style={{
-                  left: `${assets.find(a => a.id === selectedAssetId)!.x * mmToPx}px`,
-                  top: `${assets.find(a => a.id === selectedAssetId)!.y * mmToPx}px`,
-                  transform: 'translate(-50%, -50%)',
-                  width: `${chairSettings.radius * mmToPx * 2}px`,
-                  height: `${chairSettings.radius * mmToPx * 2}px`,
-                }}
-              >
-                <div
-                  className="absolute inset-0 rounded-full border-2 border-blue-400 border-dashed opacity-60"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                  }}
-                />
-                {/* Debug text showing current radius */}
-                <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 font-bold bg-white px-1 rounded">
-                  {chairSettings.radius}mm radius
-                </div>
-                {/* Show chair count */}
-                <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 font-bold bg-white px-1 rounded">
-                  {chairSettings.numChairs} chairs
-                </div>
-              </div>
-            )}
-
-            {/* Render Assets - Sort by zIndex to ensure proper layering */}
-            {assets
-              .slice()
-              .filter((asset) => asset != null) // Filter out null/undefined assets
-              .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
-              .map((asset) => {
-                const isSelected = asset.id === selectedAssetId;
-                const isMultiSelected = selectedAssetIds.includes(asset.id);
-                const isCopied = asset.id === copiedAssetId;
-                const leftPx = asset.x * mmToPx;
-                const topPx = asset.y * mmToPx;
-                const totalRotation = asset.rotation;
-
-                // Use GroupRenderer for group assets, AssetRenderer for regular assets
-                if (asset.isGroup) {
-                  return (
-                    <div
-                      key={asset.id}
-                      style={{ pointerEvents: isDrawingActive ? 'none' : 'auto' }}
-                    >
-                      <GroupRenderer
-                        group={asset}
-                        isSelected={isSelected}
-                        isMultiSelected={isMultiSelected}
-                        leftPx={leftPx}
-                        topPx={topPx}
-                        mmToPx={mmToPx}
-                        onAssetClick={(id) => selectAsset(id)}
-                        onAssetDoubleClick={(id) => {
-                          if (id) {
-                            const asset = assets.find((a) => a.id === id);
-                            if (asset?.isGroup) {
-                              updateAsset(id, { groupExpanded: !asset.groupExpanded });
-                            }
-                          }
-                        }}
-                        onAssetMouseDown={assetHandlers.onAssetMouseDown}
-                        onAssetMouseMove={() => { }}
-                        onAssetMouseUp={() => { }}
-                        onAssetMouseLeave={() => { }}
-                        onAssetMouseEnter={() => { }}
-                        onAssetMouseOver={() => { }}
-                        onAssetMouseOut={() => { }}
-                        onAssetContextMenu={handleAssetContextMenu}
-                        onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
-                        onRotationHandleMouseDown={
-                          assetHandlers.onRotationHandleMouseDown
-                        }
-                        selectedAssetId={selectedAssetId}
-                        selectedAssetIds={selectedAssetIds}
-                      />
-                    </div>
-                  );
-                }
-
-                return (
-                  <div
-                    key={asset.id}
-                    style={{ pointerEvents: isDrawingActive ? 'none' : 'auto' }}
-                  >
-                    <AssetRenderer
-                      asset={asset}
-                      updateAsset={updateAsset} // Pass updateAsset here
-                      isSelected={isSelected}
-                      isMultiSelected={isMultiSelected}
-                      isCopied={isCopied}
-                      leftPx={leftPx}
-                      topPx={topPx}
-                      totalRotation={totalRotation}
-                      editingTextId={assetHandlers.editingTextId}
-                      editingText={assetHandlers.editingText}
-                      onAssetMouseDown={assetHandlers.onAssetMouseDown}
-                      onTextDoubleClick={assetHandlers.onTextDoubleClick}
-                      onTextEditKeyDown={assetHandlers.onTextEditKeyDown}
-                      onTextEditBlur={assetHandlers.onTextEditBlur}
-                      onTextEditChange={assetHandlers.setEditingText}
-                      onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
-                      onRotationHandleMouseDown={
-                        assetHandlers.onRotationHandleMouseDown
-                      }
-                      onAssetContextMenu={handleAssetContextMenu}
-                    />
-                  </div>
-                );
-              })}
-
-            {/* Dimensions Overlay - renders on top of everything */}
             <DimensionOverlay mmToPx={mmToPx} />
-
-            {/* Smart Snap Guides Logic (Rendering LAST to ensure visibility over all assets/transforms) */}
-            {snapGuides && snapGuides.map((guide, i) => {
-              // Refactored to use standard DIVs instead of giant SVGs to avoid browser rendering limits on large canvas
-              const isVertical = guide.type === 'vertical';
-              const x1 = guide.x1 * mmToPx;
-              const y1 = guide.y1 * mmToPx;
-              const x2 = guide.x2 * mmToPx;
-              const y2 = guide.y2 * mmToPx;
-
-              const style: React.CSSProperties = {
-                position: 'absolute',
-                pointerEvents: 'none',
-                zIndex: 99999,
-                backgroundColor: isVertical ? '#ff0000' : '#00ff00',
-              };
-
-              if (isVertical) {
-                style.left = x1;
-                style.top = y1;
-                style.width = Math.max(1, 2 / workspaceZoom); // Minimum 1px visible
-                style.height = y2 - y1;
-              } else {
-                style.left = x1;
-                style.top = y1;
-                style.width = x2 - x1;
-                style.height = Math.max(1, 2 / workspaceZoom); // Minimum 1px visible
-              }
-
-              return <div key={i} style={style} />;
-            })}
+            <SnapGuidesRenderer mmToPx={mmToPx} workspaceZoom={workspaceZoom} />
+            
+            <SelectionBox mmToPx={mmToPx} />
+            <AnchorHighlights mmToPx={mmToPx} />
           </div>
         </div>
-        {/* 3D Overlay */}
         <ThreeDOverlay />
-      </div >
-    </div >
+      </div>
+
+      {/* Context Menu outside transformed content */}
+      {contextMenu && (
+        <div className="fixed z-50 bg-white border border-gray-200 rounded-md shadow-xl text-sm min-w-[180px]" style={{ top: contextMenu.y, left: contextMenu.x }}>
+          <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100 uppercase">
+            {snapSourceAssetId && snapSourceAnchor ? "Use as Anchor" : "Snap to Anchor"}
+          </div>
+          {anchorMenuOptions.map((opt) => (
+            <button key={opt.id} className="w-full px-3 py-2 text-left hover:bg-gray-100 text-gray-800" onClick={() => handleSnapMenuSelect(opt.id)}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Status Indicators */}
+      <AnimatePresence>
+        {isRectangularSelectionMode && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className='absolute top-4 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap z-50'>
+            Click and drag to select multiple assets
+          </motion.div>
+        )}
+        {snapToAnchorMode && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className='absolute top-4 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap z-50'>
+            {!snapSourceAssetId ? "Step 1: Click on the source item" : !snapSourceAnchor ? "Step 2: Click on an anchor on the source" : !snapTargetAssetId ? "Step 3: Click on the target item" : "Step 4: Click on an anchor on the target"}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }

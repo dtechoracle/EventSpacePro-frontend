@@ -18,8 +18,6 @@ export const AutoDimensionRenderer: React.FC<AutoDimensionRendererProps> = ({ wa
         const wallDims = getDimensionsForWall(wall);
         wallDims.forEach(dim => {
             (dim as any).textPosition = (wall as any).dimensionTextPosition || 'inbetween';
-            (dim as any).fontSize = (wall as any).dimensionFontSize || 12;
-            (dim as any).lineStyle = (wall as any).dimensionType || 'solid';
         });
         dimensionsToRender.push(...wallDims);
     });
@@ -30,8 +28,6 @@ export const AutoDimensionRenderer: React.FC<AutoDimensionRendererProps> = ({ wa
             const shapeDims = getDimensionsForObject(shape as Shape, `auto-dim-${shape.id}`);
             shapeDims.forEach(dim => {
                 (dim as any).textPosition = (shape as any).dimensionTextPosition || 'inbetween';
-                (dim as any).fontSize = (shape as any).dimensionFontSize || 12;
-                (dim as any).lineStyle = (shape as any).dimensionType || 'solid';
             });
             dimensionsToRender.push(...shapeDims);
         }
@@ -43,8 +39,6 @@ export const AutoDimensionRenderer: React.FC<AutoDimensionRendererProps> = ({ wa
             const assetDims = getDimensionsForObject(asset as Asset, `auto-dim-${asset.id}`);
             assetDims.forEach(dim => {
                 (dim as any).textPosition = (asset as any).dimensionTextPosition || 'inbetween';
-                (dim as any).fontSize = (asset as any).dimensionFontSize || 12;
-                (dim as any).lineStyle = (asset as any).dimensionType || 'solid';
             });
             dimensionsToRender.push(...assetDims);
         }

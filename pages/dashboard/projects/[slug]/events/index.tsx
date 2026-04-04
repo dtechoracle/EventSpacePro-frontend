@@ -9,6 +9,7 @@ import { useState } from "react";
 import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
 import { useUserStore } from "@/store/userStore";
 import { buildPreviewData } from "@/helpers/previewHelpers";
+import { BsStars } from "react-icons/bs";
 
 interface EventData {
   _id: string;
@@ -41,6 +42,7 @@ const Events = () => {
   const { user } = useUserStore(); // Needed for EventCard
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateEventModal, setShowCreateEventModal] = useState(false);
+  const [createEventMode, setCreateEventMode] = useState<'manual' | 'ai'>('manual');
 
     const { data, isLoading, error, refetch } = useQuery<ApiResponse>({
       queryKey: ["events", slug],
@@ -84,10 +86,23 @@ const Events = () => {
                 </div>
 
                 <button
-                  onClick={() => setShowCreateEventModal(true)}
-                  className="px-5 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-xl hover:opacity-90 flex items-center gap-2 shadow-md transition-opacity"
+                  onClick={() => {
+                    setCreateEventMode('manual');
+                    setShowCreateEventModal(true);
+                  }}
+                  className="px-5 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-xl hover:opacity-90 flex items-center gap-2 transition-all"
                 >
-                  <span>New Event</span>
+                  <span>Create Event</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setCreateEventMode('ai');
+                    setShowCreateEventModal(true);
+                  }}
+                  className="px-5 py-2.5 text-sm font-semibold bg-white text-[var(--accent)] rounded-xl hover:bg-gray-50 flex items-center gap-2 transition-all border border-[var(--accent)]"
+                >
+                  <BsStars className="w-4 h-4" />
+                  <span>Create Event with AI</span>
                 </button>
               </div>
             </div>
@@ -96,7 +111,10 @@ const Events = () => {
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-8">
             {showCreateEventModal && (
-              <CreateEventModal onClose={() => setShowCreateEventModal(false)} />
+              <CreateEventModal 
+                onClose={() => setShowCreateEventModal(false)} 
+                preSelectedMode={createEventMode}
+              />
             )}
 
             <div className="mb-6">

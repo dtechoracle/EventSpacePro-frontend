@@ -9,7 +9,7 @@ interface TextAnnotationToolProps {
 }
 
 export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps) {
-    const { screenToWorld, setActiveTool, setSelectedIds, selectedIds } = useEditorStore();
+    const { screenToWorld, setActiveTool, setSelectedIds, selectedIds, editingTextId } = useEditorStore();
     const { addTextAnnotation, getNextZIndex, textAnnotations, updateTextAnnotation, removeTextAnnotation } = useProjectStore();
 
     const [currentAnnotation, setCurrentAnnotation] = useState<TextAnnotation | null>(null);
@@ -183,8 +183,6 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
 
     // Handle editing state based on editingTextId from store
     useEffect(() => {
-        const editingTextId = useEditorStore.getState().editingTextId;
-        
         if (editingTextId) {
             const annotation = textAnnotations.find(t => t.id === editingTextId);
             if (annotation) {
@@ -206,7 +204,7 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
             setCurrentAnnotation(null);
             setText('');
         }
-    }, [useEditorStore.getState().editingTextId, textAnnotations, isEditingSelected]);
+    }, [editingTextId, textAnnotations, isEditingSelected]);
 
     useEffect(() => {
         if (isActive) {
@@ -314,7 +312,7 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
                     fontFamily: currentAnnotation?.fontFamily || 'Arial',
                     padding: '4px 8px',
                     margin: '0',
-                    textAlign: 'center',
+                    textAlign: currentAnnotation?.textAlign || 'center',
                     resize: 'none',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                     overflow: 'hidden',

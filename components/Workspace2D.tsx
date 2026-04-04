@@ -33,6 +33,8 @@ import { AutoDimensionRenderer } from './renderers/AutoDimensionRenderer';
 import ContextMenu from './ui/ContextMenu';
 import DuplicateDistributeModal from './ui/DuplicateDistributeModal';
 import { AnchorType, getAnchorsForObject, snapToObjects } from '@/utils/snapAnchors';
+import { findSnapPointInShapes } from '@/utils/snapToDrawing';
+import { getAssetVertices } from '@/utils/assetUtils';
 
 // Safe UUID generator with fallback for non-secure contexts
 const generateId = (): string => {
@@ -64,6 +66,147 @@ type SnapObject =
   | { type: 'wall'; object: Wall };
 
 
+// ── MAIN DRAWING LAYER ───────────────────────────────────────────────────────
+// Renders the actual items (walls, shapes, assets) without interaction states.
+// This is extremely stable and only re-renders when the viewport culling result changes.
+const MainDrawingLayer = React.memo(({ 
+  visibleRenderables, 
+  zoom 
+}: { 
+  visibleRenderables: any[], 
+  zoom: number 
+}) => {
+  return (
+    <>
+      {visibleRenderables.map((item) => {
+        switch (item._renderType) {
+          case 'wall':
+            return <WallRenderer key={item.id} wall={item} />;
+          
+          case 'shape':
+            if (item.type === 'freehand') {
+              return <FreehandRenderer key={item.id} shape={item} />;
+            }
+            return <ShapeRenderer key={item.id} shape={item} />;
+
+          case 'asset':
+            return <AssetRenderer key={item.id} asset={item} />;
+
+          case 'dimension':
+            return <DimensionRenderer key={item.id} dimension={item} zoom={zoom} />;
+
+          case 'labelArrow':
+            return <LabelArrowRenderer key={item.id} arrow={item} zoom={zoom} />;
+
+          case 'textAnnotation':
+            return <TextAnnotationRenderer key={item.id} annotation={item} zoom={zoom} />;
+
+          default:
+            return null;
+        }
+      })}
+    </>
+  );
+});
+
+// ── SELECTION HIGHLIGHT LAYER ────────────────────────────────────────────────
+// Renders only the blue outlines/glows for selected and hovered items.
+// This layer is fast because it only iterates through a few items.
+const SelectionHighlightLayer = React.memo(({ 
+  visibleRenderables,
+  selectedIds, 
+  hoveredId,
+  verticesMap
+}: { 
+  visibleRenderables: any[],
+  selectedIds: string[], 
+  hoveredId: string | null,
+  verticesMap: Record<string, { x: number; y: number }[]>
+}) => {
+  const selectionSet = React.useMemo(() => new Set(selectedIds), [selectedIds]);
+  
+  // Find only the items that need a highlight
+  const highlights = React.useMemo(() => {
+    return visibleRenderables.filter(item => selectionSet.has(item.id) || item.id === hoveredId);
+  }, [visibleRenderables, selectionSet, hoveredId]);
+
+  if (highlights.length === 0) return null;
+
+  return (
+    <g className="interaction-highlights pointer-events-none">
+      {highlights.map(item => {
+        const isSelected = selectionSet.has(item.id);
+        const isHovered = hoveredId === item.id;
+        const vertices = verticesMap[item.id] || [];
+        
+        return (
+          <React.Fragment key={`highlight-group-${item.id}`}>
+            {item._renderType === 'shape' && (
+              <ShapeRenderer shape={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
+            )}
+            {item._renderType === 'asset' && (
+              <AssetRenderer asset={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
+            )}
+            {item._renderType === 'wall' && (
+              <WallRenderer wall={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
+            )}
+            
+            {/* Premium Vertex Visualization */}
+            {(isSelected || isHovered) && vertices.length > 0 && (
+              <g className="vertex-anchors pointer-events-none">
+                {vertices.map((v, i) => (
+                  <circle
+                    key={`v-${item.id}-${i}`}
+                    cx={v.x}
+                    cy={v.y}
+                    r={i % 5 === 0 ? 4 : 2} // Visual distinction for base vs offset points
+                    fill={i % 5 === 0 ? "#3b82f6" : "#22c55e"} // Blue for base, Green for offsets
+                    stroke="white"
+                    strokeWidth={1}
+
+                    style={{ filter: 'drop-shadow(0 0 2px rgba(0, 0, 0, 0.3))' }}
+                  />
+                ))}
+              </g>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </g>
+  );
+});
+
+// ── RENDER LAYER COMPONENT ───────────────────────────────────────────────────
+// High-level wrapper that coordinates the two layers.
+const RenderLayer = React.memo(({ 
+  visibleRenderables, 
+  selectedIds, 
+  hoveredId, 
+  zoom,
+  activeTool,
+  verticesMap
+}: { 
+  visibleRenderables: any[], 
+  selectedIds: string[], 
+  hoveredId: string | null, 
+  zoom: number,
+  activeTool: string,
+  verticesMap: Record<string, { x: number; y: number }[]>
+}) => {
+  return (
+    <>
+      <MainDrawingLayer visibleRenderables={visibleRenderables} zoom={zoom} />
+      <SelectionHighlightLayer 
+        visibleRenderables={visibleRenderables}
+        selectedIds={selectedIds} 
+        hoveredId={hoveredId} 
+        verticesMap={verticesMap}
+      />
+    </>
+  );
+});
+RenderLayer.displayName = 'RenderLayer';
+
 export default function Workspace2D({
   width = 1200,
   height = 800
@@ -91,12 +234,39 @@ export default function Workspace2D({
     isOpen: boolean;
     mode: 'duplicate' | 'distribute';
   }>({ isOpen: false, mode: 'duplicate' });
+  const [verticesMap, setVerticesMap] = useState<Record<string, { x: number; y: number }[]>>({});
 
-
-  // Use targeted selectors to prevent unnecessary re-renders when other store parts change
+  const assets = useProjectStore(s => s.assets);
   const walls = useProjectStore(s => s.walls);
   const shapes = useProjectStore(s => s.shapes);
-  const assets = useProjectStore(s => s.assets);
+
+  // Prefetch vertices for marquees
+  useEffect(() => {
+    const fetchVisibleMarqueeVertices = async () => {
+      const newVerticesMap: Record<string, { x: number; y: number }[]> = { ...verticesMap };
+      let changed = false;
+
+      for (const asset of assets) {
+        if (!newVerticesMap[asset.id]) {
+          const assetDef = ASSET_LIBRARY.find(a => a.id === asset.type);
+          // Only pre-fetch for Marquees to avoid network/CPU starvation for hundreds of simple shapes
+          if (assetDef?.category === 'Marquee') {
+            const vertices = await getAssetVertices(asset);
+            if (vertices.length > 0) {
+              newVerticesMap[asset.id] = vertices;
+              changed = true;
+            }
+          }
+        }
+      }
+
+      if (changed) {
+        setVerticesMap(newVerticesMap);
+      }
+    };
+
+    fetchVisibleMarqueeVertices();
+  }, [assets]);
   const dimensions = useProjectStore(s => s.dimensions);
   const textAnnotations = useProjectStore(s => s.textAnnotations);
   const labelArrows = useProjectStore(s => s.labelArrows);
@@ -188,6 +358,79 @@ export default function Workspace2D({
     ].sort((a, b) => getZ(a) - getZ(b));
   }, [walls, shapes, assets, dimensions, labelArrows, textAnnotations]);
 
+  // Viewport Culling - Filter items that are actually visible to maximize performance with 100k+ assets
+  // Using a ref to track the "last calculated bounds" to avoid re-rendering the whole item list on every single pan pixel
+  const lastCullBounds = useRef({ 
+    left: 0, 
+    top: 0, 
+    right: 0, 
+    bottom: 0, 
+    zoom: 0, 
+    lastResult: [] as any[] 
+  });
+  
+  const visibleRenderables = useMemo(() => {
+    const margin = 1000 / zoom; // Larger margin for better pre-loading
+    const worldLeft = -panX / zoom - margin;
+    const worldTop = -panY / zoom - margin;
+    const worldRight = (viewportSize.width - panX) / zoom + margin;
+    const worldBottom = (viewportSize.height - panY) / zoom + margin;
+
+    // OPTIMIZATION: If the layout is small (less than 500 items), culling is more overhead than benefit.
+    // SVG can handle 500 items easily with memoization.
+    if (allRenderables.length < 500) {
+      return allRenderables;
+    }
+
+    // Determine if the camera has moved enough to justify a re-cull (hysteresis)
+    const dx = Math.abs(worldLeft - lastCullBounds.current.left);
+    const dy = Math.abs(worldTop - lastCullBounds.current.top);
+    const dz = Math.abs(zoom - lastCullBounds.current.zoom) / zoom;
+    
+    // Only re-filter if we moved more than 20% of the viewport or zoomed > 10%
+    const viewportWidth = worldRight - worldLeft;
+    const viewportHeight = worldBottom - worldTop;
+    if (dx < viewportWidth * 0.2 && dy < viewportHeight * 0.2 && dz < 0.1) {
+       // Return the same array reference to prevent RenderLayer from re-rendering
+       return lastCullBounds.current.lastResult || allRenderables;
+    }
+
+    // 2. Filter renderables based on spatial intersection
+    const result = allRenderables.filter((item: any) => {
+      // Wall culling (checks all nodes)
+      if (item._renderType === 'wall' && item.nodes) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const n of item.nodes) {
+          if (n.x < minX) minX = n.x;
+          if (n.y < minY) minY = n.y;
+          if (n.x > maxX) maxX = n.x;
+          if (n.y > maxY) maxY = n.y;
+        }
+        return !(maxX < worldLeft || minX > worldRight || maxY < worldTop || minY > worldBottom);
+      }
+
+      // Standard assets and shapes (centered items)
+      const x = item.x ?? 0;
+      const y = item.y ?? 0;
+      const w = item.width ?? 1000;
+      const h = item.height ?? 1000;
+      const halfSize = Math.max(w, h); 
+      return !(x + halfSize < worldLeft || x - halfSize > worldRight || y + halfSize < worldTop || y - halfSize > worldBottom);
+    });
+
+    // Save bounds for next frame
+    lastCullBounds.current = { 
+      left: worldLeft, 
+      top: worldTop, 
+      right: worldRight, 
+      bottom: worldBottom, 
+      zoom,
+      lastResult: result as any
+    };
+
+    return result;
+  }, [allRenderables, panX, panY, zoom, viewportSize]);
+
 
   const sceneStore = useSceneStore();
   const showGrid = sceneStore.showGrid;
@@ -275,8 +518,13 @@ export default function Workspace2D({
 
       const { x: worldX, y: worldY } = screenToWorld(e.clientX, e.clientY);
 
-      // Update store position for other tools to access (Throttled or moved out of re-render cycle)
-      setMouseWorldPos({ x: worldX, y: worldY });
+      // Update store position for other tools to access
+      // Throttle mouse position updates to avoid excessive store-triggering re-renders
+      const now = Date.now();
+      if (!(window as any)._lastMouseUpdate || now - (window as any)._lastMouseUpdate > 16) {
+        setMouseWorldPos({ x: worldX, y: worldY });
+        (window as any)._lastMouseUpdate = now;
+      }
 
       // Handle panning first
       if (isPanning && dragStart) {
@@ -296,135 +544,90 @@ export default function Workspace2D({
       // Hover detection
       let targetId: string | null = null;
 
-      // Check shapes (reverse order for z-index)
-      for (let i = shapes.length - 1; i >= 0; i--) {
-        const shape = shapes[i];
+      // OPTIMIZATION: Use visibleRenderables for hit testing!
+      // This reduces complexity from O(100,000+) to O(Visible_Items ≈ 500).
+      // Iterate in reverse (end to start) to hit the top-most (higher z-index) items first.
+      for (let i = visibleRenderables.length - 1; i >= 0; i--) {
+        const item = visibleRenderables[i];
         
-        if (shape.type === 'line' || shape.type === 'arrow') {
-          // Thick hit testing for lines and arrows
-          const thickness = Math.max((shape.strokeWidth ?? 2) + 20, 30);
-          if (shape.points && shape.points.length >= 2) {
-            let lineHit = false;
-            for (let s = 0; s < shape.points.length - 1; s++) {
-              const p1 = shape.points[s];
-              const p2 = shape.points[s + 1];
-              const ax = shape.x + p1.x;
-              const ay = shape.y + p1.y;
-              const bx = shape.x + p2.x;
-              const by = shape.y + p2.y;
-              const dx = bx - ax;
-              const dy = by - ay;
-              const lenSq = dx * dx + dy * dy;
-              if (lenSq === 0) continue;
-              const t = Math.max(0, Math.min(1, ((worldX - ax) * dx + (worldY - ay) * dy) / lenSq));
-              const projX = ax + t * dx;
-              const projY = ay + t * dy;
-              if (Math.hypot(worldX - projX, worldY - projY) <= thickness) {
-                lineHit = true;
-                break;
+        switch (item._renderType) {
+          case 'shape': {
+            const shape = item;
+            if (shape.id === 'background-texture') break;
+
+            if (shape.type === 'line' || shape.type === 'arrow') {
+              const thickness = Math.max((shape.strokeWidth ?? 2) + 20, 30);
+              const points = shape.points;
+              if (points && points.length >= 2) {
+                let lineHit = false;
+                for (let s = 0; s < points.length - 1; s++) {
+                  const p1 = points[s], p2 = points[s+1];
+                  const ax = shape.x + (p1.x || 0), ay = shape.y + (p1.y || 0);
+                  const bx = shape.x + (p2.x || 0), by = shape.y + (p2.y || 0);
+                  const dx = bx - ax, dy = by - ay;
+                  const lenSq = dx * dx + dy * dy;
+                  if (lenSq === 0) continue;
+                  const t = Math.max(0, Math.min(1, ((worldX - ax) * dx + (worldY - ay) * dy) / lenSq));
+                  if (Math.hypot(worldX - (ax + t * dx), worldY - (ay + t * dy)) <= thickness) {
+                    lineHit = true; break;
+                  }
+                }
+                if (lineHit) targetId = shape.id;
               }
-            }
-            if (lineHit) {
-              targetId = shape.id;
-              break;
-            }
-          } else {
-            const rot = (shape.rotation || 0) * (Math.PI / 180);
-            const cosR = Math.cos(rot), sinR = Math.sin(rot);
-            const halfLen = shape.width / 2;
-            const ax = shape.x - halfLen * cosR, ay = shape.y - halfLen * sinR;
-            const bx = shape.x + halfLen * cosR, by = shape.y + halfLen * sinR;
-            const dx = bx - ax, dy = by - ay;
-            const lenSq = dx * dx + dy * dy;
-            if (lenSq > 0) {
-              const t = Math.max(0, Math.min(1, ((worldX - ax) * dx + (worldY - ay) * dy) / lenSq));
-              if (Math.hypot(worldX - (ax + t * dx), worldY - (ay + t * dy)) <= thickness) {
+            } else {
+              const halfW = (shape.width || 0) / 2, halfH = (shape.height || 0) / 2;
+              if (worldX >= (shape.x || 0) - halfW && worldX <= (shape.x || 0) + halfW && worldY >= (shape.y || 0) - halfH && worldY <= (shape.y || 0) + halfH) {
                 targetId = shape.id;
-                break;
               }
             }
+            break;
           }
-        } else {
-          // Rectangular hit testing for other shapes
-          const halfW = shape.width / 2;
-          const halfH = shape.height / 2;
-          if (
-            worldX >= shape.x - halfW &&
-            worldX <= shape.x + halfW &&
-            worldY >= shape.y - halfH &&
-            worldY <= shape.y + halfH
-          ) {
-            targetId = shape.id;
+
+          case 'asset': {
+            const asset = item;
+            if (asset.isExploded) break;
+            const halfW = ((asset.width || 0) * (asset.scale || 1)) / 2;
+            const halfH = ((asset.height || 0) * (asset.scale || 1)) / 2;
+            if (worldX >= (asset.x || 0) - halfW && worldX <= (asset.x || 0) + halfW && worldY >= (asset.y || 0) - halfH && worldY <= (asset.y || 0) + halfH) {
+              targetId = asset.id;
+            }
+            break;
+          }
+
+          case 'wall': {
+            const wall = item;
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            if (wall.nodes) {
+              wall.nodes.forEach((n: any) => {
+                minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+                maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y);
+              });
+              if (worldX >= minX && worldX <= maxX && worldY >= minY && worldY <= maxY) {
+                targetId = wall.id;
+              }
+            }
+            break;
+          }
+
+          case 'textAnnotation': {
+            const ann = item;
+            const fontSize = ann.fontSize || 200;
+            const halfW = ((ann.text?.length || 1) * fontSize * 0.6) / 2;
+            const halfH = (fontSize * 1.2) / 2;
+            if (worldX >= (ann.x || 0) - halfW && worldX <= (ann.x || 0) + halfW && worldY >= (ann.y || 0) - halfH && worldY <= (ann.y || 0) + halfH) {
+              targetId = ann.id;
+            }
             break;
           }
         }
+
+        if (targetId) break; // Found top-most item
       }
 
-      // Check assets if no shape was hit
-      if (!targetId) {
-        for (let i = assets.length - 1; i >= 0; i--) {
-          const asset = assets[i];
-          if (asset.isExploded) continue; // ignore invisible exploded container
-          const halfW = (asset.width * asset.scale) / 2;
-          const halfH = (asset.height * asset.scale) / 2;
-          if (
-            worldX >= asset.x - halfW &&
-            worldX <= asset.x + halfW &&
-            worldY >= asset.y - halfH &&
-            worldY <= asset.y + halfH
-          ) {
-            targetId = asset.id;
-            break;
-          }
-        }
+      // Throttle hover updates
+      if (hoveredId !== targetId) {
+        setHoveredId(targetId);
       }
-
-      // Check walls if no shape or asset was hit
-      if (!targetId) {
-        for (let i = walls.length - 1; i >= 0; i--) {
-          const wall = walls[i];
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          wall.nodes.forEach(node => {
-            minX = Math.min(minX, node.x);
-            minY = Math.min(minY, node.y);
-            maxX = Math.max(maxX, node.x);
-            maxY = Math.max(maxY, node.y);
-          });
-          if (
-            worldX >= minX &&
-            worldX <= maxX &&
-            worldY >= minY &&
-            worldY <= maxY
-          ) {
-            targetId = wall.id;
-            break;
-          }
-        }
-      }
-
-      // Check text annotations
-      if (!targetId) {
-        for (let i = textAnnotations.length - 1; i >= 0; i--) {
-          const annotation = textAnnotations[i];
-          const fontSize = annotation.fontSize || 200;
-          const textLength = annotation.text.length || 1;
-          const estimatedWidth = textLength * fontSize * 0.6;
-          const estimatedHeight = fontSize * 1.2;
-          const halfW = estimatedWidth / 2;
-          const halfH = estimatedHeight / 2;
-          if (
-            worldX >= annotation.x - halfW &&
-            worldX <= annotation.x + halfW &&
-            worldY >= annotation.y - halfH &&
-            worldY <= annotation.y + halfH
-          ) {
-            targetId = annotation.id;
-            break;
-          }
-        }
-      }
-
-      setHoveredId(targetId);
 
       // Broadcast cursor position to other users
       if (updateCursor) {
@@ -552,11 +755,31 @@ export default function Workspace2D({
                 const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
                 return { id: s.id, x: s.x, y: s.y, width: s.width * cos + s.height * sin, height: s.width * sin + s.height * cos };
               }),
-              ...assets.filter(a => a.id !== id).map(a => {
+              ...assets.filter(a => a.id !== id).flatMap(a => {
                 const w = (a.width || 0) * (a.scale || 1), h = (a.height || 0) * (a.scale || 1);
                 const rad = ((a.rotation || 0) * Math.PI) / 180;
                 const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
-                return { id: a.id, x: a.x, y: a.y, width: w * cos + h * sin, height: w * sin + h * cos };
+                
+                const targets = [
+                  { id: a.id, x: a.x, y: a.y, width: w * cos + h * sin, height: w * sin + h * cos }
+                ];
+
+                // If it's a Marquee, add its inner face as a snap target
+                const assetDef = ASSET_LIBRARY.find(lib => lib.id.toLowerCase() === (a.type || a.id).toLowerCase());
+                if (assetDef?.category === 'Marquee') {
+                  const thickness = a.wallThickness || a.metadata?.wallThickness || 200; // Default to 200mm if not specified
+                  const innerW = w - thickness * 2;
+                  const innerH = h - thickness * 2;
+                  if (innerW > 0 && innerH > 0) {
+                    targets.push({ 
+                      id: `${a.id}-inner`, 
+                      x: a.x, y: a.y, 
+                      width: innerW * cos + innerH * sin, 
+                      height: innerW * sin + innerH * cos 
+                    });
+                  }
+                }
+                return targets;
               }),
               ...walls.filter(w => w.id !== id).map(w => {
                 let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -620,6 +843,16 @@ export default function Workspace2D({
               const gridSnapped = snapToGridFn({ x: worldX, y: worldY });
               finalX = gridSnapped.x;
               finalY = gridSnapped.y;
+            }
+
+            // Marquee Vertex Snapping Integration
+            const marqueeVertices = verticesMap[id] || [];
+            if (marqueeVertices.length > 0) {
+                const snapPoint = findSnapPointInShapes({ x: worldX, y: worldY }, assets.filter(a => a.id !== id), 20 / zoom, verticesMap);
+                if (snapPoint) {
+                    finalX = worldX + (snapPoint.x - worldX);
+                    finalY = worldY + (snapPoint.y - worldY);
+                }
             }
           }
 
@@ -3095,77 +3328,14 @@ export default function Workspace2D({
           {showGrid && <GridRenderer gridSize={sceneGridSize} viewportSize={viewportSize} zoom={zoom} panX={panX} panY={panY} unitSystem={unitSystem} />}
           <SnapMarkersRenderer />
 
-          {/* Unified Rendering sorted by Z-Index - Uses top-level memoized allRenderables */}
-          {allRenderables.map((item) => {
-            if (item._renderType === 'wall') {
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const { _renderType, ...wall } = item as any;
-              return (
-                <WallRenderer
-                  key={wall.id}
-                  wall={wall}
-                  isSelected={selectedIds.includes(wall.id)}
-                  isHovered={hoveredId === wall.id}
-                />
-              );
-            } else if (item._renderType === 'shape') {
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const { _renderType, ...shape } = item as any;
-              return (
-                <ShapeRenderer
-                  key={shape.id}
-                  shape={shape}
-                  isSelected={selectedIds.includes(shape.id)}
-                  isHovered={hoveredId === shape.id}
-                />
-              );
-            } else if (item._renderType === 'asset') {
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const { _renderType, ...asset } = item as any;
-              return (
-                <AssetRenderer
-                  key={asset.id}
-                  asset={asset}
-                  isSelected={selectedIds.includes(asset.id)}
-                  isHovered={hoveredId === asset.id}
-                />
-              );
-            } else if (item._renderType === 'dimension') {
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const { _renderType, ...dim } = item as any;
-              return (
-                <DimensionRenderer
-                  key={dim.id}
-                  dimension={dim}
-                  zoom={zoom}
-                />
-              );
-            } else if (item._renderType === 'labelArrow') {
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const { _renderType, ...arrow } = item as any;
-              return (
-                <LabelArrowRenderer
-                  key={arrow.id}
-                  arrow={arrow}
-                  zoom={zoom}
-                />
-              );
-            } else if (item._renderType === 'textAnnotation') {
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const { _renderType, ...annotation } = item as any;
-              // Do not render if editing
-              if (annotation.id === useEditorStore.getState().editingTextId) return null;
-
-              return (
-                <TextAnnotationRenderer
-                  key={annotation.id}
-                  annotation={annotation}
-                  zoom={zoom}
-                />
-              );
-            }
-            return null;
-          })}
+          <RenderLayer 
+            visibleRenderables={visibleRenderables}
+            selectedIds={selectedIds}
+            hoveredId={hoveredId}
+            zoom={zoom}
+            activeTool={activeTool}
+            verticesMap={verticesMap}
+          />
 
           {/* Auto Dimensions (Show Dimensions Toggle) */}
           <AutoDimensionRenderer

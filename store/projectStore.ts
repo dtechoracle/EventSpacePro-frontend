@@ -89,9 +89,14 @@ export type Shape = {
     dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
     dimensionFontSize?: number;
     dimensionTextPosition?: 'inbetween' | 'above';
+    dimensionOffset?: number;
+    dimensionStrokeWidth?: number;
+    dimensionColor?: string;
     borderRadius?: number;
     tableName?: string;
     showTableName?: boolean;
+    tableNumberingPosition?: 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'top' | 'bottom' | 'middle-left' | 'middle-right';
+    tableNumberingOrientation?: 'horizontal' | 'vertical';
 };
 
 export type Asset = {
@@ -144,7 +149,12 @@ export type Asset = {
     dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
     dimensionFontSize?: number;
     dimensionTextPosition?: 'inbetween' | 'above' | 'below';
+    dimensionOffset?: number;
+    dimensionStrokeWidth?: number;
+    dimensionColor?: string;
     borderRadius?: number;
+    tableNumberingPosition?: 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'top' | 'bottom' | 'middle-left' | 'middle-right';
+    tableNumberingOrientation?: 'horizontal' | 'vertical';
 };
 
 export type Wall = {
@@ -166,6 +176,9 @@ export type Wall = {
     dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
     dimensionFontSize?: number;
     dimensionTextPosition?: 'inbetween' | 'above' | 'below';
+    dimensionOffset?: number;
+    dimensionStrokeWidth?: number;
+    dimensionColor?: string;
 };
 
 export type Layer = {
@@ -233,6 +246,7 @@ export type TextAnnotation = {
     backgroundColor?: string;
     rotation?: number; // Rotation in degrees
     zIndex: number;
+    textAlign?: 'left' | 'center' | 'right' | 'justify';
 };
 
 export type LabelArrow = {
@@ -287,6 +301,12 @@ export type ProjectState = {
     labelArrows: LabelArrow[];
     layers: Layer[];
     groups: Group[];
+
+    // Global Labeling Settings
+    globalTableNumberingPosition: 'center' | 'top' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'middle-left' | 'middle-right';
+    globalTableNumberingOrientation: 'horizontal' | 'vertical';
+    setGlobalTableNumberingPosition: (pos: 'center' | 'top' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'middle-left' | 'middle-right', updateAll?: boolean) => void;
+    setGlobalTableNumberingOrientation: (orientation: 'horizontal' | 'vertical', updateAll?: boolean) => void;
 
     // Active layer
     activeLayerId: string | null;
@@ -478,6 +498,36 @@ export const useProjectStore = create<ProjectState>()(
             comments: [],
             textAnnotations: [],
             labelArrows: [],
+            globalTableNumberingPosition: 'center',
+            globalTableNumberingOrientation: 'horizontal',
+
+            setGlobalTableNumberingPosition: (pos, updateAll) => {
+                set({ globalTableNumberingPosition: pos, hasUnsavedChanges: true });
+                if (updateAll) {
+                  const { assets, shapes } = get();
+                  const tableAssets = assets.filter(a => (a.type || "").toLowerCase().includes('table'));
+                  const tableShapes = shapes.filter(s => (s.name || "").toLowerCase().includes('table'));
+                  
+                  get().batchUpdateItems([
+                    ...tableAssets.map(a => ({ id: a.id, type: 'asset' as const, updates: { tableNumberingPosition: pos } })),
+                    ...tableShapes.map(s => ({ id: s.id, type: 'shape' as const, updates: { tableNumberingPosition: pos } }))
+                  ]);
+                }
+            },
+
+            setGlobalTableNumberingOrientation: (orientation, updateAll) => {
+                set({ globalTableNumberingOrientation: orientation, hasUnsavedChanges: true });
+                if (updateAll) {
+                  const { assets, shapes } = get();
+                  const tableAssets = assets.filter(a => (a.type || "").toLowerCase().includes('table'));
+                  const tableShapes = shapes.filter(s => (s.name || "").toLowerCase().includes('table'));
+                  
+                  get().batchUpdateItems([
+                    ...tableAssets.map(a => ({ id: a.id, type: 'asset' as const, updates: { tableNumberingOrientation: orientation } })),
+                    ...tableShapes.map(s => ({ id: s.id, type: 'shape' as const, updates: { tableNumberingOrientation: orientation } }))
+                  ]);
+                }
+            },
 
             // Canvas methods
             setCanvas: (canvas) => {
