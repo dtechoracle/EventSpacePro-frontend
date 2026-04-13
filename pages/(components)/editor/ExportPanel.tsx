@@ -40,7 +40,6 @@ interface ProfessionalDetails {
   sittingCode: string;
   guestAllocation: string;
   logo: string | null;
-  logo2: string | null; // Added for second event logo
   byLogo: string | null; // Added for branding
   panelPosition: 'left' | 'right';
   panelColor?: string;
@@ -81,7 +80,7 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
       let processedSvg = svg;
       const fill = asset.fillColor || 'transparent';
       const stroke = asset.strokeColor || '#000000';
-      const exportStrokeWidth = (asset.strokeWidth || 4.0) * 3.5; 
+      const exportStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : 0.5;
 
       // ROBUST DOM-BASED PROCESSING (Matches AssetRenderer.tsx logic)
       try {
@@ -100,63 +99,57 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
              svgEl.setAttribute("height", "2000");
           }
 
-          const allElements = Array.from(doc.querySelectorAll('*'));
-          const circles = allElements.filter(el => el.tagName.toLowerCase() === 'circle');
-          const innerCircles = new Set<Element>();
-          if (circles.length > 1) {
-              circles.forEach(c1 => {
-                  const cx1 = c1.getAttribute('cx');
-                  const cy1 = c1.getAttribute('cy');
-                  const r1 = parseFloat(c1.getAttribute('r') || '0');
-                  circles.forEach(c2 => {
-                      if (c1 === c2) return;
-                      const cx2 = c2.getAttribute('cx');
-                      const cy2 = c2.getAttribute('cy');
-                      const r2 = parseFloat(c2.getAttribute('r') || '0');
-                      if (cx1 === cx2 && cy1 === cy2) {
-                          if (r1 < r2) innerCircles.add(c1);
-                      }
-                  });
-              });
+          const styleId = "dynamic-asset-style-export";
+          if (!doc.getElementById(styleId)) {
+            const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
+            styleEl.setAttribute("id", styleId);
+            styleEl.textContent = `* { vector-effect: non-scaling-stroke !important; } .fill-none-el { fill: none !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } .stroke-top-layer { pointer-events: none; }`;
+            svgEl.prepend(styleEl);
           }
 
-          allElements.forEach(el => {
-            const tag = el.tagName.toLowerCase();
-            if (tag === 'svg' || tag === 'style') return;
+          const children = Array.from(doc.querySelectorAll('path, circle, rect, line, polyline, ellipse'));
+          const circles = Array.from(doc.querySelectorAll('circle'));
+          const innerCircles = new Set<Element>();
 
+          if (circles.length > 1) {
+            const sorted = [...circles].sort((a, b) => parseFloat(a.getAttribute("r") || "0") - parseFloat(b.getAttribute("r") || "0"));
+            for (let i = 0; i < sorted.length - 1; i++) {
+              innerCircles.add(sorted[i]);
+            }
+          }
+
+          const category = (definition as any).category || "";
+          const catLower = category.toLowerCase();
+          const isFurniture = catLower === 'furniture' || catLower === 'structure' || catLower === 'furniture asset' || asset.type.includes('chair') || asset.type.includes('table');
+
+          children.forEach(el => {
+            const tag = el.tagName.toLowerCase();
+            const dAttr = el.getAttribute("d") || "";
             const fillAttr = el.getAttribute("fill");
             const styleAttr = el.getAttribute("style");
-            const dAttr = el.getAttribute("d") || "";
 
             const wasExplicitlyNone = fillAttr === 'none' || (styleAttr && /fill\s*:\s*none/i.test(styleAttr));
             const isLineElement = tag === 'line' || tag === 'polyline';
-            
-            // Ported closed-path detection from InlineSvg.tsx
+            const hasFillRule = el.hasAttribute("fill-rule") || (styleAttr && /fill-rule/i.test(styleAttr));
+
             const dClean = dAttr.trim();
             const isZClosed = dClean.toLowerCase().includes('z');
             let isCoordClosed = false;
             if (!isZClosed && dClean.startsWith('M')) {
-                const firstMatch = dClean.match(/^M\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)/i);
-                const lastMatch = dClean.match(/(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/);
-                if (firstMatch && lastMatch) isCoordClosed = firstMatch[1] === lastMatch[1] && firstMatch[2] === lastMatch[2];
+              const firstMatch = dClean.match(/^M\s*(-?[\d.]+)\s*[, \s]\s*(-?[\d.]+)/i);
+              const lastMatch = dClean.match(/(-?[\d.]+)\s*[, \s]\s*(-?[\d.]+)\s*$/);
+              if (firstMatch && lastMatch) {
+                const startX = parseFloat(firstMatch[1]);
+                const startY = parseFloat(firstMatch[2]);
+                const endX = parseFloat(lastMatch[1]);
+                const endY = parseFloat(lastMatch[2]);
+                isCoordClosed = Math.abs(startX - endX) < 1.0 && Math.abs(startY - endY) < 1.0;
+              }
             }
             const isClosed = isZClosed || isCoordClosed;
             const isOpenPath = tag === 'path' && !isClosed;
-            const isConsentricOuter = tag === 'circle' && circles.length > 1 && !innerCircles.has(el);
+            const isAutoFill = el.getAttribute("id") === "auto-fill";
 
-            // Preserve transparency for structural lines and open paths
-            if (wasExplicitlyNone || isLineElement || isOpenPath || isConsentricOuter) {
-              el.setAttribute("fill", "none");
-            } else {
-              el.setAttribute("fill", fill === 'transparent' ? 'none' : fill);
-            }
-
-            // Force high-contrast architectural strokes
-            el.setAttribute("stroke", stroke);
-            el.setAttribute("stroke-width", exportStrokeWidth.toString());
-            el.setAttribute("vector-effect", "non-scaling-stroke");
-            
-            // Cleanup internal styles that might override our baked attributes
             if (styleAttr) {
               const cleaned = styleAttr
                 .replace(/fill\s*:[^;]+;?/gi, "")
@@ -165,18 +158,48 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
               if (cleaned.trim()) el.setAttribute("style", cleaned);
               else el.removeAttribute("style");
             }
-          });
 
-          // Reorder: Structural outlines MUST be on top of solid fills
-          // We move all 'fill="none"' paths (outlines) to be the last children of their respective parent
-          const structuralElements = Array.from(doc.querySelectorAll('[fill="none"]'));
-          structuralElements.forEach(el => {
-            if (el.parentNode && el.parentNode.nodeType === 1) { // 1 is ELEMENT_NODE
-              el.parentNode.appendChild(el);
+            el.removeAttribute("fill");
+            el.removeAttribute("stroke");
+            el.removeAttribute("stroke-width");
+
+            let shouldBeNone = wasExplicitlyNone || isLineElement;
+            if (!isFurniture) {
+              const isConsentricOuter = tag === 'circle' && circles.length > 1 && !innerCircles.has(el);
+              if (isOpenPath || isConsentricOuter) {
+                shouldBeNone = true;
+              }
+            }
+
+            if (shouldBeNone && !hasFillRule && !isAutoFill) {
+              el.classList.add("fill-none-el");
+            } else {
+              el.classList.add("fill-inherit-el");
             }
           });
 
-          processedSvg = new XMLSerializer().serializeToString(doc);
+          const rootGroup = svgEl.querySelector('g');
+          if (rootGroup) {
+            const strokeOnlyEls = Array.from(rootGroup.querySelectorAll('.fill-none-el'));
+            if (strokeOnlyEls.length > 0) {
+              const topLayer = doc.createElementNS("http://www.w3.org/2000/svg", "g");
+              topLayer.setAttribute("class", "stroke-top-layer");
+              strokeOnlyEls.forEach(el => topLayer.appendChild(el));
+              rootGroup.appendChild(topLayer);
+            }
+          }
+
+          processedSvg = new XMLSerializer().serializeToString(doc).replace(/<svg([^>]*)>/i, (_match, attrs) => {
+            const cleanAttrs = attrs
+              .replace(/\s+width\s*=\s*["'][^"']*["']/gi, '')
+              .replace(/\s+height\s*=\s*["'][^"']*["']/gi, '')
+              .replace(/\s+x\s*=\s*["'][^"']*["']/gi, '')
+              .replace(/\s+y\s*=\s*["'][^"']*["']/gi, '')
+              .replace(/\s+fill\s*=\s*["'][^"']*["']/gi, '')
+              .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '');
+
+            return `<svg${cleanAttrs} fill="${fill}" stroke="${stroke}" stroke-width="${exportStrokeWidth}" preserveAspectRatio="xMidYMid meet">`;
+          });
         }
       } catch (err) {
         console.error("DOM Processing failed, falling back to basic replace", err);
@@ -213,6 +236,9 @@ export default function ExportPanel() {
     globalTableNumberingPosition, globalTableNumberingOrientation
   } = useProjectStore();
   const selectedIds = useEditorStore((s) => s.selectedIds);
+  const zoom = useEditorStore((s) => s.zoom);
+  const panX = useEditorStore((s) => s.panX);
+  const panY = useEditorStore((s) => s.panY);
   const [exportOptions, setExportOptions] = useState<ExportOption[]>([
     { id: "1", paperSize: "A4", format: "pdf", exportSelection: false, isProfessional: true },
   ]);
@@ -258,7 +284,6 @@ export default function ExportPanel() {
     sittingCode: "",
     guestAllocation: "",
     logo: null,
-    logo2: null,
     byLogo: null,
     panelPosition: 'right',
     panelColor: '#0056A9' // Firm Brand Blue default
@@ -293,10 +318,19 @@ export default function ExportPanel() {
           x: 0, y: 0, width: 0, height: 0, scale: 1, rotation: 0,
           wallNodes: w.nodes,
           wallEdges: validEdges.map(e => ({ id: e.id, a: w.nodes.findIndex(n => n.id === e.nodeA), b: w.nodes.findIndex(n => n.id === e.nodeB) })),
-          lineColor: '#000000',
+          lineColor: w.stroke || '#000000',
           wallThickness: validEdges[0]?.thickness || 150,
+          backgroundColor: w.fill || '#f3f4f6',
+          strokeColor: w.stroke || '#000000',
+          strokeWidth: w.strokeWidth !== undefined ? w.strokeWidth : 2,
           zIndex: w.zIndex || 0,
           showDimensions: w.showDimensions,
+          dimensionType: w.dimensionType,
+          dimensionFontSize: w.dimensionFontSize,
+          dimensionOffset: w.dimensionOffset,
+          dimensionStrokeWidth: w.dimensionStrokeWidth,
+          dimensionColor: w.dimensionColor,
+          dimensionLabelPosition: (w as any).dimensionLabelPosition,
         };
       }).filter(Boolean),
       ...assets.map(a => ({ ...a })),
@@ -306,6 +340,47 @@ export default function ExportPanel() {
     ];
     return items.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
   }, [shapes, assets, walls, textAnnotations, labelArrows, dimensions]);
+
+  const loadWorkspaceSnapshot = async (
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+    paddingMm: number
+  ) => {
+    const workspaceSvg = document.querySelector('svg[data-workspace-root="true"]') as SVGSVGElement | null;
+    if (!workspaceSvg) return null;
+
+    const screenPadding = paddingMm * zoom;
+    const screenMinX = minX * zoom + panX - screenPadding;
+    const screenMinY = minY * zoom + panY - screenPadding;
+    const screenWidth = Math.max(1, (maxX - minX + paddingMm * 2) * zoom);
+    const screenHeight = Math.max(1, (maxY - minY + paddingMm * 2) * zoom);
+
+    const clone = workspaceSvg.cloneNode(true) as SVGSVGElement;
+    clone.querySelectorAll('.interaction-highlights, .snap-markers, [data-export-ignore="true"]').forEach((node) => node.remove());
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', `${screenWidth}`);
+    clone.setAttribute('height', `${screenHeight}`);
+    clone.setAttribute('viewBox', `${screenMinX} ${screenMinY} ${screenWidth} ${screenHeight}`);
+    clone.style.background = '#ffffff';
+
+    const serialized = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    try {
+      const img = await new Promise<HTMLImageElement | null>((resolve) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => resolve(null);
+        image.src = url;
+      });
+      return img;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
 
   const renderAssetToCanvas = (
     ctx: CanvasRenderingContext2D,
@@ -321,10 +396,14 @@ export default function ExportPanel() {
     const worldY = asset.y - minY + padding;
     const cx = worldX * MM_TO_PX;
     const cy = worldY * MM_TO_PX;
+    const opacity = Math.max(0, Math.min(1, (asset as any).opacity ?? 1));
+
+    ctx.save();
+    ctx.globalAlpha = opacity;
 
     if (asset.type === 'wall-segments') {
-      const strokeColor = asset.lineColor || "#000000";
-      // Use workspace-native wall stroke width
+      const strokeColor = asset.strokeColor || asset.lineColor || "#000000";
+      const fillColor = asset.backgroundColor || 'transparent';
       const wallThickness = (asset.wallThickness || 150) * (asset.scale || 1);
       
       if (asset.wallNodes && asset.wallEdges) {
@@ -346,11 +425,11 @@ export default function ExportPanel() {
             y: (p.y - minY + padding) * MM_TO_PX
           }));
 
-          ctx.fillStyle = '#f1f5f9';
-          ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); pts.forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = fillColor;
+          ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); pts.forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath();
+          if (fillColor !== 'transparent') ctx.fill();
           ctx.strokeStyle = strokeColor;
-          // Use heavy-duty architectural line weight for structural walls (3.0mm)
-          ctx.lineWidth = (asset.strokeWidth || 3.0) * MM_TO_PX;
+          ctx.lineWidth = (asset.strokeWidth !== undefined ? asset.strokeWidth : 2) * MM_TO_PX;
           ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[1].x, pts[1].y); ctx.stroke();
           ctx.beginPath(); ctx.moveTo(pts[2].x, pts[2].y); ctx.lineTo(pts[3].x, pts[3].y); ctx.stroke();
         });
@@ -359,8 +438,7 @@ export default function ExportPanel() {
       const points = (asset as any).points;
       if (points?.length > 1) {
         ctx.strokeStyle = asset.strokeColor || "#000000";
-        // Freehand path: ensure it's visible but not chunky
-        ctx.lineWidth = Math.max(1, (asset.strokeWidth || 1) * 0.2 * MM_TO_PX);
+        ctx.lineWidth = Math.max(0.5 * MM_TO_PX, (asset.strokeWidth || 1) * MM_TO_PX);
         ctx.beginPath();
         const startX = (points[0].x + asset.x - minX + padding + (contentShift / MM_TO_PX)) * MM_TO_PX;
         const startY = (points[0].y + asset.y - minY + padding) * MM_TO_PX;
@@ -406,7 +484,6 @@ export default function ExportPanel() {
     } else {
       const w = (asset.width || 0) * (asset.scale || 1);
       const h = (asset.height || 0) * (asset.scale || 1);
-      ctx.save();
       ctx.translate(cx, cy);
       if (asset.rotation) ctx.rotate((asset.rotation * Math.PI) / 180);
 
@@ -423,7 +500,7 @@ export default function ExportPanel() {
         const fill = asset.backgroundColor || asset.fillColor || asset.fill || (asset.type.includes('table') ? '#f8fafc' : 'transparent');
         ctx.fillStyle = fill;
         ctx.strokeStyle = asset.strokeColor || '#000000';
-        ctx.lineWidth = (asset.strokeWidth || 1.5) * MM_TO_PX;
+        ctx.lineWidth = (asset.strokeWidth !== undefined ? asset.strokeWidth : 0.5) * MM_TO_PX;
         
         // Handle all primitive shapes (Circle, Ellipse, Rect, Rectangle, Square, Polygon)
         const typeLower = (asset.type || '').toLowerCase();
@@ -523,16 +600,40 @@ export default function ExportPanel() {
         ctx.fillText(label, 0, 0);
         ctx.restore();
       }
-      ctx.restore();
     }
 
     // Show auto-dimensions if enabled (Applies to all types including Walls)
     if ((asset as any).showDimensions) {
-      const autoDims = getDimensionsForObject(asset as any, `export-auto-${asset.id}`);
+      const autoDims = asset.type === 'wall-segments' && asset.wallNodes && asset.wallEdges
+        ? getDimensionsForWall({
+            id: asset.id,
+            nodes: asset.wallNodes.map((node, index) => ({ id: `wall-node-${index}`, x: node.x, y: node.y })),
+            edges: asset.wallEdges.map((edge, index) => ({
+              id: `wall-edge-${index}`,
+              nodeA: `wall-node-${edge.a}`,
+              nodeB: `wall-node-${edge.b}`,
+              thickness: asset.wallThickness || 150
+            })),
+            fill: asset.backgroundColor,
+            stroke: asset.strokeColor,
+            strokeWidth: asset.strokeWidth,
+            fillType: (asset as any).fillType || 'color',
+            fillTexture: (asset as any).fillTexture,
+            zIndex: asset.zIndex || 0,
+            showDimensions: true,
+            dimensionType: (asset as any).dimensionType,
+            dimensionFontSize: (asset as any).dimensionFontSize,
+            dimensionOffset: (asset as any).dimensionOffset,
+            dimensionStrokeWidth: (asset as any).dimensionStrokeWidth,
+            dimensionColor: (asset as any).dimensionColor
+          } as any)
+        : getDimensionsForObject(asset as any, `export-auto-${asset.id}`);
       autoDims.forEach(ad => {
         renderDimensionToCanvas(ctx, ad, minX - padding - (contentShift / MM_TO_PX), minY - padding, 0, MM_TO_PX);
       });
     }
+
+    ctx.restore();
   };
 
   const drawProfessionalPanel = async (
@@ -746,12 +847,7 @@ export default function ExportPanel() {
     }
 
     // 4. OTHER ITEMS (Decorations, Layouts, Equipment)
-    if (otherInventory.size > 0) {
-        drawHeader('OTHER ITEMS');
-        otherInventory.forEach((count, name) => {
-            drawTableEntry(name, String(count));
-        });
-    }
+    // (Removed by request - only focused on sitting assets)
 
     // 4. GUESTS ALLOCATION (Optional - Hide if empty)
     const allocationLines = (details.guestAllocation || "").split('\n').filter(l => l.trim().length > 0);
@@ -769,7 +865,7 @@ export default function ExportPanel() {
     }
 
     // 5. EVENT LOGO (Dedicated Section)
-    if (details.logo || details.logo2 || details.byLogo) {
+    if (details.logo) {
       drawHeader('EVENT LOGO');
       const logoPadding = PANEL_WIDTH * 0.1;
       const availableLogoH = PANEL_WIDTH * 0.35;
@@ -792,17 +888,35 @@ export default function ExportPanel() {
       };
 
       if (details.logo) await drawSingleLogo(details.logo);
-      if (details.logo2) await drawSingleLogo(details.logo2);
-      if (details.byLogo) await drawSingleLogo(details.byLogo);
     }
 
-    // 6. EVENT BY (Branding with Planner)
-    const BRANDING_SECTION_HEIGHT = PANEL_WIDTH * 0.3;
+    // 6. BY (Branding with Planner)
+    const BRANDING_SECTION_HEIGHT = PANEL_WIDTH * (details.byLogo ? 0.65 : 0.3);
     const footerStartY = height - BRANDING_SECTION_HEIGHT;
     
-    y = footerStartY;
-    drawHeader('EVENT BY');
+    y = Math.max(y, footerStartY); // Ensure we don't overlap with previous items if paper is too short
+    drawHeader('BY');
     
+    if (details.byLogo) {
+      const logoPadding = PANEL_WIDTH * 0.1;
+      const availableLogoH = PANEL_WIDTH * 0.25;
+
+      const img = new Image(); img.src = details.byLogo;
+      await new Promise(r => { img.onload = r; img.onerror = r; });
+      if (img.naturalWidth > 0) {
+        const maxW = PANEL_WIDTH - logoPadding * 2;
+        const maxH = availableLogoH - logoPadding;
+        let tw = img.naturalWidth;
+        let th = img.naturalHeight;
+        const scale = Math.min(maxW / tw, maxH / th);
+        tw *= scale; th *= scale;
+        const lx = xBase + (PANEL_WIDTH - tw) / 2;
+        const ly = y + (availableLogoH - th) / 2;
+        ctx.drawImage(img, lx, ly, tw, th);
+        y += availableLogoH;
+      }
+    }
+
     // Planner Name if present
     if (details.eventPlanner) {
         ctx.fillStyle = textColor;
@@ -812,11 +926,11 @@ export default function ExportPanel() {
         y += rowHeight * 0.8;
     }
     
-    // Professional Services text
+    // Footer branding
     ctx.fillStyle = '#94a3b8';
     ctx.font = `italic ${rowFontBase}px Inter, sans-serif`;
     ctx.textAlign = 'center';
-    ctx.fillText('Professional Design Services', xBase + PANEL_WIDTH / 2, y + ((height - y) / 2));
+    ctx.fillText('Powered by EventSpacePro', xBase + PANEL_WIDTH / 2, y + ((height - y) / 2));
   };
 
 
@@ -935,11 +1049,16 @@ export default function ExportPanel() {
       if (!ctx) throw new Error("Canvas context error");
       ctx.fillStyle = '#ffffff'; 
       ctx.fillRect(0, 0, sourceCanvas.width, sourceCanvas.height);
+      const workspaceSnapshot = await loadWorkspaceSnapshot(minX, minY, maxX, maxY, mmPadding);
 
-      const loadedImages = await loadSvgAssets(assetsToExport);
+      if (workspaceSnapshot) {
+        ctx.drawImage(workspaceSnapshot, 0, 0, sourceCanvas.width, sourceCanvas.height);
+      } else {
+        const loadedImages = await loadSvgAssets(assetsToExport);
 
-      // Draw all assets on sourceCanvas
-      assetsToExport.forEach(a => renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages));
+        // Fallback: redraw items manually if the live workspace snapshot is unavailable
+        assetsToExport.forEach(a => renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages));
+      }
 
       // 6. Draw sourceCanvas onto final paper, centered inside the map zone
       const ox = (details?.panelPosition === 'left' && option.isProfessional) 
@@ -1049,8 +1168,9 @@ export default function ExportPanel() {
 
             <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
               {/* Logo Upload Section */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex-1 flex flex-col items-center gap-3">
-                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Event Logo 1</label>
+                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Event Logo</label>
                   <div className="relative group w-full">
                     <div className="w-full h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-slate-400">
                       {profDetails.logo ? (
@@ -1069,30 +1189,6 @@ export default function ExportPanel() {
                     </div>
                     {profDetails.logo && (
                       <button onClick={() => setProfDetails({...profDetails, logo: null})} className="absolute -top-2 -right-2 w-6 h-6 bg-white border border-slate-100 rounded-full shadow-md flex items-center justify-center text-slate-400 hover:text-red-500 transition-all"><X size={12}/></button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex-1 flex flex-col items-center gap-3">
-                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Event Logo 2</label>
-                  <div className="relative group w-full">
-                    <div className="w-full h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-slate-400">
-                      {profDetails.logo2 ? (
-                        <img src={profDetails.logo2} className="w-full h-full object-contain p-2" />
-                      ) : (
-                        <Upload className="text-slate-300 group-hover:text-slate-500 transition-colors" size={24} />
-                      )}
-                      <input type="file" accept="image/*" onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (ev) => setProfDetails({...profDetails, logo2: ev.target?.result as string});
-                          reader.readAsDataURL(file);
-                        }
-                      }} className="absolute inset-0 opacity-0 cursor-pointer" />
-                    </div>
-                    {profDetails.logo2 && (
-                      <button onClick={() => setProfDetails({...profDetails, logo2: null})} className="absolute -top-2 -right-2 w-6 h-6 bg-white border border-slate-100 rounded-full shadow-md flex items-center justify-center text-slate-400 hover:text-red-500 transition-all"><X size={12}/></button>
                     )}
                   </div>
                 </div>
@@ -1120,6 +1216,7 @@ export default function ExportPanel() {
                     )}
                   </div>
                 </div>
+              </div>
 
               {/* Theme Selection */}
               <div className="space-y-3 text-center">

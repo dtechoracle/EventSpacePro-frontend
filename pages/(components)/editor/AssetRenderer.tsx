@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import Image from "next/image";
 import { InlineSvg } from "@/components/tools/InlineSvg";
 import { FiBox } from "react-icons/fi";
@@ -17,12 +17,9 @@ type AssetRendererProps = {
   topPx: number;
   totalRotation: number;
   editingTextId: string | null;
-  editingText: string;
   onAssetMouseDown: (e: React.MouseEvent, assetId: string) => void;
   onTextDoubleClick: (e: React.MouseEvent, assetId: string) => void;
-  onTextEditKeyDown: (e: React.KeyboardEvent, assetId: string) => void;
   onTextEditBlur: (assetId: string) => void;
-  onTextEditChange: (text: string) => void;
   onScaleHandleMouseDown: (
     e: React.MouseEvent,
     assetId: string,
@@ -44,18 +41,31 @@ export const AssetRenderer = React.memo(({
   topPx,
   totalRotation,
   editingTextId,
-  editingText,
   onAssetMouseDown,
   onTextDoubleClick,
-  onTextEditKeyDown,
   onTextEditBlur,
-  onTextEditChange,
   onScaleHandleMouseDown,
   onRotationHandleMouseDown,
   onAssetContextMenu,
   globalPos,
   globalOrientation,
 }: AssetRendererProps & { globalPos?: string, globalOrientation?: string }) => {
+  // ─── LOCAL TEXT EDITING STATE ────────────────────────────────────────────────
+  // Must be declared before any early returns to comply with React hooks rules.
+  // Keeping state local prevents Canvas re-renders on every keystroke,
+  // which was causing cursor-jump and Shift+Enter flicker.
+  const isEditingThis = editingTextId === asset?.id && asset?.type === "text";
+  const [localEditText, setLocalEditText] = useState(asset?.text ?? "");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (isEditingThis) {
+      setLocalEditText(asset?.text ?? "");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditingThis]); // intentionally NOT including asset.text to avoid mid-edit resets
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // Early return if asset is undefined (prevents SSR errors)
   if (!asset) {
     return null;
@@ -65,6 +75,28 @@ export const AssetRenderer = React.memo(({
   const isMarquee = asset.type?.toLowerCase().includes('marquee');
   const defaultStrokeWidth = isMarquee ? 2 : 0.5;
   const currentStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : defaultStrokeWidth;
+
+  // ─── LOCAL TEXT HANDLERS ─────────────────────────────────────────────────────
+  const handleLocalTextKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onTextEditBlur(asset.id); // cancel, don't save
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      updateAsset?.(asset.id, { text: localEditText });
+      onTextEditBlur(asset.id);
+      return;
+    }
+    // Shift+Enter: fall through — browser natively inserts \n into textarea
+  };
+
+  const handleLocalTextBlur = () => {
+    updateAsset?.(asset.id, { text: localEditText });
+    onTextEditBlur(asset.id);
+  };
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // Handle square and circle assets
   if (asset.type === "square" || asset.type === "circle") {
@@ -552,7 +584,7 @@ export const AssetRenderer = React.memo(({
 
   // Handle text assets
   if (asset.type === "text") {
-    const isEditing = editingTextId === asset.id;
+    const isEditing = isEditingThis;
 
     return (
       <div className="relative" onContextMenu={(e) => onAssetContextMenu(e, asset.id)}>
@@ -573,13 +605,14 @@ export const AssetRenderer = React.memo(({
         )}
 
         {isEditing ? (
-          <input
-            type="text"
-            value={editingText}
-            onChange={(e) => onTextEditChange(e.target.value)}
-            onKeyDown={(e) => onTextEditKeyDown(e, asset.id)}
-            onBlur={() => onTextEditBlur(asset.id)}
+          <textarea
+            ref={textareaRef}
+            value={localEditText}
+            onChange={(e) => setLocalEditText(e.target.value)}
+            onKeyDown={handleLocalTextKeyDown}
+            onBlur={handleLocalTextBlur}
             autoFocus
+            rows={localEditText.split('\n').length || 1}
             style={{
               position: "absolute",
               left: leftPx,
@@ -602,8 +635,11 @@ export const AssetRenderer = React.memo(({
               minWidth: "100px",
               borderRadius: "4px",
               zIndex: asset.zIndex || 0,
+              resize: "none",
+              overflow: "hidden",
+              textAlign: "center",
+              lineHeight: 1.3,
             }}
-            className="text-center"
           />
         ) : (
           <div
@@ -626,7 +662,8 @@ export const AssetRenderer = React.memo(({
                   ? "4px 8px"
                   : "0",
               borderRadius: "4px",
-              whiteSpace: "nowrap",
+              whiteSpace: "pre-wrap",
+              textAlign: "center",
               userSelect: "none",
               cursor: "move",
               zIndex: asset.zIndex || 0,
@@ -634,9 +671,15 @@ export const AssetRenderer = React.memo(({
                 ? "0 0 10px rgba(34, 197, 94, 0.8)"
                 : undefined,
               transition: isCopied ? "box-shadow 0.3s ease" : undefined,
+              lineHeight: 1.3,
             }}
           >
-            {asset.text ?? "Enter text"}
+            {(asset.text ?? "Enter text").split('\n').map((line, i, arr) => (
+              <React.Fragment key={i}>
+                {line}
+                {i < arr.length - 1 && <br />}
+              </React.Fragment>
+            ))}
           </div>
         )}
 
@@ -646,6 +689,7 @@ export const AssetRenderer = React.memo(({
             asset={asset}
             leftPx={leftPx}
             topPx={topPx}
+            liveText={isEditing ? localEditText : undefined}
             onScaleHandleMouseDown={onScaleHandleMouseDown}
             onRotationHandleMouseDown={onRotationHandleMouseDown}
           />

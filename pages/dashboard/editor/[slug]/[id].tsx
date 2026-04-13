@@ -32,6 +32,9 @@ type EventData = BaseEventData & {
     walls: any[];
     shapes: any[];
     assets: any[];
+    textAnnotations?: any[];
+    dimensions?: any[];
+    labelArrows?: any[];
     layers?: any[];
     canvas?: any;
   };
@@ -960,12 +963,22 @@ export default function Editor() {
 
         // PRIORITY 1: Load from canvasData (preferred format from DATABASE)
         if (eventData.canvasData) {
-          const { walls = [], shapes = [], assets = [] } = eventData.canvasData;
+          const {
+            walls = [],
+            shapes = [],
+            assets = [],
+            textAnnotations = [],
+            dimensions = [],
+            labelArrows = []
+          } = eventData.canvasData;
 
           console.log(`[Editor] Loading canvasData from DATABASE:`, {
             walls: walls.length,
             shapes: shapes.length,
             assets: assets.length,
+            textAnnotations: textAnnotations.length,
+            dimensions: dimensions.length,
+            labelArrows: labelArrows.length,
           });
 
           // Always load from DATABASE when opening an event
@@ -981,6 +994,18 @@ export default function Editor() {
             assets.forEach((asset: any) => {
               console.log(`[Editor] Adding asset:`, asset.id, asset.type);
               projectStore.addAsset(asset);
+            });
+            textAnnotations.forEach((annotation: any) => {
+              console.log(`[Editor] Adding text annotation:`, annotation.id);
+              projectStore.addTextAnnotation(annotation, true);
+            });
+            dimensions.forEach((dimension: any) => {
+              console.log(`[Editor] Adding dimension:`, dimension.id);
+              projectStore.addDimension(dimension, true);
+            });
+            labelArrows.forEach((arrow: any) => {
+              console.log(`[Editor] Adding label arrow:`, arrow.id);
+              projectStore.addLabelArrow(arrow, true);
             });
 
             // DEFAULT OUTDOOR LAYOUT if empty
@@ -1143,6 +1168,7 @@ export default function Editor() {
                 const defaultHeight = asset.height || 100;
 
                 projectStore.addShape({
+                  ...asset, // BRING IN EVERYTHING!
                   id: asset.id,
                   name: asset.name, // RESTORE NAME
                   type: asset.type as 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand',
@@ -1151,8 +1177,8 @@ export default function Editor() {
                   width: defaultWidth,
                   height: defaultHeight,
                   rotation: asset.rotation || 0,
-                  fill: asset.fillColor || asset.backgroundColor || "#3B82F6",
-                  stroke: asset.strokeColor || "#1E40AF",
+                  fill: asset.fillColor || asset.backgroundColor || asset.fill || "#3B82F6",
+                  stroke: asset.strokeColor || asset.stroke || "#1E40AF",
                   strokeWidth: asset.strokeWidth || 2,
                   points: asset.points,
                   zIndex: asset.zIndex || 0
@@ -1186,6 +1212,7 @@ export default function Editor() {
                 }
 
                 projectStore.addAsset({
+                  ...asset, // BRING IN EVERYTHING!
                   id: asset.id,
                   name: asset.name, // RESTORE NAME
                   type: asset.type,

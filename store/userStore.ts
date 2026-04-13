@@ -36,6 +36,19 @@ export const useUserStore = create<UserState>()(
                 try {
                     const response = await apiRequest("/user", "GET", null, true);
                     const userData = response.data;
+                    let avatarFromApi: string | null = null;
+
+                    try {
+                        const avatarResponse = await apiRequest("/user/avatar", "GET", null, true);
+                        const avatarPayload = avatarResponse?.data || avatarResponse;
+                        avatarFromApi =
+                            avatarPayload?.avatar ||
+                            avatarPayload?.data?.avatar ||
+                            avatarPayload?.url ||
+                            null;
+                    } catch (e) {
+                        console.warn("[userStore] Failed to fetch avatar from /user/avatar", e);
+                    }
 
                     set((state) => {
                         // If we don't have a user in state yet, try to see if it's in localStorage 
@@ -51,14 +64,24 @@ export const useUserStore = create<UserState>()(
                                     const parsed = JSON.parse(stored);
                                     localAvatar = parsed.state?.user?.avatar;
                                 }
+                                
+                                // Recover avatar from persistent ID-based storage (survives logouts)
+                                if (!localAvatar && userData?._id) {
+                                    const persistentAvatar = localStorage.getItem(`avatar_${userData._id}`);
+                                    if (persistentAvatar) localAvatar = persistentAvatar;
+                                }
                             } catch (e) {}
                         }
 
                         const combinedUser = state.user ? { ...state.user, ...userData } : userData;
 
+                        if (avatarFromApi) {
+                            combinedUser.avatar = avatarFromApi;
+                        }
+
                         // "Local Storage for Now": If backend returns no avatar but we have one locally,
                         // explicitly preserve our local Base64 image.
-                        if (localAvatar && !userData.avatar) {
+                        if (!avatarFromApi && localAvatar && !userData.avatar) {
                             combinedUser.avatar = localAvatar;
                         }
 

@@ -1,5 +1,42 @@
 import { Asset, Shape } from "@/store/projectStore";
 import { ASSET_LIBRARY } from "@/lib/assets";
+import { getMarqueeGeometry } from "@/lib/marquees";
+
+const assetVerticesCache: Record<string, { x: number; y: number }[]> = {};
+
+export function setCachedAssetVertices(assetId: string, vertices: { x: number; y: number }[]) {
+    assetVerticesCache[assetId] = vertices;
+}
+
+export function getCachedAssetVertices(assetId: string): { x: number; y: number }[] {
+    return assetVerticesCache[assetId] || [];
+}
+
+export function getMarqueeVertices(asset: Asset): { x: number; y: number }[] {
+    const def = ASSET_LIBRARY.find(a => a.id === asset.type);
+    const baseWidth = asset.width || def?.width || 0;
+    const baseHeight = asset.height || def?.height || 0;
+    const scale = asset.scale || 1;
+    const width = baseWidth * scale;
+    const height = baseHeight * scale;
+    const geometry = getMarqueeGeometry(
+        width,
+        height,
+        asset.wallThickness || asset.metadata?.wallThickness
+    );
+    const rad = (asset.rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    return geometry.markerCenters.map((marker) => {
+        const ox = marker.x - width / 2;
+        const oy = marker.y - height / 2;
+        return {
+            x: asset.x + (ox * cos - oy * sin),
+            y: asset.y + (ox * sin + oy * cos)
+        };
+    });
+}
 
 export async function convertAssetToShapes(asset: Asset): Promise<Shape[]> {
     const def = ASSET_LIBRARY.find(a => a.id === asset.type);
@@ -330,6 +367,100 @@ function extractPathPoints(d: string): { x: number; y: number }[] {
 
     return points;
 }
+
+function getElementPoints(el: Element): { x: number; y: number }[] {
+    const type = el.tagName.toLowerCase();
+
+    if (type === "rect") {
+        const x = parseFloat(el.getAttribute("x") || "0");
+        const y = parseFloat(el.getAttribute("y") || "0");
+        const w = parseFloat(el.getAttribute("width") || "0");
+        const h = parseFloat(el.getAttribute("height") || "0");
+        return [
+            { x, y },
+            { x: x + w, y },
+            { x: x + w, y: y + h },
+            { x, y: y + h },
+            { x, y },
+        ];
+    }
+
+    if (type === "polyline" || type === "polygon") {
+        const pointsStr = el.getAttribute("points") || "";
+        const rawPoints = pointsStr.trim().split(/\s+|,/).map(Number);
+        const pts: { x: number; y: number }[] = [];
+        for (let i = 0; i < rawPoints.length; i += 2) {
+            if (!Number.isFinite(rawPoints[i]) || !Number.isFinite(rawPoints[i + 1])) continue;
+            pts.push({ x: rawPoints[i], y: rawPoints[i + 1] });
+        }
+        if (type === "polygon" && pts.length > 0) {
+            pts.push({ ...pts[0] });
+        }
+        return pts;
+    }
+
+    if (type === "path") {
+        const d = el.getAttribute("d");
+        return d ? extractPathPoints(d) : [];
+    }
+
+    return [];
+}
+
+function dedupePoints(points: { x: number; y: number }[], tolerance: number = 1) {
+    const unique: { x: number; y: number }[] = [];
+    const seen = new Set<string>();
+
+    points.forEach((pt) => {
+        const key = `${Math.round(pt.x / tolerance)}:${Math.round(pt.y / tolerance)}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(pt);
+        }
+    });
+
+    return unique;
+}
+
+function extractMarqueeMarkerCenters(
+    svg: SVGSVGElement,
+    transformPoint: (x: number, y: number) => { x: number; y: number }
+) {
+    const centers: { x: number; y: number }[] = [];
+
+    svg.querySelectorAll("path, rect, polyline, polygon").forEach((el) => {
+        if (el.closest("defs") || el.closest("clipPath")) return;
+
+        const pts = getElementPoints(el);
+        if (pts.length < 4) return;
+
+        const first = pts[0];
+        const last = pts[pts.length - 1];
+        const isClosed =
+            Math.hypot(first.x - last.x, first.y - last.y) < 0.5 || el.tagName.toLowerCase() === "rect";
+
+        if (!isClosed) return;
+
+        const xs = pts.map((pt) => pt.x);
+        const ys = pts.map((pt) => pt.y);
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        const width = maxX - minX;
+        const height = maxY - minY;
+
+        // Marquee marker squares are tiny closed boxes; the main outline is much larger.
+        if (width < 20 || width > 120 || height < 20 || height > 120) return;
+
+        const ratio = width / Math.max(height, 1);
+        if (ratio < 0.6 || ratio > 1.4) return;
+
+        centers.push(transformPoint((minX + maxX) / 2, (minY + maxY) / 2));
+    });
+
+    return dedupePoints(centers);
+}
 /**
  * Get all vertices from an asset's SVG for snapping
  */
@@ -338,6 +469,12 @@ export async function getAssetVertices(asset: Asset): Promise<{ x: number; y: nu
     if (!def) return [];
 
     if (typeof window === 'undefined') return [];
+
+    if (def.category === "Marquee") {
+        const vertices = getMarqueeVertices(asset);
+        setCachedAssetVertices(asset.id, vertices);
+        return vertices;
+    }
 
     try {
         const response = await fetch(def.path);
@@ -370,32 +507,14 @@ export async function getAssetVertices(asset: Asset): Promise<{ x: number; y: nu
         };
 
         const vertices: { x: number; y: number }[] = [];
-        const OFFSET = 100; // 100mm offset for inner/outer snap points
-
-        const transformWithOffset = (x: number, y: number, offsetX: number = 0, offsetY: number = 0) => {
-            const nx = (x - vbX) * scaleX + offsetX;
-            const ny = (y - vbY) * scaleY + offsetY;
-            const ox = nx - (asset.width * asset.scale) / 2;
-            const oy = ny - (asset.height * asset.scale) / 2;
-            const rx = ox * cos - oy * sin;
-            const ry = ox * sin + oy * cos;
-            return { x: cx + rx, y: cy + ry };
-        };
 
         const processEl = (el: Element) => {
             if (el.closest('defs') || el.closest('clipPath')) return;
 
             const type = el.tagName.toLowerCase();
-            
-            // Helper to add a base point and its offsets if it's a Marquee
-            const addPointAndOffsets = (x: number, y: number) => {
-                vertices.push(transformWithOffset(x, y));
-                if (def.category === 'Marquee') {
-                    vertices.push(transformWithOffset(x, y, OFFSET, 0));
-                    vertices.push(transformWithOffset(x, y, -OFFSET, 0));
-                    vertices.push(transformWithOffset(x, y, 0, OFFSET));
-                    vertices.push(transformWithOffset(x, y, 0, -OFFSET));
-                }
+
+            const addPoint = (x: number, y: number) => {
+                vertices.push(transformPoint(x, y));
             };
             
             // Helper to interpolate midpoints and quarter-points for segments
@@ -406,17 +525,17 @@ export async function getAssetVertices(asset: Asset): Promise<{ x: number; y: nu
                 // Only divide the segment if it's visually meaningful (e.g. > 50mm)
                 if (physicalDist > 50) {
                     // 25% point (quarter)
-                    addPointAndOffsets((p1.x * 0.75) + (p2.x * 0.25), (p1.y * 0.75) + (p2.y * 0.25));
+                    addPoint((p1.x * 0.75) + (p2.x * 0.25), (p1.y * 0.75) + (p2.y * 0.25));
                     // 50% point (half)
-                    addPointAndOffsets((p1.x * 0.50) + (p2.x * 0.50), (p1.y * 0.50) + (p2.y * 0.50));
+                    addPoint((p1.x * 0.50) + (p2.x * 0.50), (p1.y * 0.50) + (p2.y * 0.50));
                     // 75% point (three-quarters)
-                    addPointAndOffsets((p1.x * 0.25) + (p2.x * 0.75), (p1.y * 0.25) + (p2.y * 0.75));
+                    addPoint((p1.x * 0.25) + (p2.x * 0.75), (p1.y * 0.25) + (p2.y * 0.75));
                 }
             };
 
             const interpolatePoints = (pts: {x: number, y: number}[], closed = false) => {
                 for (let i = 0; i < pts.length; i++) {
-                    addPointAndOffsets(pts[i].x, pts[i].y);
+                    addPoint(pts[i].x, pts[i].y);
                     if (i > 0) {
                         addInterpolatedSegments(pts[i-1], pts[i]);
                     }
@@ -453,7 +572,7 @@ export async function getAssetVertices(asset: Asset): Promise<{ x: number; y: nu
             } else if (type === "circle" || type === "ellipse") {
                 const cxVal = parseFloat(el.getAttribute("cx") || "0");
                 const cyVal = parseFloat(el.getAttribute("cy") || "0");
-                addPointAndOffsets(cxVal, cyVal);
+                addPoint(cxVal, cyVal);
             }
         };
 
@@ -473,6 +592,7 @@ export async function getAssetVertices(asset: Asset): Promise<{ x: number; y: nu
             }
         }
 
+        setCachedAssetVertices(asset.id, uniqueVertices);
         return uniqueVertices;
 
     } catch (e) {

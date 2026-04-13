@@ -6,6 +6,14 @@ export interface MarqueeDef {
   height: number;
 }
 
+export type MarqueeGeometry = {
+  baySize: number;
+  wallThickness: number;
+  markerSize: number;
+  innerGuideDashArray: string | null;
+  markerCenters: { x: number; y: number }[];
+};
+
 export const MARQUEES: MarqueeDef[] = [
   { id: "10m-x-10m-marquee", name: "10m X 10m Marquee", path: "/Marquees/10m X 10m Marquee.svg", width: 10000, height: 10000 },
   { id: "10m-x-20m-marquee", name: "10m X 20m Marquee", path: "/Marquees/10m X 20m Marquee.svg", width: 20000, height: 10000 },
@@ -40,3 +48,64 @@ export const MARQUEES: MarqueeDef[] = [
   { id: "9m-x-18m-marquee", name: "9m X 18m Marquee", path: "/Marquees/9m X 18m Marquee.svg", width: 18000, height: 9000 },
   { id: "9m-x-9m-marquee", name: "9m X 9m Marquee", path: "/Marquees/9m X 9m Marquee.svg", width: 9000, height: 9000 },
 ];
+
+function createAxisStops(length: number, step: number) {
+  const stops: number[] = [];
+
+  for (let current = 0; current < length; current += step) {
+    stops.push(current);
+  }
+
+  if (stops[stops.length - 1] !== length) {
+    stops.push(length);
+  }
+
+  return stops;
+}
+
+export function getMarqueeBaySize(width: number, height: number) {
+  return width % 5000 === 0 && height % 5000 === 0 ? 5000 : 3000;
+}
+
+export function getMarqueeWallThickness(width: number, height: number) {
+  return getMarqueeBaySize(width, height) === 5000 ? 150 : 75;
+}
+
+export function getMarqueeGeometry(
+  width: number,
+  height: number,
+  wallThickness?: number
+): MarqueeGeometry {
+  const baySize = getMarqueeBaySize(width, height);
+  const resolvedWallThickness = wallThickness ?? getMarqueeWallThickness(width, height);
+  const markerSize = baySize === 5000 ? 100 : 75;
+  const xs = createAxisStops(width, baySize);
+  const ys = createAxisStops(height, baySize);
+  const seen = new Set<string>();
+  const markerCenters: { x: number; y: number }[] = [];
+
+  const addMarker = (x: number, y: number) => {
+    const key = `${Math.round(x)}:${Math.round(y)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    markerCenters.push({ x, y });
+  };
+
+  xs.forEach((x) => {
+    addMarker(x, 0);
+    addMarker(x, height);
+  });
+
+  ys.forEach((y) => {
+    addMarker(0, y);
+    addMarker(width, y);
+  });
+
+  return {
+    baySize,
+    wallThickness: Math.max(50, Math.min(resolvedWallThickness, Math.min(width, height) / 4)),
+    markerSize,
+    innerGuideDashArray: baySize === 3000 ? '60 90' : null,
+    markerCenters,
+  };
+}

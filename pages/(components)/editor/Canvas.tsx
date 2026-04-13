@@ -487,12 +487,10 @@ export default function Canvas({
               <AssetRenderer
                 asset={asset} updateAsset={updateAsset} isSelected={isSelected} isMultiSelected={isMultiSelected}
                 isCopied={isCopied} leftPx={leftPx} topPx={topPx} totalRotation={asset.rotation}
-                editingTextId={assetHandlers.editingTextId} editingText={assetHandlers.editingText}
+                editingTextId={assetHandlers.editingTextId}
                 onAssetMouseDown={assetHandlers.onAssetMouseDown}
                 onTextDoubleClick={assetHandlers.onTextDoubleClick}
-                onTextEditKeyDown={assetHandlers.onTextEditKeyDown}
                 onTextEditBlur={assetHandlers.onTextEditBlur}
-                onTextEditChange={assetHandlers.setEditingText}
                 onScaleHandleMouseDown={assetHandlers.onScaleHandleMouseDown}
                 onRotationHandleMouseDown={assetHandlers.onRotationHandleMouseDown}
                 onAssetContextMenu={handleAssetContextMenu}

@@ -122,56 +122,43 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
         // Handle editing selected text
         if (!isActive && isEditingSelected && currentAnnotation) {
-            if (e.key === 'Enter' || e.key === 'Escape') {
-                if (e.key === 'Enter') {
-                    updateTextAnnotation(currentAnnotation.id, { text: text.trim() || ' ' });
-                }
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                updateTextAnnotation(currentAnnotation.id, { text: text.trim() || ' ' });
                 setIsEditingSelected(false);
                 setCurrentAnnotation(null);
                 setText('');
+                useEditorStore.getState().setEditingTextId(null);
                 return;
             }
-            return; // Let input handle other keys
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setIsEditingSelected(false);
+                setCurrentAnnotation(null);
+                setText('');
+                useEditorStore.getState().setEditingTextId(null);
+                return;
+            }
+            return; // Let input handle other keys natively
         }
 
         // Handle creating new text
         if (!isActive || !currentAnnotation) return;
 
-        // Typing characters directly into the canvas (Figma-like)
-        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            e.preventDefault();
-            const newText = (text + e.key);
-            setText(newText);
-            updateTextAnnotation(currentAnnotation.id, { text: newText });
-            return;
-        }
-
-        // Handle Backspace when there is content
-        if (e.key === 'Backspace' && text.length > 0) {
-            e.preventDefault();
-            const newText = text.slice(0, -1);
-            setText(newText);
-            updateTextAnnotation(currentAnnotation.id, { text: newText });
-            return;
-        }
-
-        if (e.key === 'Enter' || e.key === 'Escape') {
+        if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             e.stopPropagation();
-            if (e.key === 'Enter') {
-                finalizeCurrent();
-                return; // Exit immediately after finalizing
-            } else if (e.key === 'Escape') {
-                // On escape, treat empty as delete, non-empty as commit
-                finalizeCurrent();
-                return; // Exit immediately after finalizing
-            }
-        } else if (e.key === 'Backspace' && text.length === 0) {
-            e.preventDefault();
-            // Remove annotation if backspace on empty text
             finalizeCurrent();
+            return;
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            finalizeCurrent();
+            return;
         }
-    }, [isActive, isEditingSelected, currentAnnotation, text, finalizeCurrent]);
+        
+        // Let Backspace and character typing be handled naturally by the textarea
+    }, [isActive, isEditingSelected, currentAnnotation, text, finalizeCurrent, updateTextAnnotation]);
 
     const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         if (!currentAnnotation) return;
@@ -182,29 +169,33 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
     }, [currentAnnotation, updateTextAnnotation]);
 
     // Handle editing state based on editingTextId from store
+    // IMPORTANT: only depend on editingTextId here — NOT textAnnotations.
+    // If textAnnotations is in deps, every updateTextAnnotation call re-triggers
+    // this effect, which moves the cursor to the end 50ms later.
     useEffect(() => {
         if (editingTextId) {
-            const annotation = textAnnotations.find(t => t.id === editingTextId);
-            if (annotation) {
+            const annotation = useProjectStore.getState().textAnnotations
+                .find(t => t.id === editingTextId);
+            if (annotation && !isEditingSelected) {
                 setCurrentAnnotation(annotation);
                 setText(annotation.text);
                 setIsEditingSelected(true);
 
-                // Focus textarea
+                // Focus textarea and set cursor to end ONLY on first entry
                 setTimeout(() => {
                     if (inputRef.current) {
                         inputRef.current.focus();
-                        inputRef.current.setSelectionRange(inputRef.current.value.length, inputRef.current.value.length);
+                        const len = inputRef.current.value.length;
+                        inputRef.current.setSelectionRange(len, len);
                     }
                 }, 50);
             }
         } else if (isEditingSelected) {
-            // Cancel editing if editingTextId is cleared
             setIsEditingSelected(false);
             setCurrentAnnotation(null);
             setText('');
         }
-    }, [editingTextId, textAnnotations, isEditingSelected]);
+    }, [editingTextId, isEditingSelected]); // added isEditingSelected to safeguard the "first entry" logic
 
     useEffect(() => {
         if (isActive) {

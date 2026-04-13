@@ -5,6 +5,7 @@ interface AssetHandlesRendererProps {
   asset: AssetInstance;
   leftPx: number;
   topPx: number;
+  liveText?: string;
   onScaleHandleMouseDown: (e: React.MouseEvent, assetId: string, handleType: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') => void;
   onRotationHandleMouseDown: (e: React.MouseEvent, assetId: string) => void;
 }
@@ -13,6 +14,7 @@ export default function AssetHandlesRenderer({
   asset,
   leftPx,
   topPx,
+  liveText,
   onScaleHandleMouseDown,
   onRotationHandleMouseDown,
 }: AssetHandlesRendererProps) {
@@ -828,9 +830,12 @@ W        {/* Rotation line hidden for walls to avoid center box artifact */}
   } else if (asset.type === "text") {
     // For text, estimate size based on text content and font size
     const fontSize = (asset.fontSize ?? 16) * asset.scale;
-    const textLength = (asset.text ?? "Enter text").length;
-    const estimatedWidth = Math.max(textLength * fontSize * 0.6, 50); // Rough estimation
-    const estimatedHeight = fontSize * 1.2;
+    // Use liveText if provided (during editing) so the box updates in real-time
+    const displayText = liveText !== undefined ? liveText : (asset.text ?? "Enter text");
+    const textLines = displayText.split('\n');
+    const maxLineLength = Math.max(...textLines.map(l => l.length), 1);
+    const estimatedWidth = Math.max(maxLineLength * fontSize * 0.6, 50); // Rough estimation
+    const estimatedHeight = textLines.length * fontSize * 1.2;
     
     const topLeftPx = { 
       x: assetCenterPx.x - estimatedWidth / 2 - handleSize / 2, 

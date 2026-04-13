@@ -49,11 +49,29 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
     const px = -ny;
     const py = nx;
 
+    // Determine the actual offset to use
+    // If labelPosition is explicitly set, it determines the side (sign)
+    let sign = 1;
+    if (dimension.labelPosition === 'top-right') {
+        sign = -1;
+    } else if (dimension.labelPosition === 'bottom-left') {
+        sign = 1;
+    } else {
+        sign = Math.sign(offset || 1) || 1;
+    }
+    
+    // For automatic dimensions (like overlays), we might want a smaller default offset
+    // if one isn't provided. 400 is common for architectural drawings but 15 is better for UI overlays.
+    const defaultOffset = (dimension as any).color === '#666' ? 150 : 400; // #666 is used by DimensionOverlay
+    const currentOffset = offset !== undefined ? offset : defaultOffset;
+    const absOffset = Math.abs(currentOffset);
+    const finalOffset = dimension.labelPosition ? absOffset * sign : currentOffset;
+
     // Calculate offset points for the dimension line
-    const p1x = startPoint.x + px * offset;
-    const p1y = startPoint.y + py * offset;
-    const p2x = endPoint.x + px * offset;
-    const p2y = endPoint.y + py * offset;
+    const p1x = startPoint.x + px * finalOffset;
+    const p1y = startPoint.y + py * finalOffset;
+    const p2x = endPoint.x + px * finalOffset;
+    const p2y = endPoint.y + py * finalOffset;
 
     // Calculate text position (midpoint of dimension line)
     const midX = (p1x + p2x) / 2;

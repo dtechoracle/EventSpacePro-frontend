@@ -32,12 +32,12 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category }: InlineSv
         return () => { active = false; };
     }, [src]);
 
-    // 1. Base SVG processing (Heavy - runs once per unique SVG content)
+    // 1. Base SVG processing (Heavy - runs once per unique SVG content + category combination)
     const baseSvg = useMemo(() => {
         if (!rawSvg || typeof window === "undefined") return "";
         
-        // Cache check: src is our stable key for the raw content
-        if (processedSvgCache[src]) return processedSvgCache[src];
+        const cacheKey = `${src}_${category || 'none'}`;
+        if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
             const parser = new DOMParser();
@@ -53,38 +53,23 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category }: InlineSv
                 svg.prepend(styleEl);
             }
 
-            const allElements = Array.from(doc.querySelectorAll('*'));
+            const children = Array.from(doc.querySelectorAll('path, circle, rect, line, polyline, ellipse'));
+            const circles = Array.from(doc.querySelectorAll('circle'));
+            const innerCircles = new Set();
             
-            // Optimization: Detect concentric circles to only fill the inner one
-            const circles = allElements.filter(el => el.tagName.toLowerCase() === 'circle');
-            const innerCircles = new Set<Element>();
             if (circles.length > 1) {
-                circles.forEach(c1 => {
-                    const cx1 = c1.getAttribute('cx');
-                    const cy1 = c1.getAttribute('cy');
-                    const r1 = parseFloat(c1.getAttribute('r') || '0');
-                    
-                    circles.forEach(c2 => {
-                        if (c1 === c2) return;
-                        const cx2 = c2.getAttribute('cx');
-                        const cy2 = c2.getAttribute('cy');
-                        const r2 = parseFloat(c2.getAttribute('r') || '0');
-                        
-                        if (cx1 === cx2 && cy1 === cy2) {
-                            if (r1 < r2) innerCircles.add(c1);
-                        }
-                    });
-                });
+                const sorted = [...circles].sort((a, b) => parseFloat(a.getAttribute("r") || "0") - parseFloat(b.getAttribute("r") || "0"));
+                for (let i = 0; i < sorted.length - 1; i++) {
+                    innerCircles.add(sorted[i]);
+                }
             }
 
-            allElements.forEach(el => {
+            children.forEach(el => {
                 const tag = el.tagName.toLowerCase();
-                if (tag === 'svg' || tag === 'style') return;
-
+                const dAttr = el.getAttribute("d") || "";
                 const fillAttr = el.getAttribute("fill");
                 const styleAttr = el.getAttribute("style");
-                const dAttr = el.getAttribute("d") || "";
-
+                
                 const wasExplicitlyNone = fillAttr === 'none' || (styleAttr && /fill\s*:\s*none/i.test(styleAttr));
                 const isLineElement = tag === 'line' || tag === 'polyline';
                 const hasFillRule = el.hasAttribute("fill-rule") || (styleAttr && /fill-rule/i.test(styleAttr));
@@ -94,21 +79,24 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category }: InlineSv
                 
                 let isCoordClosed = false;
                 if (!isZClosed && dClean.startsWith('M')) {
-                    const firstMatch = dClean.match(/^M\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)/i);
-                    const lastMatch = dClean.match(/(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/);
+                    const firstMatch = dClean.match(/^M\s*(-?[\d.]+)\s*[, \s]\s*(-?[\d.]+)/i);
+                    const lastMatch = dClean.match(/(-?[\d.]+)\s*[, \s]\s*(-?[\d.]+)\s*$/);
+                    
                     if (firstMatch && lastMatch) {
                         const startX = parseFloat(firstMatch[1]);
                         const startY = parseFloat(firstMatch[2]);
                         const endX = parseFloat(lastMatch[1]);
                         const endY = parseFloat(lastMatch[2]);
-                        isCoordClosed = Math.abs(startX - endX) < 0.1 && Math.abs(startY - endY) < 0.1;
+                        isCoordClosed = Math.abs(startX - endX) < 1.0 && Math.abs(startY - endY) < 1.0;
                     }
                 }
 
                 const isClosed = isZClosed || isCoordClosed;
                 const isOpenPath = tag === 'path' && !isClosed;
                 const isAutoFill = el.getAttribute("id") === "auto-fill";
-                const isConsentricOuter = tag === 'circle' && circles.length > 1 && !innerCircles.has(el);
+                
+                const catLower = (category || "").toLowerCase();
+                const isFurniture = catLower === 'furniture' || catLower === 'structure' || catLower === 'furniture asset';
 
                 if (styleAttr) {
                     const cleaned = styleAttr
@@ -118,11 +106,21 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category }: InlineSv
                     if (cleaned.trim()) el.setAttribute("style", cleaned);
                     else el.removeAttribute("style");
                 }
+                
                 el.removeAttribute("fill");
                 el.removeAttribute("stroke");
                 el.removeAttribute("stroke-width");
 
-                if ((wasExplicitlyNone || isLineElement || isOpenPath || isConsentricOuter) && !hasFillRule && !isAutoFill) {
+                let shouldBeNone = wasExplicitlyNone || isLineElement;
+                
+                if (!isFurniture) {
+                    const isConsentricOuter = tag === 'circle' && circles.length > 1 && !innerCircles.has(el);
+                    if (isOpenPath || isConsentricOuter) {
+                        shouldBeNone = true;
+                    }
+                }
+
+                if (shouldBeNone && !hasFillRule && !isAutoFill) {
                     el.classList.add("fill-none-el");
                 } else {
                     el.classList.add("fill-inherit-el");
@@ -144,14 +142,15 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category }: InlineSv
             svg.removeAttribute("height");
 
             const result = new XMLSerializer().serializeToString(doc);
-            processedSvgCache[src] = result;
+            processedSvgCache[cacheKey] = result;
             return result;
         } catch (e) {
             console.error("Error parsing base SVG", e);
             return rawSvg;
         }
-    }, [rawSvg, src]);
+    }, [rawSvg, src, category]);
 
+    // 2. Instance-specific processing (Light - runs every render)
     const svgContent = useMemo(() => {
         if (!baseSvg) return "";
 
@@ -170,6 +169,7 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category }: InlineSv
     }, [baseSvg, fill, stroke, strokeWidth]);
 
     if (!svgContent) return null;
+
     return <div dangerouslySetInnerHTML={{ __html: svgContent }} style={{ width: '100%', height: '100%' }} />;
 };
 

@@ -34,7 +34,7 @@ import ContextMenu from './ui/ContextMenu';
 import DuplicateDistributeModal from './ui/DuplicateDistributeModal';
 import { AnchorType, getAnchorsForObject, snapToObjects } from '@/utils/snapAnchors';
 import { findSnapPointInShapes } from '@/utils/snapToDrawing';
-import { getAssetVertices } from '@/utils/assetUtils';
+import { getMarqueeVertices } from '@/utils/assetUtils';
 
 // Safe UUID generator with fallback for non-secure contexts
 const generateId = (): string => {
@@ -64,6 +64,68 @@ type SnapObject =
   | { type: 'shape'; object: Shape }
   | { type: 'asset'; object: Asset }
   | { type: 'wall'; object: Wall };
+
+const distanceToSegment = (
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+) => {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lengthSq = dx * dx + dy * dy;
+
+  if (lengthSq === 0) {
+    return Math.hypot(px - x1, py - y1);
+  }
+
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lengthSq));
+  const projX = x1 + t * dx;
+  const projY = y1 + t * dy;
+  return Math.hypot(px - projX, py - projY);
+};
+
+const isPointInPolygon = (x: number, y: number, points: { x: number; y: number }[]) => {
+  let inside = false;
+
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i].x;
+    const yi = points[i].y;
+    const xj = points[j].x;
+    const yj = points[j].y;
+
+    const intersects = ((yi > y) !== (yj > y))
+      && (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 0.0000001) + xi);
+
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+};
+
+const isPointInsideWall = (wall: Wall, worldX: number, worldY: number) => {
+  const nodeMap = new Map(wall.nodes.map((node) => [node.id, node]));
+
+  for (const edge of wall.edges) {
+    const nodeA = nodeMap.get(edge.nodeA);
+    const nodeB = nodeMap.get(edge.nodeB);
+    if (!nodeA || !nodeB) continue;
+
+    if (distanceToSegment(worldX, worldY, nodeA.x, nodeA.y, nodeB.x, nodeB.y) <= ((edge.thickness || 150) / 2) + 20) {
+      return true;
+    }
+  }
+
+  if (wall.nodes.length >= 3 && isPointInPolygon(worldX, worldY, wall.nodes)) {
+    return true;
+  }
+
+  return false;
+};
 
 
 // ── MAIN DRAWING LAYER ───────────────────────────────────────────────────────
@@ -234,38 +296,20 @@ export default function Workspace2D({
     isOpen: boolean;
     mode: 'duplicate' | 'distribute';
   }>({ isOpen: false, mode: 'duplicate' });
-  const [verticesMap, setVerticesMap] = useState<Record<string, { x: number; y: number }[]>>({});
-
   const assets = useProjectStore(s => s.assets);
   const walls = useProjectStore(s => s.walls);
   const shapes = useProjectStore(s => s.shapes);
+  const verticesMap = useMemo(() => {
+    const map: Record<string, { x: number; y: number }[]> = {};
 
-  // Prefetch vertices for marquees
-  useEffect(() => {
-    const fetchVisibleMarqueeVertices = async () => {
-      const newVerticesMap: Record<string, { x: number; y: number }[]> = { ...verticesMap };
-      let changed = false;
-
-      for (const asset of assets) {
-        if (!newVerticesMap[asset.id]) {
-          const assetDef = ASSET_LIBRARY.find(a => a.id === asset.type);
-          // Only pre-fetch for Marquees to avoid network/CPU starvation for hundreds of simple shapes
-          if (assetDef?.category === 'Marquee') {
-            const vertices = await getAssetVertices(asset);
-            if (vertices.length > 0) {
-              newVerticesMap[asset.id] = vertices;
-              changed = true;
-            }
-          }
-        }
+    assets.forEach((asset) => {
+      const assetDef = ASSET_LIBRARY.find(a => a.id === asset.type);
+      if (assetDef?.category === 'Marquee') {
+        map[asset.id] = getMarqueeVertices(asset);
       }
+    });
 
-      if (changed) {
-        setVerticesMap(newVerticesMap);
-      }
-    };
-
-    fetchVisibleMarqueeVertices();
+    return map;
   }, [assets]);
   const dimensions = useProjectStore(s => s.dimensions);
   const textAnnotations = useProjectStore(s => s.textAnnotations);
@@ -612,8 +656,11 @@ export default function Workspace2D({
           case 'textAnnotation': {
             const ann = item;
             const fontSize = ann.fontSize || 200;
-            const halfW = ((ann.text?.length || 1) * fontSize * 0.6) / 2;
-            const halfH = (fontSize * 1.2) / 2;
+            const lineHeight = ann.lineHeight || 1.2;
+            const lines = (ann.text || '').split('\n');
+            const maxChars = Math.max(...lines.map((l: string) => l.length), 1);
+            const halfW = (maxChars * fontSize * 0.6) / 2;
+            const halfH = (lines.length * fontSize * lineHeight) / 2;
             if (worldX >= (ann.x || 0) - halfW && worldX <= (ann.x || 0) + halfW && worldY >= (ann.y || 0) - halfH && worldY <= (ann.y || 0) + halfH) {
               targetId = ann.id;
             }
@@ -736,12 +783,15 @@ export default function Workspace2D({
               const textAnnotation = textAnnotations.find(t => t.id === id);
               if (textAnnotation) {
                 const fs = textAnnotation.fontSize || 200;
+                const lh = textAnnotation.lineHeight || 1.2;
+                const lines = (textAnnotation.text || '').split('\n');
+                const maxChars = Math.max(...lines.map(l => l.length), 1);
                 itemBounds = {
-                  x: textAnnotation.x + (worldX - draggedItemStart.x),
-                  y: textAnnotation.y + (worldY - draggedItemStart.y),
-                  width: (textAnnotation.text.length || 1) * fs * 0.6,
-                  height: fs * 1.2,
-                  id: textAnnotation.id
+                   x: textAnnotation.x + (worldX - draggedItemStart.x),
+                   y: textAnnotation.y + (worldY - draggedItemStart.y),
+                   width: maxChars * fs * 0.6,
+                   height: lines.length * fs * lh,
+                   id: textAnnotation.id
                 };
               }
             }
@@ -788,7 +838,10 @@ export default function Workspace2D({
               }),
               ...textAnnotations.filter(t => t.id !== id).map(t => {
                 const fs = t.fontSize || 200;
-                return { id: t.id, x: t.x, y: t.y, width: (t.text.length || 1) * fs * 0.6, height: fs * 1.2 };
+                const lh = t.lineHeight || 1.2;
+                const lines = (t.text || '').split('\n');
+                const maxChars = Math.max(...lines.map(l => l.length), 1);
+                return { id: t.id, x: t.x, y: t.y, width: maxChars * fs * 0.6, height: lines.length * fs * lh };
               })
             ];
 
@@ -1120,11 +1173,11 @@ export default function Workspace2D({
       for (let i = textAnnotations.length - 1; i >= 0; i--) {
         const annotation = textAnnotations[i];
         const fontSize = annotation.fontSize || 200;
-        const textLength = annotation.text.length || 1;
-        const estimatedWidth = textLength * fontSize * 0.6;
-        const estimatedHeight = fontSize * 1.2;
-        const halfW = estimatedWidth / 2;
-        const halfH = estimatedHeight / 2;
+        const lineHeight = annotation.lineHeight || 1.2;
+        const lines = (annotation.text || '').split('\n');
+        const maxChars = Math.max(...lines.map(l => l.length), 1);
+        const halfW = (maxChars * fontSize * 0.6) / 2;
+        const halfH = (lines.length * fontSize * lineHeight) / 2;
 
         if (
           worldX >= annotation.x - halfW &&
@@ -1289,12 +1342,7 @@ export default function Workspace2D({
               }
             } else if (item._renderType === 'wall') {
               const wall = item;
-              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-              wall.nodes.forEach(node => {
-                minX = Math.min(minX, node.x); minY = Math.min(minY, node.y);
-                maxX = Math.max(maxX, node.x); maxY = Math.max(maxY, node.y);
-              });
-              if (worldX >= minX && worldX <= maxX && worldY >= minY && worldY <= maxY) isHit = true;
+              isHit = isPointInsideWall(wall, worldX, worldY);
             }
 
             if (isHit) {
@@ -1564,19 +1612,7 @@ export default function Workspace2D({
               }
             } else if (item._renderType === 'wall') {
               const wall = item;
-              const wallNodeMap = new Map(wall.nodes.map((n: any) => [n.id, n]));
-              for (const edge of wall.edges) {
-                const nA = wallNodeMap.get(edge.nodeA), nB = wallNodeMap.get(edge.nodeB);
-                if (!nA || !nB) continue;
-                const dx = nB.x - nA.x, dy = nB.y - nA.y;
-                const lenSq = dx * dx + dy * dy;
-                if (lenSq === 0) continue;
-                const t = Math.max(0, Math.min(1, ((worldX - nA.x) * dx + (worldY - nA.y) * dy) / lenSq));
-                if (Math.hypot(worldX - (nA.x + t * dx), worldY - (nA.y + t * dy)) <= (edge.thickness || 150) / 2 + 20) {
-                  isHit = true;
-                  break;
-                }
-              }
+              isHit = isPointInsideWall(wall, worldX, worldY);
             } else if (item._renderType === 'textAnnotation') {
               const ann = item;
               const fS = ann.fontSize || 14;
@@ -2620,12 +2656,7 @@ export default function Workspace2D({
         }
       } else if (item._renderType === 'wall') {
         const w = item;
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        w.nodes.forEach(node => {
-          minX = Math.min(minX, node.x); minY = Math.min(minY, node.y);
-          maxX = Math.max(maxX, node.x); maxY = Math.max(maxY, node.y);
-        });
-        if (worldX >= minX && worldX <= maxX && worldY >= minY && worldY <= maxY) isHit = true;
+        isHit = isPointInsideWall(w, worldX, worldY);
       } else if (item._renderType === 'textAnnotation') {
         const t = item;
         const fS = t.fontSize || 14;

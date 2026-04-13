@@ -131,12 +131,9 @@ const GroupRenderer = React.memo(({
             isCopied={false}
             totalRotation={asset.rotation}
             editingTextId={null}
-            editingText=""
             onAssetMouseDown={onAssetMouseDown}
             onTextDoubleClick={(_e, id) => onAssetDoubleClick(id)}
-            onTextEditKeyDown={(_e, _id) => {}}
-            onTextEditBlur={(_id) => {}}
-            onTextEditChange={(_text) => {}}
+            onTextEditBlur={() => {}}
             onAssetContextMenu={(e, id) => onAssetContextMenu(e, id)}
             onScaleHandleMouseDown={onScaleHandleMouseDown}
             onRotationHandleMouseDown={onRotationHandleMouseDown}

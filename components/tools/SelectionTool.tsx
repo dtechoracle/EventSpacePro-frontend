@@ -105,14 +105,17 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
             } else if (item.type === 'textAnnotation') {
                 const ta = item.object as TextAnnotation;
                 const fs = ta.fontSize || 14;
-                const width = (ta.text.length || 1) * fs * 0.6;
-                const height = fs * 1.2;
+                const lineHeight = ta.lineHeight || 1.2;
+                const lines = (ta.text || '').split('\n');
+                const maxChars = Math.max(...lines.map(l => l.length), 1);
+                const width = maxChars * fs * 0.6;
+                const height = lines.length * fs * lineHeight;
                 const rot = (ta.rotation || 0) * (Math.PI / 180);
                 const cosR = Math.cos(rot);
                 const sinR = Math.sin(rot);
                 const corners = [
-                    { x: 0, y: -height / 2 }, { x: width, y: -height / 2 },
-                    { x: width, y: height / 2 }, { x: 0, y: height / 2 },
+                    { x: -width / 2, y: -height / 2 }, { x: width / 2, y: -height / 2 },
+                    { x: width / 2, y: height / 2 }, { x: -width / 2, y: height / 2 },
                 ].map(c => ({
                     x: ta.x + c.x * cosR - c.y * sinR,
                     y: ta.y + c.x * sinR + c.y * cosR,
@@ -135,8 +138,12 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                 } else if (type === 'shape') {
                     groupBounds = { x: item.x || 0, y: item.y || 0, width: item.width || 0, height: item.height || 0, rotation: item.rotation || 0 };
                 } else if (type === 'textAnnotation') {
-                    const width = (item.text?.length || 1) * (item.fontSize || 14) * 0.6;
-                    const height = (item.fontSize || 14) * 1.2;
+                    const fs = item.fontSize || 14;
+                    const lineHeight = item.lineHeight || 1.2;
+                    const lines = (item.text || '').split('\n');
+                    const maxChars = Math.max(...lines.map((l: string) => l.length), 1);
+                    const width = maxChars * fs * 0.6;
+                    const height = lines.length * fs * lineHeight;
                     groupBounds = { x: item.x || 0, y: item.y || 0, width, height, rotation: item.rotation || 0 };
                 } else {
                     groupBounds = { x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY, rotation: isFinite(singleRotation) ? singleRotation : 0 };
@@ -205,7 +212,16 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                         w.nodes.forEach(n => { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); });
                         return { id: w.id, x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY, type: 'wall' };
                     }),
-                    ...store.textAnnotations.filter(t => !selectedIds.includes(t.id)).map(t => ({ ...t, type: 'textAnnotation' })),
+                    ...store.textAnnotations.filter(t => !selectedIds.includes(t.id)).map(t => {
+                        const fs = t.fontSize || 14;
+                        const lines = (t.text || '').split('\n');
+                        const maxChars = Math.max(...lines.map(l => l.length), 1);
+                        const w = maxChars * fs * 0.6;
+                        const h = lines.length * fs * (t.lineHeight || 1.2);
+                        const rad = ((t.rotation || 0) * Math.PI) / 180;
+                        const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+                        return { ...t, width: w * cos + h * sin, height: w * sin + h * cos, type: 'textAnnotation' };
+                    }),
                 ];
 
                 const snap = calculateSmartSnap(currentBounds, others as any, 10 / zoom);
@@ -448,13 +464,13 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
         const rotPt = worldToScreenPoint((start.x + end.x) / 2 - Math.sin(angle) * (30 / zoom), (start.y + end.y) / 2 + Math.cos(angle) * (30 / zoom));
 
         return (
-            <>
+            <g data-export-ignore="true">
                 <line x1={startScreen.x} y1={startScreen.y} x2={endScreen.x} y2={endScreen.y} stroke="#3B82F6" strokeWidth={2} vectorEffect="non-scaling-stroke" />
                 <line x1={centerScreen.x} y1={centerScreen.y} x2={rotPt.x} y2={rotPt.y} stroke="#3B82F6" strokeWidth={2} vectorEffect="non-scaling-stroke" />
                 <rect x={startScreen.x - 7} y={startScreen.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-nwse-resize" onMouseDown={(e) => handleMouseDown(e, 'w')} />
                 <rect x={endScreen.x - 7} y={endScreen.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-nwse-resize" onMouseDown={(e) => handleMouseDown(e, 'e')} />
                 <circle cx={rotPt.x} cy={rotPt.y} r={7} fill="white" stroke="#3B82F6" strokeWidth={2} className="cursor-grab" onMouseDown={(e) => handleMouseDown(e, 'rotate')} />
-            </>
+            </g>
         );
     }
 
@@ -466,14 +482,14 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
         const ss = worldToScreenPoint(s.x, s.y), es = worldToScreenPoint(e.x, e.y), cs = worldToScreenPoint(shape.x, shape.y);
         const rp = worldToScreenPoint(shape.x - Math.sin(rot) * (30 / zoom), shape.y + Math.cos(rot) * (30 / zoom));
         return (
-            <>
+            <g data-export-ignore="true">
                 <line x1={ss.x} y1={ss.y} x2={es.x} y2={es.y} stroke="#3B82F6" strokeWidth={2} vectorEffect="non-scaling-stroke" />
                 <line x1={cs.x} y1={cs.y} x2={rp.x} y2={rp.y} stroke="#3B82F6" strokeWidth={2} vectorEffect="non-scaling-stroke" />
                 {/* For straight lines, these handles still scale the whole item relative to center/opposite */}
                 <rect x={ss.x - 7} y={ss.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-pointer" onMouseDown={(e) => handleMouseDown(e, 'w')} />
                 <rect x={es.x - 7} y={es.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-pointer" onMouseDown={(e) => handleMouseDown(e, 'e')} />
                 <circle cx={rp.x} cy={rp.y} r={7} fill="white" stroke="#3B82F6" strokeWidth={2} className="cursor-grab" onMouseDown={(e) => handleMouseDown(e, 'rotate')} />
-            </>
+            </g>
         );
     }
 
@@ -483,7 +499,7 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
         const shape = selectedItems[0].object as Shape;
         if (shape.points) {
             return (
-                <>
+                <g data-export-ignore="true">
                     {/* Bounding box for moving the whole thing */}
                     <polygon 
                         points={`${boxTopLeft.x},${boxTopLeft.y} ${boxTopRight.x},${boxTopRight.y} ${boxBottomRight.x},${boxBottomRight.y} ${boxBottomLeft.x},${boxBottomLeft.y}`} 
@@ -507,13 +523,13 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                             />
                         );
                     })}
-                </>
+                </g>
             );
         }
     }
 
     return (
-        <>
+        <g data-export-ignore="true">
             {/* Move handle (transparent overlay) */}
             <polygon 
                 points={`${boxTopLeft.x},${boxTopLeft.y} ${boxTopRight.x},${boxTopRight.y} ${boxBottomRight.x},${boxBottomRight.y} ${boxBottomLeft.x},${boxBottomLeft.y}`} 
@@ -558,6 +574,6 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                     </>
                 );
             })()}
-        </>
+        </g>
     );
 }

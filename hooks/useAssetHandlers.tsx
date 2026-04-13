@@ -100,27 +100,22 @@ export function useAssetHandlers({
     [assets]
   );
 
+  // NOTE: text saving is now handled locally inside AssetRenderer.
+  // These functions only clear the editing state.
   const onTextEditKeyDown = useCallback(
-    (e: React.KeyboardEvent, assetId: string) => {
-      if (e.key === "Enter" || e.key === "Escape") {
-        e.preventDefault();
-        if (e.key === "Enter") {
-          updateAsset(assetId, { text: editingText });
-        }
-        setEditingTextId(null);
-        setEditingText("");
-      }
+    (_e: React.KeyboardEvent, _assetId: string) => {
+      // no-op: AssetRenderer handles all keydown logic locally
     },
-    [editingText, updateAsset]
+    []
   );
 
   const onTextEditBlur = useCallback(
-    (assetId: string) => {
-      updateAsset(assetId, { text: editingText });
+    (_assetId: string) => {
+      // Just clear the editing signal — AssetRenderer already called updateAsset
       setEditingTextId(null);
       setEditingText("");
     },
-    [editingText, updateAsset]
+    []
   );
 
   const onScaleHandleMouseDown = useCallback(

@@ -30,10 +30,11 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
     const w = obj.width * scale;
     const h = obj.height * scale;
     const dimensionType = (obj as any).dimensionType || 'solid';
-    const dimensionFontSize = (obj as any).dimensionFontSize || 12; // Used to be 500, dropping to 12
+    const dimensionFontSize = (obj as any).dimensionFontSize || 12; 
     const dimensionOffset = (obj as any).dimensionOffset !== undefined ? (obj as any).dimensionOffset : OFFSET;
     const dimensionColor = (obj as any).dimensionColor || '#666666';
     const dimensionStrokeWidth = (obj as any).dimensionStrokeWidth !== undefined ? (obj as any).dimensionStrokeWidth : undefined;
+    const labelPosition = (obj as any).dimensionLabelPosition || 'top-right';
 
     // Common world points
     const tl = { x: -w / 2, y: -h / 2 };
@@ -67,38 +68,75 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
             strokeWidth: dimensionStrokeWidth,
             fontSize: dimensionFontSize,
             zIndex: 100,
-            lineStyle
+            lineStyle,
+            labelPosition
         });
     } else {
-        // TOP EDGE (TL to TR)
-        dims.push({
-            id: `${idPrefix}-top`,
-            type: 'aligned',
-            startPoint: pTL,
-            endPoint: pTR,
-            value: Math.round(w),
-            offset: -dimensionOffset, // Move Top edge UP (negative Y in standard rotation)
-            color: dimensionColor,
-            strokeWidth: dimensionStrokeWidth,
-            fontSize: dimensionFontSize,
-            zIndex: 100,
-            lineStyle
-        });
+        if (labelPosition === 'bottom-left') {
+            // BOTTOM EDGE (BL to BR)
+            dims.push({
+                id: `${idPrefix}-bottom`,
+                type: 'aligned',
+                startPoint: pBL,
+                endPoint: pBR,
+                value: Math.round(w),
+                offset: dimensionOffset, // Move Bottom edge DOWN
+                color: dimensionColor,
+                strokeWidth: dimensionStrokeWidth,
+                fontSize: dimensionFontSize,
+                zIndex: 100,
+                lineStyle,
+                labelPosition: 'bottom-left'
+            });
 
-        // RIGHT EDGE (TR to BR)
-        dims.push({
-            id: `${idPrefix}-right`,
-            type: 'aligned',
-            startPoint: pTR,
-            endPoint: pBR,
-            value: Math.round(h),
-            offset: -dimensionOffset, // Move Right edge RIGHT (outside)
-            color: dimensionColor,
-            strokeWidth: dimensionStrokeWidth,
-            fontSize: dimensionFontSize,
-            zIndex: 100,
-            lineStyle
-        });
+            // LEFT EDGE (TL to BL)
+            dims.push({
+                id: `${idPrefix}-left`,
+                type: 'aligned',
+                startPoint: pTL,
+                endPoint: pBL,
+                value: Math.round(h),
+                offset: -dimensionOffset, // Move Left edge LEFT (outside)
+                color: dimensionColor,
+                strokeWidth: dimensionStrokeWidth,
+                fontSize: dimensionFontSize,
+                zIndex: 100,
+                lineStyle,
+                labelPosition: 'bottom-left'
+            });
+        } else {
+            // TOP EDGE (TL to TR)
+            dims.push({
+                id: `${idPrefix}-top`,
+                type: 'aligned',
+                startPoint: pTL,
+                endPoint: pTR,
+                value: Math.round(w),
+                offset: -dimensionOffset, // Move Top edge UP
+                color: dimensionColor,
+                strokeWidth: dimensionStrokeWidth,
+                fontSize: dimensionFontSize,
+                zIndex: 100,
+                lineStyle,
+                labelPosition: 'top-right'
+            });
+
+            // RIGHT EDGE (TR to BR)
+            dims.push({
+                id: `${idPrefix}-right`,
+                type: 'aligned',
+                startPoint: pTR,
+                endPoint: pBR,
+                value: Math.round(h),
+                offset: dimensionOffset, // Move Right edge RIGHT
+                color: dimensionColor,
+                strokeWidth: dimensionStrokeWidth,
+                fontSize: dimensionFontSize,
+                zIndex: 100,
+                lineStyle,
+                labelPosition: 'top-right'
+            });
+        }
     }
 
     return dims;
@@ -109,6 +147,8 @@ export const getDimensionsForWall = (wall: Wall): Dimension[] => {
     const dims: Dimension[] = [];
     if (!wall.showDimensions) return dims;
 
+    const labelPosition = (wall as any).dimensionLabelPosition || 'top-right';
+
     wall.edges.forEach(edge => {
         const n1 = wall.nodes.find(n => n.id === edge.nodeA);
         const n2 = wall.nodes.find(n => n.id === edge.nodeB);
@@ -116,7 +156,6 @@ export const getDimensionsForWall = (wall: Wall): Dimension[] => {
         if (n1 && n2) {
             const len = Math.hypot(n2.x - n1.x, n2.y - n1.y);
             const wallThickness = edge.thickness || 75;
-            // Wall offset should be positive to be outside
             const baseOffset = (wall as any).dimensionOffset !== undefined ? (wall as any).dimensionOffset : OFFSET;
             const wallOffset = baseOffset + (wallThickness / 2);
             const dimensionType = (wall as any).dimensionType || 'solid';
@@ -130,13 +169,15 @@ export const getDimensionsForWall = (wall: Wall): Dimension[] => {
                 startPoint: { x: n1.x, y: n1.y },
                 endPoint: { x: n2.x, y: n2.y },
                 value: Math.round(len),
-                offset: -wallOffset, // Always negative for outside
+                // sign will be handled by DimensionRenderer if labelPosition is present
+                offset: wallOffset, 
                 color: dimensionColor,
                 strokeWidth: dimensionStrokeWidth,
                 type: 'aligned',
                 fontSize: dimensionFontSize,
                 zIndex: 100,
-                lineStyle
+                lineStyle,
+                labelPosition
             });
         }
     });
@@ -146,7 +187,16 @@ export const getDimensionsForWall = (wall: Wall): Dimension[] => {
 
 // Helper to render a dimension to canvas (used for high-res export)
 export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dimension, minX: number, minY: number, padding: number, MM_TO_PX: number) => {
-    const { startPoint, endPoint, offset, value, strokeWidth = 10, color = '#666666', fontSize = 48, lineStyle = 'solid' } = dim;
+    const {
+        startPoint,
+        endPoint,
+        offset,
+        value,
+        strokeWidth = 1.5,
+        color = '#000000',
+        fontSize = 11,
+        lineStyle = 'solid'
+    } = dim;
 
     // Calculate vector from start to end
     const dx = endPoint.x - startPoint.x;
@@ -167,17 +217,33 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
     const toCanvasX = (wx: number) => (wx - minX + padding) * MM_TO_PX;
     const toCanvasY = (wy: number) => (wy - minY + padding) * MM_TO_PX;
 
-    const p1x = toCanvasX(startPoint.x + px * offset);
-    const p1y = toCanvasY(startPoint.y + py * offset);
-    const p2x = toCanvasX(endPoint.x + px * offset);
-    const p2y = toCanvasY(endPoint.y + py * offset);
+    let sign = 1;
+    if ((dim as any).labelPosition === 'top-right') {
+        sign = -1;
+    } else if ((dim as any).labelPosition === 'bottom-left') {
+        sign = 1;
+    } else {
+        sign = Math.sign(offset || 1) || 1;
+    }
+
+    const defaultOffset = (dim as any).color === '#666' ? 150 : 400;
+    const currentOffset = offset !== undefined ? offset : defaultOffset;
+    const absOffset = Math.abs(currentOffset);
+    const finalOffset = (dim as any).labelPosition ? absOffset * sign : currentOffset;
+
+    const p1x = toCanvasX(startPoint.x + px * finalOffset);
+    const p1y = toCanvasY(startPoint.y + py * finalOffset);
+    const p2x = toCanvasX(endPoint.x + px * finalOffset);
+    const p2y = toCanvasY(endPoint.y + py * finalOffset);
 
     const isRadial = dim.type === 'radial' || dim.type === 'circular';
 
+    const canvasStrokeWidth = strokeWidth * MM_TO_PX;
+    const canvasFontSize = fontSize * MM_TO_PX;
+
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
-    // Calibrated for heavy architectural drafting (3.0mm)
-    ctx.lineWidth = 3.0 * MM_TO_PX;
+    ctx.lineWidth = canvasStrokeWidth;
     ctx.lineCap = 'round';
 
     if (isRadial) {
@@ -188,7 +254,7 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
         ctx.stroke();
 
         // Arrow at edge
-        const arrowSize = 500 * MM_TO_PX;
+        const arrowSize = 100 * MM_TO_PX;
         const ex = toCanvasX(endPoint.x);
         const ey = toCanvasY(endPoint.y);
 
@@ -203,7 +269,7 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
         const midX = toCanvasX((startPoint.x + endPoint.x) / 2);
         const midY = toCanvasY((startPoint.y + endPoint.y) / 2);
         const label = `R ${Math.round(value || length)}`;
-        renderTextLabel(ctx, label, midX, midY, dy, dx, fontSize * MM_TO_PX, color);
+        renderTextLabel(ctx, label, midX, midY, dy, dx, canvasFontSize, color);
 
         // Center Mark
         const cx = toCanvasX(startPoint.x);
@@ -216,11 +282,18 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
         // Extension lines
         const overshoot = 10;
         ctx.globalAlpha = 0.5;
+        ctx.lineWidth = canvasStrokeWidth * 0.5;
         ctx.beginPath();
         ctx.moveTo(toCanvasX(startPoint.x), toCanvasY(startPoint.y));
-        ctx.lineTo(toCanvasX(startPoint.x + px * (offset + (offset > 0 ? overshoot : -overshoot))), toCanvasY(startPoint.y + py * (offset + (offset > 0 ? overshoot : -overshoot))));
+        ctx.lineTo(
+            toCanvasX(startPoint.x + px * (finalOffset + sign * overshoot)),
+            toCanvasY(startPoint.y + py * (finalOffset + sign * overshoot))
+        );
         ctx.moveTo(toCanvasX(endPoint.x), toCanvasY(endPoint.y));
-        ctx.lineTo(toCanvasX(endPoint.x + px * (offset + (offset > 0 ? overshoot : -overshoot))), toCanvasY(endPoint.y + py * (offset + (offset > 0 ? overshoot : -overshoot))));
+        ctx.lineTo(
+            toCanvasX(endPoint.x + px * (finalOffset + sign * overshoot)),
+            toCanvasY(endPoint.y + py * (finalOffset + sign * overshoot))
+        );
         ctx.stroke();
         ctx.globalAlpha = 1.0;
 
@@ -230,13 +303,15 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
         else ctx.setLineDash([]);
 
         if (lineStyle === 'double') {
-            const gap = strokeWidth * 0.75 * MM_TO_PX;
+            const gap = canvasStrokeWidth * 0.75;
             ctx.setLineDash([10 * MM_TO_PX, 10 * MM_TO_PX]);
+            ctx.lineWidth = canvasStrokeWidth * 0.5;
             ctx.beginPath();
             ctx.moveTo(p1x + px * gap, p1y + py * gap); ctx.lineTo(p2x + px * gap, p2y + py * gap);
             ctx.moveTo(p1x - px * gap, p1y - py * gap); ctx.lineTo(p2x - px * gap, p2y - py * gap);
             ctx.stroke();
         } else {
+            ctx.lineWidth = canvasStrokeWidth;
             ctx.beginPath();
             ctx.moveTo(p1x, p1y);
             ctx.lineTo(p2x, p2y);
@@ -245,7 +320,8 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
         ctx.setLineDash([]); // Reset
 
         // Arrows
-        const arrowSize = 500 * MM_TO_PX;
+        const arrowSize = 100 * MM_TO_PX;
+        ctx.lineWidth = canvasStrokeWidth;
         renderArrow(ctx, p1x, p1y, nx, ny, px, py, arrowSize);
         renderArrow(ctx, p2x, p2y, -nx, -ny, px, py, arrowSize);
 
@@ -253,7 +329,7 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
         const midX = (p1x + p2x) / 2;
         const midY = (p1y + p2y) / 2;
         const label = `${Math.round(value || length)}`; // Removed hardcoded "mm"
-        renderTextLabel(ctx, label, midX, midY, dy, dx, fontSize * MM_TO_PX, color);
+        renderTextLabel(ctx, label, midX, midY, dy, dx, canvasFontSize, color);
     }
 };
 
@@ -273,13 +349,15 @@ const renderTextLabel = (ctx: CanvasRenderingContext2D, text: string, x: number,
     if (angle > Math.PI / 2 || angle < -Math.PI / 2) angle += Math.PI;
     ctx.rotate(angle);
 
-    ctx.font = `bold ${size}px Arial`;
-    const metrics = ctx.measureText(text);
-    const w = metrics.width + 20;
-    const h = size + 10;
+    ctx.font = `600 ${size}px sans-serif`;
+    const w = text.length * (size * 0.6);
+    const h = size * 1.8;
 
-    ctx.fillStyle = 'white'; // Solid white for maximum contrast
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = 'white';
     ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.restore();
 
     ctx.fillStyle = color;
     ctx.textAlign = 'center';

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { useProjectStore } from '@/store/projectStore';
 import { getSnapPoints, SnapPoint } from '@/utils/snapToDrawing';
+import { ASSET_LIBRARY } from '@/lib/assets';
 
 export default function SnapMarkersRenderer() {
     const { hoveredId, zoom } = useEditorStore();
@@ -14,7 +15,10 @@ export default function SnapMarkersRenderer() {
         if (shape) return getSnapPoints(shape);
 
         const asset = assets.find(a => a.id === hoveredId);
-        if (asset) return getSnapPoints(asset);
+        if (asset) {
+            const assetDef = ASSET_LIBRARY.find((def) => def.id === asset.type);
+            return assetDef?.category === 'Marquee' ? getSnapPoints(asset) : [];
+        }
 
         const wall = walls.find(w => w.id === hoveredId);
         if (wall) return getSnapPoints(wall);

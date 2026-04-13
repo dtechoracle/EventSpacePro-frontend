@@ -5,12 +5,14 @@ import { FiCamera, FiSave, FiUser, FiMail, FiCalendar } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import Head from "next/head";
+import { apiRequest } from "@/helpers/Config";
 
 export default function ProfilePage() {
     const { user, setUser } = useUserStore();
     const [firstName, setFirstName] = useState(user?.firstName || "");
     const [lastName, setLastName] = useState(user?.lastName || "");
     const [avatar, setAvatar] = useState(user?.avatar || "");
+    const [avatarFile, setAvatarFile] = useState<File | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -19,6 +21,7 @@ export default function ProfilePage() {
             setFirstName(user.firstName || "");
             setLastName(user.lastName || "");
             setAvatar(user.avatar || "");
+            setAvatarFile(null);
         }
     }, [user]);
 
@@ -59,7 +62,15 @@ export default function ProfilePage() {
 
                     // Convert to optimized JPEG with 0.8 quality
                     const optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                    setAvatar(optimizedDataUrl);
+                    canvas.toBlob((blob) => {
+                        if (!blob) {
+                            toast.error("Failed to process image.");
+                            return;
+                        }
+
+                        setAvatar(optimizedDataUrl);
+                        setAvatarFile(new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }));
+                    }, 'image/jpeg', 0.8);
                 };
                 img.src = reader.result as string;
             };
@@ -72,23 +83,44 @@ export default function ProfilePage() {
         setIsSaving(true);
 
         try {
-            // Simulate API call and update local state
+            let savedAvatar = avatar;
+
+            if (avatarFile) {
+                const formData = new FormData();
+                formData.append("avatar", avatarFile);
+
+                const avatarResponse = await apiRequest("/user/avatar", "POST", formData, true);
+                const avatarPayload = avatarResponse?.data || avatarResponse;
+                savedAvatar =
+                    avatarPayload?.avatar ||
+                    avatarPayload?.data?.avatar ||
+                    avatarPayload?.url ||
+                    avatar;
+            }
+
             const updatedUser = {
                 ...user,
                 firstName,
                 lastName,
-                avatar,
+                avatar: savedAvatar,
                 updatedAt: new Date().toISOString()
             };
 
             setUser(updatedUser);
 
-            // Also persist to localStorage manually just in case, though persist middleware handles it
+            // Also persist to localStorage manually just in case
             localStorage.setItem("user-storage", JSON.stringify({ state: { user: updatedUser } }));
+            
+            // Persist avatar independently of user session so it survives logouts
+            if (savedAvatar) {
+                localStorage.setItem(`avatar_${user._id}`, savedAvatar);
+            }
+
+            setAvatarFile(null);
 
             toast.success("Profile updated successfully!");
         } catch (error) {
-            toast.error("Failed to update profile.");
+            toast.error(error instanceof Error ? error.message : "Failed to update profile.");
         } finally {
             setIsSaving(false);
         }

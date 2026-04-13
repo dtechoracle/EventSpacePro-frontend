@@ -225,8 +225,8 @@ export const ASSET_LIBRARY: AssetDef[] = [
     "label": "20 seater doughtnut table",
     "path": "/assets/modal/Furniture/20 seater doughtnut table.svg",
     "category": "Furniture",
-    "width": 23978,
-    "height": 33854,
+    "width": 4442,
+    "height": 4442,
     "name": "20 seater doughtnut table"
   },
   {

@@ -7,6 +7,7 @@ import { ASSET_LIBRARY } from '@/lib/assets';
 
 // Global cache for SVGs - defined at module top level to prevent ReferenceErrors during evaluation
 const svgCache: Record<string, string> = {};
+const processedSvgCache: Record<string, string> = {};
 
 // Helper to extract dimensions from SVG string
 function getSvgSize(svgText: string) {
@@ -39,7 +40,7 @@ interface AssetRendererProps {
 }
 
 const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHighlightOnly = false, isPreview, onMouseEnter, onMouseLeave }: AssetRendererProps) => {
-    const [svgContent, setSvgContent] = useState<string | null>(null);
+    const [rawSvgContent, setRawSvgContent] = useState<string | null>(null);
     const updateAsset = useSceneStore(s => s.updateAsset);
     
     // Global numbering settings from store
@@ -48,6 +49,8 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
 
     // Find the definition for this asset type
     const definition = ASSET_LIBRARY.find(item => item.id === asset.type);
+    const isMarquee = definition?.category === 'Marquee';
+    const assetPath = definition?.path ? encodeURI(definition.path) : null;
 
     const showHighlight = isSelected || isHovered;
     const highlightColor = isSelected ? '#3b82f6' : '#60a5fa';
@@ -57,7 +60,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         if (!definition?.path) return;
 
         const handleSvgText = (text: string) => {
-            setSvgContent(text);
+            setRawSvgContent(text);
 
             // Extract dimensions from the SVG itself
             const { width: svgWidth, height: svgHeight } = getSvgSize(text);
@@ -65,7 +68,15 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             if (svgWidth && svgHeight) {
                 const currentW = asset.width;
                 const currentH = asset.height;
-                const needsUpdate = !currentW || !currentH;
+                const hasLegacyTwentySeaterSize =
+                    asset.type === '20-seater-doughtnut-table' &&
+                    currentW !== undefined &&
+                    currentH !== undefined &&
+                    (
+                        (Math.abs(currentW - 23978) < 1 && Math.abs(currentH - 33854) < 1) ||
+                        (Math.abs(currentW - 4600) < 1 && Math.abs(currentH - 4600) < 1)
+                    );
+                const needsUpdate = !currentW || !currentH || hasLegacyTwentySeaterSize;
 
                 if (needsUpdate) {
                     setTimeout(() => {
@@ -81,47 +92,83 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             return;
         }
 
-        fetch(encodeURI(definition.path))
+        fetch(assetPath || definition.path)
             .then(res => res.text())
             .then(text => {
                 svgCache[definition.path] = text;
                 handleSvgText(text);
             })
             .catch(err => console.error("Failed to load SVG", err));
-    }, [definition?.path, asset.id, asset.width, asset.height, updateAsset]);
+    }, [assetPath, definition?.path, definition?.width, definition?.height, asset.id, asset.width, asset.height, updateAsset]);
 
+    // 1. Base SVG processing (Heavy - matches InlineSvg logic)
     const baseSvg = useMemo(() => {
-        if (!svgContent || typeof window === 'undefined') return null;
+        if (!rawSvgContent || typeof window === 'undefined' || !definition?.path) return null;
+
+        const cacheKey = `${definition.path}_workspace`;
+        if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
             const parser = new DOMParser();
-            const doc = parser.parseFromString(svgContent, "image/svg+xml");
+            const doc = parser.parseFromString(rawSvgContent, "image/svg+xml");
             const svg = doc.querySelector("svg");
-            if (!svg) return svgContent;
+            if (!svg) return rawSvgContent;
 
             const styleId = "dynamic-asset-style";
             if (!doc.getElementById(styleId)) {
                 const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
                 styleEl.setAttribute("id", styleId);
-                styleEl.textContent = `* { vector-effect: non-scaling-stroke !important; } .fill-none-el { fill: none !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; }`;
+                styleEl.textContent = `* { vector-effect: non-scaling-stroke !important; } .fill-none-el { fill: none !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } .stroke-top-layer { pointer-events: none; }`;
                 svg.prepend(styleEl);
             }
 
-            const allElements = Array.from(doc.querySelectorAll('*'));
-            allElements.forEach(el => {
-                const tag = el.tagName.toLowerCase();
-                if (tag === 'svg' || tag === 'style') return;
+            const children = Array.from(doc.querySelectorAll('path, circle, rect, line, polyline, ellipse'));
+            const circles = Array.from(doc.querySelectorAll('circle'));
+            const innerCircles = new Set();
+            
+            if (circles.length > 1) {
+                const sorted = [...circles].sort((a, b) => parseFloat(a.getAttribute("r") || "0") - parseFloat(b.getAttribute("r") || "0"));
+                for (let i = 0; i < sorted.length - 1; i++) {
+                    innerCircles.add(sorted[i]);
+                }
+            }
 
+            children.forEach(el => {
+                const tag = el.tagName.toLowerCase();
+                const dAttr = el.getAttribute("d") || "";
                 const fillAttr = el.getAttribute("fill");
                 const styleAttr = el.getAttribute("style");
-                const dAttr = el.getAttribute("d") || "";
-
+                
                 const wasExplicitlyNone = fillAttr === 'none' || (styleAttr && /fill\s*:\s*none/i.test(styleAttr));
                 const isLineElement = tag === 'line' || tag === 'polyline';
                 const hasFillRule = el.hasAttribute("fill-rule") || (styleAttr && /fill-rule/i.test(styleAttr));
-                const isClosed = dAttr.toLowerCase().includes('z');
+                
+                const dClean = dAttr.trim();
+                const isZClosed = dClean.toLowerCase().includes('z');
+                
+                let isCoordClosed = false;
+                if (!isZClosed && dClean.startsWith('M')) {
+                    const firstMatch = dClean.match(/^M\s*(-?[\d.]+)\s*[, \s]\s*(-?[\d.]+)/i);
+                    const lastMatch = dClean.match(/(-?[\d.]+)\s*[, \s]\s*(-?[\d.]+)\s*$/);
+                    
+                    if (firstMatch && lastMatch) {
+                        const startX = parseFloat(firstMatch[1]);
+                        const startY = parseFloat(firstMatch[2]);
+                        const endX = parseFloat(lastMatch[1]);
+                        const endY = parseFloat(lastMatch[2]);
+                        isCoordClosed = Math.abs(startX - endX) < 1.0 && Math.abs(startY - endY) < 1.0;
+                    }
+                }
+
+                const isClosed = isZClosed || isCoordClosed;
                 const isOpenPath = tag === 'path' && !isClosed;
                 const isAutoFill = el.getAttribute("id") === "auto-fill";
+                
+                // On workspace, we determine if it's furniture by checking the path/type
+                // But for simplicity, we treat workspace assets with categories from the library
+                const category = (definition as any).category || "";
+                const catLower = category.toLowerCase();
+                const isFurniture = catLower === 'furniture' || catLower === 'structure' || catLower === 'furniture asset' || asset.type.includes('chair') || asset.type.includes('table');
 
                 if (styleAttr) {
                     const cleaned = styleAttr
@@ -131,11 +178,21 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                     if (cleaned.trim()) el.setAttribute("style", cleaned);
                     else el.removeAttribute("style");
                 }
+                
                 el.removeAttribute("fill");
                 el.removeAttribute("stroke");
                 el.removeAttribute("stroke-width");
 
-                if ((wasExplicitlyNone || isLineElement || isOpenPath) && !hasFillRule && !isAutoFill) {
+                let shouldBeNone = wasExplicitlyNone || isLineElement;
+                
+                if (!isFurniture) {
+                    const isConsentricOuter = tag === 'circle' && circles.length > 1 && !innerCircles.has(el);
+                    if (isOpenPath || isConsentricOuter) {
+                        shouldBeNone = true;
+                    }
+                }
+
+                if (shouldBeNone && !hasFillRule && !isAutoFill) {
                     el.classList.add("fill-none-el");
                 } else {
                     el.classList.add("fill-inherit-el");
@@ -143,12 +200,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             });
 
             // ── Z-ORDER FIX ─────────────────────────────────────────────────────────
-            // Some CAD-exported SVGs (e.g. QCAD) emit chair detail stroke-groups
-            // BEFORE the chair seat closed-path. When the seat gets a fill colour it
-            // paints over the earlier detail strokes. To always keep detail/stroke-only
-            // elements visible, gather every fill-none-el leaf element and move it into
-            // a single new <g> appended LAST inside the root SVG group — so they always
-            // render on top of any filled shapes regardless of source order.
+            // Move details to top layer
             const rootGroup = svg.querySelector('g');
             if (rootGroup) {
                 const strokeOnlyEls = Array.from(rootGroup.querySelectorAll('.fill-none-el'));
@@ -161,7 +213,6 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             }
             // ────────────────────────────────────────────────────────────────────────
 
-
             svg.removeAttribute("style");
             svg.removeAttribute("fill");
             svg.removeAttribute("stroke");
@@ -169,18 +220,20 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             svg.removeAttribute("width");
             svg.removeAttribute("height");
 
-            return new XMLSerializer().serializeToString(doc);
+            const result = new XMLSerializer().serializeToString(doc);
+            processedSvgCache[cacheKey] = result;
+            return result;
         } catch (e) {
             console.error("Error processing base SVG in AssetRenderer", e);
-            return svgContent;
+            return rawSvgContent;
         }
-    }, [svgContent]);
+    }, [rawSvgContent, definition?.path, asset.type]);
 
-    // Fill resolution logic
+    // 2. Fill resolution logic
     const currentFill = useMemo(() => {
-        let fill = asset.fillColor || 'none';
+        let fill = asset.fillColor || 'transparent'; // Standard default
         const a = asset as any;
-        if (a.fillType === 'texture' || a.fillType === 'hatch') {
+        if (a.fillType === 'texture' || a.fillType === 'hatch' || a.fillType === 'hash') {
             const scale = a.fillTextureScale || 4;
             const thickness = a.fillTextureThickness || 1;
             if (a.fillTexture) {
@@ -190,12 +243,15 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         return fill;
     }, [asset.fillColor, (asset as any).fillType, (asset as any).fillTexture, (asset as any).fillTextureScale, (asset as any).fillTextureThickness]);
 
+    const currentStroke = asset.strokeColor || '#000000';
+    const defaultStrokeWidth = isPreview ? 0.4 : 0.5;
+    const currentStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : defaultStrokeWidth;
+    const displayWidth = asset.width || definition?.width || 100;
+    const displayHeight = asset.height || definition?.height || 100;
+
+    // 3. Final Instance Processing
     const processedSvg = useMemo(() => {
         if (!baseSvg) return null;
-
-        const currentStroke = asset.strokeColor || '#000000';
-        const defaultStrokeWidth = isPreview ? 0.4 : 0.5;
-        const currentStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : defaultStrokeWidth;
 
         return baseSvg.replace(/<svg([^>]*)>/i, (_match, attrs) => {
             const cleanAttrs = attrs
@@ -206,9 +262,9 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 .replace(/\s+fill\s*=\s*["'][^"']*["']/gi, '')
                 .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '');
 
-            return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="${asset.width || 100}" height="${asset.height || 100}" x="${-(asset.width || 0) / 2}" y="${-(asset.height || 0) / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none;">`;
+            return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="${displayWidth}" height="${displayHeight}" x="${-displayWidth / 2}" y="${-displayHeight / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none; width:100%; height:100%;">`;
         });
-    }, [baseSvg, asset.fillColor, asset.strokeColor, asset.strokeWidth, asset.width, asset.height, isPreview, (asset as any).fillType, (asset as any).fillTexture, (asset as any).fillTextureScale, (asset as any).fillTextureThickness]);
+    }, [baseSvg, currentFill, currentStroke, currentStrokeWidth, displayWidth, displayHeight]);
 
     if (asset.isExploded) return null;
     const rotation = asset.rotation || 0;
@@ -223,7 +279,6 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             onMouseLeave={() => onMouseLeave?.()}
             data-id={asset.id}
         >
-            {/* IN HIGHLIGHT ONLY MODE: Skip expensive SVG logic, just render the glow */}
             {isHighlightOnly ? (
                 showHighlight && (
                     <rect
@@ -248,13 +303,13 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                             style={{ filter: 'none' }}
                         />
                     ) : (
-                        definition?.path && (
+                        assetPath && (
                             <image
-                                href={definition.path}
-                                x={-asset.width / 2}
-                                y={-asset.height / 2}
-                                width={asset.width}
-                                height={asset.height}
+                                href={assetPath}
+                                x={-displayWidth / 2}
+                                y={-displayHeight / 2}
+                                width={displayWidth}
+                                height={displayHeight}
                                 style={{ outline: 'none', filter: 'none' }}
                             />
                         )

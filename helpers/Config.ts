@@ -15,9 +15,12 @@ export const apiRequest = async (
 ) => {
   const token = fetchAuthToken();
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+  const headers: Record<string, string> = {};
+
+  if (!isFormData) {
+    headers["Content-Type"] = "application/json";
+  }
 
   // Only add Authorization if auth is required
   if (requiresAuth) {
@@ -31,7 +34,7 @@ export const apiRequest = async (
   };
 
   if (body) {
-    options.body = JSON.stringify(body);
+    options.body = isFormData ? body : JSON.stringify(body);
   }
 
   const url = `${API_BASE_URL}${endpoint}`;

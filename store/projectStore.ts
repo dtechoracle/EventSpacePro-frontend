@@ -88,7 +88,8 @@ export type Shape = {
     showDimensions?: boolean;
     dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
     dimensionFontSize?: number;
-    dimensionTextPosition?: 'inbetween' | 'above';
+    dimensionTextPosition?: 'inbetween' | 'above',
+    dimensionLabelPosition?: 'top-right' | 'bottom-left';
     dimensionOffset?: number;
     dimensionStrokeWidth?: number;
     dimensionColor?: string;
@@ -148,7 +149,8 @@ export type Asset = {
     showDimensions?: boolean;
     dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
     dimensionFontSize?: number;
-    dimensionTextPosition?: 'inbetween' | 'above' | 'below';
+    dimensionTextPosition?: 'inbetween' | 'above' | 'below',
+    dimensionLabelPosition?: 'top-right' | 'bottom-left';
     dimensionOffset?: number;
     dimensionStrokeWidth?: number;
     dimensionColor?: string;
@@ -175,7 +177,8 @@ export type Wall = {
     showDimensions?: boolean;
     dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
     dimensionFontSize?: number;
-    dimensionTextPosition?: 'inbetween' | 'above' | 'below';
+    dimensionTextPosition?: 'inbetween' | 'above' | 'below',
+    dimensionLabelPosition?: 'top-right' | 'bottom-left';
     dimensionOffset?: number;
     dimensionStrokeWidth?: number;
     dimensionColor?: string;
@@ -215,6 +218,7 @@ export interface Dimension {
     strokeWidth?: number;
     lineStyle?: 'solid' | 'dashed' | 'dotted' | 'double';
     textPosition?: 'inbetween' | 'above' | 'below';
+    labelPosition?: 'top-right' | 'bottom-left';
 
     zIndex?: number;
     groupId?: string;
@@ -247,6 +251,7 @@ export type TextAnnotation = {
     rotation?: number; // Rotation in degrees
     zIndex: number;
     textAlign?: 'left' | 'center' | 'right' | 'justify';
+    lineHeight?: number;
 };
 
 export type LabelArrow = {
@@ -1088,11 +1093,15 @@ export const useProjectStore = create<ProjectState>()(
                     shapes: [],
                     assets: [],
                     walls: [],
+                    wallSegments: [],
                     layers: [DEFAULT_LAYER],
+                    groups: [],
+                    activeLayerId: DEFAULT_LAYER.id,
                     canvas: DEFAULT_CANVAS,
                     textAnnotations: [],
                     labelArrows: [],
                     dimensions: [],
+                    comments: [],
                     hasUnsavedChanges: false,
                     lastSaved: undefined,
                 });
@@ -1108,19 +1117,22 @@ export const useProjectStore = create<ProjectState>()(
                         // Load from rich canvasData if available
                         const { 
                             shapes, assets, walls, layers, canvas,
-                            textAnnotations, dimensions, labelArrows, groups, wallSegments
+                            textAnnotations, dimensions, labelArrows, groups, wallSegments,
+                            activeLayerId, comments
                         } = data.canvasData;
                         set({
                             shapes: shapes || [],
                             assets: assets || [],
                             walls: walls || [],
+                            wallSegments: wallSegments || [],
                             layers: layers || [DEFAULT_LAYER],
+                            groups: groups || [],
+                            activeLayerId: activeLayerId || (layers && layers[0]?.id) || DEFAULT_LAYER.id,
                             canvas: canvas || DEFAULT_CANVAS,
                             textAnnotations: textAnnotations || [],
                             dimensions: dimensions || [],
                             labelArrows: labelArrows || [],
-                            groups: groups || [],
-                            wallSegments: wallSegments || [],
+                            comments: comments || [],
                             hasUnsavedChanges: false,
                             lastSaved: new Date(),
                         });
@@ -1139,8 +1151,15 @@ export const useProjectStore = create<ProjectState>()(
                             shapes: [],
                             assets: [],
                             walls: [],
+                            wallSegments: [],
                             layers: [DEFAULT_LAYER],
+                            groups: [],
+                            activeLayerId: DEFAULT_LAYER.id,
                             canvas: DEFAULT_CANVAS,
+                            textAnnotations: [],
+                            dimensions: [],
+                            labelArrows: [],
+                            comments: [],
                             hasUnsavedChanges: false,
                             lastSaved: undefined,
                         });
@@ -1158,7 +1177,8 @@ export const useProjectStore = create<ProjectState>()(
             saveEvent: async (eventId: string, slug: string) => {
                 const { 
                     shapes, assets, walls, layers, canvas, 
-                    textAnnotations, dimensions, labelArrows, groups, wallSegments 
+                    textAnnotations, dimensions, labelArrows, groups, wallSegments,
+                    activeLayerId, comments
                 } = get();
                 set({ isSaving: true });
                 try {
@@ -1179,7 +1199,8 @@ export const useProjectStore = create<ProjectState>()(
 
                     const canvasData = { 
                         shapes, assets, walls, layers, canvas,
-                        textAnnotations, dimensions, labelArrows, groups, wallSegments
+                        textAnnotations, dimensions, labelArrows, groups, wallSegments,
+                        activeLayerId, comments
                     };
 
                     // CRITICAL: Save complete asset data, not just id/type/x/y
@@ -1189,6 +1210,7 @@ export const useProjectStore = create<ProjectState>()(
                     // Convert shapes to canvasAssets
                     shapes.forEach(shape => {
                         canvasAssets.push({
+                            ...shape, // Spread to retain all custom attributes like tableNumbering and fill customizations
                             id: shape.id,
                             name: shape.name, // SAVE NAME
                             type: shape.type,
@@ -1209,6 +1231,7 @@ export const useProjectStore = create<ProjectState>()(
                     // Convert assets to canvasAssets
                     assets.forEach(asset => {
                         canvasAssets.push({
+                            ...asset, // Spread to retain all custom attributes
                             id: asset.id,
                             name: asset.name, // SAVE NAME
                             type: asset.type,
@@ -2265,11 +2288,16 @@ export const useProjectStore = create<ProjectState>()(
                 projectName: state.projectName,
                 canvas: state.canvas,
                 walls: state.walls,
+                wallSegments: state.wallSegments,
                 shapes: state.shapes,
                 assets: state.assets,
                 layers: state.layers,
                 dimensions: state.dimensions,
+                textAnnotations: state.textAnnotations,
+                labelArrows: state.labelArrows,
                 groups: state.groups,
+                activeLayerId: state.activeLayerId,
+                comments: state.comments,
             }),
         }
     )

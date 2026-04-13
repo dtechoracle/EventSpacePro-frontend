@@ -53,21 +53,17 @@ export default function DimensionOverlay({ mmToPx }: { mmToPx: number }) {
                                 startPoint: { x: start.x, y: start.y },
                                 endPoint: { x: end.x, y: end.y },
                                 value: Math.round(len),
-                                offset: 15,
+                                labelPosition: (asset as any).dimensionLabelPosition || 'top-right',
                                 color: '#666'
                             });
                         });
                     }
                     // Case 2: Native Walls (nodes/edges - Absolute Coords)
-                    // Check for 'nodes' (Native) OR 'wallNodes' (AI legacy)
                     else if (((asset as any).nodes && (asset as any).edges) || (asset.wallNodes && asset.wallEdges)) {
                         const nodes = (asset as any).nodes || asset.wallNodes;
                         const edges = (asset as any).edges || asset.wallEdges;
 
                         edges.forEach((edge: any) => {
-                            // Edges might use 'start/end' indices or 'a/b' properties depending on version
-                            // Native ProjectStore: edges: { a: string, b: string } (IDs) or indices?
-                            // Creating logic that handles indices for now as seen in file view
                             const n1 = nodes[edge.a || edge.start || 0];
                             const n2 = nodes[edge.b || edge.end || 1];
 
@@ -80,7 +76,7 @@ export default function DimensionOverlay({ mmToPx }: { mmToPx: number }) {
                                     startPoint: { x: start.x, y: start.y },
                                     endPoint: { x: end.x, y: end.y },
                                     value: Math.round(len),
-                                    offset: 15,
+                                    labelPosition: (asset as any).dimensionLabelPosition || 'top-right',
                                     color: '#666'
                                 });
                             }
@@ -88,11 +84,9 @@ export default function DimensionOverlay({ mmToPx }: { mmToPx: number }) {
                     }
                     // Case 3: Simple Shapes (Width/Height)
                     else if (asset.width && asset.height) {
-                        // Show W and H dimensions?
-                        // Or just one if it's a line?
-                        // For now, let's implement Width (bottom) and Height (right)
                         const w = asset.width;
                         const h = asset.height;
+                        const labelPos = (asset as any).dimensionLabelPosition || 'top-right';
 
                         // Corners relative to center
                         const tl = { x: -w / 2, y: -h / 2 };
@@ -100,29 +94,51 @@ export default function DimensionOverlay({ mmToPx }: { mmToPx: number }) {
                         const br = { x: w / 2, y: h / 2 };
                         const bl = { x: -w / 2, y: h / 2 };
 
-                        // Transform
-                        const pTL = transformPoint(tl.x, tl.y, asset);
-                        const pTR = transformPoint(tr.x, tr.y, asset);
-                        const pBR = transformPoint(br.x, br.y, asset);
-                        const pBL = transformPoint(bl.x, bl.y, asset);
+                        if (labelPos === 'bottom-left') {
+                            // Bottom dimension
+                            const pBL = transformPoint(bl.x, bl.y, asset);
+                            const pBR = transformPoint(br.x, br.y, asset);
+                            dimensions.push({
+                                startPoint: { x: pBL.x, y: pBL.y },
+                                endPoint: { x: pBR.x, y: pBR.y },
+                                value: Math.round(w),
+                                labelPosition: 'bottom-left',
+                                color: '#666'
+                            });
 
-                        // Top dimension
-                        dimensions.push({
-                            startPoint: { x: pTL.x, y: pTL.y },
-                            endPoint: { x: pTR.x, y: pTR.y },
-                            value: Math.round(w),
-                            offset: -15,
-                            color: '#666'
-                        });
+                            // Left dimension
+                            const pTL = transformPoint(tl.x, tl.y, asset);
+                            const pBL_left = transformPoint(bl.x, bl.y, asset);
+                            dimensions.push({
+                                startPoint: { x: pTL.x, y: pTL.y },
+                                endPoint: { x: pBL_left.x, y: pBL_left.y },
+                                value: Math.round(h),
+                                labelPosition: 'bottom-left',
+                                color: '#666'
+                            });
+                        } else {
+                            // Top dimension
+                            const pTL = transformPoint(tl.x, tl.y, asset);
+                            const pTR = transformPoint(tr.x, tr.y, asset);
+                            dimensions.push({
+                                startPoint: { x: pTL.x, y: pTL.y },
+                                endPoint: { x: pTR.x, y: pTR.y },
+                                value: Math.round(w),
+                                labelPosition: 'top-right',
+                                color: '#666'
+                            });
 
-                        // Right dimension
-                        dimensions.push({
-                            startPoint: { x: pTR.x, y: pTR.y },
-                            endPoint: { x: pBR.x, y: pBR.y },
-                            value: Math.round(h),
-                            offset: 15,
-                            color: '#666'
-                        });
+                            // Right dimension
+                            const pTR_right = transformPoint(tr.x, tr.y, asset);
+                            const pBR = transformPoint(br.x, br.y, asset);
+                            dimensions.push({
+                                startPoint: { x: pTR_right.x, y: pTR_right.y },
+                                endPoint: { x: pBR.x, y: pBR.y },
+                                value: Math.round(h),
+                                labelPosition: 'top-right',
+                                color: '#666'
+                            });
+                        }
                     }
 
                     return (
@@ -130,14 +146,11 @@ export default function DimensionOverlay({ mmToPx }: { mmToPx: number }) {
                             {dimensions.map((dim, i) => (
                                 <DimensionRenderer
                                     key={i}
-                                    dimension={dim}
-                                    zoom={1} // Zoom handled by SVG scaling? No, Canvas handles zoom. DimensionRenderer needs zoom?
-                                // Check DimensionRenderer source: text size uses zoom?
-                                // It uses `fontSize * 2` constant, doesn't use zoom for text scaling. 
-                                // It only passes zoom prop but maybe unused? 
-                                // Ah, arrowSize is constant 100?
-                                // We should pass zoom=1 if we want constant pixel size? 
-                                // Wait, we are in PIXEL coordinates here (mmToPx).
+                                    dimension={{
+                                        ...dim,
+                                        labelPosition: (asset as any).dimensionLabelPosition
+                                    } as any}
+                                    zoom={1}
                                 />
                             ))}
                         </g>

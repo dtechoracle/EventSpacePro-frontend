@@ -1,4 +1,7 @@
 import { Wall, Asset, Shape } from '@/store/projectStore';
+import { calculateNodeJunctions } from '@/utils/geometry';
+import { getCachedAssetVertices, getMarqueeVertices } from '@/utils/assetUtils';
+import { ASSET_LIBRARY } from '@/lib/assets';
 
 export interface SnapPoint {
     x: number;
@@ -26,6 +29,21 @@ function rotatePoint(x: number, y: number, cx: number, cy: number, angleDeg: num
         x: cx + dx * cos - dy * sin,
         y: cy + dx * sin + dy * cos
     };
+}
+
+function dedupeSnapPoints(points: SnapPoint[], tolerance: number = 1) {
+    const seen = new Set<string>();
+    const unique: SnapPoint[] = [];
+
+    points.forEach((point) => {
+        const key = `${point.elementId}:${Math.round(point.x / tolerance)}:${Math.round(point.y / tolerance)}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(point);
+        }
+    });
+
+    return unique;
 }
 
 /**
@@ -103,6 +121,11 @@ export function getSnapPoints(element: SnapTarget, vertices: { x: number; y: num
     // Handle Assets
     else if ('type' in element && !('nodes' in element)) { // Asset check
         const asset = element as Asset;
+        const assetDef = ASSET_LIBRARY.find((def) => def.id === asset.type);
+        const liveVertices = assetDef?.category === 'Marquee' ? getMarqueeVertices(asset) : [];
+        const cachedVertices = liveVertices.length > 0
+            ? liveVertices
+            : (vertices.length > 0 ? vertices : getCachedAssetVertices(asset.id));
         // Use scaled dimensions
         const width = asset.width * (asset.scale || 1);
         const height = asset.height * (asset.scale || 1);
@@ -110,7 +133,17 @@ export function getSnapPoints(element: SnapTarget, vertices: { x: number; y: num
         const halfH = height / 2;
         const rot = asset.rotation || 0;
 
-        const rawPoints = [
+        const rawPoints = cachedVertices.length > 0 ? [
+            { x: asset.x - halfW, y: asset.y - halfH, type: 'corner' as const },
+            { x: asset.x + halfW, y: asset.y - halfH, type: 'corner' as const },
+            { x: asset.x + halfW, y: asset.y + halfH, type: 'corner' as const },
+            { x: asset.x - halfW, y: asset.y + halfH, type: 'corner' as const },
+            { x: asset.x, y: asset.y - halfH, type: 'midpoint' as const },
+            { x: asset.x + halfW, y: asset.y, type: 'midpoint' as const },
+            { x: asset.x, y: asset.y + halfH, type: 'midpoint' as const },
+            { x: asset.x - halfW, y: asset.y, type: 'midpoint' as const },
+            { x: asset.x, y: asset.y, type: 'center' as const }
+        ] : [
             // Corners
             { x: asset.x - halfW, y: asset.y - halfH, type: 'corner' as const },
             { x: asset.x + halfW, y: asset.y - halfH, type: 'corner' as const },
@@ -141,9 +174,8 @@ export function getSnapPoints(element: SnapTarget, vertices: { x: number; y: num
             snapPoints.push({ ...rotated, type: p.type, elementId: asset.id });
         });
 
-        // Marquee Vertex Snapping integration
-        if (vertices && vertices.length > 0) {
-            vertices.forEach(v => {
+        if (cachedVertices.length > 0) {
+            cachedVertices.forEach(v => {
                 snapPoints.push({
                     x: v.x,
                     y: v.y,
@@ -158,6 +190,28 @@ export function getSnapPoints(element: SnapTarget, vertices: { x: number; y: num
         const wall = element as Wall;
         wall.nodes.forEach(node => {
             snapPoints.push({ x: node.x, y: node.y, type: 'center', elementId: wall.id });
+        });
+
+        wall.nodes.forEach((node) => {
+            const connectedEdges = wall.edges.flatMap((edge) => {
+                if (edge.nodeA === node.id) {
+                    const otherNode = wall.nodes.find((n) => n.id === edge.nodeB);
+                    return otherNode ? [{ id: edge.id, otherNode, thickness: edge.thickness || 150 }] : [];
+                }
+                if (edge.nodeB === node.id) {
+                    const otherNode = wall.nodes.find((n) => n.id === edge.nodeA);
+                    return otherNode ? [{ id: edge.id, otherNode, thickness: edge.thickness || 150 }] : [];
+                }
+                return [];
+            });
+
+            if (connectedEdges.length === 0) return;
+
+            const junctions = calculateNodeJunctions(node, connectedEdges);
+            Object.values(junctions).forEach(({ left, right }) => {
+                snapPoints.push({ x: left.x, y: left.y, type: 'corner', elementId: wall.id });
+                snapPoints.push({ x: right.x, y: right.y, type: 'corner', elementId: wall.id });
+            });
         });
 
                 wall.edges.forEach(edge => {
@@ -193,18 +247,11 @@ export function getSnapPoints(element: SnapTarget, vertices: { x: number; y: num
                                 { x: midX - px, y: midY - py, type: 'midpoint', elementId: wall.id }
                             );
 
-                            // Four corners of the segment (visual approximation)
-                            snapPoints.push(
-                                { x: n1.x + px, y: n1.y + py, type: 'corner', elementId: wall.id },
-                                { x: n1.x - px, y: n1.y - py, type: 'corner', elementId: wall.id },
-                                { x: n2.x + px, y: n2.y + py, type: 'corner', elementId: wall.id },
-                                { x: n2.x - px, y: n2.y - py, type: 'corner', elementId: wall.id }
-                            );
                         }
                     }
                 });
     }
-    return snapPoints;
+    return dedupeSnapPoints(snapPoints);
 }
 
 /**

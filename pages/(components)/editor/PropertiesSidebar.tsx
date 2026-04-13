@@ -36,6 +36,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const [numberingDirection, setNumberingDirection] = useState<'left-to-right' | 'right-to-left' | 'top-to-bottom' | 'bottom-to-top' | 'snake'>('left-to-right');
   const [numberingStartingPoint, setNumberingStartingPoint] = useState<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center' | 'left' | 'right' | 'top' | 'bottom'>('top-left');
 
+  // Local state to prevent cursor jumping when typing text annotations
+  const [localTextProps, setLocalTextProps] = useState({ id: "", text: "" });
+
   // Resolve the single selected item
   const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
 
@@ -144,6 +147,21 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const updateSceneAsset = useSceneStore((s) => s.updateAsset);
   const unitSystem = useSceneStore((s) => s.unitSystem) || 'metric-mm';
   const unitLabel = getUnitLabel(unitSystem);
+
+  // Sync local text annotation state when selection changes
+  // Keep local props in sync with store selection and real-time edits from the workspace
+  useEffect(() => {
+    if (itemType === 'text-annotation' && selectedTextAnnotation) {
+      if (localTextProps.id !== selectedTextAnnotation.id || localTextProps.text !== selectedTextAnnotation.text) {
+        // Only update if not currently focused to avoid cursor jumps in the sidebar itself
+        const isSidebarFocused = document.activeElement?.tagName === 'TEXTAREA' && 
+                                 document.activeElement.closest('.properties-sidebar');
+        if (!isSidebarFocused) {
+          setLocalTextProps({ id: selectedTextAnnotation.id, text: selectedTextAnnotation.text || "" });
+        }
+      }
+    }
+  }, [itemType, selectedTextAnnotation, localTextProps.id, localTextProps.text]);
 
   // ── AUTO-NUMBERING EFFECT ──────────────────────────────────────────────────
   useEffect(() => {
@@ -567,7 +585,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     <span className="text-gray-500 w-12">Circle</span>
                     <input
                       type="number"
-                      value={radialDiameter} // Using same state var, but semantically it's radius now
+                      value={radialDiameter} // Using same state var, but semantically its radius now
                       onChange={(e) => setRadialDiameter(Number(e.target.value))}
                       className="w-16 sidebar-input text-center"
                       placeholder="Radius"
@@ -1013,7 +1031,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         </div>
 
                         {/* Text Position */}
-                        <div className="flex justify-between items-center">
+                        <div className="flex justify-between items-center mb-2">
                           <span className="text-gray-500 text-xs">Text Position</span>
                           <select
                             value={(selectedItem as any).dimensionTextPosition || 'inbetween'}
@@ -1026,6 +1044,23 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           >
                             <option value="inbetween">In-between</option>
                             <option value="above">Above Line</option>
+                          </select>
+                        </div>
+
+                        {/* Label Position Side */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Label Side</span>
+                          <select
+                            value={(selectedItem as any).dimensionLabelPosition || 'top-right'}
+                            onChange={(e) => {
+                              const val = e.target.value as any;
+                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionLabelPosition: val });
+                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionLabelPosition: val });
+                            }}
+                            className="text-xs border rounded px-2 py-1 bg-white"
+                          >
+                            <option value="top-right">Top / Right</option>
+                            <option value="bottom-left">Bottom / Left</option>
                           </select>
                         </div>
                       </div>
@@ -1132,7 +1167,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         </div>
 
                         {/* Text Position */}
-                        <div className="flex justify-between items-center">
+                        <div className="flex justify-between items-center mb-2">
                           <span className="text-gray-500 text-xs">Text Position</span>
                           <select
                             value={(selectedItem as any).dimensionTextPosition || 'inbetween'}
@@ -1141,6 +1176,19 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           >
                             <option value="inbetween">In-between</option>
                             <option value="above">Above Line</option>
+                          </select>
+                        </div>
+
+                        {/* Label Position Side */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Label Side</span>
+                          <select
+                            value={(selectedItem as any).dimensionLabelPosition || 'top-right'}
+                            onChange={(e) => updateWall(selectedItem.id, { dimensionLabelPosition: e.target.value as any })}
+                            className="text-xs border rounded px-2 py-1 bg-white"
+                          >
+                            <option value="top-right">Top / Right</option>
+                            <option value="bottom-left">Bottom / Left</option>
                           </select>
                         </div>
                       </div>
@@ -1770,8 +1818,11 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     <div className="mb-2">
                       <label className="block text-xs text-gray-500 mb-1">Text</label>
                       <textarea
-                        value={selectedTextAnnotation.text}
-                        onChange={(e) => updateTextAnnotation(selectedTextAnnotation.id, { text: e.target.value })}
+                        value={localTextProps.id === selectedTextAnnotation.id ? localTextProps.text : selectedTextAnnotation.text}
+                        onChange={(e) => {
+                          setLocalTextProps({ id: selectedTextAnnotation.id, text: e.target.value });
+                          updateTextAnnotation(selectedTextAnnotation.id, { text: e.target.value });
+                        }}
                         className="w-full text-sm border rounded px-2 py-1 bg-white resize-none"
                         rows={3}
                       />
@@ -1792,6 +1843,25 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         className="sidebar-input w-20 text-center"
                         min={8}
                         max={5000}
+                      />
+                    </div>
+
+                    {/* Line Spacing */}
+                    <div className="space-y-2 mb-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500">Line Spacing</span>
+                        <span className="text-xs font-bold text-blue-600">
+                          {(selectedTextAnnotation.lineHeight || 1.2).toFixed(1)}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.8"
+                        max="3.0"
+                        step="0.1"
+                        value={selectedTextAnnotation.lineHeight || 1.2}
+                        onChange={(e) => updateTextAnnotation(selectedTextAnnotation.id, { lineHeight: parseFloat(e.target.value) })}
+                        className="w-full accent-blue-600 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                       />
                     </div>
 
@@ -2130,6 +2200,19 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       </select>
                     </div>
 
+                    {/* Label Position Side */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Label Side</span>
+                      <select
+                        value={selectedDimension.labelPosition || 'top-right'}
+                        onChange={(e) => updateDimension(selectedDimension.id, { labelPosition: e.target.value as any })}
+                        className="text-xs border rounded px-2 py-1 bg-white"
+                      >
+                        <option value="top-right">Top / Right</option>
+                        <option value="bottom-left">Bottom / Left</option>
+                      </select>
+                    </div>
+
                     {/* Dimension Gap */}
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-gray-500">Dimension Gap</span>
@@ -2446,32 +2529,35 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
 
 
-                    {/* Wall Thickness */}
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Thickness</span>
-                      <input
-                        type="number"
-                        value={(itemType === 'wall' && !(selectedItem as any).wallSegments ? (selectedItem as any).edges?.[0]?.thickness : (selectedItem as any).wallThickness) || 75}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          const safeVal = Math.max(1, val);
-                          if (itemType === 'wall' && (selectedItem as any).edges && !(selectedItem as any).wallSegments) {
-                            const updatedEdges = (selectedItem as any).edges.map((edge: any) => ({
-                              ...edge,
-                              thickness: safeVal
-                            }));
-                            updateWall(selectedItem.id, { edges: updatedEdges });
-                            syncToScene(selectedItem.id, { edges: updatedEdges });
-                          } else {
-                            updateAsset(selectedItem.id, { wallThickness: safeVal } as any);
-                            updateSceneAsset(selectedItem.id, { wallThickness: safeVal } as any);
-                          }
-                        }}
-                        className="sidebar-input w-16 text-center"
-                        min={1}
-                      />
+                    <div className="space-y-2 mb-2">
+                      {/* Wall Thickness */}
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500">Thickness</span>
+                        <input
+                          type="number"
+                          value={(itemType === 'wall' && !(selectedItem as any).wallSegments ? (selectedItem as any).edges?.[0]?.thickness : (selectedItem as any).wallThickness) || 75}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            const safeVal = Math.max(1, val);
+                            if (itemType === 'wall' && (selectedItem as any).edges && !(selectedItem as any).wallSegments) {
+                              const updatedEdges = (selectedItem as any).edges.map((edge: any) => ({
+                                ...edge,
+                                thickness: safeVal
+                              }));
+                              updateWall(selectedItem.id, { edges: updatedEdges });
+                              syncToScene(selectedItem.id, { edges: updatedEdges });
+                            } else {
+                              updateAsset(selectedItem.id, { wallThickness: safeVal } as any);
+                              updateSceneAsset(selectedItem.id, { wallThickness: safeVal } as any);
+                            }
+                          }}
+                          className="sidebar-input w-16 text-center"
+                          min={1}
+                        />
+                      </div>
+
                       {/* Wall Length & Height */}
-                      <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div className="flex flex-col">
                           <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Length ({unitLabel})</span>
                           <input
@@ -2579,6 +2665,14 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           <input
                             type="number"
                             value={(() => {
+                              if (itemType === 'wall' && (selectedItem as any).nodes) {
+                                const ys = (selectedItem as any).nodes.map((n: any) => n.y);
+                                if (ys.length) return roundForDisplay(Math.max(...ys) - Math.min(...ys)) || 0;
+                              }
+                              if (itemType === 'asset' && (selectedItem as any).wallNodes) {
+                                const ys = (selectedItem as any).wallNodes.map((n: any) => n.y);
+                                if (ys.length) return roundForDisplay(Math.max(...ys) - Math.min(...ys)) || 0;
+                              }
                               if ((selectedItem as any).wallSegments) {
                                 const s = (selectedItem as any).wallSegments;
                                 let minY = Infinity, maxY = -Infinity;
@@ -2594,7 +2688,44 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               const val = toStoreValue(Number(e.target.value), unitSystem);
                               if (val <= 0) return;
 
-                              // Handle manual wall segments (Scale Y)
+                              // 1. Native Walls (nodes)
+                              if (itemType === 'wall' && (selectedItem as any).nodes) {
+                                const ys = (selectedItem as any).nodes.map((n: any) => n.y);
+                                const minY = Math.min(...ys);
+                                const maxY = Math.max(...ys);
+                                const currentH = maxY - minY;
+                                if (currentH <= 0) return;
+                                const centerY = (minY + maxY) / 2;
+                                const scale = val / currentH;
+                                const updatedNodes = (selectedItem as any).nodes.map((node: any) => ({
+                                  ...node,
+                                  y: centerY + (node.y - centerY) * scale
+                                }));
+                                updateWall(selectedItem.id, { nodes: updatedNodes });
+                                syncToScene(selectedItem.id, { nodes: updatedNodes });
+                                return;
+                              }
+
+                              // 2. Asset Walls (AI generated wallNodes)
+                              if (itemType === 'asset' && (selectedItem as any).wallNodes) {
+                                const ys = (selectedItem as any).wallNodes.map((n: any) => n.y);
+                                const minY = Math.min(...ys);
+                                const maxY = Math.max(...ys);
+                                const currentH = maxY - minY;
+                                if (currentH > 0) {
+                                  const centerY = (minY + maxY) / 2;
+                                  const scale = val / currentH;
+                                  const updatedNodes = (selectedItem as any).wallNodes.map((node: any) => ({
+                                    ...node,
+                                    y: centerY + (node.y - centerY) * scale
+                                  }));
+                                  updateAsset(selectedItem.id, { wallNodes: updatedNodes } as any);
+                                  updateSceneAsset(selectedItem.id, { wallNodes: updatedNodes } as any);
+                                  return;
+                                }
+                              }
+
+                              // 3. Manual Wall Segments (Scale Y)
                               if ((selectedItem as any).wallSegments) {
                                 const segments = (selectedItem as any).wallSegments;
                                 let minY = Infinity, maxY = -Infinity;
@@ -2623,11 +2754,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
                                 }
                               }
 
-                              if (itemType === 'wall' && !(selectedItem as any).wallSegments) {
+                              if (itemType === 'wall') {
                                 updateWall(selectedItem.id, { height: val } as any);
                                 syncToScene(selectedItem.id, { height: val });
-                              }
-                              else {
+                              } else {
                                 updateAsset(selectedItem.id, { height: val });
                                 updateSceneAsset(selectedItem.id, { height: val });
                               }
