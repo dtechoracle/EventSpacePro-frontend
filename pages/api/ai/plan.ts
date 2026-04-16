@@ -65,12 +65,13 @@ Your goal is to guide the user through creating their event space by being inter
 ══════════════════════════════════════════════════════════════
 1.  **CONSULTATIVE PHASE (MANDATORY)**:
     - NEVER return a 'plan' object on the first turn unless the user explicitly says "Generate the plan now" or the request is extremely specific.
-    - **INITIAL FLOW**: If a user asks to "start a plan", "create a space", or "design an event", YOU MUST ASK: "Would you like to use one of our preloaded spaces?" and provide choices: ["Beach", "Marquee", "Park", "Grass", "No, custom"].
+    - **INITIAL FLOW**: If a user asks to "start a plan", "create a space", or "design an event", YOU MUST ASK: "Would you like to use one of our event location and space options?" and provide choices: ["Marquee", "Grassy", "Field", "Park", "Beach", "Custom"].
     - **PRELOADED SPACES**: If a user selects one:
-        - **Beach**: Use "fillTexture": "sand-01" or "sand-02" for a large background rectangle.
         - **Marquee**: DO NOT return a plan or grass background immediately. Instead, use "assetSelection": { "category": "marquee", "message": "Excellent! Which marquee would you like to use for your event?" }.
+        - **Grassy**: Use "fillTexture": "grass-01" for the background.
+        - **Field**: Use "fillTexture": "grass-02" for the background.
         - **Park**: Use "fillTexture": "grass-03" or "road-01" for the background.
-        - **Grass**: Use "fillTexture": "grass-01" for the background.
+        - **Beach**: Use "fillTexture": "sand-01" or "sand-02" for a large background rectangle.
     - **STANDALONE STRUCTURES**: Marquees (and tents) are standalone. DO NOT add walls or rooms around them unless the user explicitly asks for a "room inside a marquee".
     - **PREVIEW DURING SELECTION**: Whenever an asset category or specific asset is selected, ALWAYS include it in the "preview" object so the user can see it in the chat bubble while you continue the conversation.
     - ALWAYS ask for dimensions (e.g., "What are the dimensions of your space?") if the user hasn't provided them yet. You can combine this with the asset selection message.
@@ -628,7 +629,7 @@ ${obstaclesContext}`;
         // Simple plural normalization (chairs -> chair)
         const singularCat = cat.endsWith('s') ? cat.slice(0, -1) : cat;
         let tags = [cat, singularCat];
-        
+
         // Map common synonyms to tags with broader scope
         if (['chair', 'seat', 'stool', 'sofa', 'sitting'].some(t => cat.includes(t))) {
           tags = ['chair', 'seating', 'stool', 'seat', 'sofa', 'sitting', 'furniture'];
@@ -640,12 +641,12 @@ ${obstaclesContext}`;
 
         const filteredKnowledge = searchAssetsByTags(tags);
         options = assetList.filter(a => filteredKnowledge.some(k => k.id === a.id));
-        
+
         // Fallback for very specific queries or missing tags
         if (options.length === 0) {
           const searchVal = singularCat;
-          options = assetList.filter(a => 
-            a.name.toLowerCase().includes(searchVal) || 
+          options = assetList.filter(a =>
+            a.name.toLowerCase().includes(searchVal) ||
             a.category.toLowerCase().includes(searchVal) ||
             a.id.toLowerCase().includes(searchVal)
           );

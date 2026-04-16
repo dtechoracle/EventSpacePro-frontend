@@ -4,9 +4,10 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { useSceneStore } from '@/store/sceneStore';
 import { useProjectStore, WallNode, WallEdge, Wall } from '@/store/projectStore';
-import { findWallIntersection } from '@/utils/wallSplitting';
+import { findWallIntersection, findWallIntersectionsAlongExtendedSegment, findWallIntersectionsAlongSegment } from '@/utils/wallSplitting';
 
-import { findSnapPointInShapes } from '@/utils/snapToDrawing';
+import { findClosestSnapPointFromList, findSnapPointInShapes, getSnapPoints } from '@/utils/snapToDrawing';
+import { ASSET_LIBRARY } from '@/lib/assets';
 
 interface WallToolProps {
     isActive: boolean;
@@ -14,9 +15,9 @@ interface WallToolProps {
 }
 
 export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
-    const { canvasOffset, zoom, panX, panY, setSelectedIds, setActiveTool } = useEditorStore();
+    const { canvasOffset, zoom, panX, panY, setSelectedIds, setActiveTool, hoveredId } = useEditorStore();
     const { snapToGridEnabled, gridSize } = useSceneStore();
-    const { addWall, updateWall, getNextZIndex, walls, connectWallToEdge } = useProjectStore();
+    const { addWall, updateWall, getNextZIndex, walls, shapes, assets, splitWallEdge } = useProjectStore();
 
     // Screen to world conversion
     const screenToWorld = useCallback((screenX: number, screenY: number) => {
@@ -43,7 +44,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
     // State for alignment guides (Removed visual guides as per user request, but kept logic for magnetic snap)
     // const [alignmentGuides, setAlignmentGuides] = useState<{ type: 'horizontal' | 'vertical'; x?: number; y?: number; label?: string }[]>([]);
 
-    const SNAP_PIXELS = 15; // Screen pixels tolerance for snapping
+    const SNAP_PIXELS = 24; // Screen pixels tolerance for snapping
     const SNAP_DISTANCE = 10; // mm
     const JUNCTION_SNAP_THRESHOLD = 15; // mm
 
@@ -51,81 +52,176 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
     const currentWall = currentWallId ? walls.find(w => w.id === currentWallId) : null;
     const lastNode = lastNodeId && currentWall ? currentWall.nodes.find(n => n.id === lastNodeId) : null;
 
-    const getSnappedWallPoint = useCallback((worldPos: { x: number; y: number }) => {
-        let snapped = snapToGridEnabled
-            ? {
-                x: Math.round(worldPos.x / gridSize) * gridSize,
-                y: Math.round(worldPos.y / gridSize) * gridSize
+    const findExistingNodeAtPoint = useCallback((point: { x: number; y: number }) => {
+        for (const wall of walls) {
+            if (wall.id === currentWallId && lastNodeId) {
+                const node = wall.nodes.find(n => n.id === lastNodeId);
+                if (node && Math.hypot(node.x - point.x, node.y - point.y) < SNAP_DISTANCE) {
+                    return { nodeId: null, point: node, isCurrentLastNode: true };
+                }
             }
-            : worldPos;
 
-        const { snapToObjects } = useEditorStore.getState();
-
-        if (snapToObjects) {
-            const { shapes, walls, assets } = useProjectStore.getState();
-            const allElements = [...shapes, ...walls.filter(w => w.id !== currentWallId), ...assets];
-            const snapResult = findSnapPointInShapes(worldPos, allElements, 20 / zoom);
-            if (snapResult) {
-                snapped = { x: snapResult.x, y: snapResult.y };
+            for (const node of wall.nodes) {
+                if (Math.hypot(node.x - point.x, node.y - point.y) < SNAP_DISTANCE) {
+                    return { nodeId: node.id, point: node, isCurrentLastNode: false };
+                }
             }
         }
 
-        let didAlignmentSnap = false;
-        const snapTol = SNAP_PIXELS / zoom;
+        return { nodeId: null, point: null, isCurrentLastNode: false };
+    }, [SNAP_DISTANCE, currentWallId, lastNodeId, walls]);
 
-        if (!snapToGridEnabled) {
-            const interestingX: number[] = [];
-            const interestingY: number[] = [];
+    const findDirectSnapPoint = useCallback((worldPos: { x: number; y: number }) => {
+        const snapThreshold = 48 / zoom;
+        const wallCandidates = walls.filter(wall => wall.id !== currentWallId);
+        let closest = findClosestSnapPointFromList(
+            worldPos,
+            wallCandidates.flatMap((wall) => getSnapPoints(wall)),
+            snapThreshold
+        );
 
-            walls.forEach(w => {
-                if (w.id === currentWallId) {
-                    if (w.nodes.length > 0) {
-                        interestingX.push(w.nodes[0].x);
-                        interestingY.push(w.nodes[0].y);
+        if (!closest) {
+            const candidates = [
+                ...shapes,
+                ...assets.filter((asset) => {
+                    const assetDef = ASSET_LIBRARY.find((def) => def.id === asset.type);
+                    return assetDef?.category === 'Marquee';
+                }),
+            ];
+
+            closest = findClosestSnapPointFromList(
+                worldPos,
+                candidates.flatMap((element) => getSnapPoints(element)),
+                snapThreshold
+            );
+        }
+
+        if (!closest && currentWall && currentWall.nodes.length > 0) {
+            closest = findClosestSnapPointFromList(
+                worldPos,
+                getSnapPoints(currentWall),
+                snapThreshold
+            );
+        }
+
+        return closest;
+    }, [assets, currentWall, currentWallId, shapes, walls, zoom]);
+
+    const connectNodeToWallEdge = useCallback((
+        sourceWallId: string,
+        sourceNodeId: string,
+        targetWallId: string,
+        targetEdgeId: string,
+        point: { x: number; y: number }
+    ) => {
+        const mergedNode = splitWallEdge(targetWallId, targetEdgeId, point, true);
+        if (!mergedNode) return null;
+
+        const latestSourceWall = useProjectStore.getState().walls.find(w => w.id === sourceWallId);
+        if (!latestSourceWall) return mergedNode;
+
+        updateWall(sourceWallId, {
+            nodes: latestSourceWall.nodes.map(node =>
+                node.id === sourceNodeId ? mergedNode : node
+            ),
+            edges: latestSourceWall.edges.map(edge => ({
+                ...edge,
+                nodeA: edge.nodeA === sourceNodeId ? mergedNode.id : edge.nodeA,
+                nodeB: edge.nodeB === sourceNodeId ? mergedNode.id : edge.nodeB,
+            })),
+        }, true);
+
+        return mergedNode;
+    }, [splitWallEdge, updateWall]);
+
+    const getSegmentIntersections = useCallback((start: { x: number; y: number }, end: { x: number; y: number }) => {
+        return findWallIntersectionsAlongExtendedSegment(
+            start,
+            end,
+            thickness,
+            walls,
+            currentWallId || undefined
+        );
+    }, [currentWallId, thickness, walls]);
+
+    const removeDuplicateSharedEdges = useCallback((sourceWallId: string) => {
+        const latestWalls = useProjectStore.getState().walls;
+        const sourceWall = latestWalls.find(w => w.id === sourceWallId);
+        if (!sourceWall) return;
+
+        const edgeIdsByWall = new Map<string, Set<string>>();
+        const pointTolerance = 1;
+
+        const markEdge = (wallId: string, edgeId: string) => {
+            if (!edgeIdsByWall.has(wallId)) {
+                edgeIdsByWall.set(wallId, new Set<string>());
+            }
+            edgeIdsByWall.get(wallId)!.add(edgeId);
+        };
+
+        const pointsMatch = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+            Math.hypot(a.x - b.x, a.y - b.y) < pointTolerance;
+
+        const getEdgeNodes = (wall: Wall, edge: WallEdge) => {
+            const nodeA = wall.nodes.find(node => node.id === edge.nodeA);
+            const nodeB = wall.nodes.find(node => node.id === edge.nodeB);
+            return nodeA && nodeB ? { nodeA, nodeB } : null;
+        };
+
+        latestWalls.forEach(otherWall => {
+            if (otherWall.id === sourceWallId) return;
+
+            sourceWall.edges.forEach(sourceEdge => {
+                const sourceNodes = getEdgeNodes(sourceWall, sourceEdge);
+                if (!sourceNodes) return;
+
+                otherWall.edges.forEach(otherEdge => {
+                    const otherNodes = getEdgeNodes(otherWall, otherEdge);
+                    if (!otherNodes) return;
+
+                    const sameDirection =
+                        pointsMatch(sourceNodes.nodeA, otherNodes.nodeA) &&
+                        pointsMatch(sourceNodes.nodeB, otherNodes.nodeB);
+                    const oppositeDirection =
+                        pointsMatch(sourceNodes.nodeA, otherNodes.nodeB) &&
+                        pointsMatch(sourceNodes.nodeB, otherNodes.nodeA);
+
+                    if (sameDirection || oppositeDirection) {
+                        markEdge(sourceWall.id, sourceEdge.id);
+                        markEdge(otherWall.id, otherEdge.id);
                     }
-                    return;
-                }
-
-                w.nodes.forEach(n => {
-                    interestingX.push(n.x);
-                    interestingY.push(n.y);
                 });
             });
+        });
 
-            interestingY.sort((a, b) => Math.abs(worldPos.y - a) - Math.abs(worldPos.y - b));
-            if (interestingY.length > 0 && Math.abs(worldPos.y - interestingY[0]) < snapTol) {
-                snapped.y = interestingY[0];
-                didAlignmentSnap = true;
-            }
+        edgeIdsByWall.forEach((edgeIds, wallId) => {
+            const wall = useProjectStore.getState().walls.find(w => w.id === wallId);
+            if (!wall || edgeIds.size === 0) return;
 
-            interestingX.sort((a, b) => Math.abs(worldPos.x - a) - Math.abs(worldPos.x - b));
-            if (interestingX.length > 0 && Math.abs(worldPos.x - interestingX[0]) < snapTol) {
-                snapped.x = interestingX[0];
-                didAlignmentSnap = true;
-            }
+            updateWall(wallId, {
+                edges: wall.edges.filter(edge => !edgeIds.has(edge.id)),
+            }, true);
+        });
+    }, [updateWall]);
 
-            if (lastNode && !didAlignmentSnap) {
-                const dx = Math.abs(worldPos.x - lastNode.x);
-                const dy = Math.abs(worldPos.y - lastNode.y);
+    const refreshWallGeometry = useCallback((wallId: string) => {
+        const wall = useProjectStore.getState().walls.find((entry) => entry.id === wallId);
+        if (!wall) return;
 
-                if (dx < snapTol) {
-                    snapped.x = lastNode.x;
-                } else if (dy < snapTol) {
-                    snapped.y = lastNode.y;
-                }
-            }
-        }
+        updateWall(wallId, {
+            nodes: wall.nodes.map((node) => ({ ...node })),
+            edges: wall.edges.map((edge) => ({ ...edge })),
+        }, true);
+    }, [updateWall]);
 
-        let closingLoop = false;
+    const getSnappedWallPoint = useCallback((worldPos: { x: number; y: number }) => {
         if (currentWall && currentWall.nodes.length > 2) {
             const firstNode = currentWall.nodes[0];
-            const dist = Math.hypot(worldPos.x - firstNode.x, worldPos.y - firstNode.y);
-            if (dist < (20 / zoom)) {
-                snapped = { x: firstNode.x, y: firstNode.y };
-                closingLoop = true;
+            const distToFirstNode = Math.hypot(worldPos.x - firstNode.x, worldPos.y - firstNode.y);
+            if (distToFirstNode < (32 / zoom)) {
                 return {
-                    snapped,
-                    closingLoop,
+                    snapped: { x: firstNode.x, y: firstNode.y },
+                    closingLoop: true,
                     junction: {
                         wallId: currentWallId!,
                         edgeId: '',
@@ -134,6 +230,80 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                 };
             }
         }
+
+        const directSnapPoint = findDirectSnapPoint(worldPos);
+        if (directSnapPoint) {
+            return {
+                snapped: { x: directSnapPoint.x, y: directSnapPoint.y },
+                closingLoop: false,
+                junction: null,
+            };
+        }
+
+        let snapped = snapToGridEnabled
+            ? {
+                x: Math.round(worldPos.x / gridSize) * gridSize,
+                y: Math.round(worldPos.y / gridSize) * gridSize
+            }
+            : worldPos;
+
+        let snappedXToGuide = false;
+        let snappedYToGuide = false;
+        const snapTol = SNAP_PIXELS / zoom;
+        const alignmentReference = worldPos;
+        const interestingX: number[] = [];
+        const interestingY: number[] = [];
+
+        walls.forEach(w => {
+            if (w.id === currentWallId) {
+                if (w.nodes.length > 0) {
+                    interestingX.push(w.nodes[0].x);
+                    interestingY.push(w.nodes[0].y);
+                }
+                return;
+            }
+
+            w.nodes.forEach(n => {
+                interestingX.push(n.x);
+                interestingY.push(n.y);
+            });
+        });
+
+        interestingY.sort((a, b) => Math.abs(alignmentReference.y - a) - Math.abs(alignmentReference.y - b));
+        if (interestingY.length > 0 && Math.abs(alignmentReference.y - interestingY[0]) < snapTol) {
+            snapped.y = interestingY[0];
+            snappedYToGuide = true;
+        }
+
+        interestingX.sort((a, b) => Math.abs(alignmentReference.x - a) - Math.abs(alignmentReference.x - b));
+        if (interestingX.length > 0 && Math.abs(alignmentReference.x - interestingX[0]) < snapTol) {
+            snapped.x = interestingX[0];
+            snappedXToGuide = true;
+        }
+
+        if (lastNode) {
+            const dx = Math.abs(alignmentReference.x - lastNode.x);
+            const dy = Math.abs(alignmentReference.y - lastNode.y);
+
+            if (!snappedXToGuide && dx < snapTol) {
+                snapped.x = lastNode.x;
+            }
+
+            if (!snappedYToGuide && dy < snapTol) {
+                snapped.y = lastNode.y;
+            }
+        }
+
+        const { snapToObjects } = useEditorStore.getState();
+        if (snapToObjects && !snappedXToGuide && !snappedYToGuide) {
+            const allElements = [...shapes, ...walls.filter(w => w.id !== currentWallId), ...assets];
+            const snapResult = findSnapPointInShapes(worldPos, allElements, 20 / zoom);
+            if (snapResult) {
+                snapped = { x: snapResult.x, y: snapResult.y };
+            }
+        }
+
+        let closingLoop = false;
 
         const junction = findWallIntersection(snapped, walls, JUNCTION_SNAP_THRESHOLD, currentWallId || undefined);
         if (junction) {
@@ -145,7 +315,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             closingLoop,
             junction,
         };
-    }, [currentWall, currentWallId, gridSize, lastNode, snapToGridEnabled, walls, zoom]);
+    }, [currentWall, currentWallId, findDirectSnapPoint, gridSize, lastNode, snapToGridEnabled, walls, zoom]);
 
     const finishWall = useCallback((closed: boolean = false) => {
         if (!currentWallId) {
@@ -164,14 +334,19 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
 
     // Handle mouse move for preview
     const handleMouseMove = useCallback((e: MouseEvent) => {
-        if (!isActive || !isDrawing) return;
+        if (!isActive) return;
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
         const { snapped, junction } = getSnappedWallPoint(worldPos);
+        const segmentIntersections = isDrawing && lastNode
+            ? getSegmentIntersections(lastNode, snapped)
+            : [];
+        const firstIntersection = segmentIntersections[0] || null;
+        const segmentJunction = !junction ? firstIntersection : null;
 
-        setJunctionTarget(junction || null);
+        setJunctionTarget(junction || segmentJunction || null);
         setPreviewPoint(snapped);
-    }, [getSnappedWallPoint, isActive, isDrawing, screenToWorld]);
+    }, [getSegmentIntersections, getSnappedWallPoint, isActive, isDrawing, lastNode, screenToWorld]);
 
     // Handle click to add node
     const handleClick = useCallback((e: MouseEvent) => {
@@ -187,7 +362,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             return;
         }
 
-        const worldPos = screenToWorld(e.clientX, e.clientY);
+        const worldPos = previewPoint || screenToWorld(e.clientX, e.clientY);
         let { snapped, closingLoop, junction } = getSnappedWallPoint(worldPos);
 
         // FIRST PRIORITY: Check for loop closing (before other snapping)
@@ -200,15 +375,91 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             );
 
             if (!edgeExists) {
-                const closeEdge: WallEdge = {
-                    id: `edge-${Date.now()}-close`,
-                    nodeA: lastNodeId!,
-                    nodeB: firstNode.id,
-                    thickness,
-                };
-                updateWall(currentWallId!, {
-                    edges: [...currentWall!.edges, closeEdge],
-                });
+                const closingIntersections = lastNode
+                    ? getSegmentIntersections(lastNode, firstNode)
+                    : [];
+
+                if (closingIntersections.length > 0) {
+                    const updatedNodes = [...currentWall.nodes];
+                    const updatedEdges = [...currentWall.edges];
+                    const touchedWallIds = new Set<string>([currentWallId!]);
+                    const pendingConnections: Array<{
+                        sourceNodeId: string;
+                        wallId: string;
+                        edgeId: string;
+                        point: { x: number; y: number };
+                    }> = [];
+                    let previousNodeId = lastNodeId!;
+
+                    const addNodeIfNeeded = (node: WallNode) => {
+                        if (!updatedNodes.some(existing => existing.id === node.id)) {
+                            updatedNodes.push(node);
+                        }
+                    };
+
+                    for (const intersection of closingIntersections) {
+                        const intersectionNodeId = `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+                        const intersectionNode: WallNode = {
+                            id: intersectionNodeId,
+                            x: intersection.point.x,
+                            y: intersection.point.y,
+                        };
+
+                        addNodeIfNeeded(intersectionNode);
+                        updatedEdges.push({
+                            id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                            nodeA: previousNodeId,
+                            nodeB: intersectionNodeId,
+                            thickness,
+                        });
+
+                        pendingConnections.push({
+                            sourceNodeId: intersectionNodeId,
+                            wallId: intersection.wallId,
+                            edgeId: intersection.edgeId,
+                            point: intersection.point,
+                        });
+                        touchedWallIds.add(intersection.wallId);
+
+                        previousNodeId = intersectionNodeId;
+                    }
+
+                    updatedEdges.push({
+                        id: `edge-${Date.now()}-close`,
+                        nodeA: previousNodeId,
+                        nodeB: firstNode.id,
+                        thickness,
+                    });
+
+                    updateWall(currentWallId!, {
+                        nodes: updatedNodes,
+                        edges: updatedEdges,
+                    });
+
+                    pendingConnections.forEach(connection => {
+                        connectNodeToWallEdge(
+                            currentWallId!,
+                            connection.sourceNodeId,
+                            connection.wallId,
+                            connection.edgeId,
+                            connection.point
+                        );
+                    });
+
+                    removeDuplicateSharedEdges(currentWallId!);
+                    touchedWallIds.forEach((wallId) => refreshWallGeometry(wallId));
+                } else {
+                    const closeEdge: WallEdge = {
+                        id: `edge-${Date.now()}-close`,
+                        nodeA: lastNodeId!,
+                        nodeB: firstNode.id,
+                        thickness,
+                    };
+                    updateWall(currentWallId!, {
+                        edges: [...currentWall!.edges, closeEdge],
+                    });
+                    refreshWallGeometry(currentWallId!);
+                }
             }
             finishWall(true);
             return;
@@ -217,23 +468,13 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
         // Check for junction opportunity (edges)
         // Check for existing node snap (corners)
         let existingNodeId: string | null = null;
-        for (const wall of walls) {
-            // Don't snap to current wall's last node (prevent 0-length edge)
-            if (wall.id === currentWallId && lastNodeId) {
-                const node = wall.nodes.find(n => n.id === lastNodeId);
-                if (node && Math.hypot(node.x - snapped.x, node.y - snapped.y) < SNAP_DISTANCE) {
-                    return; // Ignore click on same node
-                }
-            }
-
-            for (const node of wall.nodes) {
-                if (Math.hypot(node.x - snapped.x, node.y - snapped.y) < SNAP_DISTANCE) {
-                    snapped = { x: node.x, y: node.y };
-                    existingNodeId = node.id;
-                    break;
-                }
-            }
-            if (existingNodeId) break;
+        const existingNodeResult = findExistingNodeAtPoint(snapped);
+        if (existingNodeResult.isCurrentLastNode) {
+            return;
+        }
+        if (existingNodeResult.nodeId && existingNodeResult.point) {
+            snapped = { x: existingNodeResult.point.x, y: existingNodeResult.point.y };
+            existingNodeId = existingNodeResult.nodeId;
         }
 
         if (junction && !existingNodeId) {
@@ -274,10 +515,120 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
 
             addWall(wall);
             setCurrentWallId(wallId);
-            setLastNodeId(newNodeId);
             setIsDrawing(true);
+
+            if (junction && !existingNodeId && junction.edgeId) {
+                const mergedNode = connectNodeToWallEdge(
+                    wallId,
+                    newNodeId,
+                    junction.wallId,
+                    junction.edgeId,
+                    junction.point
+                );
+                setLastNodeId(mergedNode?.id || newNodeId);
+            } else {
+                setLastNodeId(newNodeId);
+            }
         } else {
             // SUBSEQUENT CLICKS - Add node and edge to existing wall
+            const segmentIntersections = lastNode
+                ? getSegmentIntersections(lastNode, snapped)
+                : [];
+
+            const extendedIntersection = segmentIntersections.find(intersection => intersection.tSegment > 1);
+            if (extendedIntersection) {
+                snapped = extendedIntersection.point;
+                newNode.x = snapped.x;
+                newNode.y = snapped.y;
+            }
+
+            if (segmentIntersections.length > 0) {
+                const updatedNodes = [...currentWall!.nodes];
+                const updatedEdges = [...currentWall!.edges];
+                const touchedWallIds = new Set<string>([currentWallId]);
+                const pendingConnections: Array<{
+                    sourceNodeId: string;
+                    wallId: string;
+                    edgeId: string;
+                    point: { x: number; y: number };
+                }> = [];
+                let previousNodeId = lastNodeId!;
+
+                const addNodeIfNeeded = (node: WallNode) => {
+                    if (!updatedNodes.some(existing => existing.id === node.id)) {
+                        updatedNodes.push(node);
+                    }
+                };
+
+                for (const intersection of segmentIntersections) {
+                    const intersectionNodeId = `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+                    const intersectionNode: WallNode = {
+                        id: intersectionNodeId,
+                        x: intersection.point.x,
+                        y: intersection.point.y,
+                    };
+
+                    addNodeIfNeeded(intersectionNode);
+                    updatedEdges.push({
+                        id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                        nodeA: previousNodeId,
+                        nodeB: intersectionNodeId,
+                        thickness,
+                    });
+
+                    pendingConnections.push({
+                        sourceNodeId: intersectionNodeId,
+                        wallId: intersection.wallId,
+                        edgeId: intersection.edgeId,
+                        point: intersection.point,
+                    });
+                    touchedWallIds.add(intersection.wallId);
+
+                    previousNodeId = intersectionNodeId;
+                }
+
+                addNodeIfNeeded(newNode);
+                updatedEdges.push({
+                    id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                    nodeA: previousNodeId,
+                    nodeB: newNodeId,
+                    thickness,
+                });
+
+                updateWall(currentWallId, {
+                    nodes: updatedNodes,
+                    edges: updatedEdges,
+                });
+
+                pendingConnections.forEach(connection => {
+                    connectNodeToWallEdge(
+                        currentWallId,
+                        connection.sourceNodeId,
+                        connection.wallId,
+                        connection.edgeId,
+                        connection.point
+                    );
+                });
+
+                let finalNodeId = newNodeId;
+                if (junction && !existingNodeId) {
+                    const mergedNode = connectNodeToWallEdge(
+                        currentWallId,
+                        newNodeId,
+                        junction.wallId,
+                        junction.edgeId,
+                        junction.point
+                    );
+                    if (mergedNode) {
+                        finalNodeId = mergedNode.id;
+                    }
+                }
+
+                removeDuplicateSharedEdges(currentWallId);
+                touchedWallIds.forEach((wallId) => refreshWallGeometry(wallId));
+                setLastNodeId(finalNodeId);
+                return;
+            }
 
             // Check if edge already exists between lastNode and newNode
             // We need to check ALL walls to prevent overlap
@@ -345,17 +696,22 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
 
             // Handle junction connection if detected (and not snapping to existing node)
             if (junction && !existingNodeId) {
-                connectWallToEdge(
+                const mergedNode = connectNodeToWallEdge(
                     currentWallId,
                     newNodeId,
                     junction.wallId,
                     junction.edgeId,
-                    junction.point,
-                    true // skipHistory since updateWall already saved it
+                    junction.point
                 );
+                if (mergedNode) {
+                    setLastNodeId(mergedNode.id);
+                }
+                refreshWallGeometry(junction.wallId);
+                refreshWallGeometry(currentWallId);
             }
+            removeDuplicateSharedEdges(currentWallId);
         }
-    }, [getSnappedWallPoint, isActive, currentWallId, currentWall, lastNodeId, screenToWorld, lastClickTime, walls, SNAP_DISTANCE, thickness, addWall, updateWall, getNextZIndex, connectWallToEdge, finishWall]);
+    }, [connectNodeToWallEdge, findExistingNodeAtPoint, getSegmentIntersections, getSnappedWallPoint, isActive, currentWallId, currentWall, lastNode, lastNodeId, previewPoint, refreshWallGeometry, removeDuplicateSharedEdges, screenToWorld, lastClickTime, walls, thickness, addWall, updateWall, getNextZIndex, finishWall]);
 
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
         if (!isActive) return;
@@ -398,6 +754,9 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
 
     if (!isActive) return null;
 
+    const cursorMarkerStroke = 1.25 / zoom;
+    const junctionMarkerRadius = 4.5 / zoom;
+
     // Show preview line and junction indicator
     return (
         <>
@@ -408,10 +767,10 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                     <circle
                         cx={first.x}
                         cy={first.y}
-                        r={6 / zoom}
+                        r={junctionMarkerRadius}
                         fill="rgba(16,185,129,0.15)"
                         stroke="#10b981"
-                        strokeWidth={1 / zoom}
+                        strokeWidth={cursorMarkerStroke}
                     />
                 );
             })()}
@@ -530,33 +889,97 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                 const perpX = (-dy / length) * (wallThickness / 2);
                 const perpY = (dx / length) * (wallThickness / 2);
 
+                const openings = getSegmentIntersections(lastNode, previewPoint)
+                    .filter((intersection) => intersection.tSegment > 0 && intersection.tSegment < 1)
+                    .map((intersection) => {
+                        const targetWall = walls.find((wall) => wall.id === intersection.wallId);
+                        const targetEdge = targetWall?.edges.find((edge) => edge.id === intersection.edgeId);
+                        const targetThickness = targetEdge?.thickness || thickness;
+
+                        const otherDx = intersection.nodeB.x - intersection.nodeA.x;
+                        const otherDy = intersection.nodeB.y - intersection.nodeA.y;
+                        const angle1 = Math.atan2(dy, dx);
+                        const angle2 = Math.atan2(otherDy, otherDx);
+                        let angleDiff = Math.abs(angle1 - angle2);
+                        if (angleDiff > Math.PI) angleDiff = (2 * Math.PI) - angleDiff;
+
+                        const sinAngle = Math.abs(Math.sin(angleDiff));
+                        if (sinAngle < 0.2) {
+                            return null;
+                        }
+
+                        const halfProjectedLength = (targetThickness / 2) / sinAngle;
+                        const halfProjectedT = Math.min(0.49, halfProjectedLength / length);
+
+                        return {
+                            startT: Math.max(0, intersection.tSegment - halfProjectedT),
+                            endT: Math.min(1, intersection.tSegment + halfProjectedT),
+                        };
+                    })
+                    .filter((opening): opening is { startT: number; endT: number } => Boolean(opening))
+                    .sort((a, b) => a.startT - b.startT);
+
+                const mergedOpenings: Array<{ startT: number; endT: number }> = [];
+                openings.forEach((opening) => {
+                    const lastOpening = mergedOpenings[mergedOpenings.length - 1];
+                    if (!lastOpening || opening.startT > lastOpening.endT) {
+                        mergedOpenings.push({ ...opening });
+                        return;
+                    }
+
+                    lastOpening.endT = Math.max(lastOpening.endT, opening.endT);
+                });
+
+                const segments: Array<{ startT: number; endT: number }> = [];
+                let currentT = 0;
+                mergedOpenings.forEach((opening) => {
+                    if (opening.startT > currentT) {
+                        segments.push({ startT: currentT, endT: opening.startT });
+                    }
+                    currentT = Math.max(currentT, opening.endT);
+                });
+                if (currentT < 1) {
+                    segments.push({ startT: currentT, endT: 1 });
+                }
+
+                const pointAtT = (t: number) => ({
+                    x: lastNode.x + dx * t,
+                    y: lastNode.y + dy * t,
+                });
+
                 return (
                     <g>
-                        {/* Left line */}
-                        <line
-                            x1={lastNode.x - perpX}
-                            y1={lastNode.y - perpY}
-                            x2={previewPoint.x - perpX}
-                            y2={previewPoint.y - perpY}
-                            stroke="#3b82f6"
-                            strokeWidth={2}
-                            strokeDasharray="5,5"
-                            opacity={0.6}
-                            vectorEffect="non-scaling-stroke"
-                        />
+                        {segments.map((segment, index) => {
+                            const start = pointAtT(segment.startT);
+                            const end = pointAtT(segment.endT);
 
-                        {/* Right line */}
-                        <line
-                            x1={lastNode.x + perpX}
-                            y1={lastNode.y + perpY}
-                            x2={previewPoint.x + perpX}
-                            y2={previewPoint.y + perpY}
-                            stroke="#3b82f6"
-                            strokeWidth={2}
-                            strokeDasharray="5,5"
-                            opacity={0.6}
-                            vectorEffect="non-scaling-stroke"
-                        />
+                            return (
+                                <g key={`preview-segment-${index}`}>
+                                    <line
+                                        x1={start.x - perpX}
+                                        y1={start.y - perpY}
+                                        x2={end.x - perpX}
+                                        y2={end.y - perpY}
+                                        stroke="#3b82f6"
+                                        strokeWidth={2}
+                                        strokeDasharray="5,5"
+                                        opacity={0.6}
+                                        vectorEffect="non-scaling-stroke"
+                                    />
+                                    <line
+                                        x1={start.x + perpX}
+                                        y1={start.y + perpY}
+                                        x2={end.x + perpX}
+                                        y2={end.y + perpY}
+                                        stroke="#3b82f6"
+                                        strokeWidth={2}
+                                        strokeDasharray="5,5"
+                                        opacity={0.6}
+                                        vectorEffect="non-scaling-stroke"
+                                    />
+                                </g>
+                            );
+                        })}
                     </g>
                 );
             })()}
@@ -620,23 +1043,10 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
                 <circle
                     cx={junctionTarget.point.x}
                     cy={junctionTarget.point.y}
-                    r={6 / zoom}
+                    r={junctionMarkerRadius}
                     fill="none"
                     stroke="#10b981"
-                    strokeWidth={1 / zoom}
-                />
-            )}
-
-            {/* Close loop indicator */}
-            {junctionTarget && (
-                <circle
-                    cx={junctionTarget.point.x}
-                    cy={junctionTarget.point.y}
-                    r={10 / zoom}
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth={1 / zoom}
-                    strokeDasharray={`${4 / zoom},${4 / zoom}`}
+                    strokeWidth={cursorMarkerStroke}
                 />
             )}
         </>

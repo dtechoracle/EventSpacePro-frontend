@@ -188,6 +188,37 @@ export default function PropertiesSidebar(): React.JSX.Element {
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
 
+    const clusterSize = 1000;
+
+    if (numberingDirection === 'snake') {
+      const primaryByColumn = new Map<number, typeof allTables>();
+
+      allTables.forEach((table) => {
+        const columnBucket = Math.round(table.x / clusterSize);
+        const current = primaryByColumn.get(columnBucket) || [];
+        current.push(table);
+        primaryByColumn.set(columnBucket, current);
+      });
+
+      const orderedColumns = Array.from(primaryByColumn.entries())
+        .sort((a, b) => {
+          const [aBucket] = a;
+          const [bBucket] = b;
+          const direction = numberingStartingPoint.includes('right') || numberingStartingPoint === 'right' ? -1 : 1;
+          return (aBucket - bBucket) * direction;
+        });
+
+      const startsFromBottom = numberingStartingPoint.includes('bottom') || numberingStartingPoint === 'bottom';
+      const snakeOrdered = orderedColumns.flatMap(([, columnTables], columnIndex) => {
+        const orderedInColumn = [...columnTables].sort((a, b) => {
+          return startsFromBottom ? b.y - a.y : a.y - b.y;
+        });
+
+        return columnIndex % 2 === 0 ? orderedInColumn : orderedInColumn.reverse();
+      });
+
+      allTables.splice(0, allTables.length, ...snakeOrdered);
+    } else {
     allTables.sort((a, b) => {
       if (numberingStartingPoint === 'center') {
         const distA = Math.sqrt(Math.pow(a.x - centerX, 2) + Math.pow(a.y - centerY, 2));
@@ -197,8 +228,6 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
       // A. Start Point defines the Origin (Positive or Negative multipliers)
       // B. Direction defines the Flow (Row-first vs Column-first)
-      
-      const clusterSize = 1000; 
       
       // Calculate a "Sort Index" for each table based on clustering and multipliers
       const getSortValue = (t: {x: number, y: number}) => {
@@ -229,6 +258,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
       return getSortValue(a) - getSortValue(b);
     });
+    }
 
     // Only apply if the current numbering differs from the intended one
     const updates = allTables.map((t, idx) => {
@@ -2822,6 +2852,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 <option value="right-to-left">Right → Left</option>
                 <option value="top-to-bottom">Top ↓ Bottom</option>
                 <option value="bottom-to-top">Bottom ↑ Top</option>
+                <option value="snake">S Position</option>
               </select>
             </div>
 

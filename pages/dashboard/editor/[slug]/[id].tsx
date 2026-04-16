@@ -1004,7 +1004,6 @@ export default function Editor() {
               projectStore.addDimension(dimension, true);
             });
             labelArrows.forEach((arrow: any) => {
-              console.log(`[Editor] Adding label arrow:`, arrow.id);
               projectStore.addLabelArrow(arrow, true);
             });
 
@@ -1033,7 +1032,7 @@ export default function Editor() {
                 rotation: 0,
                 zIndex: -100,
                 points: []
-              });
+              }, true);
             }
 
             console.log(`[Editor] ✅ Loaded ${walls.length} walls, ${shapes.length} shapes, ${assets.length} assets from DATABASE`);
@@ -1092,7 +1091,7 @@ export default function Editor() {
                     nodes: wallNodes,
                     edges: wallEdges,
                     zIndex: asset.zIndex || 0
-                  });
+                  }, true);
                 }
               }
             }
@@ -1121,7 +1120,7 @@ export default function Editor() {
                     nodes: wallNodes,
                     edges: wallEdges,
                     zIndex: asset.zIndex || 0
-                  });
+                  }, true);
                   loadedCount++;
                   console.log(`[Editor] ✅ Loaded wall-segments from DATABASE:`, asset.id);
                 }
@@ -1153,7 +1152,7 @@ export default function Editor() {
                     { x: endX - (startX + endX) / 2, y: endY - (startY + endY) / 2 },
                   ],
                   zIndex: asset.zIndex || 0
-                });
+                }, true);
                 loadedCount++;
                 console.log(`[Editor] ✅ Loaded line-segment from DATABASE:`, asset.id);
               }
@@ -1182,7 +1181,7 @@ export default function Editor() {
                   strokeWidth: asset.strokeWidth || 2,
                   points: asset.points,
                   zIndex: asset.zIndex || 0
-                });
+                }, true);
 
                 console.log(`[Editor] ✅ Loaded ${asset.type} shape from DATABASE:`, {
                   id: asset.id,
@@ -1223,7 +1222,7 @@ export default function Editor() {
                   rotation: asset.rotation || 0,
                   scale: asset.scale || 1,
                   zIndex: asset.zIndex || 0,
-                });
+                }, true);
 
                 console.log(`[Editor] ✅ Loaded asset from DATABASE:`, {
                   id: asset.id,
@@ -1250,6 +1249,7 @@ export default function Editor() {
       }
     }
   }, [eventData, currentEventData, id]);
+
   // Handle focusing on content if requested in query params
   useEffect(() => {
     if (router.query.focus === 'true' && eventData && (walls.length > 0 || shapes.length > 0 || projectAssets.length > 0)) {

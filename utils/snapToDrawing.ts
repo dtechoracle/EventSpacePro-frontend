@@ -46,6 +46,25 @@ function dedupeSnapPoints(points: SnapPoint[], tolerance: number = 1) {
     return unique;
 }
 
+export function findClosestSnapPointFromList(
+    cursorPos: { x: number; y: number },
+    snapPoints: SnapPoint[],
+    snapThreshold: number = 20
+): SnapPoint | null {
+    let closestPoint: SnapPoint | null = null;
+    let closestDistance = snapThreshold;
+
+    for (const point of snapPoints) {
+        const distance = Math.hypot(cursorPos.x - point.x, cursorPos.y - point.y);
+        if (distance < closestDistance) {
+            closestDistance = distance;
+            closestPoint = point;
+        }
+    }
+
+    return closestPoint;
+}
+
 /**
  * Get all potential snap points for an element
  */
@@ -284,16 +303,15 @@ export function findClosestSnapPoint(
     const snapPoints = getSnapPoints(element, vertices);
 
     // 1. Check discrete snap points first (corners, midpoints, centers)
+    // If the cursor is close to a visible snap marker, prefer that exact point
+    // instead of allowing nearby edge snapping to override it.
+    const discreteSnapPoint = findClosestSnapPointFromList(cursorPos, snapPoints, snapThreshold);
+    if (discreteSnapPoint) {
+        return discreteSnapPoint;
+    }
+
     let closestPoint: SnapPoint | null = null;
     let closestDistance = snapThreshold;
-
-    for (const point of snapPoints) {
-        const distance = Math.hypot(cursorPos.x - point.x, cursorPos.y - point.y);
-        if (distance < closestDistance) {
-            closestDistance = distance;
-            closestPoint = point;
-        }
-    }
 
     // 2. Specialized Edge Snapping for Walls (Inner, Outer, and Center lines)
     if ('nodes' in element && 'edges' in element) {

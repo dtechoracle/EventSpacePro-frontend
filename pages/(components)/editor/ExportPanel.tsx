@@ -45,6 +45,36 @@ interface ProfessionalDetails {
   panelColor?: string;
 }
 
+const formatDateForDisplay = (value?: string) => {
+  if (!value) return "";
+  const trimmed = value.trim();
+
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+  }
+
+  const displayMatch = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (displayMatch) {
+    return trimmed;
+  }
+
+  return trimmed;
+};
+
+const normalizeDateInput = (value: string) => {
+  const trimmed = value.trim();
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+  }
+
+  const digitsOnly = trimmed.replace(/\D/g, "").slice(0, 8);
+  if (digitsOnly.length <= 2) return digitsOnly;
+  if (digitsOnly.length <= 4) return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2)}`;
+  return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4)}`;
+};
+
 /**
  * Robustly loads SVGs for export, applying real-time color/stroke overrides
  */
@@ -358,7 +388,7 @@ export default function ExportPanel() {
     const screenHeight = Math.max(1, (maxY - minY + paddingMm * 2) * zoom);
 
     const clone = workspaceSvg.cloneNode(true) as SVGSVGElement;
-    clone.querySelectorAll('.interaction-highlights, .snap-markers, [data-export-ignore="true"]').forEach((node) => node.remove());
+    clone.querySelectorAll('.interaction-highlights, .snap-markers, .grid-layer, pattern[id^="grid-"], [data-export-ignore="true"]').forEach((node) => node.remove());
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     clone.setAttribute('width', `${screenWidth}`);
     clone.setAttribute('height', `${screenHeight}`);
@@ -755,7 +785,7 @@ export default function ExportPanel() {
 
     if (details.date) {
       drawHeader('DATE');
-      drawRow('', details.date, false);
+      drawRow('', formatDateForDisplay(details.date), false);
     }
 
     // 2. VENUE
@@ -1194,7 +1224,7 @@ export default function ExportPanel() {
                 </div>
 
                 <div className="flex-1 flex flex-col items-center gap-3">
-                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">By Logo</label>
+                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Event By (Logo)</label>
                   <div className="relative group w-full">
                     <div className="w-full h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-slate-400">
                       {profDetails.byLogo ? (
@@ -1262,7 +1292,7 @@ export default function ExportPanel() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Date</label>
-                  <input type="date" className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" value={profDetails.date} onChange={e=>setProfDetails({...profDetails, date: e.target.value})}/>
+                  <input type="text" inputMode="numeric" placeholder="DD/MM/YYYY" className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" value={formatDateForDisplay(profDetails.date)} onChange={e=>setProfDetails({...profDetails, date: normalizeDateInput(e.target.value)})}/>
                 </div>
               </div>
 

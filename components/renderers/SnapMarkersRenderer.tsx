@@ -1,52 +1,75 @@
 import React, { useMemo } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { useProjectStore } from '@/store/projectStore';
-import { getSnapPoints, SnapPoint } from '@/utils/snapToDrawing';
+import { findClosestSnapPointFromList, getSnapPoints } from '@/utils/snapToDrawing';
 import { ASSET_LIBRARY } from '@/lib/assets';
 
 export default function SnapMarkersRenderer() {
-    const { hoveredId, zoom } = useEditorStore();
+    const { hoveredId, zoom, mouseWorldPos, activeTool } = useEditorStore();
     const { shapes, assets, walls } = useProjectStore();
 
-    const snapPoints = useMemo(() => {
-        if (!hoveredId) return [];
+    const fallbackSnapTargetId = useMemo<string | null>(() => {
+        if (!(activeTool === 'wall' || activeTool === 'shape-line' || activeTool === 'shape-arrow' || activeTool === 'dimension' || activeTool === 'arch')) {
+            return null;
+        }
 
-        const shape = shapes.find(s => s.id === hoveredId);
+        const marqueeCandidates: Array<{ id: string; points: ReturnType<typeof getSnapPoints> }> = assets
+            .flatMap((asset) => {
+                const assetDef = ASSET_LIBRARY.find((def) => def.id === asset.type);
+                return assetDef?.category === 'Marquee'
+                    ? [{ id: asset.id, points: getSnapPoints(asset) }]
+                    : [];
+            });
+
+        const candidates: Array<{ id: string; points: ReturnType<typeof getSnapPoints> }> = [
+            ...shapes.map((shape) => ({ id: shape.id, points: getSnapPoints(shape) })),
+            ...walls.map((wall) => ({ id: wall.id, points: getSnapPoints(wall) })),
+            ...marqueeCandidates,
+        ];
+
+        let bestMatchId: string | null = null;
+        let bestDistance = Infinity;
+
+        candidates.forEach((candidate) => {
+            const closest = findClosestSnapPointFromList(mouseWorldPos, candidate.points, 32 / zoom);
+            if (!closest) return;
+
+            const distance = Math.hypot(mouseWorldPos.x - closest.x, mouseWorldPos.y - closest.y);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestMatchId = candidate.id;
+            }
+        });
+
+        return bestMatchId;
+    }, [activeTool, assets, mouseWorldPos, shapes, walls, zoom]);
+
+    const markerSourceId = hoveredId || fallbackSnapTargetId;
+
+    const snapPoints = useMemo(() => {
+        if (!markerSourceId) return [];
+
+        const shape = shapes.find(s => s.id === markerSourceId);
         if (shape) return getSnapPoints(shape);
 
-        const asset = assets.find(a => a.id === hoveredId);
+        const asset = assets.find(a => a.id === markerSourceId);
         if (asset) {
             const assetDef = ASSET_LIBRARY.find((def) => def.id === asset.type);
             return assetDef?.category === 'Marquee' ? getSnapPoints(asset) : [];
         }
 
-        const wall = walls.find(w => w.id === hoveredId);
+        const wall = walls.find(w => w.id === markerSourceId);
         if (wall) return getSnapPoints(wall);
 
         return [];
-    }, [hoveredId, shapes, assets, walls]);
+    }, [markerSourceId, shapes, assets, walls]);
 
-    // Find the closest point to cursor for highlighting
     const activePoint = useMemo(() => {
-        if (!hoveredId || snapPoints.length === 0) return null;
+        if (!markerSourceId || snapPoints.length === 0) return null;
+        return findClosestSnapPointFromList(mouseWorldPos, snapPoints, 20 / zoom);
+    }, [markerSourceId, mouseWorldPos, snapPoints, zoom]);
 
-        // We need cursor position here, but we don't have it in props.
-        // We can get it from EditorStore if we track it, or we rely on 'snapIndicator' from the tools?
-        // Actually, the TOOLS (`ShapeTool`, `WallTool`) determine the *active* snap point.
-        // This renderer just shows *potential* snap points.
-
-        // However, we want to hide the others or highlight the active one?
-        // The implementation plan says: "Render distinct indicator for the *active* snap target".
-        // The active target is usually effectively shown by the Tool's own preview (e.g. the line sticking to it).
-        // But let's check if we can get the `snapSourceId` or similar from store?
-        // EditorStore has `hoveredId`.  Let's keep this simple:
-        // Green dots = "Here are places you CAN snap".
-        // The Tool itself draws the "I AM snapping here" indicator (usually).
-
-        return null;
-    }, [hoveredId, snapPoints]);
-
-    if (!hoveredId || snapPoints.length === 0) return null;
+    if (!markerSourceId || snapPoints.length === 0) return null;
 
     // Scale markers based on zoom
     const markerRadius = 3.5 / zoom;
@@ -60,10 +83,19 @@ export default function SnapMarkersRenderer() {
 
             {snapPoints.map((point, index) => (
                 <g key={`${point.elementId}-${index}`} transform={`translate(${point.x}, ${point.y})`}>
+                    {activePoint && activePoint.x === point.x && activePoint.y === point.y && (
+                        <circle
+                            r={markerRadius * 1.9}
+                            fill="none"
+                            stroke="#ffffff"
+                            strokeWidth={strokeWidth * 1.5}
+                            opacity={0.95}
+                        />
+                    )}
                     <circle
                         r={markerRadius}
                         fill="#22c55e" // Green
-                        opacity={0.8}
+                        opacity={activePoint && activePoint.x === point.x && activePoint.y === point.y ? 1 : 0.8}
                     />
                 </g>
             ))}

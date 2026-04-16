@@ -33,6 +33,225 @@ export function getClosestPointOnSegment(
 }
 
 /**
+ * Finds the intersection point between two line segments
+ */
+export function getLineSegmentIntersection(
+    segmentAStart: { x: number; y: number },
+    segmentAEnd: { x: number; y: number },
+    segmentBStart: { x: number; y: number },
+    segmentBEnd: { x: number; y: number }
+): { point: { x: number; y: number }; tSegment: number; tEdge: number } | null {
+    const x1 = segmentAStart.x;
+    const y1 = segmentAStart.y;
+    const x2 = segmentAEnd.x;
+    const y2 = segmentAEnd.y;
+    const x3 = segmentBStart.x;
+    const y3 = segmentBStart.y;
+    const x4 = segmentBEnd.x;
+    const y4 = segmentBEnd.y;
+
+    const denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (Math.abs(denominator) < 0.0001) {
+        return null;
+    }
+
+    const tSegment = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denominator;
+    const tEdge = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denominator;
+
+    if (tSegment < 0 || tSegment > 1 || tEdge < 0 || tEdge > 1) {
+        return null;
+    }
+
+    return {
+        point: {
+            x: x1 + tSegment * (x2 - x1),
+            y: y1 + tSegment * (y2 - y1),
+        },
+        tSegment,
+        tEdge,
+    };
+}
+
+export type WallSegmentIntersection = {
+    wallId: string;
+    edgeId: string;
+    point: { x: number; y: number };
+    nodeA: WallNode;
+    nodeB: WallNode;
+    tSegment: number;
+    tEdge: number;
+};
+
+function getLineLineIntersectionWithSegmentLimit(
+    segmentAStart: { x: number; y: number },
+    segmentAEnd: { x: number; y: number },
+    segmentBStart: { x: number; y: number },
+    segmentBEnd: { x: number; y: number },
+    maxTSegment: number
+): { point: { x: number; y: number }; tSegment: number; tEdge: number } | null {
+    const x1 = segmentAStart.x;
+    const y1 = segmentAStart.y;
+    const x2 = segmentAEnd.x;
+    const y2 = segmentAEnd.y;
+    const x3 = segmentBStart.x;
+    const y3 = segmentBStart.y;
+    const x4 = segmentBEnd.x;
+    const y4 = segmentBEnd.y;
+
+    const denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (Math.abs(denominator) < 0.0001) {
+        return null;
+    }
+
+    const tSegment = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denominator;
+    const tEdge = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denominator;
+
+    if (tSegment < 0 || tSegment > maxTSegment || tEdge < 0 || tEdge > 1) {
+        return null;
+    }
+
+    return {
+        point: {
+            x: x1 + tSegment * (x2 - x1),
+            y: y1 + tSegment * (y2 - y1),
+        },
+        tSegment,
+        tEdge,
+    };
+}
+
+/**
+ * Finds all wall-edge intersections along a proposed segment.
+ * Results are sorted from the segment start toward the segment end.
+ */
+export function findWallIntersectionsAlongSegment(
+    segmentStart: { x: number; y: number },
+    segmentEnd: { x: number; y: number },
+    walls: Wall[],
+    excludeWallId?: string,
+    tolerance: number = 0.001
+): WallSegmentIntersection[] {
+    const intersections: WallSegmentIntersection[] = [];
+
+    for (const wall of walls) {
+        if (excludeWallId && wall.id === excludeWallId) continue;
+
+        const nodeMap = new Map(wall.nodes.map((node) => [node.id, node]));
+
+        for (const edge of wall.edges) {
+            const nodeA = nodeMap.get(edge.nodeA);
+            const nodeB = nodeMap.get(edge.nodeB);
+            if (!nodeA || !nodeB) continue;
+
+            const intersection = getLineSegmentIntersection(segmentStart, segmentEnd, nodeA, nodeB);
+            if (!intersection) continue;
+
+            if (
+                intersection.tSegment <= tolerance ||
+                intersection.tSegment >= 1 - tolerance ||
+                intersection.tEdge <= tolerance ||
+                intersection.tEdge >= 1 - tolerance
+            ) {
+                continue;
+            }
+
+            intersections.push({
+                wallId: wall.id,
+                edgeId: edge.id,
+                point: intersection.point,
+                nodeA,
+                nodeB,
+                tSegment: intersection.tSegment,
+                tEdge: intersection.tEdge,
+            });
+        }
+    }
+
+    intersections.sort((a, b) => a.tSegment - b.tSegment);
+
+    return intersections.filter((intersection, index, sorted) => {
+        if (index === 0) return true;
+        const previous = sorted[index - 1];
+        return Math.hypot(
+            intersection.point.x - previous.point.x,
+            intersection.point.y - previous.point.y
+        ) > 0.5;
+    });
+}
+
+/**
+ * Finds intersections using the visual wall thickness, so crossing starts to
+ * register as soon as the proposed wall overlaps the target wall body.
+ */
+export function findWallIntersectionsAlongExtendedSegment(
+    segmentStart: { x: number; y: number },
+    segmentEnd: { x: number; y: number },
+    segmentThickness: number,
+    walls: Wall[],
+    excludeWallId?: string,
+    tolerance: number = 0.001
+): WallSegmentIntersection[] {
+    const intersections: WallSegmentIntersection[] = [];
+    const segmentDx = segmentEnd.x - segmentStart.x;
+    const segmentDy = segmentEnd.y - segmentStart.y;
+    const segmentLength = Math.hypot(segmentDx, segmentDy);
+
+    if (segmentLength < 0.0001) return intersections;
+
+    for (const wall of walls) {
+        if (excludeWallId && wall.id === excludeWallId) continue;
+
+        const nodeMap = new Map(wall.nodes.map((node) => [node.id, node]));
+
+        for (const edge of wall.edges) {
+            const nodeA = nodeMap.get(edge.nodeA);
+            const nodeB = nodeMap.get(edge.nodeB);
+            if (!nodeA || !nodeB) continue;
+
+            const visualExtension = ((segmentThickness || 150) + (edge.thickness || 150)) / 2;
+            const maxTSegment = 1 + (visualExtension / segmentLength);
+            const intersection = getLineLineIntersectionWithSegmentLimit(
+                segmentStart,
+                segmentEnd,
+                nodeA,
+                nodeB,
+                maxTSegment
+            );
+            if (!intersection) continue;
+
+            if (
+                intersection.tSegment <= tolerance ||
+                intersection.tEdge <= tolerance ||
+                intersection.tEdge >= 1 - tolerance
+            ) {
+                continue;
+            }
+
+            intersections.push({
+                wallId: wall.id,
+                edgeId: edge.id,
+                point: intersection.point,
+                nodeA,
+                nodeB,
+                tSegment: intersection.tSegment,
+                tEdge: intersection.tEdge,
+            });
+        }
+    }
+
+    intersections.sort((a, b) => a.tSegment - b.tSegment);
+
+    return intersections.filter((intersection, index, sorted) => {
+        if (index === 0) return true;
+        const previous = sorted[index - 1];
+        return Math.hypot(
+            intersection.point.x - previous.point.x,
+            intersection.point.y - previous.point.y
+        ) > 0.5;
+    });
+}
+
+/**
  * Finds if a point is near any wall edge in the given walls array
  * Returns the wall, edge, and exact snap point if found
  */

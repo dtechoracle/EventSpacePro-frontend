@@ -33,7 +33,7 @@ import { AutoDimensionRenderer } from './renderers/AutoDimensionRenderer';
 import ContextMenu from './ui/ContextMenu';
 import DuplicateDistributeModal from './ui/DuplicateDistributeModal';
 import { AnchorType, getAnchorsForObject, snapToObjects } from '@/utils/snapAnchors';
-import { findSnapPointInShapes } from '@/utils/snapToDrawing';
+import { findClosestSnapPointFromList, findSnapPointInShapes, getSnapPoints } from '@/utils/snapToDrawing';
 import { getMarqueeVertices } from '@/utils/assetUtils';
 
 // Safe UUID generator with fallback for non-secure contexts
@@ -59,6 +59,16 @@ interface Workspace2DProps {
   width?: number;
   height?: number;
 }
+
+const getWallRenderKey = (wall: Wall | (Wall & { _renderType?: 'wall' })) => {
+  const nodeKey = wall.nodes
+    .map((node) => `${node.id}:${node.x.toFixed(3)},${node.y.toFixed(3)}`)
+    .join('|');
+  const edgeKey = wall.edges
+    .map((edge) => `${edge.id}:${edge.nodeA}->${edge.nodeB}:${edge.thickness ?? 150}`)
+    .join('|');
+  return `${wall.id}:${nodeKey}:${edgeKey}`;
+};
 
 type SnapObject =
   | { type: 'shape'; object: Shape }
@@ -143,7 +153,7 @@ const MainDrawingLayer = React.memo(({
       {visibleRenderables.map((item) => {
         switch (item._renderType) {
           case 'wall':
-            return <WallRenderer key={item.id} wall={item} />;
+            return <WallRenderer key={getWallRenderKey(item)} wall={item} />;
           
           case 'shape':
             if (item.type === 'freehand') {
@@ -210,7 +220,7 @@ const SelectionHighlightLayer = React.memo(({
               <AssetRenderer asset={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
             )}
             {item._renderType === 'wall' && (
-              <WallRenderer wall={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
+              <WallRenderer key={`highlight-${getWallRenderKey(item)}`} wall={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
             )}
             
             {/* Premium Vertex Visualization */}
@@ -384,6 +394,7 @@ export default function Workspace2D({
   const toggleSnapToObjects = useEditorStore(s => s.toggleSnapToObjects);
   const placementMode = useEditorStore(s => s.placementMode);
   const setPlacementMode = useEditorStore(s => s.setPlacementMode);
+  const mouseWorldPos = useEditorStore(s => s.mouseWorldPos);
   const setMouseWorldPos = useEditorStore(s => s.setMouseWorldPos);
   const screenToWorld = useEditorStore(s => s.screenToWorld);
   const setEditingTextId = useEditorStore(s => s.setEditingTextId);
@@ -410,6 +421,7 @@ export default function Workspace2D({
     right: 0, 
     bottom: 0, 
     zoom: 0, 
+    sourceRenderables: null as any[] | null,
     lastResult: [] as any[] 
   });
   
@@ -434,7 +446,12 @@ export default function Workspace2D({
     // Only re-filter if we moved more than 20% of the viewport or zoomed > 10%
     const viewportWidth = worldRight - worldLeft;
     const viewportHeight = worldBottom - worldTop;
-    if (dx < viewportWidth * 0.2 && dy < viewportHeight * 0.2 && dz < 0.1) {
+    if (
+      lastCullBounds.current.sourceRenderables === allRenderables &&
+      dx < viewportWidth * 0.2 &&
+      dy < viewportHeight * 0.2 &&
+      dz < 0.1
+    ) {
        // Return the same array reference to prevent RenderLayer from re-rendering
        return lastCullBounds.current.lastResult || allRenderables;
     }
@@ -469,11 +486,35 @@ export default function Workspace2D({
       right: worldRight, 
       bottom: worldBottom, 
       zoom,
+      sourceRenderables: allRenderables,
       lastResult: result as any
     };
 
     return result;
   }, [allRenderables, panX, panY, zoom, viewportSize]);
+
+  const hoveredSnapPoints = useMemo(() => {
+    if (!hoveredId) return [];
+
+    const shape = shapes.find((item) => item.id === hoveredId);
+    if (shape) return getSnapPoints(shape);
+
+    const asset = assets.find((item) => item.id === hoveredId);
+    if (asset) {
+      const assetDef = ASSET_LIBRARY.find((def) => def.id === asset.type);
+      return assetDef?.category === 'Marquee' ? getSnapPoints(asset) : [];
+    }
+
+    const wall = walls.find((item) => item.id === hoveredId);
+    if (wall) return getSnapPoints(wall);
+
+    return [];
+  }, [hoveredId, shapes, assets, walls]);
+
+  const activeHoveredSnapPoint = useMemo(() => {
+    if (hoveredSnapPoints.length === 0) return null;
+    return findClosestSnapPointFromList(mouseWorldPos, hoveredSnapPoints, 20 / zoom);
+  }, [hoveredSnapPoints, mouseWorldPos, zoom]);
 
 
   const sceneStore = useSceneStore();
@@ -697,6 +738,8 @@ export default function Workspace2D({
           if (asset) {
             const aw = (asset.width || 0) * (asset.scale || 1);
             const ah = (asset.height || 0) * (asset.scale || 1);
+            const insertionInset = 50; // Door/window SVGs are drawn with the wall line ~50mm from the base
+            const insertionOffset = Math.max(0, (ah / 2) - insertionInset);
             
             const dx = worldX - draggedItemStart.x;
             const dy = worldY - draggedItemStart.y;
@@ -706,7 +749,11 @@ export default function Workspace2D({
             let minSnapDist = 150;
 
             // 1. Find the closest wall edge first to determine orientation
-            const initialSnap = findWallSnapPoint(proposedCenter, walls, 150);
+            const initialSnap = findWallSnapPoint(proposedCenter, walls, 150, {
+              allowNodes: false,
+              allowCenterLine: false,
+              allowFaces: true,
+            });
             
             if (initialSnap.snapped && initialSnap.wallId && initialSnap.edgeId) {
               const wall = walls.find(w => w.id === initialSnap.wallId);
@@ -719,27 +766,37 @@ export default function Workspace2D({
                 const wallAngleRad = Math.atan2(nB.y - nA.y, nB.x - nA.x);
                 const wallAngleDeg = wallAngleRad * (180 / Math.PI);
                 
-                // We want to check door points at THIS angle
+                // We want to check the actual insertion line, not the visual bbox extremes
                 const cos = Math.cos(wallAngleRad);
                 const sin = Math.sin(wallAngleRad);
 
-                // Door points relative to center, rotated to match wall
-                // Prioritize 'Bottom' (sill) of the door
-                // We add a tiny offset (10mm) to the bottom snap point to "push" it deeper into the wall
+                const rotateLocalPoint = (localX: number, localY: number) => ({
+                  x: (localX * cos) - (localY * sin),
+                  y: (localX * sin) + (localY * cos),
+                });
+
+                const jambInset = Math.min(80, aw / 4);
                 const doorPoints = [
-                  { x: -((ah / 2) + 10) * sin, y: ((ah / 2) + 10) * cos, type: 'bottom' },
-                  { x: 0, y: 0, type: 'center' },
-                  { x: ((ah / 2) + 10) * sin, y: -((ah / 2) + 10) * cos, type: 'top' },
+                  { ...rotateLocalPoint(0, -insertionOffset), type: 'insertion-center' },
+                  { ...rotateLocalPoint(-(aw / 2) + jambInset, -insertionOffset), type: 'insertion-left' },
+                  { ...rotateLocalPoint((aw / 2) - jambInset, -insertionOffset), type: 'insertion-right' },
                 ];
 
                 for (const pt of doorPoints) {
                   const proposedPt = { x: proposedCenter.x + pt.x, y: proposedCenter.y + pt.y };
                   // Re-check snap for this specific point against THIS wall specifically for precision
-                  const snap = findWallSnapPoint(proposedPt, [wall!], 150);
+                  const snap = findWallSnapPoint(proposedPt, [wall!], 150, {
+                    allowNodes: false,
+                    allowCenterLine: false,
+                    allowFaces: true,
+                  });
                   if (snap.snapped) {
                     const dist = Math.hypot(proposedPt.x - snap.x, proposedPt.y - snap.y);
-                    // Give slight preference to 'bottom' edge snap
-                    const biasedDist = pt.type === 'bottom' ? dist * 0.8 : dist;
+                    let biasedDist = dist;
+                    if (snap.snapType === 'wall-face') biasedDist *= 0.7;
+                    if (snap.snapType === 'wall-edge') biasedDist *= 0.9;
+                    if (snap.snapType === 'wall-node') biasedDist *= 1.4;
+                    if (pt.type === 'insertion-center') biasedDist *= 0.8;
                     if (biasedDist < minSnapDist) {
                       minSnapDist = biasedDist;
                       bestSnap = { ...snap, localOffset: pt, wallAngle: wallAngleDeg };
@@ -1973,10 +2030,12 @@ export default function Workspace2D({
       if (template?.category === 'Space_Elements') {
         // Snap to nearest wall on drop if it's a door/window!
         const snapDistance = 100; // Drop snap radius
-        const wallSnap = findWallSnapPoint({ x: worldX, y: worldY }, walls, snapDistance);
+        const wallSnap = findWallSnapPoint({ x: worldX, y: worldY }, walls, snapDistance, {
+          allowNodes: false,
+          allowCenterLine: false,
+          allowFaces: true,
+        });
         if (wallSnap.snapped && wallSnap.wallId && wallSnap.edgeId) {
-          finalX = wallSnap.x;
-          finalY = wallSnap.y;
           // Attempt to align rotation with wall
           const wall = walls.find(w => w.id === wallSnap.wallId);
           if (wall) {
@@ -1986,6 +2045,16 @@ export default function Workspace2D({
               const nodeB = wall.nodes.find(n => n.id === edge.nodeB);
               if (nodeA && nodeB) {
                 finalRotation = Math.atan2(nodeB.y - nodeA.y, nodeB.x - nodeA.x) * (180 / Math.PI);
+                const angleRad = finalRotation * (Math.PI / 180);
+                const insertionInset = 50;
+                const insertionOffset = Math.max(0, (height / 2) - insertionInset);
+                const insertionAnchor = {
+                  x: Math.sin(angleRad) * insertionOffset,
+                  y: -Math.cos(angleRad) * insertionOffset,
+                };
+
+                finalX = wallSnap.x - insertionAnchor.x;
+                finalY = wallSnap.y - insertionAnchor.y;
               }
             }
           }
@@ -3273,6 +3342,7 @@ export default function Workspace2D({
       style={{
         cursor: isPanning ? 'grabbing' : 
                 activeTool === 'pan' ? 'grab' : 
+                activeHoveredSnapPoint ? 'crosshair' :
                 (hoveredId && activeTool === 'select') ? 'pointer' :
                 activeTool === 'select' ? 'default' : 'crosshair',
       }}

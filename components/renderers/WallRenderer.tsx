@@ -116,7 +116,33 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
         return results;
     }, [nodes, edges, nodeMap, allWalls, wall.id]);
 
-    // Helper function to calculate line-line intersection
+    const getCollinearOverlap = useCallback((
+        aStart: Point,
+        aEnd: Point,
+        bStart: Point,
+        bEnd: Point
+    ): { startT: number; endT: number } | null => {
+        const dx = aEnd.x - aStart.x;
+        const dy = aEnd.y - aStart.y;
+        const lengthSq = dx * dx + dy * dy;
+        const length = Math.sqrt(lengthSq);
+        if (lengthSq < 0.0001) return null;
+
+        const cross1 = Math.abs((bStart.x - aStart.x) * dy - (bStart.y - aStart.y) * dx) / length;
+        const cross2 = Math.abs((bEnd.x - aStart.x) * dy - (bEnd.y - aStart.y) * dx) / length;
+        if (cross1 > 0.5 || cross2 > 0.5) return null;
+
+        const proj1 = ((bStart.x - aStart.x) * dx + (bStart.y - aStart.y) * dy) / lengthSq;
+        const proj2 = ((bEnd.x - aStart.x) * dx + (bEnd.y - aStart.y) * dy) / lengthSq;
+
+        const overlapStart = Math.max(0, Math.min(proj1, proj2));
+        const overlapEnd = Math.min(1, Math.max(proj1, proj2));
+
+        if (overlapEnd - overlapStart <= 0.01) return null;
+
+        return { startT: overlapStart, endT: overlapEnd };
+    }, []);
+
     const getLineLineIntersection = useCallback((
         p1: Point, p2: Point, p3: Point, p4: Point
     ): { point: Point; t1: number; t2: number } | null => {
@@ -131,18 +157,16 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
         const t1 = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
         const t2 = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
 
-        if (t1 >= 0 && t1 <= 1 && t2 >= 0 && t2 <= 1) {
-            return {
-                point: {
-                    x: x1 + t1 * (x2 - x1),
-                    y: y1 + t1 * (y2 - y1),
-                },
-                t1,
-                t2,
-            };
-        }
+        if (t1 < 0 || t1 > 1 || t2 < 0 || t2 > 1) return null;
 
-        return null;
+        return {
+            point: {
+                x: x1 + t1 * (x2 - x1),
+                y: y1 + t1 * (y2 - y1),
+            },
+            t1,
+            t2,
+        };
     }, []);
 
     // Calculate openings for each edge (both assets and wall intersections)
@@ -168,43 +192,73 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
                 }
             });
 
-            // 2. Find wall intersection openings
-            otherWallsFilter: {
-                const otherWalls = allWalls.filter(w => w.id !== wall.id);
-                otherWalls.forEach(otherWall => {
+            // 2. Hide collinear overlap against older walls so shared runs render as one wall.
+            const otherWalls = allWalls.filter(otherWall => otherWall.id !== wall.id && wall.id > otherWall.id);
+            otherWalls.forEach(otherWall => {
+                const otherNodeMap = new Map(otherWall.nodes.map(n => [n.id, n]));
+                otherWall.edges.forEach(otherEdge => {
+                    const otherNodeA = otherNodeMap.get(otherEdge.nodeA);
+                    const otherNodeB = otherNodeMap.get(otherEdge.nodeB);
+                    if (!otherNodeA || !otherNodeB) return;
+
+                    const overlap = getCollinearOverlap(nodeA, nodeB, otherNodeA, otherNodeB);
+                    if (!overlap) return;
+
+                    openings.push({
+                        type: 'wall',
+                        startT: overlap.startT,
+                        endT: overlap.endT,
+                    });
+                });
+            });
+
+            // 3. Open true crossings by the other wall thickness so perpendicular walls blend cleanly.
+            allWalls
+                .filter(otherWall => otherWall.id !== wall.id)
+                .forEach(otherWall => {
                     const otherNodeMap = new Map(otherWall.nodes.map(n => [n.id, n]));
                     otherWall.edges.forEach(otherEdge => {
                         const otherNodeA = otherNodeMap.get(otherEdge.nodeA);
                         const otherNodeB = otherNodeMap.get(otherEdge.nodeB);
                         if (!otherNodeA || !otherNodeB) return;
 
-                        const intersection = getLineLineIntersection(nodeA, nodeB, otherNodeA, otherNodeB);
-                        if (intersection && intersection.t1 > 0.05 && intersection.t1 < 0.95 && intersection.t2 > 0.05 && intersection.t2 < 0.95) {
-                            const edgeLength = Math.sqrt((nodeB.x - nodeA.x) ** 2 + (nodeB.y - nodeA.y) ** 2);
-                            const dx1 = nodeB.x - nodeA.x;
-                            const dy1 = nodeB.y - nodeA.y;
-                            const dx2 = otherNodeB.x - otherNodeA.x;
-                            const dy2 = otherNodeB.y - otherNodeA.y;
-                            const angle1 = Math.atan2(dy1, dx1);
-                            const angle2 = Math.atan2(dy2, dx2);
-                            let angleDiff = Math.abs(angle1 - angle2);
-                            if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
-                            const edgeThickness = edge.thickness || 25;
-                            const sinAngle = Math.abs(Math.sin(angleDiff));
-                            const effectiveWidth = sinAngle > 0.1 ? edgeThickness / sinAngle : edgeThickness * 2;
-                            const widthT = Math.min(effectiveWidth, edgeThickness * 3) / edgeLength;
+                        const overlap = getCollinearOverlap(nodeA, nodeB, otherNodeA, otherNodeB);
+                        if (overlap) return;
 
-                            openings.push({
-                                type: 'wall',
-                                startT: Math.max(0, intersection.t1 - widthT),
-                                endT: Math.min(1, intersection.t1 + widthT)
-                            });
-                        }
+                        const intersection = getLineLineIntersection(nodeA, nodeB, otherNodeA, otherNodeB);
+                        if (!intersection) return;
+                        // Allow blends almost all the way to edge ends so junctions
+                        // appear immediately after drawing without needing a later nudge.
+                        if (intersection.t1 <= 0.001 || intersection.t1 >= 0.999) return;
+
+                        const dx = nodeB.x - nodeA.x;
+                        const dy = nodeB.y - nodeA.y;
+                        const otherDx = otherNodeB.x - otherNodeA.x;
+                        const otherDy = otherNodeB.y - otherNodeA.y;
+                        const edgeLength = Math.sqrt(dx * dx + dy * dy);
+                        if (edgeLength < 0.0001) return;
+
+                        const angle1 = Math.atan2(dy, dx);
+                        const angle2 = Math.atan2(otherDy, otherDx);
+                        let angleDiff = Math.abs(angle1 - angle2);
+                        if (angleDiff > Math.PI) angleDiff = (2 * Math.PI) - angleDiff;
+
+                        const sinAngle = Math.abs(Math.sin(angleDiff));
+                        if (sinAngle < 0.2) return;
+
+                        const otherThickness = otherEdge.thickness || 150;
+                        const halfProjectedLength = (otherThickness / 2) / sinAngle;
+                        const halfProjectedT = Math.min(0.49, halfProjectedLength / edgeLength);
+
+                        openings.push({
+                            type: 'wall',
+                            startT: Math.max(0, intersection.t1 - halfProjectedT),
+                            endT: Math.min(1, intersection.t1 + halfProjectedT),
+                        });
                     });
                 });
-            }
 
-            // 3. Merge overlapping openings
+            // 4. Merge overlapping openings
             openings.sort((a, b) => a.startT - b.startT);
             const mergedOpenings: typeof openings = [];
             for (const opening of openings) {
@@ -219,25 +273,7 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
         });
 
         return openingsMap;
-    }, [edges, nodeMap, wallCutouts, allWalls, wall.id, getLineLineIntersection]);
-
-    // Helper function to interpolate junction points
-    const interpolateJunction = useCallback((
-        junctionA: { left: Point; right: Point },
-        junctionB: { left: Point; right: Point },
-        t: number
-    ) => {
-        return {
-            left: {
-                x: junctionA.left.x + (junctionB.left.x - junctionA.left.x) * t,
-                y: junctionA.left.y + (junctionB.left.y - junctionA.left.y) * t
-            },
-            right: {
-                x: junctionA.right.x + (junctionB.right.x - junctionA.right.x) * t,
-                y: junctionA.right.y + (junctionB.right.y - junctionA.right.y) * t
-            }
-        };
-    }, []);
+    }, [allWalls, edges, getCollinearOverlap, getLineLineIntersection, nodeMap, wall.id, wallCutouts]);
 
     // Handle edge double-click for selection
     const handleEdgeDoubleClick = useCallback((edgeId: string, e: React.MouseEvent) => {
@@ -307,16 +343,8 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
                                 ) : null;
                             }
 
-                            const isAtStartJunction = segment.startT === 0;
-                            const isAtEndJunction = segment.endT === 1;
-                            const otherWallsAtNodeA = allWalls.filter(w => w.id !== wall.id && w.nodes.some(n => Math.abs(n.x - nodeA.x) < 0.1 && Math.abs(n.y - nodeA.y) < 0.1));
-                            const otherWallsAtNodeB = allWalls.filter(w => w.id !== wall.id && w.nodes.some(n => Math.abs(n.x - nodeB.x) < 0.1 && Math.abs(n.y - nodeB.y) < 0.1));
-                            const shouldDrawInnerAtNodeA = otherWallsAtNodeA.length === 0 || otherWallsAtNodeA.every(w => wall.id < w.id);
-                            const shouldDrawInnerAtNodeB = otherWallsAtNodeB.length === 0 || otherWallsAtNodeB.every(w => wall.id < w.id);
-                            const shouldDrawInnerLine = (!isAtStartJunction || shouldDrawInnerAtNodeA) && (!isAtEndJunction || shouldDrawInnerAtNodeB);
-
                             const outerPath = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
-                            const innerPath = shouldDrawInnerLine ? `M ${p4.x} ${p4.y} L ${p3.x} ${p3.y}` : '';
+                            const innerPath = `M ${p4.x} ${p4.y} L ${p3.x} ${p3.y}`;
 
                             return (
                                 <g key={`segment-${idx}`}>
@@ -328,7 +356,7 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
                                         stroke="none"
                                     />
                                     <path d={outerPath} fill="none" stroke={strokeColor} strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                                    {shouldDrawInnerLine && innerPath && <path d={innerPath} fill="none" stroke={strokeColor} strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
+                                    <path d={innerPath} fill="none" stroke={strokeColor} strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
                                 </g>
                             );
                         })}

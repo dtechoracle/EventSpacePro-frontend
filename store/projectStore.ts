@@ -1325,7 +1325,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     walls: [...state.walls, wall],
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -1333,7 +1333,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     walls: [...state.walls, ...newWalls],
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -1341,7 +1341,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.map((w) => (w.id === id ? { ...w, ...updates } : w)),
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -1349,7 +1349,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.map((w) => (ids.includes(w.id) ? { ...w, ...updates } : w)),
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -1368,7 +1368,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     walls: state.walls.filter((w) => w.id !== id),
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -1499,7 +1499,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     shapes: [...state.shapes, shape],
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -1507,7 +1507,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     shapes: [...state.shapes, ...newShapes],
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -1515,7 +1515,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     shapes: state.shapes.map((s) => (s.id === id ? { ...s, ...updates } : s)),
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -1523,7 +1523,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     shapes: state.shapes.map((s) => (ids.includes(s.id) ? { ...s, ...updates } : s)),
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -1557,7 +1557,7 @@ export const useProjectStore = create<ProjectState>()(
                     return {
                         shapes: state.shapes.filter((s) => s.id !== id),
                         assets: updatedAssets,
-                        hasUnsavedChanges: true,
+                        hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                     };
                 });
             },
@@ -1576,7 +1576,7 @@ export const useProjectStore = create<ProjectState>()(
                 };
                 set((state) => ({
                     assets: [...state.assets, assetWithDefaults],
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -1588,14 +1588,14 @@ export const useProjectStore = create<ProjectState>()(
                 }));
                 set((state) => ({
                     assets: [...state.assets, ...assetsWithDefaults],
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
             updateAsset: (id, updates, skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     assets: state.assets.map((a) => (a.id === id ? { ...a, ...updates } : a)),
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -1603,7 +1603,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     assets: state.assets.map((a) => (ids.includes(a.id) ? { ...a, ...updates } : a)),
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -1623,7 +1623,7 @@ export const useProjectStore = create<ProjectState>()(
                 set((state) => ({
                     assets: state.assets.filter((a) => a.id !== id),
                     shapes: state.shapes.filter((s) => s.sourceAssetId !== id),
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -2105,7 +2105,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     textAnnotations: [...state.textAnnotations, annotation],
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -2130,7 +2130,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     labelArrows: [...state.labelArrows, arrow],
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
