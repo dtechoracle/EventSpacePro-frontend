@@ -10,7 +10,10 @@ interface TextAnnotationToolProps {
 
 export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps) {
     const { screenToWorld, setActiveTool, setSelectedIds, selectedIds, editingTextId } = useEditorStore();
-    const { addTextAnnotation, getNextZIndex, textAnnotations, updateTextAnnotation, removeTextAnnotation } = useProjectStore();
+    const addTextAnnotation = useProjectStore(s => s.addTextAnnotation);
+    const getNextZIndex = useProjectStore(s => s.getNextZIndex);
+    const updateTextAnnotation = useProjectStore(s => s.updateTextAnnotation);
+    const removeTextAnnotation = useProjectStore(s => s.removeTextAnnotation);
 
     const [currentAnnotation, setCurrentAnnotation] = useState<TextAnnotation | null>(null);
     const [text, setText] = useState<string>('');
@@ -93,9 +96,9 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
             x: worldPos.x,
             y: worldPos.y,
             text: '',
-            fontSize: 500,
+            fontSize: 250,
             color: '#000000',
-            fontFamily: 'Arial',
+            fontFamily: 'Inter, sans-serif',
             rotation: 0,
             zIndex: getNextZIndex(),
         };
@@ -299,8 +302,8 @@ export default function TextAnnotationTool({ isActive }: TextAnnotationToolProps
                     borderRadius: '6px',
                     outline: 'none',
                     color: currentAnnotation?.color || '#000',
-                    fontSize: `${(currentAnnotation?.fontSize || 200) * zoom}px`,
-                    fontFamily: currentAnnotation?.fontFamily || 'Arial',
+                    fontSize: `${(currentAnnotation?.fontSize || 250) * zoom}px`,
+                    fontFamily: currentAnnotation?.fontFamily || 'Inter, sans-serif',
                     padding: '4px 8px',
                     margin: '0',
                     textAlign: currentAnnotation?.textAlign || 'center',

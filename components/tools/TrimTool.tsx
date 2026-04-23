@@ -10,7 +10,13 @@ interface TrimToolProps {
 
 export default function TrimTool({ isActive, isTrimToObject }: TrimToolProps) {
     const { canvasOffset, zoom, panX, panY } = useEditorStore();
-    const { shapes, walls, updateShape, addShape, removeShape, saveToHistory, getNextZIndex } = useProjectStore();
+    const shapes = useProjectStore(s => s.shapes);
+    const walls = useProjectStore(s => s.walls);
+    const updateShape = useProjectStore(s => s.updateShape);
+    const addShape = useProjectStore(s => s.addShape);
+    const removeShape = useProjectStore(s => s.removeShape);
+    const saveToHistory = useProjectStore(s => s.saveToHistory);
+    const getNextZIndex = useProjectStore(s => s.getNextZIndex);
 
     const [cuttingLine, setCuttingLine] = useState<{ start: { x: number; y: number }, end: { x: number; y: number } } | null>(null);
     const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);

@@ -6,7 +6,7 @@ import { ASSET_LIBRARY } from '@/lib/assets';
 export interface SnapPoint {
     x: number;
     y: number;
-    type: 'corner' | 'midpoint' | 'edge' | 'center';
+    type: 'corner' | 'midpoint' | 'edge' | 'center' | 'quad';
     elementId: string;
 }
 
@@ -86,10 +86,18 @@ export function getSnapPoints(element: SnapTarget, vertices: { x: number; y: num
             { x: shape.x + halfW, y: shape.y - halfH, type: 'corner' as const },
             { x: shape.x + halfW, y: shape.y + halfH, type: 'corner' as const },
             { x: shape.x - halfW, y: shape.y + halfH, type: 'corner' as const },
+            { x: shape.x - halfW / 2, y: shape.y - halfH, type: 'quad' as const },
             { x: shape.x, y: shape.y - halfH, type: 'midpoint' as const },
+            { x: shape.x + halfW / 2, y: shape.y - halfH, type: 'quad' as const },
+            { x: shape.x + halfW, y: shape.y - halfH / 2, type: 'quad' as const },
             { x: shape.x + halfW, y: shape.y, type: 'midpoint' as const },
+            { x: shape.x + halfW, y: shape.y + halfH / 2, type: 'quad' as const },
+            { x: shape.x + halfW / 2, y: shape.y + halfH, type: 'quad' as const },
             { x: shape.x, y: shape.y + halfH, type: 'midpoint' as const },
+            { x: shape.x - halfW / 2, y: shape.y + halfH, type: 'quad' as const },
+            { x: shape.x - halfW, y: shape.y + halfH / 2, type: 'quad' as const },
             { x: shape.x - halfW, y: shape.y, type: 'midpoint' as const },
+            { x: shape.x - halfW, y: shape.y - halfH / 2, type: 'quad' as const },
             { x: shape.x, y: shape.y, type: 'center' as const }
         ];
 

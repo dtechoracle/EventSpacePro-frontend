@@ -15,13 +15,63 @@ import { getDimensionsForWall, getDimensionsForObject, renderDimensionToCanvas }
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
+import { canRenderAssetOnCanvas } from "@/utils/assetRenderMode";
 
 type ExportFormat = "pdf" | "png" | "jpg" | "jpeg";
 
 const svgCache: Record<string, string> = {};
 const typeIconCache: Record<string, HTMLImageElement> = {};
+const assetTypesWithSvgPaths = new Set(
+  ASSET_LIBRARY
+    .filter(item => !!item.path)
+    .flatMap(item => [item.id, item.name].filter(Boolean) as string[])
+);
 
 const EXPORT_DPI = 300; 
+
+type ExportBounds = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
+const expandBoundsWithPoint = (bounds: ExportBounds, x: number, y: number, pad = 0) => {
+  bounds.minX = Math.min(bounds.minX, x - pad);
+  bounds.minY = Math.min(bounds.minY, y - pad);
+  bounds.maxX = Math.max(bounds.maxX, x + pad);
+  bounds.maxY = Math.max(bounds.maxY, y + pad);
+};
+
+const expandBoundsWithDimension = (bounds: ExportBounds, dim: any, viewportZoom = 1) => {
+  const startPoint = dim.startPoint;
+  const endPoint = dim.endPoint;
+  if (!startPoint || !endPoint) return;
+
+  const dx = endPoint.x - startPoint.x;
+  const dy = endPoint.y - startPoint.y;
+  const length = Math.hypot(dx, dy);
+  if (length === 0) return;
+
+  const px = -dy / length;
+  const py = dx / length;
+  const offset = dim.offset ?? 400;
+  let sign = Math.sign(offset || 1) || 1;
+  if (dim.labelPosition === 'top-right') sign = -1;
+  if (dim.labelPosition === 'bottom-left') sign = 1;
+  const finalOffset = dim.labelPosition ? Math.abs(offset) * sign : offset;
+
+  const p1 = { x: startPoint.x + px * finalOffset, y: startPoint.y + py * finalOffset };
+  const p2 = { x: endPoint.x + px * finalOffset, y: endPoint.y + py * finalOffset };
+  const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+
+  const safeZoom = Math.max(0.02, Math.min(viewportZoom || 1, 4));
+  const fixedScreenLabelPad = ((dim.fontSize || 12) * 12) / safeZoom;
+  const labelPad = Math.max(1800, Math.min(3600, fixedScreenLabelPad));
+  const dimensionLinePad = Math.max(260, labelPad * 0.1);
+  [startPoint, endPoint, p1, p2].forEach((point) => expandBoundsWithPoint(bounds, point.x, point.y, dimensionLinePad));
+  expandBoundsWithPoint(bounds, mid.x, mid.y, labelPad);
+};
 
 interface ExportOption {
   id: string;
@@ -263,7 +313,10 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
 export default function ExportPanel() {
   const { 
     shapes, assets, walls, textAnnotations, labelArrows, dimensions, projectName,
-    globalTableNumberingPosition, globalTableNumberingOrientation
+    globalTableNumberingPosition, globalTableNumberingOrientation,
+    globalTableNumberingFontSize, globalTableNumberingFontFamily,
+    globalTableNumberingFontWeight, globalTableNumberingFontStyle,
+    globalTableNumberingTextDecoration, globalTableNumberingColor
   } = useProjectStore();
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const zoom = useEditorStore((s) => s.zoom);
@@ -389,11 +442,15 @@ export default function ExportPanel() {
 
     const clone = workspaceSvg.cloneNode(true) as SVGSVGElement;
     clone.querySelectorAll('.interaction-highlights, .snap-markers, .grid-layer, pattern[id^="grid-"], [data-export-ignore="true"]').forEach((node) => node.remove());
+    clone.querySelectorAll('[data-canvas-backed-asset="true"]').forEach((node) => {
+      (node as SVGElement).style.display = '';
+      (node as SVGElement).removeAttribute('display');
+    });
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     clone.setAttribute('width', `${screenWidth}`);
     clone.setAttribute('height', `${screenHeight}`);
     clone.setAttribute('viewBox', `${screenMinX} ${screenMinY} ${screenWidth} ${screenHeight}`);
-    clone.style.background = '#ffffff';
+    clone.style.background = 'transparent';
 
     const serialized = new XMLSerializer().serializeToString(clone);
     const blob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' });
@@ -485,31 +542,116 @@ export default function ExportPanel() {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText((asset as any).text || "", cx, cy);
     } else if (asset.type === 'label-arrow') {
-      // Basic label arrow export
       const la = asset as any;
       const startX = (la.startPoint.x - minX + padding + (contentShift / MM_TO_PX)) * MM_TO_PX;
       const startY = (la.startPoint.y - minY + padding) * MM_TO_PX;
       const endX = (la.endPoint.x - minX + padding + (contentShift / MM_TO_PX)) * MM_TO_PX;
       const endY = (la.endPoint.y - minY + padding) * MM_TO_PX;
+      const dx = endX - startX;
+      const dy = endY - startY;
+      const len = Math.hypot(dx, dy);
+      if (len === 0) return;
+      const ux = dx / len;
+      const uy = dy / len;
+      const px = -uy;
+      const py = ux;
+      const color = la.color || "#000000";
+      const stroke = Math.max(1, la.strokeWidth || 3) * MM_TO_PX;
+      const markerSize = Math.max(14 * MM_TO_PX, stroke * 5);
+
+      const drawMarker = (type: string, x: number, y: number, dirX: number, dirY: number) => {
+        if (!type || type === 'none') return;
+        const mpX = -dirY;
+        const mpY = dirX;
+        const baseX = x - dirX * markerSize;
+        const baseY = y - dirY * markerSize;
+        const side = markerSize * 0.48;
+
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = type === 'filled-triangle' ? color : '#ffffff';
+        ctx.lineWidth = stroke;
+        ctx.lineJoin = 'round';
+
+        if (type === 'triangle' || type === 'filled-triangle') {
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(baseX + mpX * side, baseY + mpY * side);
+          ctx.lineTo(baseX - mpX * side, baseY - mpY * side);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        } else if (type === 'open') {
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(baseX + mpX * side, baseY + mpY * side);
+          ctx.moveTo(x, y);
+          ctx.lineTo(baseX - mpX * side, baseY - mpY * side);
+          ctx.stroke();
+        } else if (type === 'circle') {
+          ctx.beginPath();
+          ctx.arc(x, y, markerSize * 0.36, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        } else if (type === 'square') {
+          const size = markerSize * 0.72;
+          ctx.translate(x, y);
+          ctx.rotate(Math.atan2(dirY, dirX));
+          ctx.fillRect(-size / 2, -size / 2, size, size);
+          ctx.strokeRect(-size / 2, -size / 2, size, size);
+        } else if (type === 'diamond') {
+          const backX = x - dirX * markerSize;
+          const backY = y - dirY * markerSize;
+          const centerX = x - dirX * markerSize * 0.5;
+          const centerY = y - dirY * markerSize * 0.5;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(centerX + mpX * side, centerY + mpY * side);
+          ctx.lineTo(backX, backY);
+          ctx.lineTo(centerX - mpX * side, centerY - mpY * side);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(x + mpX * markerSize * 0.5, y + mpY * markerSize * 0.5);
+          ctx.lineTo(x - mpX * markerSize * 0.5, y - mpY * markerSize * 0.5);
+          ctx.stroke();
+        }
+        ctx.restore();
+      };
       
-      ctx.strokeStyle = la.color || "#000000";
-      ctx.lineWidth = 1 * MM_TO_PX;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = stroke;
+      ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(endX, endY); ctx.stroke();
-      
-      // Arrow head (simple)
-      const angle = Math.atan2(endY - startY, endX - startX);
-      const headLen = 10 * MM_TO_PX;
-      ctx.beginPath();
-      ctx.moveTo(endX, endY);
-      ctx.lineTo(endX - headLen * Math.cos(angle - Math.PI / 6), endY - headLen * Math.sin(angle - Math.PI / 6));
-      ctx.moveTo(endX, endY);
-      ctx.lineTo(endX - headLen * Math.cos(angle + Math.PI / 6), endY - headLen * Math.sin(angle + Math.PI / 6));
-      ctx.stroke();
+      drawMarker(la.arrowHeadType || 'filled-triangle', endX, endY, ux, uy);
+      drawMarker(la.arrowTailType || 'none', startX, startY, -ux, -uy);
 
       if (la.label) {
-        ctx.font = `${8 * MM_TO_PX}px Inter, sans-serif`;
-        ctx.fillStyle = la.color || "#000000";
-        ctx.fillText(la.label, startX, startY - 5 * MM_TO_PX);
+        const fontSize = (la.fontSize || 16) * MM_TO_PX;
+        const labelPosition = la.textPosition || 'bottom';
+        const labelT = labelPosition === 'top' ? 0.86 : labelPosition === 'middle' ? 0.5 : 0.14;
+        const labelX = startX + dx * labelT;
+        const labelY = startY + dy * labelT;
+        const textWidth = Math.max(34 * MM_TO_PX, la.label.length * fontSize * 0.62 + 16 * MM_TO_PX);
+        const textHeight = fontSize * 1.65;
+        let textAngle = Math.atan2(dy, dx);
+        if (textAngle > Math.PI / 2 || textAngle < -Math.PI / 2) textAngle += Math.PI;
+
+        ctx.save();
+        ctx.translate(labelX, labelY);
+        ctx.rotate(textAngle);
+        ctx.fillStyle = la.backgroundColor || '#ffffff';
+        ctx.globalAlpha = 0.96;
+        ctx.fillRect(-textWidth / 2, -textHeight / 2, textWidth, textHeight);
+        ctx.globalAlpha = 1;
+        ctx.font = `${la.fontWeight || '700'} ${Math.round(fontSize)}px ${la.fontFamily || 'Inter, sans-serif'}`;
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(la.label, 0, 0);
+        ctx.restore();
       }
     } else {
       const w = (asset.width || 0) * (asset.scale || 1);
@@ -591,7 +733,12 @@ export default function ExportPanel() {
         ctx.save();
         
         // Base sizes
-        const size = Math.max(14, (asset.width || 100) * 0.14);
+        const size = (asset as any).tableNumberingFontSize || globalTableNumberingFontSize || Math.max(14, (asset.width || 100) * 0.14);
+        const labelFontFamily = (asset as any).tableNumberingFontFamily || globalTableNumberingFontFamily || 'Inter, sans-serif';
+        const labelFontWeight = (asset as any).tableNumberingFontWeight || globalTableNumberingFontWeight || '900';
+        const labelFontStyle = (asset as any).tableNumberingFontStyle || globalTableNumberingFontStyle || 'normal';
+        const labelTextDecoration = (asset as any).tableNumberingTextDecoration || globalTableNumberingTextDecoration || 'none';
+        const labelColor = (asset as any).tableNumberingColor || globalTableNumberingColor || '#000000';
         const circleR = Math.max(16, (asset.width || 100) * 0.12);
         
         // Calculate Offset based on position
@@ -623,11 +770,20 @@ export default function ExportPanel() {
         ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
 
 
-        ctx.font = `900 ${size * MM_TO_PX}px Inter, sans-serif`;
-        ctx.fillStyle = '#000000';
+        ctx.font = `${labelFontStyle} ${labelFontWeight} ${size * MM_TO_PX}px ${labelFontFamily}`;
+        ctx.fillStyle = labelColor;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(label, 0, 0);
+        if (labelTextDecoration === 'underline') {
+          const metrics = ctx.measureText(label);
+          ctx.strokeStyle = labelColor;
+          ctx.lineWidth = Math.max(1, size * MM_TO_PX * 0.08);
+          ctx.beginPath();
+          ctx.moveTo(-metrics.width / 2, size * MM_TO_PX * 0.42);
+          ctx.lineTo(metrics.width / 2, size * MM_TO_PX * 0.42);
+          ctx.stroke();
+        }
         ctx.restore();
       }
     }
@@ -973,6 +1129,14 @@ export default function ExportPanel() {
       // 1. Calculate Bounding Box of content in mm (Include ALL types to prevent clipping)
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       const OFFSET = 200; // Architectural dimension offset from dimensionUtils
+      const includeDimensionBounds = (dim: any) => {
+        const bounds = { minX, minY, maxX, maxY };
+        expandBoundsWithDimension(bounds, dim, zoom);
+        minX = bounds.minX;
+        minY = bounds.minY;
+        maxX = bounds.maxX;
+        maxY = bounds.maxY;
+      };
 
       assetsToExport.forEach(a => {
         if (a.type === 'wall-segments' && a.wallNodes) {
@@ -980,25 +1144,35 @@ export default function ExportPanel() {
             minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); 
             maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); 
           });
-        } else if (a.type === 'dimension') {
-          const d = a as any;
-          minX = Math.min(minX, d.startPoint.x, d.endPoint.x);
-          minY = Math.min(minY, d.startPoint.y, d.endPoint.y);
-          maxX = Math.max(maxX, d.startPoint.x, d.endPoint.x);
-          maxY = Math.max(maxY, d.startPoint.y, d.endPoint.y);
-          // Account for dimension offset
-          if (d.offset) {
-             const dx = d.endPoint.x - d.startPoint.x;
-             const dy = d.endPoint.y - d.startPoint.y;
-             const len = Math.sqrt(dx*dx + dy*dy);
-             if (len > 0) {
-               const nx = -dy/len; const ny = dx/len;
-               const px = d.startPoint.x + nx * d.offset;
-               const py = d.startPoint.y + ny * d.offset;
-               minX = Math.min(minX, px); minY = Math.min(minY, py);
-               maxX = Math.max(maxX, px); maxY = Math.max(maxY, py);
-             }
+
+          if ((a as any).showDimensions && a.wallEdges) {
+            const wallAutoDims = getDimensionsForWall({
+              id: a.id,
+              nodes: a.wallNodes.map((node, index) => ({ id: `wall-node-${index}`, x: node.x, y: node.y })),
+              edges: a.wallEdges.map((edge, index) => ({
+                id: `wall-edge-${index}`,
+                nodeA: `wall-node-${edge.a}`,
+                nodeB: `wall-node-${edge.b}`,
+                thickness: a.wallThickness || 150
+              })),
+              fill: a.backgroundColor,
+              stroke: a.strokeColor,
+              strokeWidth: a.strokeWidth,
+              fillType: (a as any).fillType || 'color',
+              fillTexture: (a as any).fillTexture,
+              zIndex: a.zIndex || 0,
+              showDimensions: true,
+              dimensionType: (a as any).dimensionType,
+              dimensionFontSize: (a as any).dimensionFontSize,
+              dimensionOffset: (a as any).dimensionOffset,
+              dimensionStrokeWidth: (a as any).dimensionStrokeWidth,
+              dimensionColor: (a as any).dimensionColor,
+              dimensionLabelPosition: (a as any).dimensionLabelPosition,
+            } as any);
+            wallAutoDims.forEach(includeDimensionBounds);
           }
+        } else if (a.type === 'dimension') {
+          includeDimensionBounds(a as any);
         } else if (a.type === 'label-arrow') {
           const la = a as any;
           minX = Math.min(minX, la.startPoint.x, la.endPoint.x);
@@ -1019,11 +1193,12 @@ export default function ExportPanel() {
             minY = Math.min(minY, a.y - h/2 - OFFSET - 100);
             maxX = Math.max(maxX, a.x + w/2 + OFFSET + 100);
             maxY = Math.max(maxY, a.y + h/2 + OFFSET + 100);
+            getDimensionsForObject(a as any, `export-bounds-${a.id}`).forEach(includeDimensionBounds);
           }
         }
       });
 
-      const mmPadding = 400; // Increased to 400mm (40cm) for better architectural breathing room
+      const mmPadding = 900; // Extra breathing room for fixed-size dimension labels in exports
       const contentW_mm = (maxX - minX) + mmPadding * 2;
       const contentH_mm = (maxY - minY) + mmPadding * 2;
 
@@ -1080,8 +1255,25 @@ export default function ExportPanel() {
       ctx.fillStyle = '#ffffff'; 
       ctx.fillRect(0, 0, sourceCanvas.width, sourceCanvas.height);
       const workspaceSnapshot = await loadWorkspaceSnapshot(minX, minY, maxX, maxY, mmPadding);
+      const canvasBackedAssetIds = new Set(
+        assets
+          .filter(asset =>
+            !asset.isExploded &&
+            assetTypesWithSvgPaths.has(asset.type) &&
+            canRenderAssetOnCanvas(asset) &&
+            (!option.exportSelection || selectedIds.includes(asset.id))
+          )
+          .map(asset => asset.id)
+      );
+      const canvasBackedAssetsToDraw = assetsToExport
+        .filter(asset => canvasBackedAssetIds.has(asset.id))
+        .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
       if (workspaceSnapshot) {
+        if (canvasBackedAssetsToDraw.length > 0) {
+          const loadedImages = await loadSvgAssets(canvasBackedAssetsToDraw);
+          canvasBackedAssetsToDraw.forEach(a => renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages));
+        }
         ctx.drawImage(workspaceSnapshot, 0, 0, sourceCanvas.width, sourceCanvas.height);
       } else {
         const loadedImages = await loadSvgAssets(assetsToExport);

@@ -12,7 +12,7 @@ const SNAP_CLOSE_RADIUS_PX = 16; // pixels on screen — snap indicator radius
 
 export default function FreehandTool({ isActive }: FreehandToolProps) {
     const { screenToWorld, setActiveTool, setSelectedIds, zoom } = useEditorStore();
-    const { addShape } = useProjectStore();
+    const addShape = useProjectStore(s => s.addShape);
 
     const [points, setPoints] = useState<{ x: number; y: number }[]>([]);
     const [isDrawing, setIsDrawing] = useState(false);

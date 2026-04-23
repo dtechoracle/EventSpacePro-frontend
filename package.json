@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
+    "assets:webp": "node scripts/generate-asset-webp.js",
     "start": "next start",
     "lint": "next lint"
   },
@@ -45,6 +46,7 @@
     "baseline-browser-mapping": "^2.9.7",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.1.6",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

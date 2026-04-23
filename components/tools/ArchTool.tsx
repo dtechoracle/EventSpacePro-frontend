@@ -1,13 +1,20 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { useSceneStore } from '@/store/sceneStore';
 import { useProjectStore, Shape } from '@/store/projectStore';
 import ShapeRenderer from '../renderers/ShapeRenderer';
 import { findSnapPointInShapes } from '@/utils/snapToDrawing';
+import { ASSET_LIBRARY } from '@/lib/assets';
 
 interface ArchToolProps {
     isActive: boolean;
 }
+
+const marqueeAssetTypes = new Set(
+    ASSET_LIBRARY
+        .filter((asset) => asset.category === 'Marquee')
+        .map((asset) => asset.id)
+);
 
 // A single committed arc segment
 interface ArcSegment {
@@ -19,7 +26,15 @@ interface ArcSegment {
 export default function ArchTool({ isActive }: ArchToolProps) {
     const { canvasOffset, zoom, panX, panY, archWaveMode, snapToObjects } = useEditorStore();
     const { snapToGridEnabled, gridSize } = useSceneStore();
-    const { addShape, getNextZIndex, shapes, walls, assets } = useProjectStore();
+    const addShape = useProjectStore(s => s.addShape);
+    const getNextZIndex = useProjectStore(s => s.getNextZIndex);
+    const shapes = useProjectStore(s => s.shapes);
+    const walls = useProjectStore(s => s.walls);
+    const allAssets = useProjectStore(s => s.assets);
+    const assets = useMemo(
+        () => allAssets.filter(asset => marqueeAssetTypes.has(asset.type)),
+        [allAssets]
+    );
 
     // Drawing step: 0 = idle, 1 = chord (set end), 2 = control (set bulge)
     const [step, setStep] = useState<0 | 1 | 2>(0);

@@ -7,16 +7,31 @@ import { useSceneStore } from '@/store/sceneStore';
 import { useProjectStore, Shape } from '@/store/projectStore';
 import { snapTo90Degrees } from '@/lib/wallGeometry';
 import { findSnapPointInShapes, SnapPoint } from '@/utils/snapToDrawing';
+import { ASSET_LIBRARY } from '@/lib/assets';
 
 interface ShapeToolProps {
     isActive: boolean;
     shapeType: 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'polygon';
 }
 
+const marqueeAssetTypes = new Set(
+    ASSET_LIBRARY
+        .filter((asset) => asset.category === 'Marquee')
+        .map((asset) => asset.id)
+);
+
 export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
     const { screenToWorld, setSelectedIds, setActiveTool, zoom } = useEditorStore();
     const { snapToGridEnabled, gridSize } = useSceneStore();
-    const { addShape, getNextZIndex, shapes } = useProjectStore();
+    const addShape = useProjectStore(s => s.addShape);
+    const getNextZIndex = useProjectStore(s => s.getNextZIndex);
+    const shapes = useProjectStore(s => s.shapes);
+    const walls = useProjectStore(s => s.walls);
+    const assets = useProjectStore(s => s.assets);
+    const marqueeAssets = useMemo(
+        () => assets.filter(asset => marqueeAssetTypes.has(asset.type)),
+        [assets]
+    );
 
     // Multi-segment state for lines/arrows
     const [segments, setSegments] = useState<Array<{ start: { x: number; y: number }; end: { x: number; y: number } }>>([]);
@@ -34,6 +49,11 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
 
     const isLineMode = shapeType === 'line' || shapeType === 'arrow';
     const isPolygon = shapeType === 'polygon';
+
+    const drawingSnapTargets = useMemo(
+        () => [...shapes, ...walls, ...marqueeAssets],
+        [shapes, walls, marqueeAssets]
+    );
 
     const [polygonSides, setPolygonSides] = useState<number>(4);
     const [showPolygonModal, setShowPolygonModal] = useState<boolean>(false);
@@ -108,9 +128,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
 
         // Apply Smart Snapping on Click
         if (snapToObjects) {
-            const { shapes, walls, assets } = useProjectStore.getState();
-            const allElements = [...shapes, ...walls, ...assets];
-            const snapResult = findSnapPointInShapes(worldPos, allElements, 20 / zoom);
+            const snapResult = findSnapPointInShapes(worldPos, drawingSnapTargets, 20 / zoom);
             if (snapResult) {
                 snapped = { x: snapResult.x, y: snapResult.y };
             }
@@ -119,7 +137,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         setStartPoint(snapped);
         setEndPoint(snapped);
         setIsDrawing(true);
-    }, [isActive, isLineMode, screenToWorld, snapToGridEnabled, gridSize]);
+    }, [isActive, isLineMode, screenToWorld, snapToGridEnabled, gridSize, drawingSnapTargets]);
 
     // Handle mouse move
     const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -134,10 +152,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         // Enhanced snap-to-objects
         let currentSnapPoint: SnapPoint | null = null;
         if (snapToObjects) {
-            const { shapes, walls, assets } = useProjectStore.getState();
-            // Filter out current shape if needed (not applicable here as we create new)
-            const allElements = [...shapes, ...walls, ...assets];
-            const snapResult = findSnapPointInShapes(worldPos, allElements, 20 / zoom);
+            const snapResult = findSnapPointInShapes(worldPos, drawingSnapTargets, 20 / zoom);
             if (snapResult) {
                 snapped = { x: snapResult.x, y: snapResult.y };
                 currentSnapPoint = snapResult;
@@ -176,7 +191,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             if (!isDrawing || !startPoint) return;
             setEndPoint(snapped);
         }
-    }, [isActive, isDrawing, isLineMode, lastPoint, existingEndpoints, screenToWorld, snapToGridEnabled, gridSize, segments, shapes]);
+    }, [isActive, isDrawing, isLineMode, lastPoint, existingEndpoints, screenToWorld, snapToGridEnabled, gridSize, segments, drawingSnapTargets]);
 
     // Handle mouse up (rect/ellipse/polygon only)
     const handleMouseUp = useCallback(() => {
@@ -800,12 +815,12 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                             x={snapIndicator.x + 12}
                             y={snapIndicator.y}
                             fill="#f59e0b"
-                            fontSize={12}
+                            fontSize={16}
                             fontWeight="bold"
                             dominantBaseline="middle"
                             style={{ textShadow: '0px 0px 2px white' }}
                         >
-                            {snapIndicator.type}
+                            {snapIndicator.type === 'corner' ? 'endpoint' : snapIndicator.type}
                         </text>
                     </g>
                 )}
@@ -898,5 +913,3 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         </>
     );
 }
-
-

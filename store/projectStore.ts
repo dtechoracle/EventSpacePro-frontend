@@ -93,11 +93,21 @@ export type Shape = {
     dimensionOffset?: number;
     dimensionStrokeWidth?: number;
     dimensionColor?: string;
+    dimensionFontFamily?: string;
+    dimensionFontWeight?: string;
+    dimensionFontStyle?: string;
+    dimensionTextDecoration?: string;
     borderRadius?: number;
     tableName?: string;
     showTableName?: boolean;
     tableNumberingPosition?: 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'top' | 'bottom' | 'middle-left' | 'middle-right';
     tableNumberingOrientation?: 'horizontal' | 'vertical';
+    tableNumberingFontSize?: number;
+    tableNumberingFontFamily?: string;
+    tableNumberingFontWeight?: string;
+    tableNumberingFontStyle?: string;
+    tableNumberingTextDecoration?: string;
+    tableNumberingColor?: string;
 };
 
 export type Asset = {
@@ -154,9 +164,19 @@ export type Asset = {
     dimensionOffset?: number;
     dimensionStrokeWidth?: number;
     dimensionColor?: string;
+    dimensionFontFamily?: string;
+    dimensionFontWeight?: string;
+    dimensionFontStyle?: string;
+    dimensionTextDecoration?: string;
     borderRadius?: number;
     tableNumberingPosition?: 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'top' | 'bottom' | 'middle-left' | 'middle-right';
     tableNumberingOrientation?: 'horizontal' | 'vertical';
+    tableNumberingFontSize?: number;
+    tableNumberingFontFamily?: string;
+    tableNumberingFontWeight?: string;
+    tableNumberingFontStyle?: string;
+    tableNumberingTextDecoration?: string;
+    tableNumberingColor?: string;
 };
 
 export type Wall = {
@@ -182,6 +202,10 @@ export type Wall = {
     dimensionOffset?: number;
     dimensionStrokeWidth?: number;
     dimensionColor?: string;
+    dimensionFontFamily?: string;
+    dimensionFontWeight?: string;
+    dimensionFontStyle?: string;
+    dimensionTextDecoration?: string;
 };
 
 export type Layer = {
@@ -211,10 +235,15 @@ export interface Dimension {
 
     value?: number; // Optional manual override or cached value
     targetId?: string; // ID of the object being measured (e.g., wall ID)
+    targetIds?: string[]; // IDs of objects touched by a manual dimension
 
     // Visual properties
     color?: string;
     fontSize?: number;
+    fontFamily?: string;
+    fontWeight?: string;
+    fontStyle?: string;
+    textDecoration?: string;
     strokeWidth?: number;
     lineStyle?: 'solid' | 'dashed' | 'dotted' | 'double';
     textPosition?: 'inbetween' | 'above' | 'below';
@@ -262,8 +291,18 @@ export type LabelArrow = {
     endPoint: { x: number; y: number };
     label: string;
     fontSize?: number;
+    fontFamily?: string;
+    fontWeight?: string;
+    fontStyle?: string;
+    textDecoration?: string;
     color?: string;
     strokeWidth?: number;
+    arrowHeadType?: 'none' | 'triangle' | 'filled-triangle' | 'open' | 'circle' | 'square' | 'diamond' | 'bar';
+    arrowTailType?: 'none' | 'triangle' | 'filled-triangle' | 'open' | 'circle' | 'square' | 'diamond' | 'bar';
+    arrowHeadSize?: number;
+    arrowTailSize?: number;
+    textPosition?: 'top' | 'middle' | 'bottom';
+    backgroundColor?: string;
     zIndex: number;
 };
 
@@ -310,8 +349,22 @@ export type ProjectState = {
     // Global Labeling Settings
     globalTableNumberingPosition: 'center' | 'top' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'middle-left' | 'middle-right';
     globalTableNumberingOrientation: 'horizontal' | 'vertical';
+    globalTableNumberingFontSize: number;
+    globalTableNumberingFontFamily: string;
+    globalTableNumberingFontWeight: string;
+    globalTableNumberingFontStyle: string;
+    globalTableNumberingTextDecoration: string;
+    globalTableNumberingColor: string;
     setGlobalTableNumberingPosition: (pos: 'center' | 'top' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'middle-left' | 'middle-right', updateAll?: boolean) => void;
     setGlobalTableNumberingOrientation: (orientation: 'horizontal' | 'vertical', updateAll?: boolean) => void;
+    setGlobalTableNumberingTextStyle: (updates: {
+        fontSize?: number;
+        fontFamily?: string;
+        fontWeight?: string;
+        fontStyle?: string;
+        textDecoration?: string;
+        color?: string;
+    }, updateAll?: boolean) => void;
 
     // Active layer
     activeLayerId: string | null;
@@ -476,6 +529,119 @@ const DEFAULT_LAYER: Layer = {
     shapeIds: [],
 };
 
+const SHARED_WALL_STYLE_KEYS: Array<keyof Wall> = [
+    'fill',
+    'stroke',
+    'strokeWidth',
+    'fillType',
+    'fillTexture',
+    'fillTextureScale',
+    'fillTextureThickness',
+    'showDimensions',
+    'dimensionType',
+    'dimensionFontSize',
+    'dimensionTextPosition',
+    'dimensionLabelPosition',
+    'dimensionOffset',
+    'dimensionStrokeWidth',
+    'dimensionColor',
+    'dimensionFontFamily',
+    'dimensionFontWeight',
+    'dimensionFontStyle',
+    'dimensionTextDecoration',
+];
+
+const getSharedWallStyleUpdates = (updates: Partial<Wall>): Partial<Wall> => {
+    const sharedUpdates: Partial<Wall> = {};
+    SHARED_WALL_STYLE_KEYS.forEach((key) => {
+        if (key in updates) {
+            (sharedUpdates as any)[key] = (updates as any)[key];
+        }
+    });
+    return sharedUpdates;
+};
+
+const normalizeLegacyWallStroke = (...values: Array<string | undefined | null>) => {
+    const stroke = values.find((value) => value && value !== 'none');
+    return stroke?.toUpperCase() === '#1E40AF' ? '#1f2937' : (stroke || '#1f2937');
+};
+
+const getWallEdgePoints = (wall: Wall, edge: WallEdge) => {
+    const nodeA = wall.nodes.find((node) => node.id === edge.nodeA);
+    const nodeB = wall.nodes.find((node) => node.id === edge.nodeB);
+    return nodeA && nodeB ? { nodeA, nodeB } : null;
+};
+
+const wallsTouchOrBlend = (wallA: Wall, wallB: Wall) => {
+    const pointTolerance = 2;
+    const lineTolerance = 1.5;
+
+    if (wallA.nodes.some((a) => wallB.nodes.some((b) => Math.hypot(a.x - b.x, a.y - b.y) <= pointTolerance))) {
+        return true;
+    }
+
+    for (const edgeA of wallA.edges) {
+        const pointsA = getWallEdgePoints(wallA, edgeA);
+        if (!pointsA) continue;
+
+        for (const edgeB of wallB.edges) {
+            const pointsB = getWallEdgePoints(wallB, edgeB);
+            if (!pointsB) continue;
+
+            const { nodeA: a1, nodeB: a2 } = pointsA;
+            const { nodeA: b1, nodeB: b2 } = pointsB;
+            const ax = a2.x - a1.x;
+            const ay = a2.y - a1.y;
+            const bx = b2.x - b1.x;
+            const by = b2.y - b1.y;
+            const denom = ax * by - ay * bx;
+
+            if (Math.abs(denom) > 0.0001) {
+                const cx = b1.x - a1.x;
+                const cy = b1.y - a1.y;
+                const t = (cx * by - cy * bx) / denom;
+                const u = (cx * ay - cy * ax) / denom;
+                if (t >= -0.01 && t <= 1.01 && u >= -0.01 && u <= 1.01) return true;
+                continue;
+            }
+
+            const lenSq = ax * ax + ay * ay;
+            if (lenSq < 0.0001) continue;
+            const lineDistanceA = Math.abs((b1.x - a1.x) * ay - (b1.y - a1.y) * ax) / Math.sqrt(lenSq);
+            const lineDistanceB = Math.abs((b2.x - a1.x) * ay - (b2.y - a1.y) * ax) / Math.sqrt(lenSq);
+            if (lineDistanceA > lineTolerance || lineDistanceB > lineTolerance) continue;
+
+            const projectionA = ((b1.x - a1.x) * ax + (b1.y - a1.y) * ay) / lenSq;
+            const projectionB = ((b2.x - a1.x) * ax + (b2.y - a1.y) * ay) / lenSq;
+            const overlapStart = Math.max(0, Math.min(projectionA, projectionB));
+            const overlapEnd = Math.min(1, Math.max(projectionA, projectionB));
+            if (overlapEnd - overlapStart > 0.001) return true;
+        }
+    }
+
+    return false;
+};
+
+const getBlendedWallGroupIds = (walls: Wall[], seedIds: string[]) => {
+    const visited = new Set(seedIds);
+    const queue = [...seedIds];
+
+    while (queue.length > 0) {
+        const currentId = queue.shift()!;
+        const currentWall = walls.find((wall) => wall.id === currentId);
+        if (!currentWall) continue;
+
+        walls.forEach((candidate) => {
+            if (visited.has(candidate.id) || candidate.id === currentWall.id) return;
+            if (!wallsTouchOrBlend(currentWall, candidate)) return;
+            visited.add(candidate.id);
+            queue.push(candidate.id);
+        });
+    }
+
+    return visited;
+};
+
 export const useProjectStore = create<ProjectState>()(
     persist(
         (set, get) => ({
@@ -505,6 +671,12 @@ export const useProjectStore = create<ProjectState>()(
             labelArrows: [],
             globalTableNumberingPosition: 'center',
             globalTableNumberingOrientation: 'horizontal',
+            globalTableNumberingFontSize: 0,
+            globalTableNumberingFontFamily: 'Inter, sans-serif',
+            globalTableNumberingFontWeight: '900',
+            globalTableNumberingFontStyle: 'normal',
+            globalTableNumberingTextDecoration: 'none',
+            globalTableNumberingColor: '#000000',
 
             setGlobalTableNumberingPosition: (pos, updateAll) => {
                 set({ globalTableNumberingPosition: pos, hasUnsavedChanges: true });
@@ -531,6 +703,40 @@ export const useProjectStore = create<ProjectState>()(
                     ...tableAssets.map(a => ({ id: a.id, type: 'asset' as const, updates: { tableNumberingOrientation: orientation } })),
                     ...tableShapes.map(s => ({ id: s.id, type: 'shape' as const, updates: { tableNumberingOrientation: orientation } }))
                   ]);
+                }
+            },
+
+            setGlobalTableNumberingTextStyle: (updates, updateAll) => {
+                const storeUpdates: Partial<ProjectState> = {
+                    hasUnsavedChanges: true,
+                };
+
+                if (updates.fontSize !== undefined) storeUpdates.globalTableNumberingFontSize = updates.fontSize;
+                if (updates.fontFamily !== undefined) storeUpdates.globalTableNumberingFontFamily = updates.fontFamily;
+                if (updates.fontWeight !== undefined) storeUpdates.globalTableNumberingFontWeight = updates.fontWeight;
+                if (updates.fontStyle !== undefined) storeUpdates.globalTableNumberingFontStyle = updates.fontStyle;
+                if (updates.textDecoration !== undefined) storeUpdates.globalTableNumberingTextDecoration = updates.textDecoration;
+                if (updates.color !== undefined) storeUpdates.globalTableNumberingColor = updates.color;
+
+                set(storeUpdates);
+
+                if (updateAll) {
+                    const { assets, shapes } = get();
+                    const tableAssets = assets.filter(a => (a.type || "").toLowerCase().includes('table'));
+                    const tableShapes = shapes.filter(s => (s.name || "").toLowerCase().includes('table'));
+                    const itemUpdates: any = {};
+
+                    if (updates.fontSize !== undefined) itemUpdates.tableNumberingFontSize = updates.fontSize;
+                    if (updates.fontFamily !== undefined) itemUpdates.tableNumberingFontFamily = updates.fontFamily;
+                    if (updates.fontWeight !== undefined) itemUpdates.tableNumberingFontWeight = updates.fontWeight;
+                    if (updates.fontStyle !== undefined) itemUpdates.tableNumberingFontStyle = updates.fontStyle;
+                    if (updates.textDecoration !== undefined) itemUpdates.tableNumberingTextDecoration = updates.textDecoration;
+                    if (updates.color !== undefined) itemUpdates.tableNumberingColor = updates.color;
+
+                    get().batchUpdateItems([
+                        ...tableAssets.map(a => ({ id: a.id, type: 'asset' as const, updates: itemUpdates })),
+                        ...tableShapes.map(s => ({ id: s.id, type: 'shape' as const, updates: itemUpdates }))
+                    ]);
                 }
             },
 
@@ -1123,7 +1329,11 @@ export const useProjectStore = create<ProjectState>()(
                         set({
                             shapes: shapes || [],
                             assets: assets || [],
-                            walls: walls || [],
+                            walls: (walls || []).map((wall: any) => ({
+                                ...wall,
+                                stroke: normalizeLegacyWallStroke(wall.stroke, wall.strokeColor),
+                                strokeWidth: wall.strokeWidth ?? 2,
+                            })),
                             wallSegments: wallSegments || [],
                             layers: layers || [DEFAULT_LAYER],
                             groups: groups || [],
@@ -1249,32 +1459,60 @@ export const useProjectStore = create<ProjectState>()(
                         });
                     });
 
-                    // Convert walls to canvasAssets (wall-polygon format)
+                    // Convert walls to canvasAssets with full geometry as a compatibility backup.
+                    // Older backend/editor paths may fall back to canvasAssets, so keep nodes,
+                    // edges, and style data intact instead of rebuilding walls from a flat polygon.
                     walls.forEach(wall => {
-                        // Convert wall nodes/edges to wallPolygon format
-                        const wallPolygon = wall.nodes.map(node => ({
-                            x: node.x - wall.nodes[0].x, // Relative to first node
-                            y: node.y - wall.nodes[0].y,
-                        }));
-
-                        const centerline = wall.edges.length > 0 ? [
-                            { x: 0, y: 0 },
-                            { x: wall.nodes[wall.nodes.length - 1].x - wall.nodes[0].x, y: wall.nodes[wall.nodes.length - 1].y - wall.nodes[0].y }
-                        ] : [];
+                        const origin = wall.nodes[0] || { x: 0, y: 0 };
 
                         canvasAssets.push({
+                            ...wall,
                             id: wall.id,
                             name: wall.name, // SAVE NAME
                             type: 'wall-polygon',
-                            x: wall.nodes[0]?.x || 0,
-                            y: wall.nodes[0]?.y || 0,
-                            wallPolygon,
-                            centerline,
+                            x: origin.x,
+                            y: origin.y,
+                            wallData: wall,
+                            wallNodes: wall.nodes,
+                            wallEdges: wall.edges,
+                            wallPolygon: wall.nodes.map(node => ({
+                                x: node.x - origin.x,
+                                y: node.y - origin.y,
+                            })),
                             wallThickness: wall.edges[0]?.thickness || 75,
-                            strokeColor: wall.stroke || '#1E40AF',
-                            backgroundColor: wall.fill || '#F3F4F6',
+                            strokeColor: wall.stroke || '#1f2937',
+                            backgroundColor: wall.fill || '#ffffff',
+                            fill: wall.fill,
+                            stroke: wall.stroke || '#1f2937',
+                            fillType: wall.fillType,
+                            fillTexture: wall.fillTexture,
+                            fillTextureScale: wall.fillTextureScale,
+                            fillTextureThickness: wall.fillTextureThickness,
                             strokeWidth: wall.strokeWidth !== undefined ? wall.strokeWidth : 2,
                             zIndex: wall.zIndex,
+                        });
+                    });
+
+                    dimensions.forEach(dimension => {
+                        canvasAssets.push({
+                            ...dimension,
+                            type: 'dimension',
+                            itemType: 'dimension',
+                            dimensionType: dimension.type,
+                            x: (dimension.startPoint.x + dimension.endPoint.x) / 2,
+                            y: (dimension.startPoint.y + dimension.endPoint.y) / 2,
+                            zIndex: dimension.zIndex || 0,
+                        });
+                    });
+
+                    labelArrows.forEach(arrow => {
+                        canvasAssets.push({
+                            ...arrow,
+                            type: 'label-arrow',
+                            itemType: 'label-arrow',
+                            x: (arrow.startPoint.x + arrow.endPoint.x) / 2,
+                            y: (arrow.startPoint.y + arrow.endPoint.y) / 2,
+                            zIndex: arrow.zIndex || 0,
                         });
                     });
 
@@ -1339,26 +1577,49 @@ export const useProjectStore = create<ProjectState>()(
 
             updateWall: (id, updates, skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
-                set((state) => ({
-                    walls: state.walls.map((w) => (w.id === id ? { ...w, ...updates } : w)),
-                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
-                }));
+                set((state) => {
+                    const sharedUpdates = getSharedWallStyleUpdates(updates);
+                    const linkedIds = Object.keys(sharedUpdates).length > 0
+                        ? getBlendedWallGroupIds(state.walls, [id])
+                        : new Set([id]);
+
+                    return {
+                        walls: state.walls.map((w) => {
+                            if (w.id === id) return { ...w, ...updates };
+                            if (linkedIds.has(w.id)) return { ...w, ...sharedUpdates };
+                            return w;
+                        }),
+                        hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
+                    };
+                });
             },
 
             updateWallBatch: (ids: string[], updates: Partial<Wall>, skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
-                set((state) => ({
-                    walls: state.walls.map((w) => (ids.includes(w.id) ? { ...w, ...updates } : w)),
-                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
-                }));
+                set((state) => {
+                    const sharedUpdates = getSharedWallStyleUpdates(updates);
+                    const linkedIds = Object.keys(sharedUpdates).length > 0
+                        ? getBlendedWallGroupIds(state.walls, ids)
+                        : new Set(ids);
+
+                    return {
+                        walls: state.walls.map((w) => {
+                            if (ids.includes(w.id)) return { ...w, ...updates };
+                            if (linkedIds.has(w.id)) return { ...w, ...sharedUpdates };
+                            return w;
+                        }),
+                        hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
+                    };
+                });
             },
 
             batchUpdateWalls: (updates: { id: string; updates: Partial<Wall> }[], skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
+                const updatesById = new Map(updates.map((update) => [update.id, update.updates]));
                 set((state) => ({
                     walls: state.walls.map((wall) => {
-                        const update = updates.find((u) => u.id === wall.id);
-                        return update ? { ...wall, ...update.updates } : wall;
+                        const wallUpdates = updatesById.get(wall.id);
+                        return wallUpdates ? { ...wall, ...wallUpdates } : wall;
                     }),
                     hasUnsavedChanges: true,
                 }));
@@ -1529,10 +1790,11 @@ export const useProjectStore = create<ProjectState>()(
 
             batchUpdateShapes: (updates: { id: string; updates: Partial<Shape> }[], skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
+                const updatesById = new Map(updates.map((update) => [update.id, update.updates]));
                 set((state) => ({
                     shapes: state.shapes.map((shape) => {
-                        const update = updates.find((u) => u.id === shape.id);
-                        return update ? { ...shape, ...update.updates } : shape;
+                        const shapeUpdates = updatesById.get(shape.id);
+                        return shapeUpdates ? { ...shape, ...shapeUpdates } : shape;
                     }),
                     hasUnsavedChanges: true,
                 }));
@@ -1572,7 +1834,7 @@ export const useProjectStore = create<ProjectState>()(
                 // Apply default strokeWidth of 2 if not already set
                 const assetWithDefaults = {
                     ...asset,
-                    strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : 0.5
+                    strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : 0.6
                 };
                 set((state) => ({
                     assets: [...state.assets, assetWithDefaults],
@@ -1584,7 +1846,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 const assetsWithDefaults = newAssets.map(asset => ({
                     ...asset,
-                    strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : 0.5
+                    strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : 0.6
                 }));
                 set((state) => ({
                     assets: [...state.assets, ...assetsWithDefaults],
@@ -1609,10 +1871,11 @@ export const useProjectStore = create<ProjectState>()(
 
             batchUpdateAssets: (updates: { id: string; updates: Partial<Asset> }[], skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
+                const updatesById = new Map(updates.map((update) => [update.id, update.updates]));
                 set((state) => ({
                     assets: state.assets.map((asset) => {
-                        const update = updates.find((u) => u.id === asset.id);
-                        return update ? { ...asset, ...update.updates } : asset;
+                        const assetUpdates = updatesById.get(asset.id);
+                        return assetUpdates ? { ...asset, ...assetUpdates } : asset;
                     }),
                     hasUnsavedChanges: true,
                 }));
@@ -2025,11 +2288,141 @@ export const useProjectStore = create<ProjectState>()(
                     }
                 });
 
+                const deletedWalls = state.walls.filter((w) => idsToDelete.has(w.id));
+                const deletedShapes = state.shapes.filter((s) => idsToDelete.has(s.id));
+                const deletedAssets = state.assets.filter((a) => idsToDelete.has(a.id));
+                const deletedWallIds = new Set(deletedWalls.map((w) => w.id));
+
+                const getRotatedBounds = (item: { x: number; y: number; width: number; height: number; rotation?: number; scale?: number }) => {
+                    const width = item.width * (item.scale || 1);
+                    const height = item.height * (item.scale || 1);
+                    const halfW = width / 2;
+                    const halfH = height / 2;
+                    const rot = ((item.rotation || 0) * Math.PI) / 180;
+                    const cos = Math.cos(rot);
+                    const sin = Math.sin(rot);
+                    const corners = [
+                        { x: -halfW, y: -halfH },
+                        { x: halfW, y: -halfH },
+                        { x: halfW, y: halfH },
+                        { x: -halfW, y: halfH },
+                    ].map((corner) => ({
+                        x: item.x + corner.x * cos - corner.y * sin,
+                        y: item.y + corner.x * sin + corner.y * cos,
+                    }));
+
+                    return {
+                        minX: Math.min(...corners.map((point) => point.x)),
+                        minY: Math.min(...corners.map((point) => point.y)),
+                        maxX: Math.max(...corners.map((point) => point.x)),
+                        maxY: Math.max(...corners.map((point) => point.y)),
+                    };
+                };
+
+                const getWallBounds = (wall: Wall) => {
+                    if (wall.nodes.length === 0) return null;
+                    const maxThickness = Math.max(0, ...wall.edges.map((edge) => edge.thickness || 150));
+                    const pad = maxThickness / 2;
+                    return {
+                        minX: Math.min(...wall.nodes.map((node) => node.x)) - pad,
+                        minY: Math.min(...wall.nodes.map((node) => node.y)) - pad,
+                        maxX: Math.max(...wall.nodes.map((node) => node.x)) + pad,
+                        maxY: Math.max(...wall.nodes.map((node) => node.y)) + pad,
+                    };
+                };
+
+                const deletedBounds = [
+                    ...deletedShapes.map((shape) => ({ id: shape.id, bounds: getRotatedBounds(shape), tolerance: 90 })),
+                    ...deletedAssets.map((asset) => ({ id: asset.id, bounds: getRotatedBounds(asset), tolerance: 90 })),
+                    ...deletedWalls
+                        .map((wall) => {
+                            const bounds = getWallBounds(wall);
+                            return bounds ? { id: wall.id, bounds, tolerance: 120 } : null;
+                        })
+                        .filter((entry): entry is { id: string; bounds: { minX: number; minY: number; maxX: number; maxY: number }; tolerance: number } => Boolean(entry)),
+                ];
+
+                const pointTouchesDeletedItem = (point: Point) => deletedBounds.some(({ bounds, tolerance }) => (
+                    point.x >= bounds.minX - tolerance &&
+                    point.x <= bounds.maxX + tolerance &&
+                    point.y >= bounds.minY - tolerance &&
+                    point.y <= bounds.maxY + tolerance
+                ));
+
+                const shouldRemoveDimension = (dimension: Dimension) => {
+                    if (idsToDelete.has(dimension.id)) return true;
+                    if (dimension.targetId && idsToDelete.has(dimension.targetId)) return true;
+                    if (dimension.targetIds?.some((id) => idsToDelete.has(id))) return true;
+                    return pointTouchesDeletedItem(dimension.startPoint) || pointTouchesDeletedItem(dimension.endPoint);
+                };
+
+                const cleanupCollinearSplitNodes = (wall: Wall): Wall => {
+                    if (deletedWallIds.size === 0 || wall.nodes.length === 0 || wall.edges.length === 0) return wall;
+
+                    let nodes = wall.nodes.map((node) => ({ ...node }));
+                    let edges = wall.edges.map((edge) => ({ ...edge }));
+                    const tolerance = 0.75;
+
+                    let changed = true;
+                    while (changed) {
+                        changed = false;
+
+                        for (const node of nodes) {
+                            const connectedEdges = edges.filter((edge) => edge.nodeA === node.id || edge.nodeB === node.id);
+                            if (connectedEdges.length !== 2) continue;
+
+                            const [edgeA, edgeB] = connectedEdges;
+                            if ((edgeA.thickness || 150) !== (edgeB.thickness || 150)) continue;
+
+                            const otherAId = edgeA.nodeA === node.id ? edgeA.nodeB : edgeA.nodeA;
+                            const otherBId = edgeB.nodeA === node.id ? edgeB.nodeB : edgeB.nodeA;
+                            if (otherAId === otherBId) continue;
+
+                            const otherA = nodes.find((entry) => entry.id === otherAId);
+                            const otherB = nodes.find((entry) => entry.id === otherBId);
+                            if (!otherA || !otherB) continue;
+
+                            const ax = node.x - otherA.x;
+                            const ay = node.y - otherA.y;
+                            const bx = otherB.x - node.x;
+                            const by = otherB.y - node.y;
+                            const lenA = Math.hypot(ax, ay);
+                            const lenB = Math.hypot(bx, by);
+                            if (lenA < 0.01 || lenB < 0.01) continue;
+
+                            const crossDistance = Math.abs(ax * by - ay * bx) / Math.max(lenA, lenB);
+                            const dot = (ax * bx + ay * by) / (lenA * lenB);
+                            if (crossDistance > tolerance || dot < 0.999) continue;
+
+                            const mergedEdge: WallEdge = {
+                                id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                                nodeA: otherAId,
+                                nodeB: otherBId,
+                                thickness: edgeA.thickness || edgeB.thickness || 150,
+                            };
+
+                            nodes = nodes.filter((entry) => entry.id !== node.id);
+                            edges = edges
+                                .filter((edge) => edge.id !== edgeA.id && edge.id !== edgeB.id)
+                                .concat(mergedEdge);
+                            changed = true;
+                            break;
+                        }
+                    }
+
+                    const usedNodeIds = new Set(edges.flatMap((edge) => [edge.nodeA, edge.nodeB]));
+                    nodes = nodes.filter((node) => usedNodeIds.has(node.id) || edges.length === 0);
+
+                    return nodes.length !== wall.nodes.length || edges.length !== wall.edges.length
+                        ? { ...wall, nodes, edges }
+                        : wall;
+                };
+
                 set((state) => ({
-                    walls: state.walls.filter((w) => !idsToDelete.has(w.id)),
+                    walls: state.walls.filter((w) => !idsToDelete.has(w.id)).map(cleanupCollinearSplitNodes),
                     shapes: state.shapes.filter((s) => !idsToDelete.has(s.id)),
                     assets: state.assets.filter((a) => !idsToDelete.has(a.id)),
-                    dimensions: state.dimensions.filter((d) => !idsToDelete.has(d.id)),
+                    dimensions: state.dimensions.filter((d) => !shouldRemoveDimension(d)),
                     labelArrows: state.labelArrows.filter((la) => !idsToDelete.has(la.id)),
                     textAnnotations: state.textAnnotations.filter((ta) => !idsToDelete.has(ta.id)),
                     groups: state.groups.filter((g) => !idsToDelete.has(g.id)),
@@ -2040,36 +2433,54 @@ export const useProjectStore = create<ProjectState>()(
             batchUpdateItems: (items: { id: string; type: 'shape' | 'asset' | 'wall' | 'dimension' | 'textAnnotation' | 'labelArrow'; updates: any }[], skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
                 set((state) => {
-                    let newShapes = [...state.shapes];
-                    let newAssets = [...state.assets];
-                    let newWalls = [...state.walls];
-                    let newDimensions = [...state.dimensions];
-                    let newTextAnnotations = [...state.textAnnotations];
-                    let newLabelArrows = [...state.labelArrows];
-
+                    const shapeUpdates = new Map<string, any>();
+                    const assetUpdates = new Map<string, any>();
+                    const wallUpdates = new Map<string, any>();
+                    const dimensionUpdates = new Map<string, any>();
+                    const textAnnotationUpdates = new Map<string, any>();
+                    const labelArrowUpdates = new Map<string, any>();
+                    
                     items.forEach(item => {
                         if (item.type === 'shape') {
-                            newShapes = newShapes.map(s => (s.id === item.id ? { ...s, ...item.updates } : s));
+                            shapeUpdates.set(item.id, item.updates);
                         } else if (item.type === 'asset') {
-                            newAssets = newAssets.map(a => (a.id === item.id ? { ...a, ...item.updates } : a));
+                            assetUpdates.set(item.id, item.updates);
                         } else if (item.type === 'wall') {
-                            newWalls = newWalls.map(w => (w.id === item.id ? { ...w, ...item.updates } : w));
+                            wallUpdates.set(item.id, item.updates);
                         } else if (item.type === 'dimension') {
-                            newDimensions = newDimensions.map(d => (d.id === item.id ? { ...d, ...item.updates } : d));
+                            dimensionUpdates.set(item.id, item.updates);
                         } else if (item.type === 'textAnnotation') {
-                            newTextAnnotations = newTextAnnotations.map(ta => (ta.id === item.id ? { ...ta, ...item.updates } : ta));
+                            textAnnotationUpdates.set(item.id, item.updates);
                         } else if (item.type === 'labelArrow') {
-                            newLabelArrows = newLabelArrows.map(la => (la.id === item.id ? { ...la, ...item.updates } : la));
+                            labelArrowUpdates.set(item.id, item.updates);
                         }
                     });
 
                     return {
-                        shapes: newShapes,
-                        assets: newAssets,
-                        walls: newWalls,
-                        dimensions: newDimensions,
-                        textAnnotations: newTextAnnotations,
-                        labelArrows: newLabelArrows,
+                        shapes: shapeUpdates.size > 0 ? state.shapes.map(s => {
+                            const updates = shapeUpdates.get(s.id);
+                            return updates ? { ...s, ...updates } : s;
+                        }) : state.shapes,
+                        assets: assetUpdates.size > 0 ? state.assets.map(a => {
+                            const updates = assetUpdates.get(a.id);
+                            return updates ? { ...a, ...updates } : a;
+                        }) : state.assets,
+                        walls: wallUpdates.size > 0 ? state.walls.map(w => {
+                            const updates = wallUpdates.get(w.id);
+                            return updates ? { ...w, ...updates } : w;
+                        }) : state.walls,
+                        dimensions: dimensionUpdates.size > 0 ? state.dimensions.map(d => {
+                            const updates = dimensionUpdates.get(d.id);
+                            return updates ? { ...d, ...updates } : d;
+                        }) : state.dimensions,
+                        textAnnotations: textAnnotationUpdates.size > 0 ? state.textAnnotations.map(ta => {
+                            const updates = textAnnotationUpdates.get(ta.id);
+                            return updates ? { ...ta, ...updates } : ta;
+                        }) : state.textAnnotations,
+                        labelArrows: labelArrowUpdates.size > 0 ? state.labelArrows.map(la => {
+                            const updates = labelArrowUpdates.get(la.id);
+                            return updates ? { ...la, ...updates } : la;
+                        }) : state.labelArrows,
                         hasUnsavedChanges: true,
                     };
                 });
@@ -2080,7 +2491,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     dimensions: [...state.dimensions, dimension],
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 

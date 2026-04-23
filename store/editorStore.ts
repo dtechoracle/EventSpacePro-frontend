@@ -51,6 +51,7 @@ export type EditorState = {
   isDragging: boolean;
   isDrawing: boolean;
   isPanning: boolean;
+  currentDrawingWallId: string | null;
 
   // Mouse position state
   mouseWorldPos: { x: number; y: number };
@@ -75,6 +76,7 @@ export type EditorState = {
   resetZoom: () => void;
 
   setPan: (x: number, y: number) => void;
+  setViewportTransform: (zoom: number, panX: number, panY: number) => void;
   panBy: (dx: number, dy: number) => void;
   resetPan: () => void;
 
@@ -106,6 +108,7 @@ export type EditorState = {
   setDragging: (dragging: boolean) => void;
   setDrawing: (drawing: boolean) => void;
   setPanning: (panning: boolean) => void;
+  setCurrentDrawingWallId: (id: string | null) => void;
 
   // Utility methods
   screenToWorld: (screenX: number, screenY: number) => { x: number; y: number };
@@ -150,6 +153,7 @@ export const useEditorStore = create<EditorState>()(
       isDragging: false,
       isDrawing: false,
       isPanning: false,
+      currentDrawingWallId: null,
 
       mouseWorldPos: { x: 0, y: 0 },
       setMouseWorldPos: (pos) => set({ mouseWorldPos: pos }),
@@ -184,6 +188,11 @@ export const useEditorStore = create<EditorState>()(
 
       // Pan methods
       setPan: (x, y) => set({ panX: x, panY: y }),
+      setViewportTransform: (zoom, panX, panY) => set({
+        zoom: Math.max(0.000001, Math.min(1000000, zoom)),
+        panX,
+        panY,
+      }),
 
       panBy: (dx, dy) => {
         const state = get();
@@ -253,6 +262,7 @@ export const useEditorStore = create<EditorState>()(
       setDrawing: (drawing) => set({ isDrawing: drawing }),
 
       setPanning: (panning) => set({ isPanning: panning }),
+      setCurrentDrawingWallId: (id) => set({ currentDrawingWallId: id }),
 
       // Utility methods
       screenToWorld: (screenX, screenY) => {

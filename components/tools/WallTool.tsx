@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { useSceneStore } from '@/store/sceneStore';
 import { useProjectStore, WallNode, WallEdge, Wall } from '@/store/projectStore';
@@ -14,10 +14,26 @@ interface WallToolProps {
     thickness?: number;
 }
 
+const marqueeAssetTypes = new Set(
+    ASSET_LIBRARY
+        .filter((asset) => asset.category === 'Marquee')
+        .map((asset) => asset.id)
+);
+
 export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
-    const { canvasOffset, zoom, panX, panY, setSelectedIds, setActiveTool, hoveredId } = useEditorStore();
+    const { canvasOffset, zoom, panX, panY, setSelectedIds, setActiveTool, setCurrentDrawingWallId } = useEditorStore();
     const { snapToGridEnabled, gridSize } = useSceneStore();
-    const { addWall, updateWall, getNextZIndex, walls, shapes, assets, splitWallEdge } = useProjectStore();
+    const addWall = useProjectStore(s => s.addWall);
+    const updateWall = useProjectStore(s => s.updateWall);
+    const getNextZIndex = useProjectStore(s => s.getNextZIndex);
+    const walls = useProjectStore(s => s.walls);
+    const shapes = useProjectStore(s => s.shapes);
+    const allAssets = useProjectStore(s => s.assets);
+    const assets = useMemo(
+        () => allAssets.filter(asset => marqueeAssetTypes.has(asset.type)),
+        [allAssets]
+    );
+    const splitWallEdge = useProjectStore(s => s.splitWallEdge);
 
     // Screen to world conversion
     const screenToWorld = useCallback((screenX: number, screenY: number) => {
@@ -83,10 +99,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
         if (!closest) {
             const candidates = [
                 ...shapes,
-                ...assets.filter((asset) => {
-                    const assetDef = ASSET_LIBRARY.find((def) => def.id === asset.type);
-                    return assetDef?.category === 'Marquee';
-                }),
+                ...assets,
             ];
 
             closest = findClosestSnapPointFromList(
@@ -320,17 +333,19 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
     const finishWall = useCallback((closed: boolean = false) => {
         if (!currentWallId) {
             setIsDrawing(false);
+            setCurrentDrawingWallId(null);
             return;
         }
 
         setCurrentWallId(null);
+        setCurrentDrawingWallId(null);
         setLastNodeId(null);
         setIsDrawing(false);
         setJunctionTarget(null);
 
         setActiveTool('select');
         setSelectedIds([]);
-    }, [currentWallId, setSelectedIds, setActiveTool]);
+    }, [currentWallId, setSelectedIds, setActiveTool, setCurrentDrawingWallId]);
 
     // Handle mouse move for preview
     const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -515,6 +530,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
 
             addWall(wall);
             setCurrentWallId(wallId);
+            setCurrentDrawingWallId(wallId);
             setIsDrawing(true);
 
             if (junction && !existingNodeId && junction.edgeId) {
@@ -711,7 +727,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             }
             removeDuplicateSharedEdges(currentWallId);
         }
-    }, [connectNodeToWallEdge, findExistingNodeAtPoint, getSegmentIntersections, getSnappedWallPoint, isActive, currentWallId, currentWall, lastNode, lastNodeId, previewPoint, refreshWallGeometry, removeDuplicateSharedEdges, screenToWorld, lastClickTime, walls, thickness, addWall, updateWall, getNextZIndex, finishWall]);
+    }, [connectNodeToWallEdge, findExistingNodeAtPoint, getSegmentIntersections, getSnappedWallPoint, isActive, currentWallId, currentWall, lastNode, lastNodeId, previewPoint, refreshWallGeometry, removeDuplicateSharedEdges, screenToWorld, lastClickTime, walls, thickness, addWall, updateWall, getNextZIndex, finishWall, setCurrentDrawingWallId]);
 
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
         if (!isActive) return;
@@ -734,6 +750,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
         if (!isActive) {
             setIsDrawing(false);
             setCurrentWallId(null);
+            setCurrentDrawingWallId(null);
             setLastNodeId(null);
             setJunctionTarget(null);
             setPreviewPoint(null);
@@ -750,7 +767,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             window.removeEventListener('click', handleClick);
             window.removeEventListener('keydown', handleKeyDown);
         };
-    }, [isActive, handleMouseMove, handleClick, handleKeyDown]);
+    }, [isActive, handleMouseMove, handleClick, handleKeyDown, setCurrentDrawingWallId]);
 
     if (!isActive) return null;
 

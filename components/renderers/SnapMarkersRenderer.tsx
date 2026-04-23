@@ -4,33 +4,51 @@ import { useProjectStore } from '@/store/projectStore';
 import { findClosestSnapPointFromList, getSnapPoints } from '@/utils/snapToDrawing';
 import { ASSET_LIBRARY } from '@/lib/assets';
 
+const marqueeAssetTypes = new Set(
+    ASSET_LIBRARY
+        .filter((def) => def.category === 'Marquee')
+        .map((def) => def.id)
+);
+
+const snapDrawingTools = new Set(['wall', 'shape-line', 'shape-arrow', 'dimension', 'arch']);
+
 export default function SnapMarkersRenderer() {
-    const { hoveredId, zoom, mouseWorldPos, activeTool } = useEditorStore();
-    const { shapes, assets, walls } = useProjectStore();
+    const hoveredId = useEditorStore(s => s.hoveredId);
+    const zoom = useEditorStore(s => s.zoom);
+    const mouseWorldPos = useEditorStore(s => s.mouseWorldPos);
+    const activeTool = useEditorStore(s => s.activeTool);
+    const shapes = useProjectStore(s => s.shapes);
+    const allAssets = useProjectStore(s => s.assets);
+    const assets = useMemo(
+        () => allAssets.filter(asset => marqueeAssetTypes.has(asset.type)),
+        [allAssets]
+    );
+    const walls = useProjectStore(s => s.walls);
 
-    const fallbackSnapTargetId = useMemo<string | null>(() => {
-        if (!(activeTool === 'wall' || activeTool === 'shape-line' || activeTool === 'shape-arrow' || activeTool === 'dimension' || activeTool === 'arch')) {
-            return null;
-        }
-
-        const marqueeCandidates: Array<{ id: string; points: ReturnType<typeof getSnapPoints> }> = assets
-            .flatMap((asset) => {
-                const assetDef = ASSET_LIBRARY.find((def) => def.id === asset.type);
-                return assetDef?.category === 'Marquee'
-                    ? [{ id: asset.id, points: getSnapPoints(asset) }]
-                    : [];
-            });
+    const fallbackCandidates = useMemo<Array<{ id: string; points: ReturnType<typeof getSnapPoints> }>>(() => {
+        if (!snapDrawingTools.has(activeTool)) return [];
 
         const candidates: Array<{ id: string; points: ReturnType<typeof getSnapPoints> }> = [
             ...shapes.map((shape) => ({ id: shape.id, points: getSnapPoints(shape) })),
             ...walls.map((wall) => ({ id: wall.id, points: getSnapPoints(wall) })),
-            ...marqueeCandidates,
         ];
+
+        assets.forEach((asset) => {
+            candidates.push({ id: asset.id, points: getSnapPoints(asset) });
+        });
+
+        return candidates;
+    }, [activeTool, assets, shapes, walls]);
+
+    const fallbackSnapTargetId = useMemo<string | null>(() => {
+        if (fallbackCandidates.length === 0) {
+            return null;
+        }
 
         let bestMatchId: string | null = null;
         let bestDistance = Infinity;
 
-        candidates.forEach((candidate) => {
+        fallbackCandidates.forEach((candidate) => {
             const closest = findClosestSnapPointFromList(mouseWorldPos, candidate.points, 32 / zoom);
             if (!closest) return;
 
@@ -42,7 +60,7 @@ export default function SnapMarkersRenderer() {
         });
 
         return bestMatchId;
-    }, [activeTool, assets, mouseWorldPos, shapes, walls, zoom]);
+    }, [fallbackCandidates, mouseWorldPos, zoom]);
 
     const markerSourceId = hoveredId || fallbackSnapTargetId;
 
@@ -54,8 +72,7 @@ export default function SnapMarkersRenderer() {
 
         const asset = assets.find(a => a.id === markerSourceId);
         if (asset) {
-            const assetDef = ASSET_LIBRARY.find((def) => def.id === asset.type);
-            return assetDef?.category === 'Marquee' ? getSnapPoints(asset) : [];
+            return getSnapPoints(asset);
         }
 
         const wall = walls.find(w => w.id === markerSourceId);

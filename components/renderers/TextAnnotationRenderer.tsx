@@ -10,7 +10,7 @@ interface TextAnnotationRendererProps {
 
 export default function TextAnnotationRenderer({ annotation, zoom }: TextAnnotationRendererProps) {
     const rotation = annotation.rotation || 0;
-    const fontSize = annotation.fontSize || 200;
+    const fontSize = annotation.fontSize || 250;
 
     const lines = annotation.text ? annotation.text.split('\n') : [''];
     const lineHeight = annotation.lineHeight || 1.2;
@@ -40,7 +40,7 @@ export default function TextAnnotationRenderer({ annotation, zoom }: TextAnnotat
                 y={-(lines.length - 1) * (fontSize * lineHeight) / 2}
                 fontSize={fontSize}
                 fill={annotation.color || '#000000'}
-                fontFamily={annotation.fontFamily || 'Arial'}
+                fontFamily={annotation.fontFamily || 'Inter, sans-serif'}
                 fontWeight={annotation.fontWeight || 'normal'}
                 fontStyle={annotation.fontStyle || 'normal'}
                 textDecoration={annotation.textDecoration || 'none'}

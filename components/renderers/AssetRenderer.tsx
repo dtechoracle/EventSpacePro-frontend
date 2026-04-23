@@ -4,11 +4,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSceneStore } from '@/store/sceneStore';
 import { Asset, useProjectStore } from '@/store/projectStore';
 import { ASSET_LIBRARY } from '@/lib/assets';
+import { DEFAULT_ASSET_STROKE_WIDTH, canRenderAssetAsImage } from '@/utils/assetRenderMode';
+import { getRasterAssetPath } from '@/utils/assetRasterPath';
 
 // Global cache for SVGs - defined at module top level to prevent ReferenceErrors during evaluation
 const svgCache: Record<string, string> = {};
+const pendingSvgCache: Record<string, Promise<string>> = {};
 const processedSvgCache: Record<string, string> = {};
-
 // Helper to extract dimensions from SVG string
 function getSvgSize(svgText: string) {
     const widthMatch = svgText.match(/width=["']([\d.]+)[a-z%]*["']/i);
@@ -37,27 +39,61 @@ interface AssetRendererProps {
     isPreview?: boolean;
     onMouseEnter?: (name: string) => void;
     onMouseLeave?: () => void;
+    isCanvasBacked?: boolean;
 }
 
-const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHighlightOnly = false, isPreview, onMouseEnter, onMouseLeave }: AssetRendererProps) => {
+const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHighlightOnly = false, isPreview, onMouseEnter, onMouseLeave, isCanvasBacked = false }: AssetRendererProps) => {
     const [rawSvgContent, setRawSvgContent] = useState<string | null>(null);
+    const [rasterImageFailed, setRasterImageFailed] = useState(false);
     const updateAsset = useSceneStore(s => s.updateAsset);
     
     // Global numbering settings from store
     const globalPos = useProjectStore(s => s.globalTableNumberingPosition);
     const globalOrientation = useProjectStore(s => s.globalTableNumberingOrientation);
+    const globalTableFontSize = useProjectStore(s => s.globalTableNumberingFontSize);
+    const globalTableFontFamily = useProjectStore(s => s.globalTableNumberingFontFamily);
+    const globalTableFontWeight = useProjectStore(s => s.globalTableNumberingFontWeight);
+    const globalTableFontStyle = useProjectStore(s => s.globalTableNumberingFontStyle);
+    const globalTableTextDecoration = useProjectStore(s => s.globalTableNumberingTextDecoration);
+    const globalTableColor = useProjectStore(s => s.globalTableNumberingColor);
 
     // Find the definition for this asset type
     const definition = ASSET_LIBRARY.find(item => item.id === asset.type);
     const isMarquee = definition?.category === 'Marquee';
     const assetPath = definition?.path ? encodeURI(definition.path) : null;
+    const rasterAssetPath = definition?.path ? encodeURI(getRasterAssetPath(definition.path) || '') : null;
 
     const showHighlight = isSelected || isHovered;
     const highlightColor = isSelected ? '#3b82f6' : '#60a5fa';
+    const defaultStrokeWidth = isPreview ? 0.4 : DEFAULT_ASSET_STROKE_WIDTH;
+    const canUseFastImage = !!assetPath && !asset.isExploded && canRenderAssetAsImage(asset, isPreview);
+    const fastImageHref = canUseFastImage && rasterAssetPath && !rasterImageFailed ? rasterAssetPath : assetPath;
+
+    useEffect(() => {
+        setRasterImageFailed(false);
+    }, [rasterAssetPath]);
 
     // Fetch SVG content
     useEffect(() => {
         if (!definition?.path) return;
+
+        const currentW = asset.width;
+        const currentH = asset.height;
+        const hasLegacyTwentySeaterSize =
+            asset.type === '20-seater-doughtnut-table' &&
+            currentW !== undefined &&
+            currentH !== undefined &&
+            (
+                (Math.abs(currentW - 23978) < 1 && Math.abs(currentH - 33854) < 1) ||
+                (Math.abs(currentW - 4600) < 1 && Math.abs(currentH - 4600) < 1)
+            );
+
+        const needsDimensionRepair = !currentW || !currentH || hasLegacyTwentySeaterSize;
+
+        if (canUseFastImage && !needsDimensionRepair) {
+            setRawSvgContent(null);
+            return;
+        }
 
         const handleSvgText = (text: string) => {
             setRawSvgContent(text);
@@ -66,16 +102,6 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             const { width: svgWidth, height: svgHeight } = getSvgSize(text);
 
             if (svgWidth && svgHeight) {
-                const currentW = asset.width;
-                const currentH = asset.height;
-                const hasLegacyTwentySeaterSize =
-                    asset.type === '20-seater-doughtnut-table' &&
-                    currentW !== undefined &&
-                    currentH !== undefined &&
-                    (
-                        (Math.abs(currentW - 23978) < 1 && Math.abs(currentH - 33854) < 1) ||
-                        (Math.abs(currentW - 4600) < 1 && Math.abs(currentH - 4600) < 1)
-                    );
                 const needsUpdate = !currentW || !currentH || hasLegacyTwentySeaterSize;
 
                 if (needsUpdate) {
@@ -92,17 +118,28 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             return;
         }
 
-        fetch(assetPath || definition.path)
-            .then(res => res.text())
-            .then(text => {
-                svgCache[definition.path] = text;
-                handleSvgText(text);
-            })
+        if (!pendingSvgCache[definition.path]) {
+            pendingSvgCache[definition.path] = fetch(assetPath || definition.path)
+                .then(res => res.text())
+                .then(text => {
+                    svgCache[definition.path] = text;
+                    delete pendingSvgCache[definition.path];
+                    return text;
+                })
+                .catch(err => {
+                    delete pendingSvgCache[definition.path];
+                    throw err;
+                });
+        }
+
+        pendingSvgCache[definition.path]
+            .then(handleSvgText)
             .catch(err => console.error("Failed to load SVG", err));
-    }, [assetPath, definition?.path, definition?.width, definition?.height, asset.id, asset.width, asset.height, updateAsset]);
+    }, [assetPath, definition?.path, definition?.width, definition?.height, asset.id, asset.width, asset.height, asset.type, canUseFastImage, updateAsset]);
 
     // 1. Base SVG processing (Heavy - matches InlineSvg logic)
     const baseSvg = useMemo(() => {
+        if (canUseFastImage) return null;
         if (!rawSvgContent || typeof window === 'undefined' || !definition?.path) return null;
 
         const cacheKey = `${definition.path}_workspace`;
@@ -227,7 +264,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             console.error("Error processing base SVG in AssetRenderer", e);
             return rawSvgContent;
         }
-    }, [rawSvgContent, definition?.path, asset.type]);
+    }, [rawSvgContent, definition?.path, asset.type, canUseFastImage]);
 
     // 2. Fill resolution logic
     const currentFill = useMemo(() => {
@@ -244,13 +281,13 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     }, [asset.fillColor, (asset as any).fillType, (asset as any).fillTexture, (asset as any).fillTextureScale, (asset as any).fillTextureThickness]);
 
     const currentStroke = asset.strokeColor || '#000000';
-    const defaultStrokeWidth = isPreview ? 0.4 : 0.5;
     const currentStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : defaultStrokeWidth;
     const displayWidth = asset.width || definition?.width || 100;
     const displayHeight = asset.height || definition?.height || 100;
 
     // 3. Final Instance Processing
     const processedSvg = useMemo(() => {
+        if (canUseFastImage) return null;
         if (!baseSvg) return null;
 
         return baseSvg.replace(/<svg([^>]*)>/i, (_match, attrs) => {
@@ -264,7 +301,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
 
             return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="${displayWidth}" height="${displayHeight}" x="${-displayWidth / 2}" y="${-displayHeight / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none; width:100%; height:100%;">`;
         });
-    }, [baseSvg, currentFill, currentStroke, currentStrokeWidth, displayWidth, displayHeight]);
+    }, [baseSvg, canUseFastImage, currentFill, currentStroke, currentStrokeWidth, displayWidth, displayHeight]);
 
     if (asset.isExploded) return null;
     const rotation = asset.rotation || 0;
@@ -274,10 +311,11 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     return (
         <g
             transform={transform}
-            style={{ cursor: 'pointer' }}
+            style={{ cursor: 'pointer', ...(isCanvasBacked && canUseFastImage ? { display: 'none' } : {}) }}
             onMouseEnter={() => definition && onMouseEnter?.(definition.label)}
             onMouseLeave={() => onMouseLeave?.()}
             data-id={asset.id}
+            data-canvas-backed-asset={isCanvasBacked && canUseFastImage ? 'true' : undefined}
         >
             {isHighlightOnly ? (
                 showHighlight && (
@@ -290,9 +328,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                         stroke={highlightColor}
                         strokeWidth={2}
                         rx={8}
-                        style={{
-                            filter: `drop-shadow(0 0 6px ${highlightColor}) drop-shadow(0 0 2px ${highlightColor})`
-                        }}
+                        style={{ pointerEvents: 'none' }}
                     />
                 )
             ) : (
@@ -303,14 +339,20 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                             style={{ filter: 'none' }}
                         />
                     ) : (
-                        assetPath && (
+                        fastImageHref && (
                             <image
-                                href={assetPath}
+                                href={fastImageHref}
                                 x={-displayWidth / 2}
                                 y={-displayHeight / 2}
                                 width={displayWidth}
                                 height={displayHeight}
-                                style={{ outline: 'none', filter: 'none' }}
+                                preserveAspectRatio="none"
+                                onError={() => {
+                                    if (canUseFastImage && fastImageHref !== assetPath) {
+                                        setRasterImageFailed(true);
+                                    }
+                                }}
+                                style={{ outline: 'none', filter: 'none', pointerEvents: 'none' }}
                             />
                         )
                     )}
@@ -334,7 +376,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                                 height={asset.height || 100}
                                 fill={currentFill}
                                 stroke={asset.strokeColor || '#000000'}
-                                strokeWidth={asset.strokeWidth || 1}
+                                strokeWidth={asset.strokeWidth ?? DEFAULT_ASSET_STROKE_WIDTH}
                                 style={{ filter: 'none' }}
                             />
                             <text
@@ -356,6 +398,12 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                         (() => {
                             const pos = (asset as any).tableNumberingPosition || globalPos || 'center';
                             const orientation = (asset as any).tableNumberingOrientation || globalOrientation || 'horizontal';
+                            const labelFontSize = (asset as any).tableNumberingFontSize || globalTableFontSize || Math.max(14, (asset.width || 100) * 0.14);
+                            const labelFontFamily = (asset as any).tableNumberingFontFamily || globalTableFontFamily || 'Inter, sans-serif';
+                            const labelFontWeight = (asset as any).tableNumberingFontWeight || globalTableFontWeight || '900';
+                            const labelFontStyle = (asset as any).tableNumberingFontStyle || globalTableFontStyle || 'normal';
+                            const labelTextDecoration = (asset as any).tableNumberingTextDecoration || globalTableTextDecoration || 'none';
+                            const labelColor = (asset as any).tableNumberingColor || globalTableColor || '#000000';
                             const circleR = Math.max(16, (asset.width || 100) * 0.12);
                             const padding = circleR * 1.5;
                             const halfW = (asset.width || 100) / 2;
@@ -388,13 +436,15 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                                         y={0}
                                         textAnchor="middle"
                                         dominantBaseline="middle"
-                                        fontSize={Math.max(14, (asset.width || 100) * 0.14)}
-                                        fill="#000000"
-                                        fontWeight="900"
+                                        fontSize={labelFontSize}
+                                        fill={labelColor}
+                                        fontWeight={labelFontWeight}
+                                        fontStyle={labelFontStyle}
+                                        textDecoration={labelTextDecoration}
                                         pointerEvents="none"
                                         style={{
                                             userSelect: 'none',
-                                            fontFamily: 'Inter, sans-serif'
+                                            fontFamily: labelFontFamily
                                         }}
                                     >
                                         {asset.tableName}

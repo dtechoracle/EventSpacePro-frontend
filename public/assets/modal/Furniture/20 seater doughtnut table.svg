@@ -5,14 +5,16 @@
             <!-- Auto-generated fillable area -->
         <!-- Block Reference: 20 seater doughtnut / entities: 24 -->
         <g>
+            <!-- Fillable doughnut table surface. The even-odd hole keeps the center transparent when a fill is applied. -->
+            <path id="auto-fill" fill="none" fill-rule="evenodd" d="M875.5586,2534.0499 A1675,1675 0 1,0 4225.5586,2534.0499 A1675,1675 0 1,0 875.5586,2534.0499 M1475.5586,2534.0499 A1075,1075 0 1,1 3625.5586,2534.0499 A1075,1075 0 1,1 1475.5586,2534.0499" style="stroke:#000000;stroke-width:0.1;"/>
             <!-- Circle -->
-            <circle cx="2550.5585670775035" cy="2534.0499262169906" r="1675" style="stroke:#000000;stroke-width:0.1;"/>
+            <circle cx="2550.5585670775035" cy="2534.0499262169906" r="1675" fill="none" style="stroke:#000000;stroke-width:0.1;"/>
             <!-- Circle -->
-            <circle cx="2550.5585670775035" cy="2534.0499262169906" r="1075" style="stroke:#000000;stroke-width:0.1;"/>
+            <circle cx="2550.5585670775035" cy="2534.0499262169906" r="1075" fill="none" style="stroke:#000000;stroke-width:0.1;"/>
             <!-- Circle -->
-            <circle cx="2550.5585670775035" cy="2534.0499262169906" r="1095" style="stroke:#000000;stroke-width:0.1;"/>
+            <circle cx="2550.5585670775035" cy="2534.0499262169906" r="1095" fill="none" style="stroke:#000000;stroke-width:0.1;"/>
             <!-- Circle -->
-            <circle cx="2550.5585670775035" cy="2534.0499262169906" r="1655" style="stroke:#000000;stroke-width:0.1;"/>
+            <circle cx="2550.5585670775035" cy="2534.0499262169906" r="1655" fill="none" style="stroke:#000000;stroke-width:0.1;"/>
             <!-- Block Reference: chair_015 / entities: 8 -->
             <g>
                 <!-- Arc -->

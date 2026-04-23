@@ -8,7 +8,9 @@ import { useProjectStore } from '@/store/projectStore';
  * Optimized for performance by using appropriate tiling and cache-friendly definitions.
  */
 export default function TexturePatternDefs() {
-    const { shapes, walls, assets } = useProjectStore();
+    const shapes = useProjectStore(s => s.shapes);
+    const walls = useProjectStore(s => s.walls);
+    const assets = useProjectStore(s => s.assets);
 
     // Identify all unique scales used for each pattern ID in the scene
     const usedScales = useMemo(() => {

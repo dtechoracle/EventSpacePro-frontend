@@ -24,6 +24,10 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
   
   const ydocRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<WebsocketProvider | null>(null);
+  const activeUsersSignatureRef = useRef('');
+  const lastCursorSentAtRef = useRef(0);
+  const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
+  const cursorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const user = useUserStore((s) => s.user);
   const router = useRouter();
   
@@ -90,6 +94,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       const users: UserPresence[] = [];
       
       states.forEach((state: any, clientId: number) => {
+        if (clientId === awareness.clientID) return;
         if (state.user) {
           users.push({
             ...state.user,
@@ -98,8 +103,20 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
           });
         }
       });
-      
-      setActiveUsers(users);
+
+      users.sort((a, b) => a.userId.localeCompare(b.userId));
+      const signature = JSON.stringify(users.map((activeUser) => [
+        activeUser.userId,
+        activeUser.cursor?.x ?? null,
+        activeUser.cursor?.y ?? null,
+        activeUser.isTyping ?? false,
+        activeUser.lastSeen,
+      ]));
+
+      if (signature !== activeUsersSignatureRef.current) {
+        activeUsersSignatureRef.current = signature;
+        setActiveUsers(users);
+      }
     };
 
     awareness.on('change', handleAwarenessUpdate);
@@ -246,104 +263,70 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       const prevState = lastKnownState;
       lastKnownState = state;
 
+      const syncCollection = <T extends { id: string }>(
+        currentItems: T[],
+        previousItems: T[],
+        targetMap: Y.Map<any>
+      ) => {
+        const previousById = new Map(previousItems.map((item) => [item.id, item]));
+
+        currentItems.forEach((item) => {
+          const previousItem = previousById.get(item.id);
+          if (item !== previousItem) {
+            targetMap.set(item.id, item);
+          }
+          previousById.delete(item.id);
+        });
+
+        previousById.forEach((_, id) => {
+          targetMap.delete(id);
+        });
+      };
+
       ydoc.transact(() => {
         // Sync Assets
         if (state.assets !== prevState.assets) {
-          state.assets.forEach(asset => {
-            const prev = prevState.assets.find(a => a.id === asset.id);
-            if (asset !== prev) yAssets.set(asset.id, asset);
-          });
-          prevState.assets.forEach(asset => {
-            if (!state.assets.find(a => a.id === asset.id)) yAssets.delete(asset.id);
-          });
+          syncCollection(state.assets, prevState.assets, yAssets);
         }
 
         // Sync Walls
         if (state.walls !== prevState.walls) {
-          state.walls.forEach(wall => {
-            const prev = prevState.walls.find(w => w.id === wall.id);
-            if (wall !== prev) yWalls.set(wall.id, wall);
-          });
-          prevState.walls.forEach(wall => {
-            if (!state.walls.find(w => w.id === wall.id)) yWalls.delete(wall.id);
-          });
+          syncCollection(state.walls, prevState.walls, yWalls);
         }
 
         // Sync Shapes
         if (state.shapes !== prevState.shapes) {
-          state.shapes.forEach(shape => {
-            const prev = prevState.shapes.find(s => s.id === shape.id);
-            if (shape !== prev) yShapes.set(shape.id, shape);
-          });
-          prevState.shapes.forEach(shape => {
-            if (!state.shapes.find(s => s.id === shape.id)) yShapes.delete(shape.id);
-          });
+          syncCollection(state.shapes, prevState.shapes, yShapes);
         }
 
         // Sync Annotations
         if (state.textAnnotations !== prevState.textAnnotations) {
-          state.textAnnotations.forEach(ann => {
-            const prev = prevState.textAnnotations.find(a => a.id === ann.id);
-            if (ann !== prev) yAnnotations.set(ann.id, ann);
-          });
-          prevState.textAnnotations.forEach(ann => {
-            if (!state.textAnnotations.find(a => a.id === ann.id)) yAnnotations.delete(ann.id);
-          });
+          syncCollection(state.textAnnotations, prevState.textAnnotations, yAnnotations);
         }
 
         // Sync Arrows
         if (state.labelArrows !== prevState.labelArrows) {
-          state.labelArrows.forEach(arrow => {
-            const prev = prevState.labelArrows.find(a => a.id === arrow.id);
-            if (arrow !== prev) yArrows.set(arrow.id, arrow);
-          });
-          prevState.labelArrows.forEach(arrow => {
-            if (!state.labelArrows.find(a => a.id === arrow.id)) yArrows.delete(arrow.id);
-          });
+          syncCollection(state.labelArrows, prevState.labelArrows, yArrows);
         }
 
         // Sync Dimensions
         if (state.dimensions !== prevState.dimensions) {
-          state.dimensions.forEach(dim => {
-            const prev = prevState.dimensions.find(d => d.id === dim.id);
-            if (dim !== prev) yDimensions.set(dim.id, dim);
-          });
-          prevState.dimensions.forEach(dim => {
-            if (!state.dimensions.find(d => d.id === dim.id)) yDimensions.delete(dim.id);
-          });
+          syncCollection(state.dimensions, prevState.dimensions, yDimensions);
         }
 
         // Sync Groups
         if (state.groups !== prevState.groups) {
-          state.groups.forEach(group => {
-            const prev = prevState.groups.find(g => g.id === group.id);
-            if (group !== prev) yGroups.set(group.id, group);
-          });
-          prevState.groups.forEach(group => {
-            if (!state.groups.find(g => g.id === group.id)) yGroups.delete(group.id);
-          });
+          syncCollection(state.groups, prevState.groups, yGroups);
         }
 
         // Sync Wall Segments
         if (state.wallSegments !== prevState.wallSegments) {
-          state.wallSegments.forEach(seg => {
-            const prev = prevState.wallSegments.find(s => s.id === seg.id);
-            if (seg !== prev) yWallSegments.set(seg.id, seg);
-          });
-          prevState.wallSegments.forEach(seg => {
-            if (!state.wallSegments.find(s => s.id === seg.id)) yWallSegments.delete(seg.id);
-          });
+          syncCollection(state.wallSegments, prevState.wallSegments, yWallSegments);
         }
 
         // Sync Comments
         if (state.comments !== prevState.comments) {
-          state.comments.forEach(comment => {
-            const prev = prevState.comments.find(c => c.id === comment.id);
-            if (comment !== prev) yComments.set(comment.id, comment);
-          });
-          prevState.comments.forEach(comment => {
-            if (!state.comments.find(c => c.id === comment.id)) yComments.delete(comment.id);
-          });
+          syncCollection(state.comments, prevState.comments, yComments);
         }
 
         // Sync Canvas
@@ -354,6 +337,10 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     });
 
     return () => {
+      if (cursorTimerRef.current) {
+        clearTimeout(cursorTimerRef.current);
+        cursorTimerRef.current = null;
+      }
       unsubscribe();
       provider.disconnect();
       ydoc.destroy();
@@ -363,9 +350,40 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
   }, [effectiveProjectId, effectiveEventId, user, getUserColor]);
 
   const updateCursor = useCallback((x: number, y: number) => {
-    if (providerRef.current) {
-      providerRef.current.awareness.setLocalStateField('cursor', { x, y });
+    if (!providerRef.current) {
+      return;
     }
+
+    const cursor = { x, y };
+    const sendCursor = (nextCursor: { x: number; y: number }) => {
+      providerRef.current?.awareness.setLocalStateField('cursor', nextCursor);
+    };
+
+    const now = performance.now();
+    const elapsed = now - lastCursorSentAtRef.current;
+    const minInterval = 80;
+
+    if (elapsed >= minInterval) {
+      lastCursorSentAtRef.current = now;
+      pendingCursorRef.current = null;
+      sendCursor(cursor);
+      return;
+    }
+
+    pendingCursorRef.current = cursor;
+    if (cursorTimerRef.current) {
+      return;
+    }
+
+    cursorTimerRef.current = setTimeout(() => {
+      cursorTimerRef.current = null;
+      const pendingCursor = pendingCursorRef.current;
+      if (!pendingCursor) return;
+
+      pendingCursorRef.current = null;
+      lastCursorSentAtRef.current = performance.now();
+      sendCursor(pendingCursor);
+    }, Math.max(0, minInterval - elapsed));
   }, []);
 
   const updateTyping = useCallback((isTyping: boolean) => {

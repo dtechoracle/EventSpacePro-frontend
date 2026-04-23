@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { Shape } from '@/store/projectStore';
+import { Shape, useProjectStore } from '@/store/projectStore';
 import { useEditorStore } from '@/store/editorStore';
 
 interface ShapeRendererProps {
@@ -15,6 +15,12 @@ const ShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHighlig
     // Use selector for zoom to prevent re-renders on other editor store changes
     const zoom = useEditorStore(s => s.zoom);
     const activeTool = useEditorStore(s => s.activeTool);
+    const globalTableFontSize = useProjectStore(s => s.globalTableNumberingFontSize);
+    const globalTableFontFamily = useProjectStore(s => s.globalTableNumberingFontFamily);
+    const globalTableFontWeight = useProjectStore(s => s.globalTableNumberingFontWeight);
+    const globalTableFontStyle = useProjectStore(s => s.globalTableNumberingFontStyle);
+    const globalTableTextDecoration = useProjectStore(s => s.globalTableNumberingTextDecoration);
+    const globalTableColor = useProjectStore(s => s.globalTableNumberingColor);
     
     // Default pure black stroke so new shapes/lines pop clearly
     const strokeColor = shape.stroke || '#000000';
@@ -729,13 +735,15 @@ const ShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHighlig
                                     y={0}
                                     textAnchor="middle"
                                     dominantBaseline="middle"
-                                    fontSize={Math.max(14, (shape.width || 100) * 0.14)}
-                                    fill="#000000"
-                                    fontWeight="900"
+                                    fontSize={(shape as any).tableNumberingFontSize || globalTableFontSize || Math.max(14, (shape.width || 100) * 0.14)}
+                                    fill={(shape as any).tableNumberingColor || globalTableColor || '#000000'}
+                                    fontWeight={(shape as any).tableNumberingFontWeight || globalTableFontWeight || '900'}
+                                    fontStyle={(shape as any).tableNumberingFontStyle || globalTableFontStyle || 'normal'}
+                                    textDecoration={(shape as any).tableNumberingTextDecoration || globalTableTextDecoration || 'none'}
                                     pointerEvents="none"
                                     style={{
                                         userSelect: 'none',
-                                        fontFamily: 'Inter, sans-serif'
+                                        fontFamily: (shape as any).tableNumberingFontFamily || globalTableFontFamily || 'Inter, sans-serif'
                                     }}
                                 >
                                     {shape.tableName}

@@ -42,8 +42,16 @@ type EventData = BaseEventData & {
 
 // Lightweight pane listing all elements on the workspace (walls, shapes, assets)
 function ElementsPane() {
-  const { walls, shapes, assets, textAnnotations, dimensions, labelArrows, groups } = useProjectStore();
-  const { selectedIds, setSelectedIds, zoom, setPan } = useEditorStore();
+  const walls = useProjectStore(s => s.walls);
+  const shapes = useProjectStore(s => s.shapes);
+  const assets = useProjectStore(s => s.assets);
+  const textAnnotations = useProjectStore(s => s.textAnnotations);
+  const dimensions = useProjectStore(s => s.dimensions);
+  const labelArrows = useProjectStore(s => s.labelArrows);
+  const groups = useProjectStore(s => s.groups);
+  const selectedIds = useEditorStore(s => s.selectedIds);
+  const setSelectedIds = useEditorStore(s => s.setSelectedIds);
+  const setPan = useEditorStore(s => s.setPan);
   const [expandedAssets, setExpandedAssets] = React.useState<Record<string, boolean>>({});
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renamingText, setRenamingText] = React.useState("");
@@ -63,24 +71,25 @@ function ElementsPane() {
     setRenamingId(null);
   };
 
-  // Group shapes by exploded asset (sourceAssetId)
-  const assetChildrenMap: Record<string, typeof shapes> = {};
-  const independentShapes: typeof shapes = [];
+  const items = React.useMemo(() => {
+    // Group shapes by exploded asset (sourceAssetId)
+    const assetChildrenMap: Record<string, typeof shapes> = {};
+    const independentShapes: typeof shapes = [];
 
-  shapes.forEach((s) => {
-    // Show all shapes including background-texture if it exists
-    // if (s.id === 'background-texture') return;
+    shapes.forEach((s) => {
+      // Show all shapes including background-texture if it exists
+      // if (s.id === 'background-texture') return;
 
-    const sourceId = (s as any).sourceAssetId as string | undefined;
-    if (sourceId) {
-      if (!assetChildrenMap[sourceId]) assetChildrenMap[sourceId] = [];
-      assetChildrenMap[sourceId].push(s);
-    } else {
-      independentShapes.push(s);
-    }
-  });
+      const sourceId = (s as any).sourceAssetId as string | undefined;
+      if (sourceId) {
+        if (!assetChildrenMap[sourceId]) assetChildrenMap[sourceId] = [];
+        assetChildrenMap[sourceId].push(s);
+      } else {
+        independentShapes.push(s);
+      }
+    });
 
-  const items = [
+    return [
     // Filter out items that belong to a group
     ...walls.filter(w => !w.groupId).map((w) => {
       if (!w.nodes || w.nodes.length === 0) {
@@ -176,7 +185,8 @@ function ElementsPane() {
         childIds: g.itemIds,
       };
     }),
-  ];
+    ];
+  }, [assets, dimensions, groups, labelArrows, shapes, textAnnotations, walls]);
 
   const handleSelect = (item: { id: string; x: number; y: number; childIds?: string[] }, e?: React.MouseEvent) => {
     const idsToSelect = item.childIds && item.childIds.length > 0 ? item.childIds : [item.id];
@@ -196,6 +206,7 @@ function ElementsPane() {
     }
 
     // Pan the workspace so that the selected element is roughly centered
+    const zoom = useEditorStore.getState().zoom;
     if (typeof window !== "undefined" && zoom > 0) {
       const availableWidth = window.innerWidth - 260 - 200; // sidebar + properties
       const availableHeight = window.innerHeight - 140; // account for toolbar/header
@@ -650,6 +661,11 @@ type UpdateEventPayload = {
   };
 };
 
+const normalizeLegacyWallStroke = (...values: Array<string | undefined | null>) => {
+  const stroke = values.find((value) => value && value !== 'none');
+  return stroke?.toUpperCase() === '#1E40AF' ? '#1f2937' : (stroke || '#1f2937');
+};
+
 export default function Editor() {
   const [showAssetsModal, setShowAssetsModal] = useState(false);
   const [show3D, setShow3D] = useState(false);
@@ -697,8 +713,11 @@ export default function Editor() {
   }, [preview]);
 
   // New stores
-  const { activeTool, zoom, panX, panY, setZoom, setPan } = useEditorStore();
-  const { assets: projectAssets, walls, shapes } = useProjectStore();
+  const setZoom = useEditorStore(s => s.setZoom);
+  const setPan = useEditorStore(s => s.setPan);
+  const projectAssets = useProjectStore(s => s.assets);
+  const walls = useProjectStore(s => s.walls);
+  const shapes = useProjectStore(s => s.shapes);
   const sceneAssets = useSceneStore((s) => s.assets);
 
   // Old scene store methods (for compatibility)
@@ -961,8 +980,19 @@ export default function Editor() {
           projectStore.setProjectName(eventData.name);
         }
 
-        // PRIORITY 1: Load from canvasData (preferred format from DATABASE)
-        if (eventData.canvasData) {
+        const hasCanvasDataWorkspaceItems = !!eventData.canvasData && [
+          eventData.canvasData.walls,
+          eventData.canvasData.shapes,
+          eventData.canvasData.assets,
+          eventData.canvasData.textAnnotations,
+          eventData.canvasData.dimensions,
+          eventData.canvasData.labelArrows,
+        ].some((collection) => Array.isArray(collection) && collection.length > 0);
+
+        // PRIORITY 1: Load from canvasData (preferred format from DATABASE).
+        // If an older backend response has an empty canvasData object but populated
+        // canvasAssets, fall through so dimensions/arrows/walls can still restore.
+        if (eventData.canvasData && (hasCanvasDataWorkspaceItems || !eventData.canvasAssets?.length)) {
           const {
             walls = [],
             shapes = [],
@@ -985,15 +1015,19 @@ export default function Editor() {
           if (isDifferentEvent) {
             walls.forEach((wall: any) => {
               console.log(`[Editor] Adding wall:`, wall.id);
-              projectStore.addWall(wall);
+              projectStore.addWall({
+                ...wall,
+                stroke: normalizeLegacyWallStroke(wall.stroke, wall.strokeColor),
+                strokeWidth: wall.strokeWidth ?? 2,
+              }, true);
             });
             shapes.forEach((shape: any) => {
               console.log(`[Editor] Adding shape:`, shape.id, shape.type);
-              projectStore.addShape(shape);
+              projectStore.addShape(shape, true);
             });
             assets.forEach((asset: any) => {
               console.log(`[Editor] Adding asset:`, asset.id, asset.type);
-              projectStore.addAsset(asset);
+              projectStore.addAsset(asset, true);
             });
             textAnnotations.forEach((annotation: any) => {
               console.log(`[Editor] Adding text annotation:`, annotation.id);
@@ -1006,6 +1040,7 @@ export default function Editor() {
             labelArrows.forEach((arrow: any) => {
               projectStore.addLabelArrow(arrow, true);
             });
+            projectStore.markAsSaved();
 
             // DEFAULT OUTDOOR LAYOUT if empty
             if (eventData.type === 'Outdoor Venue' && shapes.length === 0 && walls.length === 0 && assets.length === 0) {
@@ -1061,8 +1096,101 @@ export default function Editor() {
 
           let loadedCount = 0;
           eventData.canvasAssets.forEach((asset: AssetInstance | any) => {
+            if ((asset.itemType === 'dimension' || asset.type === 'dimension') && asset.startPoint && asset.endPoint) {
+              const existingDimension = projectStore.dimensions.find(d => d.id === asset.id);
+              if (!existingDimension) {
+                projectStore.addDimension({
+                  ...asset,
+                  id: asset.id,
+                  type: asset.dimensionType || asset.dimensionKind || 'linear',
+                  startPoint: asset.startPoint,
+                  endPoint: asset.endPoint,
+                  offset: asset.offset || 0,
+                  zIndex: asset.zIndex || 0,
+                }, true);
+                loadedCount++;
+              }
+              return;
+            }
+
+            if ((asset.itemType === 'label-arrow' || asset.type === 'label-arrow') && asset.startPoint && asset.endPoint) {
+              const existingArrow = projectStore.labelArrows.find(a => a.id === asset.id);
+              if (!existingArrow) {
+                projectStore.addLabelArrow({
+                  ...asset,
+                  id: asset.id,
+                  startPoint: asset.startPoint,
+                  endPoint: asset.endPoint,
+                  label: asset.label || '',
+                  zIndex: asset.zIndex || 0,
+                }, true);
+                loadedCount++;
+              }
+              return;
+            }
+
             // Handle wall-polygon type (new format)
-            if (asset.type === 'wall-polygon' && asset.wallPolygon && Array.isArray(asset.wallPolygon)) {
+            if (asset.type === 'wall-polygon') {
+              const savedWall = asset.wallData || asset.wall;
+              if (savedWall?.nodes?.length && savedWall?.edges?.length) {
+                const existingWall = projectStore.walls.find(w => w.id === asset.id);
+                if (!existingWall) {
+                  projectStore.addWall({
+                    ...savedWall,
+                    id: asset.id,
+                    name: savedWall.name || asset.name,
+                    nodes: savedWall.nodes,
+                    edges: savedWall.edges,
+                    fill: savedWall.fill ?? asset.fill ?? asset.backgroundColor,
+                    stroke: normalizeLegacyWallStroke(savedWall.stroke, asset.stroke, asset.strokeColor),
+                    strokeWidth: savedWall.strokeWidth ?? asset.strokeWidth ?? 2,
+                    fillType: savedWall.fillType ?? asset.fillType,
+                    fillTexture: savedWall.fillTexture ?? asset.fillTexture,
+                    fillTextureScale: savedWall.fillTextureScale ?? asset.fillTextureScale,
+                    fillTextureThickness: savedWall.fillTextureThickness ?? asset.fillTextureThickness,
+                    zIndex: savedWall.zIndex ?? asset.zIndex ?? 0,
+                  }, true);
+                  loadedCount++;
+                }
+                return;
+              }
+
+              if (asset.wallNodes?.length && asset.wallEdges?.length) {
+                const wallNodes = asset.wallNodes.map((node: any, idx: number) => ({
+                  id: node.id || `node-${asset.id}-${idx}`,
+                  x: node.x,
+                  y: node.y,
+                }));
+
+                const wallEdges = asset.wallEdges.map((edge: any, idx: number) => ({
+                  id: edge.id || `edge-${asset.id}-${idx}`,
+                  nodeA: edge.nodeA || wallNodes[edge.a]?.id || '',
+                  nodeB: edge.nodeB || wallNodes[edge.b]?.id || '',
+                  thickness: edge.thickness ?? asset.wallThickness ?? 75,
+                })).filter((edge: any) => edge.nodeA && edge.nodeB);
+
+                const existingWall = projectStore.walls.find(w => w.id === asset.id);
+                if (!existingWall && wallNodes.length > 0 && wallEdges.length > 0) {
+                  projectStore.addWall({
+                    id: asset.id,
+                    name: asset.name,
+                    nodes: wallNodes,
+                    edges: wallEdges,
+                    fill: asset.fill ?? asset.backgroundColor,
+                    stroke: normalizeLegacyWallStroke(asset.stroke, asset.strokeColor),
+                    strokeWidth: asset.strokeWidth ?? 2,
+                    fillType: asset.fillType,
+                    fillTexture: asset.fillTexture,
+                    fillTextureScale: asset.fillTextureScale,
+                    fillTextureThickness: asset.fillTextureThickness,
+                    zIndex: asset.zIndex || 0,
+                  }, true);
+                  loadedCount++;
+                }
+                return;
+              }
+
+              if (asset.wallPolygon && Array.isArray(asset.wallPolygon)) {
               // Convert wall-polygon to wall format with nodes and edges
               const wallNodes = asset.wallPolygon.map((point: any, idx: number) => ({
                 id: `node-${asset.id}-${idx}`,
@@ -1078,7 +1206,7 @@ export default function Editor() {
                   id: `edge-${asset.id}-${i}`,
                   nodeA: wallNodes[i].id,
                   nodeB: wallNodes[nextIdx].id,
-                  thickness: asset.wallThickness || 75,
+                  thickness: asset.wallThickness ?? 75,
                 });
               }
 
@@ -1090,9 +1218,18 @@ export default function Editor() {
                     name: asset.name, // RESTORE NAME
                     nodes: wallNodes,
                     edges: wallEdges,
+                    fill: asset.fill ?? asset.backgroundColor,
+                    stroke: normalizeLegacyWallStroke(asset.stroke, asset.strokeColor),
+                    strokeWidth: asset.strokeWidth ?? 2,
+                    fillType: asset.fillType,
+                    fillTexture: asset.fillTexture,
+                    fillTextureScale: asset.fillTextureScale,
+                    fillTextureThickness: asset.fillTextureThickness,
                     zIndex: asset.zIndex || 0
                   }, true);
+                  loadedCount++;
                 }
+              }
               }
             }
             // Check if it's a wall-segments (legacy format)
@@ -1108,7 +1245,7 @@ export default function Editor() {
                 id: `edge-${asset.id}-${idx}`,
                 nodeA: wallNodes[edge.a]?.id || '',
                 nodeB: wallNodes[edge.b]?.id || '',
-                thickness: asset.wallThickness || 75
+                thickness: asset.wallThickness ?? 75
               }));
 
               if (wallNodes.length > 0 && wallEdges.length > 0) {
@@ -1146,7 +1283,7 @@ export default function Editor() {
                   rotation: asset.rotation || 0,
                   fill: asset.backgroundColor || 'transparent',
                   stroke: asset.strokeColor || '#3B82F6',
-                  strokeWidth: asset.strokeWidth || 2,
+                  strokeWidth: asset.strokeWidth ?? 2,
                   points: [
                     { x: startX - (startX + endX) / 2, y: startY - (startY + endY) / 2 },
                     { x: endX - (startX + endX) / 2, y: endY - (startY + endY) / 2 },
@@ -1178,7 +1315,7 @@ export default function Editor() {
                   rotation: asset.rotation || 0,
                   fill: asset.fillColor || asset.backgroundColor || asset.fill || "#3B82F6",
                   stroke: asset.strokeColor || asset.stroke || "#1E40AF",
-                  strokeWidth: asset.strokeWidth || 2,
+                  strokeWidth: asset.strokeWidth ?? 2,
                   points: asset.points,
                   zIndex: asset.zIndex || 0
                 }, true);
@@ -1243,6 +1380,7 @@ export default function Editor() {
             shapes: projectStore.shapes.length,
             assets: projectStore.assets.length,
           });
+          projectStore.markAsSaved();
         }
       } else {
         console.log(`[Editor] Skipping load - same event and we have current data`);

@@ -10,7 +10,7 @@ import { useSceneStore } from '@/store/sceneStore';
 import WallRenderer from './renderers/WallRenderer';
 import ShapeRenderer from './renderers/ShapeRenderer';
 import AssetRenderer from './renderers/AssetRenderer';
-import GridRenderer from './renderers/GridRenderer';
+import CanvasGridLayer from './renderers/CanvasGridLayer';
 import FreehandRenderer from './renderers/FreehandRenderer';
 import { DimensionRenderer } from './renderers/DimensionRenderer';
 import CommentRenderer from './renderers/CommentRenderer';
@@ -54,6 +54,9 @@ import { convertAssetToShapes } from '@/utils/assetUtils';
 import { texturePatterns } from '@/utils/texturePatterns';
 import { calculateSmartSnap } from '@/utils/smartSnapping'; // Added import
 import { trimToBlendShapes } from '@/utils/shapeBoolean';
+import { DEFAULT_ASSET_STROKE_WIDTH, canRenderAssetOnCanvas } from '@/utils/assetRenderMode';
+import { SpatialIndex, getRotatedItemBounds } from '@/utils/spatialIndex';
+import { TEXT_STYLE_FONTS, ensureGoogleFontsLoaded } from '@/utils/googleFonts';
 
 interface Workspace2DProps {
   width?: number;
@@ -74,6 +77,16 @@ type SnapObject =
   | { type: 'shape'; object: Shape }
   | { type: 'asset'; object: Asset }
   | { type: 'wall'; object: Wall };
+
+type DragPreview = {
+  ids: string[];
+  dx: number;
+  dy: number;
+};
+
+const LARGE_SELECTION_DRAG_PREVIEW_THRESHOLD = 12;
+const MOUSE_WORLD_POS_TOOLS = new Set(['wall', 'shape-line', 'shape-arrow', 'dimension', 'arch']);
+const assetDefinitionById = new Map(ASSET_LIBRARY.map((asset) => [asset.id, asset]));
 
 const distanceToSegment = (
   px: number,
@@ -138,19 +151,24 @@ const isPointInsideWall = (wall: Wall, worldX: number, worldY: number) => {
 };
 
 
-// ── MAIN DRAWING LAYER ───────────────────────────────────────────────────────
-// Renders the actual items (walls, shapes, assets) without interaction states.
-// This is extremely stable and only re-renders when the viewport culling result changes.
-const MainDrawingLayer = React.memo(({ 
-  visibleRenderables, 
-  zoom 
-}: { 
-  visibleRenderables: any[], 
-  zoom: number 
+// ── STATIC DRAWING LAYER ─────────────────────────────────────────────────────
+// Parent SVG transforms handle zooming, so walls/shapes/assets do not need to
+// re-render just because the zoom value changed.
+const StaticDrawingLayer = React.memo(({
+  visibleRenderables,
+  hiddenIds,
+  selectedIds
+}: {
+  visibleRenderables: any[],
+  hiddenIds?: Set<string>,
+  selectedIds: string[]
 }) => {
+  const selectedIdSet = React.useMemo(() => new Set(selectedIds), [selectedIds]);
+
   return (
     <>
       {visibleRenderables.map((item) => {
+        if (hiddenIds?.has(item.id)) return null;
         switch (item._renderType) {
           case 'wall':
             return <WallRenderer key={getWallRenderKey(item)} wall={item} />;
@@ -162,8 +180,35 @@ const MainDrawingLayer = React.memo(({
             return <ShapeRenderer key={item.id} shape={item} />;
 
           case 'asset':
-            return <AssetRenderer key={item.id} asset={item} />;
+            if (canRenderAssetOnCanvas(item)) return null;
+            return <AssetRenderer key={item.id} asset={item} isSelected={selectedIdSet.has(item.id)} />;
 
+          default:
+            return null;
+        }
+      })}
+    </>
+  );
+});
+StaticDrawingLayer.displayName = 'StaticDrawingLayer';
+
+// ── ANNOTATION DRAWING LAYER ─────────────────────────────────────────────────
+// These items use inverse zoom to keep text/handles readable, so they are the
+// only regular drawing items that should update on each zoom tick.
+const AnnotationDrawingLayer = React.memo(({
+  visibleRenderables,
+  zoom,
+  hiddenIds
+}: {
+  visibleRenderables: any[],
+  zoom: number,
+  hiddenIds?: Set<string>
+}) => {
+  return (
+    <>
+      {visibleRenderables.map((item) => {
+        if (hiddenIds?.has(item.id)) return null;
+        switch (item._renderType) {
           case 'dimension':
             return <DimensionRenderer key={item.id} dimension={item} zoom={zoom} />;
 
@@ -180,6 +225,60 @@ const MainDrawingLayer = React.memo(({
     </>
   );
 });
+AnnotationDrawingLayer.displayName = 'AnnotationDrawingLayer';
+
+const DragPreviewLayer = React.memo(({
+  visibleRenderables,
+  preview,
+  zoom
+}: {
+  visibleRenderables: any[],
+  preview: DragPreview | null,
+  zoom: number
+}) => {
+  const items = React.useMemo(() => {
+    if (!preview) return [];
+    const previewIds = new Set(preview.ids);
+    return visibleRenderables.filter(item => previewIds.has(item.id));
+  }, [visibleRenderables, preview?.ids]);
+
+  if (!preview) return null;
+  if (items.length === 0) return null;
+
+  return (
+    <g transform={`translate(${preview.dx}, ${preview.dy})`} className="drag-preview-layer pointer-events-none">
+      {items.map((item) => {
+        switch (item._renderType) {
+          case 'wall':
+            return <WallRenderer key={`preview-${getWallRenderKey(item)}`} wall={item} />;
+
+          case 'shape':
+            if (item.type === 'freehand') {
+              return <FreehandRenderer key={`preview-${item.id}`} shape={item} />;
+            }
+            return <ShapeRenderer key={`preview-${item.id}`} shape={item} />;
+
+          case 'asset':
+            if (canRenderAssetOnCanvas(item)) return null;
+            return <AssetRenderer key={`preview-${item.id}`} asset={item} />;
+
+          case 'dimension':
+            return <DimensionRenderer key={`preview-${item.id}`} dimension={item} zoom={zoom} />;
+
+          case 'labelArrow':
+            return <LabelArrowRenderer key={`preview-${item.id}`} arrow={item} zoom={zoom} />;
+
+          case 'textAnnotation':
+            return <TextAnnotationRenderer key={`preview-${item.id}`} annotation={item} zoom={zoom} />;
+
+          default:
+            return null;
+        }
+      })}
+    </g>
+  );
+});
+DragPreviewLayer.displayName = 'DragPreviewLayer';
 
 // ── SELECTION HIGHLIGHT LAYER ────────────────────────────────────────────────
 // Renders only the blue outlines/glows for selected and hovered items.
@@ -255,25 +354,34 @@ const RenderLayer = React.memo(({
   selectedIds, 
   hoveredId, 
   zoom,
-  activeTool,
-  verticesMap
+  verticesMap,
+  dragPreview
 }: { 
   visibleRenderables: any[], 
   selectedIds: string[], 
   hoveredId: string | null, 
   zoom: number,
-  activeTool: string,
-  verticesMap: Record<string, { x: number; y: number }[]>
+  verticesMap: Record<string, { x: number; y: number }[]>,
+  dragPreview: DragPreview | null
 }) => {
+  const previewHiddenIds = React.useMemo(
+    () => dragPreview ? new Set(dragPreview.ids) : undefined,
+    [dragPreview?.ids]
+  );
+
   return (
     <>
-      <MainDrawingLayer visibleRenderables={visibleRenderables} zoom={zoom} />
-      <SelectionHighlightLayer 
-        visibleRenderables={visibleRenderables}
-        selectedIds={selectedIds} 
-        hoveredId={hoveredId} 
-        verticesMap={verticesMap}
-      />
+      <StaticDrawingLayer visibleRenderables={visibleRenderables} hiddenIds={previewHiddenIds} selectedIds={selectedIds} />
+      <AnnotationDrawingLayer visibleRenderables={visibleRenderables} zoom={zoom} hiddenIds={previewHiddenIds} />
+      <DragPreviewLayer visibleRenderables={visibleRenderables} preview={dragPreview} zoom={zoom} />
+      {!dragPreview && (
+        <SelectionHighlightLayer 
+          visibleRenderables={visibleRenderables}
+          selectedIds={selectedIds} 
+          hoveredId={hoveredId} 
+          verticesMap={verticesMap}
+        />
+      )}
     </>
   );
 });
@@ -289,6 +397,12 @@ export default function Workspace2D({
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [isDraggingItem, setIsDraggingItem] = useState(false);
   const [draggedItemStart, setDraggedItemStart] = useState<{ x: number; y: number } | null>(null);
+  const draggedItemStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
+  const dragPreviewRef = useRef<DragPreview | null>(null);
+  const pendingDragPreviewRef = useRef<DragPreview | null>(null);
+  const dragPreviewRafRef = useRef<number | null>(null);
+  const lastHoverHitTestRef = useRef(0);
   const [selectionRect, setSelectionRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const [gridHud, setGridHud] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
   const gridHudTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -306,14 +420,52 @@ export default function Workspace2D({
     isOpen: boolean;
     mode: 'duplicate' | 'distribute';
   }>({ isOpen: false, mode: 'duplicate' });
+
+  useEffect(() => {
+    ensureGoogleFontsLoaded(TEXT_STYLE_FONTS);
+  }, []);
   const assets = useProjectStore(s => s.assets);
   const walls = useProjectStore(s => s.walls);
   const shapes = useProjectStore(s => s.shapes);
+  const assetById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
+  const assetSpatialIndex = useMemo(
+    () => new SpatialIndex(
+      assets
+        .filter((asset) => !asset.isExploded)
+        .map((asset) => ({
+          id: asset.id,
+          item: asset,
+          bounds: getRotatedItemBounds(asset),
+          zIndex: asset.zIndex || 0,
+        }))
+    ),
+    [assets]
+  );
+  const findTopAssetAtPoint = useCallback((worldX: number, worldY: number) => {
+    const hitAssets = assetSpatialIndex.queryPoint(worldX, worldY);
+    if (hitAssets.length === 0) return null;
+
+    let best = hitAssets[0];
+    for (let index = 1; index < hitAssets.length; index += 1) {
+      const entry = hitAssets[index];
+      if ((entry.zIndex || 0) >= (best.zIndex || 0)) {
+        best = entry;
+      }
+    }
+    return best;
+  }, [assetSpatialIndex]);
+  const canvasBackedAssetIds = useMemo(() => {
+    const ids = new Set<string>();
+    assets.forEach((asset) => {
+      if (!asset.isExploded && canRenderAssetOnCanvas(asset)) ids.add(asset.id);
+    });
+    return ids;
+  }, [assets]);
   const verticesMap = useMemo(() => {
     const map: Record<string, { x: number; y: number }[]> = {};
 
     assets.forEach((asset) => {
-      const assetDef = ASSET_LIBRARY.find(a => a.id === asset.type);
+      const assetDef = assetDefinitionById.get(asset.type);
       if (assetDef?.category === 'Marquee') {
         map[asset.id] = getMarqueeVertices(asset);
       }
@@ -328,8 +480,11 @@ export default function Workspace2D({
   const updateWall = useProjectStore(s => s.updateWall);
   const addShape = useProjectStore(s => s.addShape);
   const updateShape = useProjectStore(s => s.updateShape);
+  const batchUpdateShapes = useProjectStore(s => s.batchUpdateShapes);
   const addAsset = useProjectStore(s => s.addAsset);
   const updateAsset = useProjectStore(s => s.updateAsset);
+  const batchUpdateAssets = useProjectStore(s => s.batchUpdateAssets);
+  const batchUpdateWalls = useProjectStore(s => s.batchUpdateWalls);
   const removeItemsBatch = useProjectStore(s => s.removeItemsBatch);
   const groups = useProjectStore(s => s.groups);
   const addGroup = useProjectStore(s => s.addGroup);
@@ -357,6 +512,23 @@ export default function Workspace2D({
   const removeComment = useProjectStore(s => s.removeComment);
   const resolveComment = useProjectStore(s => s.resolveComment);
 
+  useEffect(() => {
+    const legacyStrokeUpdates = assets
+      .filter((asset) =>
+        !asset.isExploded &&
+        asset.strokeWidth !== undefined &&
+        Math.abs(asset.strokeWidth - 0.5) < 0.001
+      )
+      .map((asset) => ({
+        id: asset.id,
+        updates: { strokeWidth: DEFAULT_ASSET_STROKE_WIDTH },
+      }));
+
+    if (legacyStrokeUpdates.length > 0) {
+      batchUpdateAssets(legacyStrokeUpdates, true);
+    }
+  }, [assets, batchUpdateAssets]);
+
   
   const { activeUsers, updateCursor, updateTyping } = useCollaboration(undefined, undefined);
 
@@ -367,6 +539,7 @@ export default function Workspace2D({
     setSelectionRect(null);
     setDragStart(null);
   }, [activeTool]);
+
   const setActiveTool = useEditorStore(s => s.setActiveTool);
   const selectedIds = useEditorStore(s => s.selectedIds);
   const setSelectedIds = useEditorStore(s => s.setSelectedIds);
@@ -374,10 +547,10 @@ export default function Workspace2D({
   const hoveredId = useEditorStore(s => s.hoveredId);
   const setHoveredId = useEditorStore(s => s.setHoveredId);
   const zoom = useEditorStore(s => s.zoom);
-  const setZoom = useEditorStore(s => s.setZoom);
   const panX = useEditorStore(s => s.panX);
   const panY = useEditorStore(s => s.panY);
   const setPan = useEditorStore(s => s.setPan);
+  const setViewportTransform = useEditorStore(s => s.setViewportTransform);
   const panBy = useEditorStore(s => s.panBy);
   const isPanning = useEditorStore(s => s.isPanning);
   const setPanning = useEditorStore(s => s.setPanning);
@@ -399,19 +572,98 @@ export default function Workspace2D({
   const screenToWorld = useEditorStore(s => s.screenToWorld);
   const setEditingTextId = useEditorStore(s => s.setEditingTextId);
   const setSelectedEdgeId = useEditorStore(s => s.setSelectedEdgeId);
+  const wheelTransformRef = useRef({ zoom, panX, panY });
+  const pendingViewportTransformRef = useRef<{ zoom: number; panX: number; panY: number } | null>(null);
+  const viewportTransformRafRef = useRef<number | null>(null);
+  const renderableCacheRef = useRef(new WeakMap<object, any>());
+
+  useEffect(() => {
+    wheelTransformRef.current = { zoom, panX, panY };
+  }, [zoom, panX, panY]);
+
+  const scheduleDragPreview = useCallback((preview: DragPreview) => {
+    pendingDragPreviewRef.current = preview;
+    if (dragPreviewRafRef.current !== null) return;
+
+    dragPreviewRafRef.current = requestAnimationFrame(() => {
+      dragPreviewRafRef.current = null;
+      setDragPreview(pendingDragPreviewRef.current);
+    });
+  }, []);
+
+  const clearDragPreview = useCallback(() => {
+    if (dragPreviewRafRef.current !== null) {
+      cancelAnimationFrame(dragPreviewRafRef.current);
+      dragPreviewRafRef.current = null;
+    }
+    pendingDragPreviewRef.current = null;
+    dragPreviewRef.current = null;
+    setDragPreview(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (dragPreviewRafRef.current !== null) {
+        cancelAnimationFrame(dragPreviewRafRef.current);
+      }
+      if (viewportTransformRafRef.current !== null) {
+        cancelAnimationFrame(viewportTransformRafRef.current);
+      }
+    };
+  }, []);
+
+  const scheduleViewportTransform = useCallback((nextTransform: { zoom: number; panX: number; panY: number }) => {
+    pendingViewportTransformRef.current = nextTransform;
+
+    if (viewportTransformRafRef.current !== null) return;
+
+    viewportTransformRafRef.current = requestAnimationFrame(() => {
+      viewportTransformRafRef.current = null;
+      const pending = pendingViewportTransformRef.current;
+      pendingViewportTransformRef.current = null;
+
+      if (!pending) return;
+      setViewportTransform(pending.zoom, pending.panX, pending.panY);
+    });
+  }, [setViewportTransform]);
+
+  const shouldUseDragPreviewForIds = useCallback((ids: string[]) => {
+    if (ids.length > 0 && ids.every(id => assetById.has(id))) return true;
+    if (ids.length >= LARGE_SELECTION_DRAG_PREVIEW_THRESHOLD) return true;
+    return ids.length > 0 && ids.every(id => canvasBackedAssetIds.has(id));
+  }, [assetById, canvasBackedAssetIds]);
 
   // Top-level memoized list of all renderable items for efficient hit-testing and rendering
   const allRenderables = useMemo(() => {
     const getZ = (item: any) => (typeof item.zIndex === 'number' ? item.zIndex : 0);
+    const toRenderable = <T extends object>(item: T, renderType: string) => {
+      const cached = renderableCacheRef.current.get(item);
+      if (cached && cached._renderType === renderType) {
+        return cached;
+      }
+
+      const next = { ...item, _renderType: renderType };
+      renderableCacheRef.current.set(item, next);
+      return next;
+    };
+
     return [
-      ...walls.map(w => ({ ...w, _renderType: 'wall' as const })),
-      ...shapes.map(s => ({ ...s, _renderType: 'shape' as const })),
-      ...assets.map(a => ({ ...a, _renderType: 'asset' as const })),
-      ...dimensions.map(d => ({ ...d, _renderType: 'dimension' as const })),
-      ...labelArrows.map(l => ({ ...l, _renderType: 'labelArrow' as const })),
-      ...textAnnotations.map(t => ({ ...t, _renderType: 'textAnnotation' as const })),
+      ...walls.map(w => toRenderable(w, 'wall')),
+      ...shapes.map(s => toRenderable(s, 'shape')),
+      ...assets.map(a => toRenderable(a, 'asset')),
+      ...dimensions.map(d => toRenderable(d, 'dimension')),
+      ...labelArrows.map(l => toRenderable(l, 'labelArrow')),
+      ...textAnnotations.map(t => toRenderable(t, 'textAnnotation')),
     ].sort((a, b) => getZ(a) - getZ(b));
   }, [walls, shapes, assets, dimensions, labelArrows, textAnnotations]);
+
+  const svgRenderables = useMemo(
+    () => allRenderables.filter((item: any) => {
+      if (item._renderType !== 'asset') return true;
+      return !canRenderAssetOnCanvas(item);
+    }),
+    [allRenderables]
+  );
 
   // Viewport Culling - Filter items that are actually visible to maximize performance with 100k+ assets
   // Using a ref to track the "last calculated bounds" to avoid re-rendering the whole item list on every single pan pixel
@@ -432,12 +684,6 @@ export default function Workspace2D({
     const worldRight = (viewportSize.width - panX) / zoom + margin;
     const worldBottom = (viewportSize.height - panY) / zoom + margin;
 
-    // OPTIMIZATION: If the layout is small (less than 500 items), culling is more overhead than benefit.
-    // SVG can handle 500 items easily with memoization.
-    if (allRenderables.length < 500) {
-      return allRenderables;
-    }
-
     // Determine if the camera has moved enough to justify a re-cull (hysteresis)
     const dx = Math.abs(worldLeft - lastCullBounds.current.left);
     const dy = Math.abs(worldTop - lastCullBounds.current.top);
@@ -447,17 +693,17 @@ export default function Workspace2D({
     const viewportWidth = worldRight - worldLeft;
     const viewportHeight = worldBottom - worldTop;
     if (
-      lastCullBounds.current.sourceRenderables === allRenderables &&
+      lastCullBounds.current.sourceRenderables === svgRenderables &&
       dx < viewportWidth * 0.2 &&
       dy < viewportHeight * 0.2 &&
       dz < 0.1
     ) {
        // Return the same array reference to prevent RenderLayer from re-rendering
-       return lastCullBounds.current.lastResult || allRenderables;
+       return lastCullBounds.current.lastResult || svgRenderables;
     }
 
     // 2. Filter renderables based on spatial intersection
-    const result = allRenderables.filter((item: any) => {
+    const result = svgRenderables.filter((item: any) => {
       // Wall culling (checks all nodes)
       if (item._renderType === 'wall' && item.nodes) {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -486,12 +732,21 @@ export default function Workspace2D({
       right: worldRight, 
       bottom: worldBottom, 
       zoom,
-      sourceRenderables: allRenderables,
+      sourceRenderables: svgRenderables,
       lastResult: result as any
     };
 
     return result;
-  }, [allRenderables, panX, panY, zoom, viewportSize]);
+  }, [svgRenderables, panX, panY, zoom, viewportSize]);
+
+  const autoDimensionShapes = useMemo(
+    () => shapes.filter((shape) => (shape as any).showDimensions && shape.type !== 'line' && shape.type !== 'arrow'),
+    [shapes]
+  );
+  const autoDimensionAssets = useMemo(
+    () => assets.filter((asset) => (asset as any).showDimensions && !asset.isExploded),
+    [assets]
+  );
 
   const hoveredSnapPoints = useMemo(() => {
     if (!hoveredId) return [];
@@ -499,9 +754,9 @@ export default function Workspace2D({
     const shape = shapes.find((item) => item.id === hoveredId);
     if (shape) return getSnapPoints(shape);
 
-    const asset = assets.find((item) => item.id === hoveredId);
+    const asset = assetById.get(hoveredId);
     if (asset) {
-      const assetDef = ASSET_LIBRARY.find((def) => def.id === asset.type);
+      const assetDef = assetDefinitionById.get(asset.type);
       return assetDef?.category === 'Marquee' ? getSnapPoints(asset) : [];
     }
 
@@ -509,7 +764,7 @@ export default function Workspace2D({
     if (wall) return getSnapPoints(wall);
 
     return [];
-  }, [hoveredId, shapes, assets, walls]);
+  }, [hoveredId, shapes, assetById, walls]);
 
   const activeHoveredSnapPoint = useMemo(() => {
     if (hoveredSnapPoints.length === 0) return null;
@@ -517,16 +772,22 @@ export default function Workspace2D({
   }, [hoveredSnapPoints, mouseWorldPos, zoom]);
 
 
-  const sceneStore = useSceneStore();
-  const showGrid = sceneStore.showGrid;
-  const sceneGridSize = sceneStore.gridSize;
-  const availableGridSizes = sceneStore.availableGridSizes || [];
-  const selectedGridSizeIndex = sceneStore.selectedGridSizeIndex || 0;
-  const currentGridSizeValue = availableGridSizes[selectedGridSizeIndex] || sceneStore.gridSize || 1000;
-  const snapToGridEnabled = sceneStore.snapToGridEnabled;
+  const showGrid = useSceneStore(s => s.showGrid);
+  const sceneGridSize = useSceneStore(s => s.gridSize);
+  const availableGridSizes = useSceneStore(s => s.availableGridSizes || []);
+  const selectedGridSizeIndex = useSceneStore(s => s.selectedGridSizeIndex || 0);
+  const currentGridSizeValue = availableGridSizes[selectedGridSizeIndex] || sceneGridSize || 1000;
+  const snapToGridEnabled = useSceneStore(s => s.snapToGridEnabled);
   const { user } = useUserStore();
-  const unitSystem = sceneStore.unitSystem || 'metric-mm';
-  const setUnitSystem = sceneStore.setUnitSystem;
+  const unitSystem = useSceneStore(s => s.unitSystem || 'metric-mm');
+  const setUnitSystem = useSceneStore(s => s.setUnitSystem);
+  const setSnapGuides = useSceneStore(s => s.setSnapGuides);
+  const selectMultipleAssets = useSceneStore(s => s.selectMultipleAssets);
+  const isRectangularSelectionMode = useSceneStore(s => s.isRectangularSelectionMode);
+  const currentWallThickness = useSceneStore(s => {
+    const wallTypeConfig = s.availableWallTypes.find(wallType => wallType.id === s.wallType);
+    return wallTypeConfig?.thickness ?? 150;
+  });
   const initialGridHudSkip = useRef(true);
 
   const formatGridSize = useCallback((size: number) => {
@@ -606,7 +867,7 @@ export default function Workspace2D({
       // Update store position for other tools to access
       // Throttle mouse position updates to avoid excessive store-triggering re-renders
       const now = Date.now();
-      if (!(window as any)._lastMouseUpdate || now - (window as any)._lastMouseUpdate > 16) {
+      if (MOUSE_WORLD_POS_TOOLS.has(activeTool) && !isDraggingItem && (!(window as any)._lastMouseUpdate || now - (window as any)._lastMouseUpdate > 16)) {
         setMouseWorldPos({ x: worldX, y: worldY });
         (window as any)._lastMouseUpdate = now;
       }
@@ -626,14 +887,23 @@ export default function Workspace2D({
         return; // Don't process hover when panning
       }
 
+      const shouldHitTestHover = activeTool === 'select' || activeTool === 'trim-to-blend';
+      if (shouldHitTestHover && !isDraggingItem && now - lastHoverHitTestRef.current > 32) {
+      lastHoverHitTestRef.current = now;
       // Hover detection
       let targetId: string | null = null;
+      const topAssetHit = findTopAssetAtPoint(worldX, worldY);
+      const topAssetZ = topAssetHit?.zIndex ?? -Infinity;
 
       // OPTIMIZATION: Use visibleRenderables for hit testing!
       // This reduces complexity from O(100,000+) to O(Visible_Items ≈ 500).
       // Iterate in reverse (end to start) to hit the top-most (higher z-index) items first.
       for (let i = visibleRenderables.length - 1; i >= 0; i--) {
         const item = visibleRenderables[i];
+        const itemZ = item.zIndex || 0;
+        if (topAssetHit && itemZ < topAssetZ) {
+          break;
+        }
         
         switch (item._renderType) {
           case 'shape': {
@@ -696,7 +966,7 @@ export default function Workspace2D({
 
           case 'textAnnotation': {
             const ann = item;
-            const fontSize = ann.fontSize || 200;
+            const fontSize = ann.fontSize || 250;
             const lineHeight = ann.lineHeight || 1.2;
             const lines = (ann.text || '').split('\n');
             const maxChars = Math.max(...lines.map((l: string) => l.length), 1);
@@ -712,9 +982,14 @@ export default function Workspace2D({
         if (targetId) break; // Found top-most item
       }
 
+      if (!targetId && topAssetHit) {
+        targetId = topAssetHit.id;
+      }
+
       // Throttle hover updates
       if (hoveredId !== targetId) {
         setHoveredId(targetId);
+      }
       }
 
       // Broadcast cursor position to other users
@@ -722,7 +997,9 @@ export default function Workspace2D({
         updateCursor(e.clientX - canvasOffset.left, e.clientY - canvasOffset.top);
       }
 
-      if (isDraggingItem && draggedItemStart && selectedIds.length > 0) {
+      const dragOrigin = draggedItemStartRef.current || draggedItemStart;
+
+      if (isDraggingItem && dragOrigin && selectedIds.length > 0) {
         let finalX = worldX;
         let finalY = worldY;
         let guides: any[] = [];
@@ -741,8 +1018,8 @@ export default function Workspace2D({
             const insertionInset = 50; // Door/window SVGs are drawn with the wall line ~50mm from the base
             const insertionOffset = Math.max(0, (ah / 2) - insertionInset);
             
-            const dx = worldX - draggedItemStart.x;
-            const dy = worldY - draggedItemStart.y;
+            const dx = worldX - dragOrigin.x;
+            const dy = worldY - dragOrigin.y;
             const proposedCenter = { x: asset.x + dx, y: asset.y + dy };
 
             let bestSnap: any = null;
@@ -819,8 +1096,8 @@ export default function Workspace2D({
           const shape = shapes.find(s => s.id === id);
           if (shape) {
             itemBounds = {
-              x: shape.x + (worldX - draggedItemStart.x),
-              y: shape.y + (worldY - draggedItemStart.y),
+              x: shape.x + (worldX - dragOrigin.x),
+              y: shape.y + (worldY - dragOrigin.y),
               width: shape.width,
               height: shape.height,
               id: shape.id
@@ -829,8 +1106,8 @@ export default function Workspace2D({
             const asset = assets.find(a => a.id === id);
             if (asset) {
               itemBounds = {
-                x: asset.x + (worldX - draggedItemStart.x),
-                y: asset.y + (worldY - draggedItemStart.y),
+                x: asset.x + (worldX - dragOrigin.x),
+                y: asset.y + (worldY - dragOrigin.y),
                 width: (asset.width || 0) * (asset.scale || 1),
                 height: (asset.height || 0) * (asset.scale || 1),
                 rotation: asset.rotation,
@@ -839,13 +1116,13 @@ export default function Workspace2D({
             } else {
               const textAnnotation = textAnnotations.find(t => t.id === id);
               if (textAnnotation) {
-                const fs = textAnnotation.fontSize || 200;
+                const fs = textAnnotation.fontSize || 250;
                 const lh = textAnnotation.lineHeight || 1.2;
                 const lines = (textAnnotation.text || '').split('\n');
                 const maxChars = Math.max(...lines.map(l => l.length), 1);
                 itemBounds = {
-                   x: textAnnotation.x + (worldX - draggedItemStart.x),
-                   y: textAnnotation.y + (worldY - draggedItemStart.y),
+                   x: textAnnotation.x + (worldX - dragOrigin.x),
+                   y: textAnnotation.y + (worldY - dragOrigin.y),
                    width: maxChars * fs * 0.6,
                    height: lines.length * fs * lh,
                    id: textAnnotation.id
@@ -855,6 +1132,17 @@ export default function Workspace2D({
           }
 
           if (itemBounds) {
+            const targetSearchMargin = Math.max(itemBounds.width, itemBounds.height, 2500 / zoom);
+            const nearbyAssets = assetSpatialIndex
+              .query({
+                left: itemBounds.x - (itemBounds.width / 2) - targetSearchMargin,
+                top: itemBounds.y - (itemBounds.height / 2) - targetSearchMargin,
+                right: itemBounds.x + (itemBounds.width / 2) + targetSearchMargin,
+                bottom: itemBounds.y + (itemBounds.height / 2) + targetSearchMargin,
+              })
+              .map((entry) => entry.item)
+              .filter((asset) => asset.id !== id);
+
             // Collect targets
             const targets = [
               ...shapes.filter(s => s.id !== id).map(s => {
@@ -862,7 +1150,7 @@ export default function Workspace2D({
                 const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
                 return { id: s.id, x: s.x, y: s.y, width: s.width * cos + s.height * sin, height: s.width * sin + s.height * cos };
               }),
-              ...assets.filter(a => a.id !== id).flatMap(a => {
+              ...nearbyAssets.flatMap(a => {
                 const w = (a.width || 0) * (a.scale || 1), h = (a.height || 0) * (a.scale || 1);
                 const rad = ((a.rotation || 0) * Math.PI) / 180;
                 const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
@@ -894,7 +1182,7 @@ export default function Workspace2D({
                 return { id: w.id, x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY };
               }),
               ...textAnnotations.filter(t => t.id !== id).map(t => {
-                const fs = t.fontSize || 200;
+                const fs = t.fontSize || 250;
                 const lh = t.lineHeight || 1.2;
                 const lines = (t.text || '').split('\n');
                 const maxChars = Math.max(...lines.map(l => l.length), 1);
@@ -958,7 +1246,7 @@ export default function Workspace2D({
             // Marquee Vertex Snapping Integration
             const marqueeVertices = verticesMap[id] || [];
             if (marqueeVertices.length > 0) {
-                const snapPoint = findSnapPointInShapes({ x: worldX, y: worldY }, assets.filter(a => a.id !== id), 20 / zoom, verticesMap);
+                const snapPoint = findSnapPointInShapes({ x: worldX, y: worldY }, nearbyAssets, 20 / zoom, verticesMap);
                 if (snapPoint) {
                     finalX = worldX + (snapPoint.x - worldX);
                     finalY = worldY + (snapPoint.y - worldY);
@@ -989,40 +1277,85 @@ export default function Workspace2D({
         }
 
         // Update guides
-        sceneStore.setSnapGuides(guides);
+        setSnapGuides(guides);
 
-        const snappedDx = finalX - draggedItemStart.x;
-        const snappedDy = finalY - draggedItemStart.y;
+        const snappedDx = finalX - dragOrigin.x;
+        const snappedDy = finalY - dragOrigin.y;
 
-        // CRITICAL: Update draggedItemStart so next frame dx/dy is a delta, not cumulative
-        setDraggedItemStart({ x: finalX, y: finalY });
+        // Keep per-frame drag deltas in a ref so dragging doesn't re-render the whole workspace.
+        if (dragPreviewRef.current) {
+          const nextPreview = {
+            ids: dragPreviewRef.current.ids,
+            dx: snappedDx,
+            dy: snappedDy,
+          };
+          dragPreviewRef.current = nextPreview;
+          scheduleDragPreview(nextPreview);
+          return;
+        }
+
+        draggedItemStartRef.current = { x: finalX, y: finalY };
+
+        const selectedIdSet = new Set(selectedIds);
+        const shapeUpdates: { id: string; updates: Partial<Shape> }[] = [];
+        const assetUpdates: { id: string; updates: Partial<Asset> }[] = [];
+        const wallUpdates: { id: string; updates: Partial<Wall> }[] = [];
+
+        shapes.forEach((shape) => {
+          if (!selectedIdSet.has(shape.id)) return;
+          shapeUpdates.push({
+            id: shape.id,
+            updates: {
+              x: shape.x + snappedDx,
+              y: shape.y + snappedDy,
+            },
+          });
+        });
+
+        assets.forEach((asset) => {
+          if (!selectedIdSet.has(asset.id)) return;
+          assetUpdates.push({
+            id: asset.id,
+            updates: {
+              x: asset.x + snappedDx,
+              y: asset.y + snappedDy,
+              ...(finalRotation !== null && finalRotation !== undefined ? { rotation: finalRotation } : {})
+            },
+          });
+        });
+
+        walls.forEach((wall) => {
+          if (!selectedIdSet.has(wall.id)) return;
+          wallUpdates.push({
+            id: wall.id,
+            updates: {
+              nodes: wall.nodes.map(node => ({
+                ...node,
+                x: node.x + snappedDx,
+                y: node.y + snappedDy
+              }))
+            },
+          });
+        });
+
+        if (shapeUpdates.length > 0) batchUpdateShapes(shapeUpdates, true);
+        if (assetUpdates.length > 0) batchUpdateAssets(assetUpdates, true);
+        if (wallUpdates.length > 0) batchUpdateWalls(wallUpdates, true);
 
         selectedIds.forEach((id) => {
           const shape = shapes.find((s) => s.id === id);
           if (shape) {
-            updateShape(id, {
-              x: shape.x + snappedDx,
-              y: shape.y + snappedDy,
-            }, true);
+            return;
           }
 
           const asset = assets.find((a) => a.id === id);
           if (asset) {
-            updateAsset(id, {
-              x: asset.x + snappedDx,
-              y: asset.y + snappedDy,
-              ...(finalRotation !== null && finalRotation !== undefined ? { rotation: finalRotation } : {})
-            }, true);
+            return;
           }
 
           const wall = walls.find((w) => w.id === id);
           if (wall) {
-            const newNodes = wall.nodes.map(node => ({
-              ...node,
-              x: node.x + snappedDx,
-              y: node.y + snappedDy
-            }));
-            updateWall(id, { nodes: newNodes }, true);
+            return;
           }
 
           const textAnnotation = textAnnotations.find((t) => t.id === id);
@@ -1061,8 +1394,6 @@ export default function Workspace2D({
             }, true);
           }
         });
-
-        setDraggedItemStart({ x: finalX, y: finalY });
       }
 
       // Update selection rectangle if dragging to select
@@ -1095,7 +1426,7 @@ export default function Workspace2D({
         }
       }
     },
-    [panX, panY, zoom, isPanning, dragStart, panBy, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, walls, textAnnotations, labelArrows, dimensions, updateShape, updateAsset, updateWall, snapToGridFn, selectionRect, updateCursor, setHoveredId, draggedPoint, screenToWorld, setMouseWorldPos, canvasOffset, snapToObjectsEnabled, snapToGridEnabled, gridSize, updateTextAnnotation, updateLabelArrow, updateDimension, sceneStore]
+    [activeTool, panX, panY, zoom, isPanning, dragStart, panBy, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, walls, textAnnotations, labelArrows, dimensions, batchUpdateShapes, batchUpdateAssets, batchUpdateWalls, scheduleDragPreview, snapToGridFn, selectionRect, updateCursor, setHoveredId, draggedPoint, screenToWorld, setMouseWorldPos, canvasOffset, snapToObjectsEnabled, snapToGridEnabled, gridSize, updateTextAnnotation, updateLabelArrow, updateDimension, setSnapGuides, visibleRenderables, verticesMap, findTopAssetAtPoint, assetSpatialIndex]
   );
 
   const handleDoubleClick = useCallback(
@@ -1103,17 +1434,10 @@ export default function Workspace2D({
       if (!canvasRef.current) return;
       const { x: worldX, y: worldY } = screenToWorld(e.clientX, e.clientY);
 
-      // Check for asset hit (Assets are rendered on top of shapes)
-      for (let i = assets.length - 1; i >= 0; i--) {
-        const asset = assets[i];
-        const halfW = (asset.width * asset.scale) / 2;
-        const halfH = (asset.height * asset.scale) / 2;
-        if (
-          worldX >= asset.x - halfW &&
-          worldX <= asset.x + halfW &&
-          worldY >= asset.y - halfH &&
-          worldY <= asset.y + halfH
-        ) {
+      // Check for asset hit through the spatial index instead of scanning every asset.
+      const assetHit = findTopAssetAtPoint(worldX, worldY);
+      if (assetHit) {
+        const asset = assetHit.item;
           // Explode asset
           /* // Explode asset logic - commented out for now
           if (asset.isExploded) {
@@ -1170,7 +1494,6 @@ export default function Workspace2D({
           });
           return; */
           console.log("Asset double-clicked, explosion is currently disabled.");
-        }
       }
 
       // Check for shape hit
@@ -1229,7 +1552,7 @@ export default function Workspace2D({
       // Check for text annotation hit
       for (let i = textAnnotations.length - 1; i >= 0; i--) {
         const annotation = textAnnotations[i];
-        const fontSize = annotation.fontSize || 200;
+        const fontSize = annotation.fontSize || 250;
         const lineHeight = annotation.lineHeight || 1.2;
         const lines = (annotation.text || '').split('\n');
         const maxChars = Math.max(...lines.map(l => l.length), 1);
@@ -1250,46 +1573,7 @@ export default function Workspace2D({
         }
       }
     },
-    [assets, shapes, textAnnotations, screenToWorld, setSelectedIds, setEditingTextId, updateTyping]
-  );
-
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault(); // Always prevent default scroll
-
-      if (e.shiftKey) {
-        // Pan with Shift+Wheel
-        panBy(-e.deltaX, -e.deltaY);
-      } else {
-        // Zoom by default (centered on cursor)
-        const rect = canvasRef.current?.getBoundingClientRect();
-        if (!rect) return;
-
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        // Calculate world position before zoom
-        const worldXBefore = (mouseX - panX) / zoom;
-        const worldYBefore = (mouseY - panY) / zoom;
-
-        // Apply zoom
-        const delta = e.deltaY;
-        const zoomFactor = delta > 0 ? 0.9 : 1.1; // Zoom out if scrolling down, in if scrolling up
-        const newZoom = Math.max(0.000001, Math.min(1000000, zoom * zoomFactor));
-
-        // Calculate world position after zoom
-        const worldXAfter = (mouseX - panX) / newZoom;
-        const worldYAfter = (mouseY - panY) / newZoom;
-
-        // Adjust pan to keep cursor at same world position
-        const newPanX = panX + (worldXAfter - worldXBefore) * newZoom;
-        const newPanY = panY + (worldYAfter - worldYBefore) * newZoom;
-
-        setZoom(newZoom);
-        setPan(newPanX, newPanY);
-      }
-    },
-    [zoom, panX, panY, setZoom, setPan, panBy]
+    [findTopAssetAtPoint, shapes, textAnnotations, screenToWorld, setSelectedIds, setEditingTextId, updateTyping]
   );
 
   const handleMouseDown = useCallback(
@@ -1340,7 +1624,7 @@ export default function Workspace2D({
           let hitExistingText = false;
           for (let i = textAnnotations.length - 1; i >= 0; i--) {
             const annotation = textAnnotations[i];
-            const fontSize = annotation.fontSize || 14;
+            const fontSize = annotation.fontSize || 250;
             const textLength = annotation.text.length || 1;
             const estimatedWidth = textLength * fontSize * 0.6;
             const estimatedHeight = fontSize * 1.2;
@@ -1363,7 +1647,7 @@ export default function Workspace2D({
 
 
         // Handle Rectangular Selection - Only if the tool is active
-        if (sceneStore.isRectangularSelectionMode && activeTool === 'rectangular-select') {
+        if (isRectangularSelectionMode && activeTool === 'rectangular-select') {
           setDragStart({ x: worldX, y: worldY });
           setSelectionRect({ x1: worldX, y1: worldY, x2: worldX, y2: worldY });
           return;
@@ -1570,18 +1854,27 @@ export default function Workspace2D({
               }
               const newSelection = Array.from(current);
               setSelectedIds(newSelection);
-              sceneStore.selectMultipleAssets(newSelection);
+              selectMultipleAssets(newSelection);
             } else {
               setSelectedIds(expandedIds);
-              sceneStore.selectMultipleAssets(expandedIds);
+              selectMultipleAssets(expandedIds);
             }
           };
 
-          // Use top-level memoized allRenderables for hit testing
+          const topAssetHit = findTopAssetAtPoint(worldX, worldY);
+          const assetHitRenderable = topAssetHit
+            ? { ...topAssetHit.item, _renderType: 'asset' as const }
+            : null;
+          const hitRenderables = assetHitRenderable
+            ? [
+                ...visibleRenderables.filter((item) => item.id !== assetHitRenderable.id),
+                assetHitRenderable,
+              ].sort((a, b) => ((a as any).zIndex || 0) - ((b as any).zIndex || 0))
+            : visibleRenderables;
 
-          // Check items from front to back (highest zIndex first)
-          for (let i = allRenderables.length - 1; i >= 0; i--) {
-            const item = allRenderables[i];
+          // Check visible/spatially indexed items from front to back.
+          for (let i = hitRenderables.length - 1; i >= 0; i--) {
+            const item = hitRenderables[i];
             
             // Skip background texture for hit testing in select mode
             if (activeTool === 'select' && item.id === 'background-texture') continue;
@@ -1672,7 +1965,7 @@ export default function Workspace2D({
               isHit = isPointInsideWall(wall, worldX, worldY);
             } else if (item._renderType === 'textAnnotation') {
               const ann = item;
-              const fS = ann.fontSize || 14;
+              const fS = ann.fontSize || 250;
               const hitR = Math.max((ann.text.length || 2) * fS * 0.4, fS * 0.8, 40);
               if (Math.hypot(worldX - ann.x, worldY - ann.y) <= hitR) {
                 isHit = true;
@@ -1685,7 +1978,7 @@ export default function Workspace2D({
                     (window as any).__lastTextClickTime = 0;
                     (window as any).__lastTextClickId = null;
                     setSelectedIds([ann.id]);
-                    sceneStore.selectMultipleAssets([ann.id]);
+                    selectMultipleAssets([ann.id]);
                     itemSelected = true;
                     return;
                   }
@@ -1712,13 +2005,27 @@ export default function Workspace2D({
                 if (idsToSelect.some(id => selectedIds.includes(id))) {
                   saveToHistory();
                   setIsDraggingItem(true);
-                  setDraggedItemStart({ x: worldX, y: worldY });
+                  const dragPoint = { x: worldX, y: worldY };
+                  draggedItemStartRef.current = dragPoint;
+                  setDraggedItemStart(dragPoint);
+                  if (shouldUseDragPreviewForIds(selectedIds)) {
+                    const preview = { ids: [...selectedIds], dx: 0, dy: 0 };
+                    dragPreviewRef.current = preview;
+                    setDragPreview(preview);
+                  }
                 } else {
                   handleItemSelection([item.id], e.shiftKey);
                   // Allow immediate drag on first click if not shifting
                   if (!e.shiftKey) {
                     setIsDraggingItem(true);
-                    setDraggedItemStart({ x: worldX, y: worldY });
+                    const dragPoint = { x: worldX, y: worldY };
+                    draggedItemStartRef.current = dragPoint;
+                    setDraggedItemStart(dragPoint);
+                    if (shouldUseDragPreviewForIds(idsToSelect)) {
+                      const preview = { ids: [...idsToSelect], dx: 0, dy: 0 };
+                      dragPreviewRef.current = preview;
+                      setDragPreview(preview);
+                    }
                   }
                 }
               } else {
@@ -1757,7 +2064,7 @@ export default function Workspace2D({
         // For other tools (wall, shape-*, freehand, dimension), don't handle - let tool handle it
       }
     },
-    [activeTool, setPanning, screenToWorld, shapes, assets, walls, setSelectedIds, clearSelection, selectedIds, setIsDraggingItem, setDraggedItemStart, sceneStore, snapToGridEnabled, gridSize, snapToGridFn, snapToObjectsEnabled, isSnapMode, snapSourceId, snapAnchor, setSnapMode, updateShape, updateAsset, zoom, textAnnotations, resolveIdsWithGroups, saveToHistory, setSelectedEdgeId, removeDimension, dimensions]
+    [activeTool, setPanning, screenToWorld, shapes, assets, walls, setSelectedIds, clearSelection, selectedIds, setIsDraggingItem, setDraggedItemStart, selectMultipleAssets, isRectangularSelectionMode, snapToGridEnabled, gridSize, snapToGridFn, snapToObjectsEnabled, isSnapMode, snapSourceId, snapAnchor, setSnapMode, updateShape, updateAsset, zoom, textAnnotations, resolveIdsWithGroups, saveToHistory, setSelectedEdgeId, removeDimension, dimensions, shouldUseDragPreviewForIds, visibleRenderables, findTopAssetAtPoint]
   );
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
@@ -1908,6 +2215,87 @@ export default function Workspace2D({
       updateTyping(false);
     }
 
+    const previewToCommit = dragPreviewRef.current;
+    if (previewToCommit && (previewToCommit.dx !== 0 || previewToCommit.dy !== 0)) {
+      const selectedIdSet = new Set(previewToCommit.ids);
+      const batchUpdates: {
+        id: string;
+        type: 'shape' | 'asset' | 'wall' | 'dimension' | 'textAnnotation' | 'labelArrow';
+        updates: any;
+      }[] = [];
+
+      shapes.forEach((shape) => {
+        if (!selectedIdSet.has(shape.id)) return;
+        batchUpdates.push({
+          id: shape.id,
+          type: 'shape',
+          updates: { x: shape.x + previewToCommit.dx, y: shape.y + previewToCommit.dy },
+        });
+      });
+
+      assets.forEach((asset) => {
+        if (!selectedIdSet.has(asset.id)) return;
+        batchUpdates.push({
+          id: asset.id,
+          type: 'asset',
+          updates: { x: asset.x + previewToCommit.dx, y: asset.y + previewToCommit.dy },
+        });
+      });
+
+      walls.forEach((wall) => {
+        if (!selectedIdSet.has(wall.id)) return;
+        batchUpdates.push({
+          id: wall.id,
+          type: 'wall',
+          updates: {
+            nodes: wall.nodes.map(node => ({
+              ...node,
+              x: node.x + previewToCommit.dx,
+              y: node.y + previewToCommit.dy,
+            })),
+          },
+        });
+      });
+
+      textAnnotations.forEach((annotation) => {
+        if (!selectedIdSet.has(annotation.id)) return;
+        batchUpdates.push({
+          id: annotation.id,
+          type: 'textAnnotation',
+          updates: { x: annotation.x + previewToCommit.dx, y: annotation.y + previewToCommit.dy },
+        });
+      });
+
+      labelArrows.forEach((arrow) => {
+        if (!selectedIdSet.has(arrow.id)) return;
+        batchUpdates.push({
+          id: arrow.id,
+          type: 'labelArrow',
+          updates: {
+            startPoint: { x: arrow.startPoint.x + previewToCommit.dx, y: arrow.startPoint.y + previewToCommit.dy },
+            endPoint: { x: arrow.endPoint.x + previewToCommit.dx, y: arrow.endPoint.y + previewToCommit.dy },
+          },
+        });
+      });
+
+      dimensions.forEach((dimension) => {
+        if (!selectedIdSet.has(dimension.id)) return;
+        batchUpdates.push({
+          id: dimension.id,
+          type: 'dimension',
+          updates: {
+            startPoint: { x: dimension.startPoint.x + previewToCommit.dx, y: dimension.startPoint.y + previewToCommit.dy },
+            endPoint: { x: dimension.endPoint.x + previewToCommit.dx, y: dimension.endPoint.y + previewToCommit.dy },
+          },
+        });
+      });
+
+      if (batchUpdates.length > 0) {
+        batchUpdateItems(batchUpdates, true);
+      }
+    }
+    clearDragPreview();
+
     // Finalize rectangular selection
     if (selectionRect) {
       const minX = Math.min(selectionRect.x1, selectionRect.x2);
@@ -1924,9 +2312,8 @@ export default function Workspace2D({
         }
       });
 
-      // Select assets within rectangle (but skip exploded assets - their shapes are already selected)
-      assets.forEach(asset => {
-        if (asset.isExploded) return; // Skip invisible exploded containers
+      // Select assets through the spatial index instead of scanning every asset.
+      assetSpatialIndex.query({ left: minX, top: minY, right: maxX, bottom: maxY }).forEach(({ item: asset }) => {
         if (asset.x >= minX && asset.x <= maxX && asset.y >= minY && asset.y <= maxY) {
           selectedItems.push(asset.id);
         }
@@ -1979,7 +2366,7 @@ export default function Workspace2D({
         // Expand selection to include full groups
         const expandedItems = resolveIdsWithGroups(selectedItems);
         setSelectedIds(expandedItems);
-        sceneStore.selectMultipleAssets(expandedItems);
+        selectMultipleAssets(expandedItems);
       } else {
         // Clear selection if no items found in rectangle
         clearSelection();
@@ -1991,10 +2378,11 @@ export default function Workspace2D({
     setPanning(false);
     setDragStart(null);
     setIsDraggingItem(false);
+    draggedItemStartRef.current = null;
     setDraggedItemStart(null);
     setDraggedPoint(null);
-    sceneStore.setSnapGuides([]); // Clear snap guides
-  }, [setPanning, selectionRect, shapes, assets, walls, textAnnotations, labelArrows, setSelectedIds, sceneStore, draggedPoint, clearSelection, setPan, zoom, placementMode, addWall, addAsset, addShape, setPlacementMode, resolveIdsWithGroups, updateTyping]);
+    setSnapGuides([]); // Clear snap guides
+  }, [setPanning, selectionRect, shapes, assetSpatialIndex, walls, textAnnotations, labelArrows, dimensions, batchUpdateItems, clearDragPreview, setSelectedIds, selectMultipleAssets, setSnapGuides, draggedPoint, clearSelection, setPan, zoom, placementMode, addWall, addAsset, addShape, setPlacementMode, resolveIdsWithGroups, updateTyping]);
 
   const handleAssetDrop = useCallback(
     async (e: React.DragEvent<HTMLDivElement>) => {
@@ -2138,27 +2526,32 @@ export default function Workspace2D({
       const isPanAction = e.shiftKey;
 
       if (isPanAction) {
-        panBy(-e.deltaX, -e.deltaY);
+        const current = wheelTransformRef.current;
+        const nextPanX = current.panX - e.deltaX;
+        const nextPanY = current.panY - e.deltaY;
+        wheelTransformRef.current = { ...current, panX: nextPanX, panY: nextPanY };
+        scheduleViewportTransform({ zoom: current.zoom, panX: nextPanX, panY: nextPanY });
         return;
       }
 
       // Zoom Handling
+      const current = wheelTransformRef.current;
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      const newZoom = Math.max(0.000001, Math.min(1000000, zoom * delta));
+      const newZoom = Math.max(0.000001, Math.min(1000000, current.zoom * delta));
 
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
-      const worldX = (mouseX - panX) / zoom;
-      const worldY = (mouseY - panY) / zoom;
+      const worldX = (mouseX - current.panX) / current.zoom;
+      const worldY = (mouseY - current.panY) / current.zoom;
 
       // Calculate new pan to keep mouse over same world point
       const newPanX = mouseX - worldX * newZoom;
       const newPanY = mouseY - worldY * newZoom;
 
-      setZoom(newZoom);
-      setPan(newPanX, newPanY);
+      wheelTransformRef.current = { zoom: newZoom, panX: newPanX, panY: newPanY };
+      scheduleViewportTransform({ zoom: newZoom, panX: newPanX, panY: newPanY });
 
       // Show toast notification about grid size
       if (zoomToastTimeout) clearTimeout(zoomToastTimeout);
@@ -2180,7 +2573,7 @@ export default function Workspace2D({
       canvas.removeEventListener('wheel', handleWheel);
       if (zoomToastTimeout) clearTimeout(zoomToastTimeout);
     };
-  }, [zoom, panX, panY, setZoom, setPan, panBy]);
+  }, [scheduleViewportTransform]);
 
   useEffect(() => {
     if (!showGrid) return;
@@ -2487,7 +2880,7 @@ export default function Workspace2D({
       }
       const text = textAnnotations.find(t => t.id === id);
       if (text) {
-        const fontSize = text.fontSize || 14;
+        const fontSize = text.fontSize || 250;
         const width = Math.max(10, (text.text?.length || 1) * (fontSize * 0.6));
         const height = fontSize * 1.2;
         items.push({ id, type: 'textAnnotation', bounds: { x1: text.x, y1: text.y - height / 2, x2: text.x + width, y2: text.y + height / 2 } });
@@ -2728,7 +3121,7 @@ export default function Workspace2D({
         isHit = isPointInsideWall(w, worldX, worldY);
       } else if (item._renderType === 'textAnnotation') {
         const t = item;
-        const fS = t.fontSize || 14;
+        const fS = t.fontSize || 250;
         const hitR = Math.max((t.text?.length || 1) * fS * 0.3, fS * 0.6, 30);
         if (Math.hypot(worldX - t.x, worldY - t.y) <= hitR) isHit = true;
       }
@@ -3332,7 +3725,6 @@ export default function Workspace2D({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      onWheel={handleWheel}
       onContextMenu={handleContextMenu}
       onDoubleClick={handleDoubleClick}
       onClick={() => {
@@ -3352,6 +3744,15 @@ export default function Workspace2D({
           {gridHud.message}
         </div>
       )}
+      <CanvasGridLayer
+        show={showGrid}
+        gridSize={sceneGridSize}
+        viewportSize={viewportSize}
+        zoom={zoom}
+        panX={panX}
+        panY={panY}
+        unitSystem={unitSystem}
+      />
       {/* Grid unit / size control */}
       <div className="absolute top-3 right-3 z-50 flex items-center gap-3 bg-white/90 shadow-sm rounded-md px-3 py-2 text-xs sm:text-sm text-slate-700 border border-slate-200">
         <label className="flex items-center gap-1 cursor-pointer" title="Snap to grid intersections">
@@ -3426,7 +3827,6 @@ export default function Workspace2D({
         {/* Remote Cursors and User Awareness */}
         <CursorOverlay cursors={activeUsers} />
         <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>
-          {showGrid && <GridRenderer gridSize={sceneGridSize} viewportSize={viewportSize} zoom={zoom} panX={panX} panY={panY} unitSystem={unitSystem} />}
           <SnapMarkersRenderer />
 
           <RenderLayer 
@@ -3434,15 +3834,15 @@ export default function Workspace2D({
             selectedIds={selectedIds}
             hoveredId={hoveredId}
             zoom={zoom}
-            activeTool={activeTool}
             verticesMap={verticesMap}
+            dragPreview={dragPreview}
           />
 
           {/* Auto Dimensions (Show Dimensions Toggle) */}
           <AutoDimensionRenderer
             walls={walls}
-            shapes={shapes}
-            assets={assets}
+            shapes={autoDimensionShapes}
+            assets={autoDimensionAssets}
             zoom={zoom}
           />
 
@@ -3456,7 +3856,7 @@ export default function Workspace2D({
 
           <WallTool
             isActive={activeTool === 'wall'}
-            thickness={sceneStore.getCurrentWallThickness()}
+            thickness={currentWallThickness}
           />
 
           <DimensionTool isActive={activeTool === 'dimension'} />
@@ -3534,7 +3934,9 @@ export default function Workspace2D({
           {/* SelectionTool handles will be rendered outside the scaled group for fixed size */}
         </g>
         {/* Render SelectionTool outside scaled group so handles stay fixed size */}
-        <SelectionTool isActive={activeTool === 'select'} viewportSize={viewportSize} />
+        {activeTool === 'select' && !dragPreview && (
+          <SelectionTool isActive={true} viewportSize={viewportSize} />
+        )}
 
         {/* Snap Guides - Rendered last to be on top */}
         <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>

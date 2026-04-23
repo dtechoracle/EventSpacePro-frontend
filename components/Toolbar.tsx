@@ -11,7 +11,9 @@ interface ToolbarProps {
 
 export default function Toolbar({ className = '' }: ToolbarProps) {
     const { activeTool, setActiveTool, zoomIn, zoomOut, resetZoom, zoom, snapToObjects, toggleSnapToObjects } = useEditorStore();
-    const { undo, redo, history } = useProjectStore();
+    const undo = useProjectStore(s => s.undo);
+    const redo = useProjectStore(s => s.redo);
+    const history = useProjectStore(s => s.history);
     const { setRectangularSelectionMode, snapToGridEnabled, showGrid } = useSceneStore();
 
     const handleGridToggle = () => {

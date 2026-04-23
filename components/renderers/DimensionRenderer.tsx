@@ -19,6 +19,10 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
         fontSize = 11,
         textPosition = 'inbetween' 
     } = dimension;
+    const fontFamily = (dimension as any).fontFamily || 'Inter, sans-serif';
+    const fontWeight = (dimension as any).fontWeight || '600';
+    const fontStyle = (dimension as any).fontStyle || 'normal';
+    const textDecoration = (dimension as any).textDecoration || 'none';
 
     const formatValue = (mmValue: number) => {
         if (unitSystem === 'imperial-ft') {
@@ -96,8 +100,10 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
     const arrowSize = 100; // 100mm arrow size? Might be too big/small depending on scale.
     // Let's assume 1 unit = 1mm. 100mm is 10cm.
 
-    // Extension line overshoot (how far the tick extends past the dimension line)
-    const overshoot = 10;
+    // Keep extension lines from visually touching the measured element.
+    const extensionDirection = Math.sign(finalOffset || sign || 1) || 1;
+    const extensionGap = Math.min(Math.abs(finalOffset) * 0.45, 10 / Math.max(zoom, 0.01));
+    const overshoot = 10 / Math.max(zoom, 0.01);
 
     // Convert fontSize to world units (fontSize is in points, we scale it)
     const worldFontSize = fontSize * 2; // Approximate conversion
@@ -139,7 +145,7 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                 {/* Text Label */}
                 {(() => {
                     const labelFontSize = fontSize || 11;
-                    const rectWidth = textStr.length * (labelFontSize * 0.6);
+                    const rectWidth = text.length * (labelFontSize * 0.6);
                     const rectHeight = labelFontSize * 1.8;
                     return (
                         <g transform={`translate(${midX}, ${midY}) scale(${1 / zoom}) rotate(${angle})`}>
@@ -159,11 +165,13 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                                 textAnchor="middle"
                                 dominantBaseline="middle"
                                 fontSize={labelFontSize}
-                                fontWeight="600"
+                                fontWeight={fontWeight}
+                                fontStyle={fontStyle}
+                                textDecoration={textDecoration}
                                 fill={color}
-                                fontFamily="sans-serif"
+                                fontFamily={fontFamily}
                             >
-                                {textStr}
+                                {text}
                             </text>
                         </g>
                     );
@@ -182,23 +190,24 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
         <g className="dimension-group" style={{ pointerEvents: 'all', cursor: 'pointer' }}>
             {/* Extension Lines */}
             <line
-                x1={startPoint.x}
-                y1={startPoint.y}
-                x2={p1x + px * overshoot}
-                y2={p1y + py * overshoot}
+                x1={startPoint.x + px * extensionDirection * extensionGap}
+                y1={startPoint.y + py * extensionDirection * extensionGap}
+                x2={p1x + px * extensionDirection * overshoot}
+                y2={p1y + py * extensionDirection * overshoot}
                 stroke={color}
                 strokeWidth={strokeWidth * 0.5}
-                opacity={0.5}
+                opacity={0.42}
                 vectorEffect="non-scaling-stroke"
             />
             <line
-                x1={endPoint.x}
-                y1={endPoint.y}
-                x2={p2x + px * overshoot}
-                y2={p2y + py * overshoot}
+                x1={endPoint.x + px * extensionDirection * extensionGap}
+                y1={endPoint.y + py * extensionDirection * extensionGap}
+                x2={p2x + px * extensionDirection * overshoot}
+                y2={p2y + py * extensionDirection * overshoot}
                 stroke={color}
                 strokeWidth={strokeWidth * 0.5}
-                opacity={0.5}
+                opacity={0.42}
+                vectorEffect="non-scaling-stroke"
             />
 
             {/* Main Dimension Line */}
@@ -290,9 +299,11 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
                             textAnchor="middle"
                             dominantBaseline="middle"
                             fontSize={labelFontSize}
-                            fontWeight="600"
+                            fontWeight={fontWeight}
+                            fontStyle={fontStyle}
+                            textDecoration={textDecoration}
                             fill={color}
-                            fontFamily="sans-serif"
+                            fontFamily={fontFamily}
                         >
                             {textStr}
                         </text>

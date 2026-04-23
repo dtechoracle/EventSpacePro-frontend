@@ -5,7 +5,8 @@ import { Wall } from '@/store/projectStore';
 import { calculateNodeJunctions, Point } from '@/utils/geometry';
 import { useEditorStore } from '@/store/editorStore';
 import { useProjectStore } from '@/store/projectStore';
-import { calculateAllCutouts, getCutoutsForEdge } from '@/utils/wallCutouts';
+import { calculateAllCutouts, getCutoutsForEdge, isCutoutAsset } from '@/utils/wallCutouts';
+import * as polygonClipping from 'polygon-clipping';
 
 interface WallRendererProps {
     wall: Wall;
@@ -14,266 +15,340 @@ interface WallRendererProps {
     isHighlightOnly?: boolean;
 }
 
+type Ring = polygonClipping.Ring;
+type MultiPolygon = polygonClipping.MultiPolygon;
+
+const POSITION_TOLERANCE = 1;
+
+const closeRing = (ring: Ring): Ring => {
+    if (ring.length === 0) return ring;
+    const first = ring[0];
+    const last = ring[ring.length - 1];
+    if (first[0] === last[0] && first[1] === last[1]) return ring;
+    return [...ring, [first[0], first[1]]];
+};
+
+const pointToPair = (point: Point): polygonClipping.Pair => [point.x, point.y];
+
+const multiPolygonToPath = (multiPolygon: MultiPolygon): string => {
+    return multiPolygon
+        .map((polygon) => polygon
+            .map((ring) => {
+                if (ring.length === 0) return '';
+                const [first, ...rest] = ring;
+                return `M ${first[0]} ${first[1]} ${rest.map(([x, y]) => `L ${x} ${y}`).join(' ')} Z`;
+            })
+            .join(' '))
+        .join(' ');
+};
+
+const getEdgeNodes = (wall: Wall, edge: Wall['edges'][number]) => {
+    const nodeA = wall.nodes.find((node) => node.id === edge.nodeA);
+    const nodeB = wall.nodes.find((node) => node.id === edge.nodeB);
+    return nodeA && nodeB ? { nodeA, nodeB } : null;
+};
+
+const lineIntersection = (
+    p1: Point,
+    p2: Point,
+    p3: Point,
+    p4: Point
+): { point: Point; t1: number; t2: number } | null => {
+    const x1 = p1.x, y1 = p1.y;
+    const x2 = p2.x, y2 = p2.y;
+    const x3 = p3.x, y3 = p3.y;
+    const x4 = p4.x, y4 = p4.y;
+    const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (Math.abs(denom) < 0.0001) return null;
+
+    const t1 = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+    const t2 = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+    if (t1 < -0.001 || t1 > 1.001 || t2 < -0.001 || t2 > 1.001) return null;
+
+    return {
+        point: { x: x1 + t1 * (x2 - x1), y: y1 + t1 * (y2 - y1) },
+        t1,
+        t2,
+    };
+};
+
+const collinearOverlap = (aStart: Point, aEnd: Point, bStart: Point, bEnd: Point) => {
+    const dx = aEnd.x - aStart.x;
+    const dy = aEnd.y - aStart.y;
+    const lengthSq = dx * dx + dy * dy;
+    const length = Math.sqrt(lengthSq);
+    if (lengthSq < 0.0001) return null;
+
+    const cross1 = Math.abs((bStart.x - aStart.x) * dy - (bStart.y - aStart.y) * dx) / length;
+    const cross2 = Math.abs((bEnd.x - aStart.x) * dy - (bEnd.y - aStart.y) * dx) / length;
+    if (cross1 > 0.5 || cross2 > 0.5) return null;
+
+    const proj1 = ((bStart.x - aStart.x) * dx + (bStart.y - aStart.y) * dy) / lengthSq;
+    const proj2 = ((bEnd.x - aStart.x) * dx + (bEnd.y - aStart.y) * dy) / lengthSq;
+    const overlapStart = Math.max(0, Math.min(proj1, proj2));
+    const overlapEnd = Math.min(1, Math.max(proj1, proj2));
+
+    return overlapEnd - overlapStart > 0.01 ? { startT: overlapStart, endT: overlapEnd } : null;
+};
+
+const pointToSegmentDistance = (point: Point, start: Point, end: Point) => {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSq = dx * dx + dy * dy;
+    if (lengthSq < 0.0001) return Math.hypot(point.x - start.x, point.y - start.y);
+
+    const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSq));
+    const projected = {
+        x: start.x + t * dx,
+        y: start.y + t * dy,
+    };
+
+    return Math.hypot(point.x - projected.x, point.y - projected.y);
+};
+
+const segmentDistance = (aStart: Point, aEnd: Point, bStart: Point, bEnd: Point) => {
+    if (lineIntersection(aStart, aEnd, bStart, bEnd)) return 0;
+
+    return Math.min(
+        pointToSegmentDistance(aStart, bStart, bEnd),
+        pointToSegmentDistance(aEnd, bStart, bEnd),
+        pointToSegmentDistance(bStart, aStart, aEnd),
+        pointToSegmentDistance(bEnd, aStart, aEnd)
+    );
+};
+
+const wallsTouchOrIntersect = (wallA: Wall, wallB: Wall) => {
+    if (wallA.nodes.some((a) => wallB.nodes.some((b) => Math.hypot(a.x - b.x, a.y - b.y) <= POSITION_TOLERANCE))) {
+        return true;
+    }
+
+    for (const edgeA of wallA.edges) {
+        const pointsA = getEdgeNodes(wallA, edgeA);
+        if (!pointsA) continue;
+        for (const edgeB of wallB.edges) {
+            const pointsB = getEdgeNodes(wallB, edgeB);
+            if (!pointsB) continue;
+            if (collinearOverlap(pointsA.nodeA, pointsA.nodeB, pointsB.nodeA, pointsB.nodeB)) return true;
+            if (lineIntersection(pointsA.nodeA, pointsA.nodeB, pointsB.nodeA, pointsB.nodeB)) return true;
+
+            const edgeSurfaceDistance = segmentDistance(pointsA.nodeA, pointsA.nodeB, pointsB.nodeA, pointsB.nodeB);
+            const combinedHalfThickness = ((edgeA.thickness || 150) + (edgeB.thickness || 150)) / 2;
+            if (edgeSurfaceDistance <= combinedHalfThickness + POSITION_TOLERANCE) return true;
+        }
+    }
+
+    return false;
+};
+
+const getConnectedWallGroup = (seedWall: Wall, walls: Wall[]) => {
+    const visited = new Set<string>([seedWall.id]);
+    const queue = [seedWall];
+
+    while (queue.length > 0) {
+        const current = queue.shift()!;
+        walls.forEach((candidate) => {
+            if (visited.has(candidate.id)) return;
+            if (!wallsTouchOrIntersect(current, candidate)) return;
+            visited.add(candidate.id);
+            queue.push(candidate);
+        });
+    }
+
+    return walls.filter((entry) => visited.has(entry.id));
+};
+
+const getWallEdgePolygons = (targetWall: Wall, groupWalls: Wall[]) => {
+    const localNodeMap = new Map(targetWall.nodes.map((node) => [node.id, node]));
+    const nodeEdges = new Map<string, Array<{ id: string; otherNode: Point; thickness: number }>>();
+
+    const processEdges = (sourceWall: Wall) => {
+        const sourceNodeMap = new Map(sourceWall.nodes.map((node) => [node.id, node]));
+
+        sourceWall.edges.forEach((edge) => {
+            const nodeA = sourceNodeMap.get(edge.nodeA);
+            const nodeB = sourceNodeMap.get(edge.nodeB);
+            if (!nodeA || !nodeB) return;
+
+            const localA = targetWall.nodes.find((node) => Math.hypot(node.x - nodeA.x, node.y - nodeA.y) <= POSITION_TOLERANCE);
+            const localB = targetWall.nodes.find((node) => Math.hypot(node.x - nodeB.x, node.y - nodeB.y) <= POSITION_TOLERANCE);
+            if (!localA && !localB) return;
+
+            const thickness = edge.thickness || 150;
+            if (localA) {
+                if (!nodeEdges.has(localA.id)) nodeEdges.set(localA.id, []);
+                if (!nodeEdges.get(localA.id)!.some((entry) => entry.id === edge.id)) {
+                    nodeEdges.get(localA.id)!.push({ id: edge.id, otherNode: nodeB, thickness });
+                }
+            }
+            if (localB) {
+                if (!nodeEdges.has(localB.id)) nodeEdges.set(localB.id, []);
+                if (!nodeEdges.get(localB.id)!.some((entry) => entry.id === edge.id)) {
+                    nodeEdges.get(localB.id)!.push({ id: edge.id, otherNode: nodeA, thickness });
+                }
+            }
+        });
+    };
+
+    groupWalls.forEach(processEdges);
+
+    const junctions = new Map<string, Record<string, { left: Point; right: Point }>>();
+    nodeEdges.forEach((connectedEdges, nodeId) => {
+        const node = localNodeMap.get(nodeId);
+        if (!node) return;
+        junctions.set(nodeId, calculateNodeJunctions(node, connectedEdges));
+    });
+
+    return targetWall.edges
+        .map((edge) => {
+            const nodeA = localNodeMap.get(edge.nodeA);
+            const nodeB = localNodeMap.get(edge.nodeB);
+            if (!nodeA || !nodeB) return null;
+
+            const junctionA = junctions.get(edge.nodeA)?.[edge.id];
+            let junctionB = junctions.get(edge.nodeB)?.[edge.id];
+            if (!junctionA || !junctionB) return null;
+            junctionB = { left: junctionB.right, right: junctionB.left };
+
+            const ring = closeRing([
+                pointToPair(junctionA.left),
+                pointToPair(junctionB.left),
+                pointToPair(junctionB.right),
+                pointToPair(junctionA.right),
+            ]);
+
+            return { wall: targetWall, edge, ring };
+        })
+        .filter((entry): entry is { wall: Wall; edge: Wall['edges'][number]; ring: Ring } => Boolean(entry));
+};
+
+const getWallEdgeRectPolygons = (targetWall: Wall) => {
+    return targetWall.edges
+        .map((edge) => {
+            const points = getEdgeNodes(targetWall, edge);
+            if (!points) return null;
+
+            const dx = points.nodeB.x - points.nodeA.x;
+            const dy = points.nodeB.y - points.nodeA.y;
+            const length = Math.hypot(dx, dy);
+            if (length < 0.0001) return null;
+
+            const nx = -dy / length;
+            const ny = dx / length;
+            const halfThickness = (edge.thickness || 150) / 2;
+
+            const ring = closeRing([
+                [points.nodeA.x + nx * halfThickness, points.nodeA.y + ny * halfThickness],
+                [points.nodeB.x + nx * halfThickness, points.nodeB.y + ny * halfThickness],
+                [points.nodeB.x - nx * halfThickness, points.nodeB.y - ny * halfThickness],
+                [points.nodeA.x - nx * halfThickness, points.nodeA.y - ny * halfThickness],
+            ]);
+
+            return { wall: targetWall, edge, ring };
+        })
+        .filter((entry): entry is { wall: Wall; edge: Wall['edges'][number]; ring: Ring } => Boolean(entry));
+};
+
+const getCutoutPolygonsForGroup = (groupWalls: Wall[], wallCutouts: ReturnType<typeof calculateAllCutouts>) => {
+    const polygons: polygonClipping.Polygon[] = [];
+
+    groupWalls.forEach((targetWall) => {
+        targetWall.edges.forEach((edge) => {
+            const points = getEdgeNodes(targetWall, edge);
+            if (!points) return;
+
+            const dx = points.nodeB.x - points.nodeA.x;
+            const dy = points.nodeB.y - points.nodeA.y;
+            const length = Math.hypot(dx, dy);
+            if (length < 0.0001) return;
+
+            const ux = dx / length;
+            const uy = dy / length;
+            const nx = -uy;
+            const ny = ux;
+            const halfThickness = (edge.thickness || 150) / 2 + 2;
+
+            getCutoutsForEdge(targetWall.id, edge.id, wallCutouts).forEach((cutout) => {
+                const startT = Math.max(0, cutout.startParam);
+                const endT = Math.min(1, cutout.endParam);
+                if (endT <= startT) return;
+
+                const start = {
+                    x: points.nodeA.x + ux * length * startT,
+                    y: points.nodeA.y + uy * length * startT,
+                };
+                const end = {
+                    x: points.nodeA.x + ux * length * endT,
+                    y: points.nodeA.y + uy * length * endT,
+                };
+
+                polygons.push([closeRing([
+                    [start.x + nx * halfThickness, start.y + ny * halfThickness],
+                    [end.x + nx * halfThickness, end.y + ny * halfThickness],
+                    [end.x - nx * halfThickness, end.y - ny * halfThickness],
+                    [start.x - nx * halfThickness, start.y - ny * halfThickness],
+                ])]);
+            });
+        });
+    });
+
+    return polygons;
+};
+
 const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlightOnly = false }: WallRendererProps) => {
     const { nodes, edges } = wall;
     const selectedEdgeId = useEditorStore(s => s.selectedEdgeId);
     const setSelectedEdgeId = useEditorStore(s => s.setSelectedEdgeId);
-    const zoom = useEditorStore(s => s.zoom);
+    const selectedIds = useEditorStore(s => s.selectedIds);
+    const hoveredId = useEditorStore(s => s.hoveredId);
+    const currentDrawingWallId = useEditorStore(s => s.currentDrawingWallId);
     
-    // Use target selectors for ProjectStore
+    // Keep the store selector cheap; filtering every store update gets expensive with large asset counts.
     const assets = useProjectStore(s => s.assets);
+    const cutoutAssets = useMemo(() => assets.filter(isCutoutAsset), [assets]);
     const allWalls = useProjectStore(s => s.walls);
 
     // Calculate all cutouts for doors/windows
     const wallCutouts = useMemo(() => {
-        return calculateAllCutouts(assets, allWalls);
-    }, [assets, allWalls]);
+        return calculateAllCutouts(cutoutAssets, allWalls);
+    }, [cutoutAssets, allWalls]);
 
-    // Create a map of node IDs to nodes for quick lookup
     const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
 
-    // Calculate junctions for all nodes
-    const junctions = useMemo(() => {
-        const nodeEdges = new Map<string, Array<{ id: string; otherNode: Point; thickness: number }>>();
+    const connectedWalls = useMemo(
+        () => getConnectedWallGroup(wall, allWalls),
+        [allWalls, wall]
+    );
+    const primaryWallId = useMemo(
+        () => [...connectedWalls].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0) || a.id.localeCompare(b.id))[0]?.id,
+        [connectedWalls]
+    );
+    const isPrimaryRenderer = wall.id === primaryWallId;
 
-        // Helper to process edges from any wall
-        const processEdges = (wallEdges: typeof edges, wallNodes: typeof nodes) => {
-            const wNodeMap = new Map(wallNodes.map((node) => [node.id, node]));
+    const unionedWallSurface = useMemo(() => {
+        if (!isPrimaryRenderer) return null;
 
-            wallEdges.forEach(edge => {
-                const nodeA = wNodeMap.get(edge.nodeA);
-                const nodeB = wNodeMap.get(edge.nodeB);
-                if (!nodeA || !nodeB) return;
+        const stableWalls = currentDrawingWallId
+            ? connectedWalls.filter((entry) => entry.id !== currentDrawingWallId)
+            : connectedWalls;
 
-                // Find corresponding nodes in OUR wall by position (not ID!)
-                const POSITION_TOLERANCE = 1; // mm
-                const ourNodeA = nodes.find(n =>
-                    Math.abs(n.x - nodeA.x) < POSITION_TOLERANCE &&
-                    Math.abs(n.y - nodeA.y) < POSITION_TOLERANCE
-                );
-                const ourNodeB = nodes.find(n =>
-                    Math.abs(n.x - nodeB.x) < POSITION_TOLERANCE &&
-                    Math.abs(n.y - nodeB.y) < POSITION_TOLERANCE
-                );
+        const wallPolygons = connectedWalls
+            .flatMap((entry) => (
+                entry.id === currentDrawingWallId
+                    ? getWallEdgeRectPolygons(entry)
+                    : getWallEdgePolygons(entry, stableWalls.length > 0 ? stableWalls : [entry])
+            ))
+            .map((entry) => [entry.ring] as polygonClipping.Polygon);
 
-                // Only process if at least one endpoint is at one of OUR node positions
-                if (!ourNodeA && !ourNodeB) return;
+        if (wallPolygons.length === 0) return null;
 
-                // Use OUR node IDs as keys, so edges from different walls get grouped together
-                const keyA = ourNodeA ? ourNodeA.id : edge.nodeA;
-                const keyB = ourNodeB ? ourNodeB.id : edge.nodeB;
+        let surface = polygonClipping.union(wallPolygons[0], ...wallPolygons.slice(1));
+        const cutoutPolygons = getCutoutPolygonsForGroup(connectedWalls, wallCutouts);
+        if (cutoutPolygons.length > 0) {
+            surface = polygonClipping.difference(surface, ...cutoutPolygons);
+        }
 
-                if (!nodeEdges.has(keyA)) nodeEdges.set(keyA, []);
-                if (!nodeEdges.has(keyB)) nodeEdges.set(keyB, []);
-
-                const realThickness = edge.thickness || 150; // Default to 150 if missing
-
-                // Add edges using our node positions
-                const existingA = nodeEdges.get(keyA)!.find(e => e.id === edge.id);
-                if (!existingA) {
-                    nodeEdges.get(keyA)!.push({ id: edge.id, otherNode: nodeB, thickness: realThickness });
-                }
-
-                const existingB = nodeEdges.get(keyB)!.find(e => e.id === edge.id);
-                if (!existingB) {
-                    nodeEdges.get(keyB)!.push({ id: edge.id, otherNode: nodeA, thickness: realThickness });
-                }
-            });
-        };
-
-        // 1. Process our own edges
-        processEdges(edges, nodes);
-
-        // 2. Process edges from other walls that have nodes at the same POSITION (not same ID)
-        const POSITION_TOLERANCE = 1; // mm - nodes within 1mm are considered the same position
-
-        allWalls.forEach(otherWall => {
-            if (otherWall.id === wall.id) return;
-
-            // Check if this wall has any node at the same position as our nodes
-            const sharesPosition = otherWall.nodes.some(otherNode =>
-                nodes.some(ourNode =>
-                    Math.abs(otherNode.x - ourNode.x) < POSITION_TOLERANCE &&
-                    Math.abs(otherNode.y - ourNode.y) < POSITION_TOLERANCE
-                )
-            );
-
-            if (sharesPosition) {
-                processEdges(otherWall.edges, otherWall.nodes);
-            }
-        });
-
-        // Calculate geometry for each node
-        const results = new Map<string, Record<string, { left: Point; right: Point }>>();
-        nodeEdges.forEach((connectedEdges, nodeId) => {
-            // Only calculate for nodes that belong to THIS wall
-            if (nodeMap.has(nodeId)) {
-                const node = nodeMap.get(nodeId)!;
-                results.set(nodeId, calculateNodeJunctions(node, connectedEdges));
-            }
-        });
-
-        return results;
-    }, [nodes, edges, nodeMap, allWalls, wall.id]);
-
-    const getCollinearOverlap = useCallback((
-        aStart: Point,
-        aEnd: Point,
-        bStart: Point,
-        bEnd: Point
-    ): { startT: number; endT: number } | null => {
-        const dx = aEnd.x - aStart.x;
-        const dy = aEnd.y - aStart.y;
-        const lengthSq = dx * dx + dy * dy;
-        const length = Math.sqrt(lengthSq);
-        if (lengthSq < 0.0001) return null;
-
-        const cross1 = Math.abs((bStart.x - aStart.x) * dy - (bStart.y - aStart.y) * dx) / length;
-        const cross2 = Math.abs((bEnd.x - aStart.x) * dy - (bEnd.y - aStart.y) * dx) / length;
-        if (cross1 > 0.5 || cross2 > 0.5) return null;
-
-        const proj1 = ((bStart.x - aStart.x) * dx + (bStart.y - aStart.y) * dy) / lengthSq;
-        const proj2 = ((bEnd.x - aStart.x) * dx + (bEnd.y - aStart.y) * dy) / lengthSq;
-
-        const overlapStart = Math.max(0, Math.min(proj1, proj2));
-        const overlapEnd = Math.min(1, Math.max(proj1, proj2));
-
-        if (overlapEnd - overlapStart <= 0.01) return null;
-
-        return { startT: overlapStart, endT: overlapEnd };
-    }, []);
-
-    const getLineLineIntersection = useCallback((
-        p1: Point, p2: Point, p3: Point, p4: Point
-    ): { point: Point; t1: number; t2: number } | null => {
-        const x1 = p1.x, y1 = p1.y;
-        const x2 = p2.x, y2 = p2.y;
-        const x3 = p3.x, y3 = p3.y;
-        const x4 = p4.x, y4 = p4.y;
-
-        const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-        if (Math.abs(denom) < 0.0001) return null;
-
-        const t1 = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
-        const t2 = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
-
-        if (t1 < 0 || t1 > 1 || t2 < 0 || t2 > 1) return null;
-
-        return {
-            point: {
-                x: x1 + t1 * (x2 - x1),
-                y: y1 + t1 * (y2 - y1),
-            },
-            t1,
-            t2,
-        };
-    }, []);
-
-    // Calculate openings for each edge (both assets and wall intersections)
-    const edgeOpenings = useMemo(() => {
-        const openingsMap = new Map<string, Array<{ type: 'asset' | 'wall' | 'door-window'; startT: number; endT: number }>>();
-
-        edges.forEach(edge => {
-            const nodeA = nodeMap.get(edge.nodeA);
-            const nodeB = nodeMap.get(edge.nodeB);
-            if (!nodeA || !nodeB) return;
-
-            const openings: Array<{ type: 'asset' | 'wall' | 'door-window'; startT: number; endT: number }> = [];
-
-            // 1. Find asset openings (doors/windows)
-            const cutoutsForThisEdge = getCutoutsForEdge(wall.id, edge.id, wallCutouts);
-            cutoutsForThisEdge.forEach(cutout => {
-                if (cutout.startParam > 0.01 && cutout.endParam < 0.99) {
-                    openings.push({
-                        type: 'asset',
-                        startT: cutout.startParam,
-                        endT: cutout.endParam
-                    });
-                }
-            });
-
-            // 2. Hide collinear overlap against older walls so shared runs render as one wall.
-            const otherWalls = allWalls.filter(otherWall => otherWall.id !== wall.id && wall.id > otherWall.id);
-            otherWalls.forEach(otherWall => {
-                const otherNodeMap = new Map(otherWall.nodes.map(n => [n.id, n]));
-                otherWall.edges.forEach(otherEdge => {
-                    const otherNodeA = otherNodeMap.get(otherEdge.nodeA);
-                    const otherNodeB = otherNodeMap.get(otherEdge.nodeB);
-                    if (!otherNodeA || !otherNodeB) return;
-
-                    const overlap = getCollinearOverlap(nodeA, nodeB, otherNodeA, otherNodeB);
-                    if (!overlap) return;
-
-                    openings.push({
-                        type: 'wall',
-                        startT: overlap.startT,
-                        endT: overlap.endT,
-                    });
-                });
-            });
-
-            // 3. Open true crossings by the other wall thickness so perpendicular walls blend cleanly.
-            allWalls
-                .filter(otherWall => otherWall.id !== wall.id)
-                .forEach(otherWall => {
-                    const otherNodeMap = new Map(otherWall.nodes.map(n => [n.id, n]));
-                    otherWall.edges.forEach(otherEdge => {
-                        const otherNodeA = otherNodeMap.get(otherEdge.nodeA);
-                        const otherNodeB = otherNodeMap.get(otherEdge.nodeB);
-                        if (!otherNodeA || !otherNodeB) return;
-
-                        const overlap = getCollinearOverlap(nodeA, nodeB, otherNodeA, otherNodeB);
-                        if (overlap) return;
-
-                        const intersection = getLineLineIntersection(nodeA, nodeB, otherNodeA, otherNodeB);
-                        if (!intersection) return;
-                        // Allow blends almost all the way to edge ends so junctions
-                        // appear immediately after drawing without needing a later nudge.
-                        if (intersection.t1 <= 0.001 || intersection.t1 >= 0.999) return;
-
-                        const dx = nodeB.x - nodeA.x;
-                        const dy = nodeB.y - nodeA.y;
-                        const otherDx = otherNodeB.x - otherNodeA.x;
-                        const otherDy = otherNodeB.y - otherNodeA.y;
-                        const edgeLength = Math.sqrt(dx * dx + dy * dy);
-                        if (edgeLength < 0.0001) return;
-
-                        const angle1 = Math.atan2(dy, dx);
-                        const angle2 = Math.atan2(otherDy, otherDx);
-                        let angleDiff = Math.abs(angle1 - angle2);
-                        if (angleDiff > Math.PI) angleDiff = (2 * Math.PI) - angleDiff;
-
-                        const sinAngle = Math.abs(Math.sin(angleDiff));
-                        if (sinAngle < 0.2) return;
-
-                        const otherThickness = otherEdge.thickness || 150;
-                        const halfProjectedLength = (otherThickness / 2) / sinAngle;
-                        const halfProjectedT = Math.min(0.49, halfProjectedLength / edgeLength);
-
-                        openings.push({
-                            type: 'wall',
-                            startT: Math.max(0, intersection.t1 - halfProjectedT),
-                            endT: Math.min(1, intersection.t1 + halfProjectedT),
-                        });
-                    });
-                });
-
-            // 4. Merge overlapping openings
-            openings.sort((a, b) => a.startT - b.startT);
-            const mergedOpenings: typeof openings = [];
-            for (const opening of openings) {
-                if (mergedOpenings.length === 0) mergedOpenings.push(opening);
-                else {
-                    const last = mergedOpenings[mergedOpenings.length - 1];
-                    if (opening.startT <= last.endT) last.endT = Math.max(last.endT, opening.endT);
-                    else mergedOpenings.push(opening);
-                }
-            }
-            openingsMap.set(edge.id, mergedOpenings);
-        });
-
-        return openingsMap;
-    }, [allWalls, edges, getCollinearOverlap, getLineLineIntersection, nodeMap, wall.id, wallCutouts]);
+        return surface;
+    }, [connectedWalls, currentDrawingWallId, isPrimaryRenderer, wallCutouts]);
 
     // Handle edge double-click for selection
     const handleEdgeDoubleClick = useCallback((edgeId: string, e: React.MouseEvent) => {
@@ -281,85 +356,67 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
         setSelectedEdgeId(edgeId);
     }, [setSelectedEdgeId]);
 
+    const groupSelected = isSelected || connectedWalls.some((entry) => selectedIds.includes(entry.id));
+    const groupHovered = isHovered || connectedWalls.some((entry) => hoveredId === entry.id);
+    const styleSource = connectedWalls.find((entry) => selectedIds.includes(entry.id))
+        || connectedWalls.find((entry) => hoveredId === entry.id)
+        || wall;
+    const wallFill = (styleSource.fillType === 'texture' || styleSource.fillType === 'hatch' || styleSource.fillType === 'hash') && styleSource.fillTexture
+        ? `url(#${styleSource.fillTexture}-scale-${styleSource.fillTextureScale || 1}-thick-${styleSource.fillTextureThickness || 1})`
+        : (styleSource.fill || '#ffffff');
+    const groupStrokeColor = styleSource.stroke || '#1f2937';
+    const groupStrokeWidth = styleSource.strokeWidth !== undefined ? styleSource.strokeWidth : 2;
+
     return (
         <g className="wall" data-wall-id={wall.id} data-id={wall.id}>
-            {/* Render only the layers requested */}
+            {isPrimaryRenderer && unionedWallSurface && (
+                isHighlightOnly ? (
+                    (groupSelected || groupHovered) && (
+                        <path
+                            d={multiPolygonToPath(unionedWallSurface)}
+                            fill="#3b82f6"
+                            fillOpacity={groupSelected ? 0.2 : 0.1}
+                            stroke="none"
+                            fillRule="evenodd"
+                            pointerEvents="none"
+                        />
+                    )
+                ) : (
+                    <path
+                        d={multiPolygonToPath(unionedWallSurface)}
+                        fill={wallFill}
+                        stroke={groupStrokeColor}
+                        strokeWidth={groupStrokeWidth}
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                        vectorEffect="non-scaling-stroke"
+                        fillRule="evenodd"
+                    />
+                )
+            )}
+
+            {/* Transparent per-wall hit lines remain separate so drawing/selection logic is untouched. */}
             {edges.map((edge) => {
                 const nodeA = nodeMap.get(edge.nodeA);
                 const nodeB = nodeMap.get(edge.nodeB);
                 if (!nodeA || !nodeB) return null;
-
-                const junctionA = junctions.get(edge.nodeA)?.[edge.id];
-                let junctionB = junctions.get(edge.nodeB)?.[edge.id];
-                if (!junctionA || !junctionB) return null;
-                junctionB = { left: junctionB.right, right: junctionB.left };
-
-                const openings = edgeOpenings.get(edge.id) || [];
                 const isEdgeSelected = selectedEdgeId === edge.id;
-                const lineStrokeWidth = wall.strokeWidth !== undefined ? wall.strokeWidth : 2;
-                const strokeColor = wall.stroke || (isEdgeSelected ? '#2563eb' : isSelected ? '#3b82f6' : isHovered ? '#60a5fa' : '#1f2937');
-
-                const segments: Array<{ startT: number; endT: number }> = [];
-                let currentT = 0;
-                for (const opening of openings) {
-                    if (opening.startT > currentT) segments.push({ startT: currentT, endT: opening.startT });
-                    currentT = opening.endT;
-                }
-                if (currentT < 1) segments.push({ startT: currentT, endT: 1 });
 
                 return (
                     <g key={edge.id} onDoubleClick={(e) => handleEdgeDoubleClick(edge.id, e)}>
-                        {segments.map((segment, idx) => {
-                            const getPointsAtT = (t: number) => {
-                                if (t <= 0.001) return junctionA;
-                                if (t >= 0.999) return junctionB;
-                                const dx = nodeB.x - nodeA.x; const dy = nodeB.y - nodeA.y;
-                                const len = Math.sqrt(dx * dx + dy * dy);
-                                const px = nodeA.x + dx * t; const py = nodeA.y + dy * t;
-                                const nx = -dy / len; const ny = dx / len;
-                                const halfThick = (edge.thickness || 150) / 2;
-                                return {
-                                    left: { x: px + nx * halfThick, y: py + ny * halfThick },
-                                    right: { x: px - nx * halfThick, y: py - ny * halfThick }
-                                };
-                            };
-
-                            const startPoints = getPointsAtT(segment.startT);
-                            const endPoints = getPointsAtT(segment.endT);
-                            const p1 = startPoints.left; const p2 = endPoints.left;
-                            const p3 = endPoints.right; const p4 = startPoints.right;
-                            const fillPath = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y} L ${p3.x} ${p3.y} L ${p4.x} ${p4.y} Z`;
-
-                            if (isHighlightOnly) {
-                                return (isSelected || isHovered || isEdgeSelected) ? (
-                                    <path
-                                        key={`highlight-segment-${idx}`}
-                                        d={fillPath}
-                                        fill="#3b82f6"
-                                        fillOpacity={isEdgeSelected ? 0.3 : (isSelected ? 0.2 : 0.1)}
-                                        stroke="none"
-                                        style={{ pointerEvents: 'none' }}
-                                    />
-                                ) : null;
-                            }
-
-                            const outerPath = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
-                            const innerPath = `M ${p4.x} ${p4.y} L ${p3.x} ${p3.y}`;
-
-                            return (
-                                <g key={`segment-${idx}`}>
-                                    <path
-                                        d={fillPath}
-                                        fill={(wall.fillType === 'texture' || wall.fillType === 'hatch' || wall.fillType === 'hash') && wall.fillTexture
-                                            ? `url(#${wall.fillTexture}-scale-${wall.fillTextureScale || 1}-thick-${wall.fillTextureThickness || 1})`
-                                            : (wall.fill || '#ffffff')}
-                                        stroke="none"
-                                    />
-                                    <path d={outerPath} fill="none" stroke={strokeColor} strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                                    <path d={innerPath} fill="none" stroke={strokeColor} strokeWidth={isEdgeSelected ? lineStrokeWidth * 1.5 : lineStrokeWidth} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                                </g>
-                            );
-                        })}
+                        {isHighlightOnly && isEdgeSelected && (
+                            <line
+                                x1={nodeA.x}
+                                y1={nodeA.y}
+                                x2={nodeB.x}
+                                y2={nodeB.y}
+                                stroke="#3b82f6"
+                                strokeWidth={(edge.thickness || 150)}
+                                strokeOpacity={0.22}
+                                strokeLinecap="round"
+                                pointerEvents="none"
+                            />
+                        )}
 
                         {/* Rendering interaction lines (transparent but wide for clicking) */}
                         {!isHighlightOnly && <line x1={nodeA.x} y1={nodeA.y} x2={nodeB.x} y2={nodeB.y} stroke="transparent" strokeWidth={20} style={{ cursor: 'pointer' }} />}

@@ -34,6 +34,10 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
     const dimensionOffset = (obj as any).dimensionOffset !== undefined ? (obj as any).dimensionOffset : OFFSET;
     const dimensionColor = (obj as any).dimensionColor || '#666666';
     const dimensionStrokeWidth = (obj as any).dimensionStrokeWidth !== undefined ? (obj as any).dimensionStrokeWidth : undefined;
+    const dimensionFontFamily = (obj as any).dimensionFontFamily;
+    const dimensionFontWeight = (obj as any).dimensionFontWeight;
+    const dimensionFontStyle = (obj as any).dimensionFontStyle;
+    const dimensionTextDecoration = (obj as any).dimensionTextDecoration;
     const labelPosition = (obj as any).dimensionLabelPosition || 'top-right';
 
     // Common world points
@@ -67,6 +71,10 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
             color: dimensionColor,
             strokeWidth: dimensionStrokeWidth,
             fontSize: dimensionFontSize,
+            fontFamily: dimensionFontFamily,
+            fontWeight: dimensionFontWeight,
+            fontStyle: dimensionFontStyle,
+            textDecoration: dimensionTextDecoration,
             zIndex: 100,
             lineStyle,
             labelPosition
@@ -84,6 +92,10 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
                 color: dimensionColor,
                 strokeWidth: dimensionStrokeWidth,
                 fontSize: dimensionFontSize,
+                fontFamily: dimensionFontFamily,
+                fontWeight: dimensionFontWeight,
+                fontStyle: dimensionFontStyle,
+                textDecoration: dimensionTextDecoration,
                 zIndex: 100,
                 lineStyle,
                 labelPosition: 'bottom-left'
@@ -100,6 +112,10 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
                 color: dimensionColor,
                 strokeWidth: dimensionStrokeWidth,
                 fontSize: dimensionFontSize,
+                fontFamily: dimensionFontFamily,
+                fontWeight: dimensionFontWeight,
+                fontStyle: dimensionFontStyle,
+                textDecoration: dimensionTextDecoration,
                 zIndex: 100,
                 lineStyle,
                 labelPosition: 'bottom-left'
@@ -116,6 +132,10 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
                 color: dimensionColor,
                 strokeWidth: dimensionStrokeWidth,
                 fontSize: dimensionFontSize,
+                fontFamily: dimensionFontFamily,
+                fontWeight: dimensionFontWeight,
+                fontStyle: dimensionFontStyle,
+                textDecoration: dimensionTextDecoration,
                 zIndex: 100,
                 lineStyle,
                 labelPosition: 'top-right'
@@ -132,6 +152,10 @@ export const getDimensionsForObject = (obj: Shape | Asset, idPrefix: string): Di
                 color: dimensionColor,
                 strokeWidth: dimensionStrokeWidth,
                 fontSize: dimensionFontSize,
+                fontFamily: dimensionFontFamily,
+                fontWeight: dimensionFontWeight,
+                fontStyle: dimensionFontStyle,
+                textDecoration: dimensionTextDecoration,
                 zIndex: 100,
                 lineStyle,
                 labelPosition: 'top-right'
@@ -162,6 +186,10 @@ export const getDimensionsForWall = (wall: Wall): Dimension[] => {
             const dimensionFontSize = (wall as any).dimensionFontSize || 12; 
             const dimensionColor = (wall as any).dimensionColor || '#666666';
             const dimensionStrokeWidth = (wall as any).dimensionStrokeWidth !== undefined ? (wall as any).dimensionStrokeWidth : undefined;
+            const dimensionFontFamily = (wall as any).dimensionFontFamily;
+            const dimensionFontWeight = (wall as any).dimensionFontWeight;
+            const dimensionFontStyle = (wall as any).dimensionFontStyle;
+            const dimensionTextDecoration = (wall as any).dimensionTextDecoration;
             const lineStyle = getLineStyleFromType(dimensionType);
 
             dims.push({
@@ -175,6 +203,10 @@ export const getDimensionsForWall = (wall: Wall): Dimension[] => {
                 strokeWidth: dimensionStrokeWidth,
                 type: 'aligned',
                 fontSize: dimensionFontSize,
+                fontFamily: dimensionFontFamily,
+                fontWeight: dimensionFontWeight,
+                fontStyle: dimensionFontStyle,
+                textDecoration: dimensionTextDecoration,
                 zIndex: 100,
                 lineStyle,
                 labelPosition
@@ -197,6 +229,10 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
         fontSize = 11,
         lineStyle = 'solid'
     } = dim;
+    const fontFamily = (dim as any).fontFamily || 'sans-serif';
+    const fontWeight = (dim as any).fontWeight || '600';
+    const fontStyle = (dim as any).fontStyle || 'normal';
+    const textDecoration = (dim as any).textDecoration || 'none';
 
     // Calculate vector from start to end
     const dx = endPoint.x - startPoint.x;
@@ -269,7 +305,7 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
         const midX = toCanvasX((startPoint.x + endPoint.x) / 2);
         const midY = toCanvasY((startPoint.y + endPoint.y) / 2);
         const label = `R ${Math.round(value || length)}`;
-        renderTextLabel(ctx, label, midX, midY, dy, dx, canvasFontSize, color);
+        renderTextLabel(ctx, label, midX, midY, dy, dx, canvasFontSize, color, fontFamily, fontWeight, fontStyle, textDecoration);
 
         // Center Mark
         const cx = toCanvasX(startPoint.x);
@@ -279,20 +315,28 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
         ctx.moveTo(cx, cy - 10 * MM_TO_PX); ctx.lineTo(cx, cy + 10 * MM_TO_PX);
         ctx.stroke();
     } else {
-        // Extension lines
+        // Extension lines stay slightly away from the measured object, matching the SVG renderer.
+        const extensionDirection = Math.sign(finalOffset || sign || 1) || 1;
+        const extensionGap = Math.min(Math.abs(finalOffset) * 0.45, 10);
         const overshoot = 10;
-        ctx.globalAlpha = 0.5;
+        ctx.globalAlpha = 0.42;
         ctx.lineWidth = canvasStrokeWidth * 0.5;
         ctx.beginPath();
-        ctx.moveTo(toCanvasX(startPoint.x), toCanvasY(startPoint.y));
-        ctx.lineTo(
-            toCanvasX(startPoint.x + px * (finalOffset + sign * overshoot)),
-            toCanvasY(startPoint.y + py * (finalOffset + sign * overshoot))
+        ctx.moveTo(
+            toCanvasX(startPoint.x + px * extensionDirection * extensionGap),
+            toCanvasY(startPoint.y + py * extensionDirection * extensionGap)
         );
-        ctx.moveTo(toCanvasX(endPoint.x), toCanvasY(endPoint.y));
         ctx.lineTo(
-            toCanvasX(endPoint.x + px * (finalOffset + sign * overshoot)),
-            toCanvasY(endPoint.y + py * (finalOffset + sign * overshoot))
+            toCanvasX(startPoint.x + px * (finalOffset + extensionDirection * overshoot)),
+            toCanvasY(startPoint.y + py * (finalOffset + extensionDirection * overshoot))
+        );
+        ctx.moveTo(
+            toCanvasX(endPoint.x + px * extensionDirection * extensionGap),
+            toCanvasY(endPoint.y + py * extensionDirection * extensionGap)
+        );
+        ctx.lineTo(
+            toCanvasX(endPoint.x + px * (finalOffset + extensionDirection * overshoot)),
+            toCanvasY(endPoint.y + py * (finalOffset + extensionDirection * overshoot))
         );
         ctx.stroke();
         ctx.globalAlpha = 1.0;
@@ -329,7 +373,7 @@ export const renderDimensionToCanvas = (ctx: CanvasRenderingContext2D, dim: Dime
         const midX = (p1x + p2x) / 2;
         const midY = (p1y + p2y) / 2;
         const label = `${Math.round(value || length)}`; // Removed hardcoded "mm"
-        renderTextLabel(ctx, label, midX, midY, dy, dx, canvasFontSize, color);
+        renderTextLabel(ctx, label, midX, midY, dy, dx, canvasFontSize, color, fontFamily, fontWeight, fontStyle, textDecoration);
     }
 };
 
@@ -342,14 +386,27 @@ const renderArrow = (ctx: CanvasRenderingContext2D, x: number, y: number, nx: nu
     ctx.stroke();
 };
 
-const renderTextLabel = (ctx: CanvasRenderingContext2D, text: string, x: number, y: number, dy: number, dx: number, size: number, color: string) => {
+const renderTextLabel = (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    x: number,
+    y: number,
+    dy: number,
+    dx: number,
+    size: number,
+    color: string,
+    fontFamily = 'sans-serif',
+    fontWeight = '600',
+    fontStyle = 'normal',
+    textDecoration = 'none'
+) => {
     ctx.save();
     ctx.translate(x, y);
     let angle = Math.atan2(dy, dx);
     if (angle > Math.PI / 2 || angle < -Math.PI / 2) angle += Math.PI;
     ctx.rotate(angle);
 
-    ctx.font = `600 ${size}px sans-serif`;
+    ctx.font = `${fontStyle} ${fontWeight} ${size}px ${fontFamily}`;
     const w = text.length * (size * 0.6);
     const h = size * 1.8;
 
@@ -363,5 +420,13 @@ const renderTextLabel = (ctx: CanvasRenderingContext2D, text: string, x: number,
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, 0, 0);
+    if (textDecoration === 'underline') {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(1, size * 0.08);
+        ctx.beginPath();
+        ctx.moveTo(-w / 2, size * 0.42);
+        ctx.lineTo(w / 2, size * 0.42);
+        ctx.stroke();
+    }
     ctx.restore();
 };

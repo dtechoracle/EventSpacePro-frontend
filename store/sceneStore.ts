@@ -460,7 +460,7 @@ export const useSceneStore = create<SceneState>()(
                     ? { wallThickness: get().getCurrentWallThickness(), wallGap: 8, lineColor: "#000000", backgroundColor: defaultBackgroundColor }
                     : type === "text"
                       ? { width: 100, height: 20, text: "Enter text", fontSize: 16, textColor: "#000000", fontFamily: "Arial", backgroundColor: defaultBackgroundColor }
-                      : { width: finalWidth, height: finalHeight, strokeWidth: 0.5, strokeColor: "#000000", fillColor: "transparent", backgroundColor: defaultBackgroundColor }; // Reduced default strokeWidths
+                      : { width: finalWidth, height: finalHeight, strokeWidth: 0.6, strokeColor: "#000000", fillColor: "transparent", backgroundColor: defaultBackgroundColor }; // Default asset stroke width
 
         set({
           assets: [

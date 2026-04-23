@@ -18,23 +18,190 @@ import toast from "react-hot-toast";
 import { convertAssetToShapes } from "@/utils/assetUtils";
 import LineTypeSelector from "@/components/ui/LineTypeSelector";
 import { fromStoreValue, toStoreValue, getUnitLabel, UnitSystem } from '@/lib/units';
+import { TEXT_STYLE_FONTS, ensureGoogleFontsLoaded, getFontDisplayName } from "@/utils/googleFonts";
+
+type TableNumberingMode = 'manual' | 'auto';
+type TableNumberingPattern = 'linear' | 's-direction';
+type TableNumberingDirection =
+  | 'from-top-right-to-left'
+  | 'from-bottom-right-to-left'
+  | 'from-top-left-to-right'
+  | 'from-bottom-left-to-right'
+  | 'radial';
+
+type NumberableTable = {
+  id: string;
+  type: 'asset' | 'shape';
+  x: number;
+  y: number;
+  name?: string;
+  label: string;
+};
+
+const TABLE_NUMBERING_SETTINGS_KEY = 'eventspacepro-table-numbering-settings';
+
+const isTableLike = (item: any) => {
+  const haystack = [
+    item?.type,
+    item?.name,
+    item?.label,
+    item?.tableName,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return haystack.includes('table');
+};
+
+const isStageLike = (item: any) => {
+  const haystack = [
+    item?.type,
+    item?.name,
+    item?.label,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return haystack.includes('stage');
+};
+
+const getTableLabel = (item: any, fallback: string) => {
+  return item?.name || item?.label || item?.type || fallback;
+};
+
+const getStageAnchor = (assets: any[], shapes: any[]) => {
+  const stageItems = [
+    ...assets.filter(isStageLike).map((item) => ({ x: item.x, y: item.y })),
+    ...shapes.filter(isStageLike).map((item) => ({ x: item.x, y: item.y })),
+  ];
+
+  if (stageItems.length === 0) return null;
+
+  return {
+    x: stageItems.reduce((sum, item) => sum + item.x, 0) / stageItems.length,
+    y: stageItems.reduce((sum, item) => sum + item.y, 0) / stageItems.length,
+  };
+};
+
+const getOrderedTablesForNumbering = (
+  tables: NumberableTable[],
+  direction: TableNumberingDirection,
+  pattern: TableNumberingPattern,
+  stageAnchor: { x: number; y: number } | null
+) => {
+  if (tables.length <= 1) return tables;
+
+  const anchor = stageAnchor || {
+    x: tables.reduce((sum, table) => sum + table.x, 0) / tables.length,
+    y: tables.reduce((sum, table) => sum + table.y, 0) / tables.length,
+  };
+
+  const distanceToAnchor = (table: NumberableTable) => Math.hypot(table.x - anchor.x, table.y - anchor.y);
+
+  if (direction === 'radial') {
+    return [...tables].sort((a, b) => {
+      const distanceDelta = distanceToAnchor(a) - distanceToAnchor(b);
+      if (Math.abs(distanceDelta) > 20) return distanceDelta;
+
+      const angleA = Math.atan2(a.y - anchor.y, a.x - anchor.x);
+      const angleB = Math.atan2(b.y - anchor.y, b.x - anchor.x);
+      return angleA - angleB;
+    });
+  }
+
+  const fromBottom = direction.startsWith('from-bottom');
+  const leftToRight = direction.endsWith('left-to-right');
+  const minX = Math.min(...tables.map((table) => table.x));
+  const maxX = Math.max(...tables.map((table) => table.x));
+  const minY = Math.min(...tables.map((table) => table.y));
+  const maxY = Math.max(...tables.map((table) => table.y));
+  const clusterSize = Math.max(250, Math.min(2500, Math.max(maxX - minX, maxY - minY) / Math.max(1, Math.sqrt(tables.length))));
+  const groupedTables = new Map<number, NumberableTable[]>();
+
+  tables.forEach((table) => {
+    const key = Math.round(table.y / clusterSize);
+    const current = groupedTables.get(key) || [];
+    current.push(table);
+    groupedTables.set(key, current);
+  });
+
+  const rowGroups = Array.from(groupedTables.entries())
+    .map(([key, group]) => ({
+      key,
+      group,
+      y: group.reduce((sum, table) => sum + table.y, 0) / group.length,
+      stageDistance: stageAnchor ? Math.min(...group.map(distanceToAnchor)) : Infinity,
+    }))
+    .sort((a, b) => fromBottom ? b.y - a.y : a.y - b.y);
+
+  if (stageAnchor) {
+    rowGroups.sort((a, b) => {
+      const stageDelta = a.stageDistance - b.stageDistance;
+      if (Math.abs(stageDelta) > 20) return stageDelta;
+      return fromBottom ? b.y - a.y : a.y - b.y;
+    });
+  }
+
+  return rowGroups.flatMap((row, rowIndex) => {
+    const orderedGroup = [...row.group].sort((a, b) => leftToRight ? a.x - b.x : b.x - a.x);
+
+    const shouldReverse = pattern === 's-direction' && rowIndex % 2 === 1;
+    const directionalGroup = shouldReverse ? orderedGroup.reverse() : orderedGroup;
+
+    if (!stageAnchor || rowIndex !== 0) return directionalGroup;
+
+    const closestIndex = directionalGroup.reduce((bestIndex, table, index) => {
+      return distanceToAnchor(table) < distanceToAnchor(directionalGroup[bestIndex]) ? index : bestIndex;
+    }, 0);
+
+    return [
+      ...directionalGroup.slice(closestIndex),
+      ...directionalGroup.slice(0, closestIndex),
+    ];
+  });
+};
 
 export default function PropertiesSidebar(): React.JSX.Element {
-  const { selectedIds, screenToWorld, zoom, worldToScreen, panX, panY, canvasOffset, activeTool } = useEditorStore();
-  const {
-    shapes, assets, walls, textAnnotations, labelArrows, dimensions, groups,
-    updateShape, updateAsset, updateWall, updateTextAnnotation, updateLabelArrow, updateDimension,
-    updateShapeBatch, updateAssetBatch, updateWallBatch, batchUpdateItems,
-    isSaving, lastSaved, saveEvent, hasUnsavedChanges,
-    projectName, setProjectName,
-    globalTableNumberingPosition, globalTableNumberingOrientation, 
-    setGlobalTableNumberingPosition, setGlobalTableNumberingOrientation
-  } = useProjectStore();
+  const selectedIds = useEditorStore(s => s.selectedIds);
+  const activeTool = useEditorStore(s => s.activeTool);
+  const dimensionType = useEditorStore(s => s.dimensionType);
+  const toggleEditorGrid = useEditorStore(s => s.toggleGrid);
+  const setEditorGridSize = useEditorStore(s => s.setGridSize);
+  const shapes = useProjectStore(s => s.shapes);
+  const assets = useProjectStore(s => s.assets);
+  const walls = useProjectStore(s => s.walls);
+  const textAnnotations = useProjectStore(s => s.textAnnotations);
+  const labelArrows = useProjectStore(s => s.labelArrows);
+  const dimensions = useProjectStore(s => s.dimensions);
+  const groups = useProjectStore(s => s.groups);
+  const updateShape = useProjectStore(s => s.updateShape);
+  const updateAsset = useProjectStore(s => s.updateAsset);
+  const updateWall = useProjectStore(s => s.updateWall);
+  const updateTextAnnotation = useProjectStore(s => s.updateTextAnnotation);
+  const updateLabelArrow = useProjectStore(s => s.updateLabelArrow);
+  const updateDimension = useProjectStore(s => s.updateDimension);
+  const updateShapeBatch = useProjectStore(s => s.updateShapeBatch);
+  const updateAssetBatch = useProjectStore(s => s.updateAssetBatch);
+  const updateWallBatch = useProjectStore(s => s.updateWallBatch);
+  const batchUpdateItems = useProjectStore(s => s.batchUpdateItems);
+  const isSaving = useProjectStore(s => s.isSaving);
+  const lastSaved = useProjectStore(s => s.lastSaved);
+  const saveEvent = useProjectStore(s => s.saveEvent);
+  const hasUnsavedChanges = useProjectStore(s => s.hasUnsavedChanges);
+  const projectName = useProjectStore(s => s.projectName);
+  const setProjectName = useProjectStore(s => s.setProjectName);
+  const globalTableNumberingPosition = useProjectStore(s => s.globalTableNumberingPosition);
+  const globalTableNumberingOrientation = useProjectStore(s => s.globalTableNumberingOrientation);
+  const globalTableNumberingFontSize = useProjectStore(s => s.globalTableNumberingFontSize);
+  const globalTableNumberingFontFamily = useProjectStore(s => s.globalTableNumberingFontFamily);
+  const globalTableNumberingFontWeight = useProjectStore(s => s.globalTableNumberingFontWeight);
+  const globalTableNumberingFontStyle = useProjectStore(s => s.globalTableNumberingFontStyle);
+  const globalTableNumberingTextDecoration = useProjectStore(s => s.globalTableNumberingTextDecoration);
+  const globalTableNumberingColor = useProjectStore(s => s.globalTableNumberingColor);
+  const setGlobalTableNumberingPosition = useProjectStore(s => s.setGlobalTableNumberingPosition);
+  const setGlobalTableNumberingOrientation = useProjectStore(s => s.setGlobalTableNumberingOrientation);
+  const setGlobalTableNumberingTextStyle = useProjectStore(s => s.setGlobalTableNumberingTextStyle);
 
   const [startingNumber, setStartingNumber] = useState(1);
   const [isNumberingEnabled, setIsNumberingEnabled] = useState(false);
-  const [numberingDirection, setNumberingDirection] = useState<'left-to-right' | 'right-to-left' | 'top-to-bottom' | 'bottom-to-top' | 'snake'>('left-to-right');
-  const [numberingStartingPoint, setNumberingStartingPoint] = useState<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center' | 'left' | 'right' | 'top' | 'bottom'>('top-left');
+  const [numberingMode, setNumberingMode] = useState<TableNumberingMode>('auto');
+  const [numberingPattern, setNumberingPattern] = useState<TableNumberingPattern>('linear');
+  const [numberingDirection, setNumberingDirection] = useState<TableNumberingDirection>('from-top-left-to-right');
+  const textStyleFonts = TEXT_STYLE_FONTS;
 
   // Local state to prevent cursor jumping when typing text annotations
   const [localTextProps, setLocalTextProps] = useState({ id: "", text: "" });
@@ -44,6 +211,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
   // Multi-selection logic
   const isMultiSelection = selectedIds.length > 1;
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   // Calculate collective bounding box for multi-selection or single item
   const getCollectiveBounds = () => {
@@ -133,8 +301,14 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const selectedItem = selectedShape || selectedAsset || selectedWall || selectedTextAnnotation || selectedLabelArrow || selectedDimension;
   const itemType = selectedShape ? 'shape' : selectedWall ? 'wall' : (selectedAsset?.type === 'wall-segments') ? 'wall' : selectedAsset ? 'asset' : selectedTextAnnotation ? 'text-annotation' : selectedLabelArrow ? 'label-arrow' : selectedDimension ? 'dimension' : null;
 
-  const selectedShapes = shapes.filter(s => selectedIds.includes(s.id));
-  const selectedAssets = assets.filter(a => selectedIds.includes(a.id));
+  const selectedShapes = useMemo(
+    () => shapes.filter(s => selectedIdSet.has(s.id)),
+    [shapes, selectedIdSet]
+  );
+  const selectedAssets = useMemo(
+    () => assets.filter(a => selectedIdSet.has(a.id)),
+    [assets, selectedIdSet]
+  );
   const allSelectedAreShapes = isMultiSelection && selectedShapes.length === selectedIds.length;
 
   const showGrid = useSceneStore((s) => s.showGrid);
@@ -147,6 +321,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const updateSceneAsset = useSceneStore((s) => s.updateAsset);
   const unitSystem = useSceneStore((s) => s.unitSystem) || 'metric-mm';
   const unitLabel = getUnitLabel(unitSystem);
+
+  useEffect(() => {
+    ensureGoogleFontsLoaded(textStyleFonts);
+  }, [textStyleFonts]);
 
   // Sync local text annotation state when selection changes
   // Keep local props in sync with store selection and real-time edits from the workspace
@@ -163,105 +341,85 @@ export default function PropertiesSidebar(): React.JSX.Element {
     }
   }, [itemType, selectedTextAnnotation, localTextProps.id, localTextProps.text]);
 
-  // ── AUTO-NUMBERING EFFECT ──────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isNumberingEnabled) return;
-
-    // Identify all table-like assets and shapes
-    const tableAssets = assets.filter(a => (a.type || "").toLowerCase().includes('table'));
-    const tableShapes = shapes.filter(s => (s.name || "").toLowerCase().includes('table'));
-
-    const allTables = [
-      ...tableAssets.map(a => ({ id: a.id, type: 'asset' as const, x: a.x, y: a.y, name: a.tableName })),
-      ...tableShapes.map(s => ({ id: s.id, type: 'shape' as const, x: s.x, y: s.y, name: s.tableName }))
+  const tableNumberingItems = useMemo<NumberableTable[]>(() => {
+    const tables = [
+      ...assets
+        .filter(isTableLike)
+        .map((asset, index) => ({
+          id: asset.id,
+          type: 'asset' as const,
+          x: asset.x,
+          y: asset.y,
+          name: asset.tableName,
+          label: getTableLabel(asset, `Table ${index + 1}`),
+        })),
+      ...shapes
+        .filter(isTableLike)
+        .map((shape, index) => ({
+          id: shape.id,
+          type: 'shape' as const,
+          x: shape.x,
+          y: shape.y,
+          name: shape.tableName,
+          label: getTableLabel(shape, `Table ${index + 1}`),
+        })),
     ];
 
-    if (allTables.length === 0) return;
+    return getOrderedTablesForNumbering(
+      tables,
+      numberingDirection,
+      numberingPattern,
+      getStageAnchor(assets, shapes)
+    );
+  }, [assets, shapes, numberingDirection, numberingPattern]);
 
-    // Calculate bounding box of all tables to find corners and center
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    allTables.forEach(t => {
-      minX = Math.min(minX, t.x); minY = Math.min(minY, t.y);
-      maxX = Math.max(maxX, t.x); maxY = Math.max(maxY, t.y);
-    });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
 
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
+    try {
+      const rawSettings = window.localStorage.getItem(TABLE_NUMBERING_SETTINGS_KEY);
+      if (!rawSettings) return;
 
-    const clusterSize = 1000;
-
-    if (numberingDirection === 'snake') {
-      const primaryByColumn = new Map<number, typeof allTables>();
-
-      allTables.forEach((table) => {
-        const columnBucket = Math.round(table.x / clusterSize);
-        const current = primaryByColumn.get(columnBucket) || [];
-        current.push(table);
-        primaryByColumn.set(columnBucket, current);
-      });
-
-      const orderedColumns = Array.from(primaryByColumn.entries())
-        .sort((a, b) => {
-          const [aBucket] = a;
-          const [bBucket] = b;
-          const direction = numberingStartingPoint.includes('right') || numberingStartingPoint === 'right' ? -1 : 1;
-          return (aBucket - bBucket) * direction;
-        });
-
-      const startsFromBottom = numberingStartingPoint.includes('bottom') || numberingStartingPoint === 'bottom';
-      const snakeOrdered = orderedColumns.flatMap(([, columnTables], columnIndex) => {
-        const orderedInColumn = [...columnTables].sort((a, b) => {
-          return startsFromBottom ? b.y - a.y : a.y - b.y;
-        });
-
-        return columnIndex % 2 === 0 ? orderedInColumn : orderedInColumn.reverse();
-      });
-
-      allTables.splice(0, allTables.length, ...snakeOrdered);
-    } else {
-    allTables.sort((a, b) => {
-      if (numberingStartingPoint === 'center') {
-        const distA = Math.sqrt(Math.pow(a.x - centerX, 2) + Math.pow(a.y - centerY, 2));
-        const distB = Math.sqrt(Math.pow(b.x - centerX, 2) + Math.pow(b.y - centerY, 2));
-        return distA - distB;
+      const settings = JSON.parse(rawSettings);
+      if (settings.mode === 'manual' || settings.mode === 'auto') setNumberingMode(settings.mode);
+      if (typeof settings.enabled === 'boolean') setIsNumberingEnabled(settings.enabled);
+      if (settings.pattern === 'linear' || settings.pattern === 's-direction') setNumberingPattern(settings.pattern);
+      if ([
+        'from-top-right-to-left',
+        'from-bottom-right-to-left',
+        'from-top-left-to-right',
+        'from-bottom-left-to-right',
+        'radial',
+      ].includes(settings.direction)) {
+        setNumberingDirection(settings.direction);
       }
-
-      // A. Start Point defines the Origin (Positive or Negative multipliers)
-      // B. Direction defines the Flow (Row-first vs Column-first)
-      
-      // Calculate a "Sort Index" for each table based on clustering and multipliers
-      const getSortValue = (t: {x: number, y: number}) => {
-        let primary: number, secondary: number;
-        let pM: number, sM: number;
-
-        if (numberingDirection === 'left-to-right' || numberingDirection === 'right-to-left') {
-          // Horizontal Flow: Group by Rows (Y), Sort by X
-          primary = t.y; secondary = t.x;
-          sM = (numberingDirection === 'left-to-right') ? 1 : -1;
-          pM = (numberingStartingPoint.includes('bottom') || numberingStartingPoint === 'bottom') ? -1 : 1;
-        } else {
-          // Vertical Flow: Group by Columns (X), Sort by Y
-          primary = t.x; secondary = t.y;
-          sM = (numberingDirection === 'top-to-bottom') ? 1 : -1;
-          pM = (numberingStartingPoint.includes('right') || numberingStartingPoint === 'right') ? -1 : 1;
-        }
-        
-        // Bucket index for the "Scan Order" (Rows/Cols)
-        const bucket = Math.round(primary / clusterSize);
-        
-        // Return a composite score:
-        // Huge weight on bucket (Scan Order) * pM
-        // Regular weight on secondary (Flow) * sM
-        // We use pM on the bucket to determine if we go Row 1 -> Row 2 or Row 10 -> Row 9
-        return (bucket * 1000000 * pM) + (secondary * sM);
-      };
-
-      return getSortValue(a) - getSortValue(b);
-    });
+      if (Number.isFinite(Number(settings.startingNumber))) {
+        setStartingNumber(Math.max(1, Number(settings.startingNumber)));
+      }
+    } catch {
+      // Ignore invalid persisted numbering settings.
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    window.localStorage.setItem(TABLE_NUMBERING_SETTINGS_KEY, JSON.stringify({
+      mode: numberingMode,
+      enabled: isNumberingEnabled,
+      pattern: numberingPattern,
+      direction: numberingDirection,
+      startingNumber,
+    }));
+  }, [numberingMode, isNumberingEnabled, numberingPattern, numberingDirection, startingNumber]);
+
+  // ── AUTO-NUMBERING EFFECT ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isNumberingEnabled || numberingMode !== 'auto') return;
+    if (tableNumberingItems.length === 0) return;
 
     // Only apply if the current numbering differs from the intended one
-    const updates = allTables.map((t, idx) => {
+    const updates = tableNumberingItems.map((t, idx) => {
       const expectedName = String(startingNumber + idx);
       if (t.name !== expectedName) {
         return { id: t.id, type: t.type, updates: { tableName: expectedName } };
@@ -274,19 +432,17 @@ export default function PropertiesSidebar(): React.JSX.Element {
     }
   }, [
     isNumberingEnabled, 
+    numberingMode,
+    numberingPattern,
     numberingDirection, 
-    numberingStartingPoint, 
     startingNumber, 
-    assets.length, 
-    shapes.length,
+    tableNumberingItems,
     batchUpdateItems
   ]);
 
-  const editorStore = useEditorStore();
-
   const handleToggleGrid = () => {
     toggleGrid();
-    editorStore.toggleGrid();
+    toggleEditorGrid();
   };
 
   const handleToggleSnapToGrid = () => {
@@ -307,7 +463,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const handleSetGridSize = (index: number) => {
     setSelectedGridSizeIndex(index);
     const size = availableGridSizes?.[index] || 10;
-    editorStore.setGridSize(size);
+    setEditorGridSize(size);
   };
 
   // Wall drawing state
@@ -510,7 +666,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
       {/* Grouping Controls Removed as per request (moved to Context Menu) */}
 
       {/* Dimension Tool Properties - Show when tool is active */}
-      {editorStore.activeTool === 'dimension' && (
+      {activeTool === 'dimension' && (
         <div className="mb-6 p-4 bg-white rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
             Line Style
@@ -536,9 +692,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
           <div className="mt-3 text-xs text-gray-500 leading-relaxed">
             Choose the visual style of the dimension line.
 
-            {editorStore.dimensionType === 'aligned' && "Measure direct point-to-point distance."}
-            {editorStore.dimensionType === 'angular' && "Measure angle (Center → Start → End)."}
-            {editorStore.dimensionType === 'radial' && "Measure radius (Center → Circle Edge)."}
+            {dimensionType === 'aligned' && "Measure direct point-to-point distance."}
+            {dimensionType === 'angular' && "Measure angle (Center → Start → End)."}
+            {dimensionType === 'radial' && "Measure radius (Center → Circle Edge)."}
           </div>
         </div>
       )}
@@ -999,6 +1155,45 @@ export default function PropertiesSidebar(): React.JSX.Element {
                           />
                         </div>
 
+                        <div className="pt-2 mt-2 border-t border-gray-100 space-y-2">
+                          <div className="text-[10px] uppercase font-bold text-gray-400">Dimension Text Style</div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-500 text-xs">Font</span>
+                            <select
+                              value={(selectedItem as any).dimensionFontFamily || 'Inter, sans-serif'}
+                              onChange={(e) => updateWall(selectedItem.id, { dimensionFontFamily: e.target.value })}
+                              className="text-xs border rounded px-2 py-1 bg-white w-32"
+                            >
+                              {textStyleFonts.map((font) => (
+                                <option key={font} value={font}>{getFontDisplayName(font)}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-500 text-xs">Style</span>
+                            <div className="flex gap-1 bg-white p-0.5 rounded border">
+                              <button
+                                onClick={() => updateWall(selectedItem.id, { dimensionFontWeight: (selectedItem as any).dimensionFontWeight === '700' ? '600' : '700' })}
+                                className={`p-1.5 rounded transition-colors ${(selectedItem as any).dimensionFontWeight === '700' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                              >
+                                <FaBold size={12} />
+                              </button>
+                              <button
+                                onClick={() => updateWall(selectedItem.id, { dimensionFontStyle: (selectedItem as any).dimensionFontStyle === 'italic' ? 'normal' : 'italic' })}
+                                className={`p-1.5 rounded transition-colors ${(selectedItem as any).dimensionFontStyle === 'italic' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                              >
+                                <FaItalic size={12} />
+                              </button>
+                              <button
+                                onClick={() => updateWall(selectedItem.id, { dimensionTextDecoration: (selectedItem as any).dimensionTextDecoration === 'underline' ? 'none' : 'underline' })}
+                                className={`p-1.5 rounded transition-colors ${(selectedItem as any).dimensionTextDecoration === 'underline' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                              >
+                                <FaUnderline size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
                         {/* Gap/Offset */}
                         <div className="flex justify-between items-center mt-2">
                           <span className="text-gray-500 text-xs">Dimension Gap</span>
@@ -1014,6 +1209,60 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             }}
                             className="sidebar-input w-16 text-center"
                           />
+                        </div>
+
+                        <div className="pt-2 mt-2 border-t border-gray-100 space-y-2">
+                          <div className="text-[10px] uppercase font-bold text-gray-400">Dimension Text Style</div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-500 text-xs">Font</span>
+                            <select
+                              value={(selectedItem as any).dimensionFontFamily || 'Inter, sans-serif'}
+                              onChange={(e) => {
+                                if (itemType === 'shape') updateShape(selectedItem.id, { dimensionFontFamily: e.target.value });
+                                if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionFontFamily: e.target.value });
+                              }}
+                              className="text-xs border rounded px-2 py-1 bg-white w-32"
+                            >
+                              {textStyleFonts.map((font) => (
+                                <option key={font} value={font}>{getFontDisplayName(font)}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-500 text-xs">Style</span>
+                            <div className="flex gap-1 bg-white p-0.5 rounded border">
+                              <button
+                                onClick={() => {
+                                  const next = (selectedItem as any).dimensionFontWeight === '700' ? '600' : '700';
+                                  if (itemType === 'shape') updateShape(selectedItem.id, { dimensionFontWeight: next });
+                                  if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionFontWeight: next });
+                                }}
+                                className={`p-1.5 rounded transition-colors ${(selectedItem as any).dimensionFontWeight === '700' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                              >
+                                <FaBold size={12} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const next = (selectedItem as any).dimensionFontStyle === 'italic' ? 'normal' : 'italic';
+                                  if (itemType === 'shape') updateShape(selectedItem.id, { dimensionFontStyle: next });
+                                  if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionFontStyle: next });
+                                }}
+                                className={`p-1.5 rounded transition-colors ${(selectedItem as any).dimensionFontStyle === 'italic' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                              >
+                                <FaItalic size={12} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const next = (selectedItem as any).dimensionTextDecoration === 'underline' ? 'none' : 'underline';
+                                  if (itemType === 'shape') updateShape(selectedItem.id, { dimensionTextDecoration: next });
+                                  if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionTextDecoration: next });
+                                }}
+                                className={`p-1.5 rounded transition-colors ${(selectedItem as any).dimensionTextDecoration === 'underline' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                              >
+                                <FaUnderline size={12} />
+                              </button>
+                            </div>
+                          </div>
                         </div>
 
                         {/* Line Weight */}
@@ -1361,7 +1610,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     </div>
                   </div>
                 )}
-                {/* Table Numbering (Manual Override) */}
+
+                {/* Table Numbering (Manual Override) */}
                 {(itemType === 'shape' || itemType === 'asset') && 
                   (((selectedItem as any).type || "").toLowerCase().includes('table') || 
                     ((selectedItem as any).name || "").toLowerCase().includes('table')) && (
@@ -1863,11 +2113,11 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span className="text-gray-500">Font Size (px)</span>
                       <input
                         type="number"
-                        value={selectedTextAnnotation.fontSize || 200}
+                        value={selectedTextAnnotation.fontSize ?? 250}
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           if (!isNaN(val) && val > 0) {
-                            updateTextAnnotation(selectedTextAnnotation.id, { fontSize: Math.max(8, Math.min(5000, val)) });
+                            updateTextAnnotation(selectedTextAnnotation.id, { fontSize: Math.min(5000, val) });
                           }
                         }}
                         className="sidebar-input w-20 text-center"
@@ -1901,9 +2151,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <button
                         onClick={() => setIsFontDropdownOpen(!isFontDropdownOpen)}
                         className="w-full text-xs border rounded px-2 py-1 bg-white text-left flex justify-between items-center"
-                        style={{ fontFamily: selectedTextAnnotation.fontFamily || 'Arial' }}
+                        style={{ fontFamily: selectedTextAnnotation.fontFamily || 'Inter, sans-serif' }}
                       >
-                        {selectedTextAnnotation.fontFamily || 'Arial'}
+                        {getFontDisplayName(selectedTextAnnotation.fontFamily || 'Inter, sans-serif')}
                         <FaChevronDown size={10} className="text-gray-400" />
                       </button>
 
@@ -1914,11 +2164,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             onClick={() => setIsFontDropdownOpen(false)}
                           />
                           <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded shadow-lg z-20 max-h-48 overflow-y-auto">
-                            {[
-                              "Arial", "Helvetica", "Times New Roman", "Courier New",
-                              "Verdana", "Georgia", "Palatino", "Garamond",
-                              "Comic Sans MS", "Impact"
-                            ].map((font) => (
+                            {textStyleFonts.map((font) => (
                               <div
                                 key={font}
                                 className="px-2 py-1.5 hover:bg-gray-100 cursor-pointer text-xs"
@@ -1928,7 +2174,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                                   setIsFontDropdownOpen(false);
                                 }}
                               >
-                                {font}
+                                {getFontDisplayName(font)}
                               </div>
                             ))}
                           </div>
@@ -2094,6 +2340,19 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       />
                     </div>
 
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Font</span>
+                      <select
+                        value={selectedLabelArrow.fontFamily || 'Inter, sans-serif'}
+                        onChange={(e) => updateLabelArrow(selectedLabelArrow.id, { fontFamily: e.target.value })}
+                        className="text-xs border rounded px-2 py-1 bg-white w-36"
+                      >
+                        {textStyleFonts.map((font) => (
+                          <option key={font} value={font}>{getFontDisplayName(font)}</option>
+                        ))}
+                      </select>
+                    </div>
+
                     {/* Color */}
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-gray-500">Color</span>
@@ -2118,7 +2377,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span className="text-gray-500">Stroke Width</span>
                       <input
                         type="number"
-                        value={selectedLabelArrow.strokeWidth || 2}
+                        value={selectedLabelArrow.strokeWidth || 3}
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           updateLabelArrow(selectedLabelArrow.id, { strokeWidth: Math.max(1, val) });
@@ -2126,6 +2385,56 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         className="sidebar-input w-16 text-center"
                         min={1}
                       />
+                    </div>
+
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Label Position</span>
+                      <select
+                        value={(selectedLabelArrow as any).textPosition || 'bottom'}
+                        onChange={(e) => updateLabelArrow(selectedLabelArrow.id, { textPosition: e.target.value as any })}
+                        className="sidebar-input w-28 text-xs"
+                      >
+                        <option value="bottom">Bottom (Tail)</option>
+                        <option value="middle">Center</option>
+                        <option value="top">Top (Head)</option>
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Arrow Head</label>
+                        <select
+                          value={(selectedLabelArrow as any).arrowHeadType || 'filled-triangle'}
+                          onChange={(e) => updateLabelArrow(selectedLabelArrow.id, { arrowHeadType: e.target.value as any })}
+                          className="sidebar-input w-full text-xs"
+                        >
+                          <option value="filled-triangle">Filled Triangle</option>
+                          <option value="triangle">Triangle</option>
+                          <option value="open">Open</option>
+                          <option value="circle">Circle</option>
+                          <option value="square">Square</option>
+                          <option value="diamond">Diamond</option>
+                          <option value="bar">Bar</option>
+                          <option value="none">None</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Arrow Bottom</label>
+                        <select
+                          value={(selectedLabelArrow as any).arrowTailType || 'none'}
+                          onChange={(e) => updateLabelArrow(selectedLabelArrow.id, { arrowTailType: e.target.value as any })}
+                          className="sidebar-input w-full text-xs"
+                        >
+                          <option value="none">None</option>
+                          <option value="bar">Bar</option>
+                          <option value="circle">Circle</option>
+                          <option value="square">Square</option>
+                          <option value="diamond">Diamond</option>
+                          <option value="triangle">Triangle</option>
+                          <option value="filled-triangle">Filled Triangle</option>
+                          <option value="open">Open</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -2180,6 +2489,45 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         min={6}
                         max={500000}
                       />
+                    </div>
+
+                    <div className="pt-2 mt-2 mb-2 border-t border-gray-100 space-y-2">
+                      <div className="text-[10px] uppercase font-bold text-gray-400">Dimension Text Style</div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500 text-xs">Font</span>
+                        <select
+                          value={(selectedDimension as any).fontFamily || 'Inter, sans-serif'}
+                          onChange={(e) => updateDimension(selectedDimension.id, { fontFamily: e.target.value } as any)}
+                          className="text-xs border rounded px-2 py-1 bg-white w-32"
+                        >
+                          {textStyleFonts.map((font) => (
+                            <option key={font} value={font}>{getFontDisplayName(font)}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500 text-xs">Style</span>
+                        <div className="flex gap-1 bg-white p-0.5 rounded border">
+                          <button
+                            onClick={() => updateDimension(selectedDimension.id, { fontWeight: (selectedDimension as any).fontWeight === '700' ? '600' : '700' } as any)}
+                            className={`p-1.5 rounded transition-colors ${(selectedDimension as any).fontWeight === '700' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                          >
+                            <FaBold size={12} />
+                          </button>
+                          <button
+                            onClick={() => updateDimension(selectedDimension.id, { fontStyle: (selectedDimension as any).fontStyle === 'italic' ? 'normal' : 'italic' } as any)}
+                            className={`p-1.5 rounded transition-colors ${(selectedDimension as any).fontStyle === 'italic' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                          >
+                            <FaItalic size={12} />
+                          </button>
+                          <button
+                            onClick={() => updateDimension(selectedDimension.id, { textDecoration: (selectedDimension as any).textDecoration === 'underline' ? 'none' : 'underline' } as any)}
+                            className={`p-1.5 rounded transition-colors ${(selectedDimension as any).textDecoration === 'underline' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                          >
+                            <FaUnderline size={12} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Color */}
@@ -2811,69 +3159,119 @@ export default function PropertiesSidebar(): React.JSX.Element {
       </div>
 
       {/* Workspace Numbering Section */}
-      {assets.some(a => (a.type || "").toLowerCase().includes('table')) && (
+      {tableNumberingItems.length > 0 && (
         <div className="mx-4 mb-6">
           <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-2">
-            Workspace Numbering
+            Table Numbering
           </div>
 
-          <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200/50">
-            <span className="text-xs font-semibold text-slate-700">Auto-Numbering</span>
-            <button
-              onClick={() => setIsNumberingEnabled(!isNumberingEnabled)}
-              className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isNumberingEnabled ? 'bg-blue-600' : 'bg-slate-300'
-                }`}
-            >
-              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isNumberingEnabled ? 'translate-x-5' : 'translate-x-0'
-                }`} />
-            </button>
+          <div className="mb-4 pb-4 border-b border-slate-200/50 space-y-3">
+            <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
+              {[
+                { id: 'manual', label: 'Manual' },
+                { id: 'auto', label: 'Auto' },
+              ].map((mode) => (
+                <button
+                  key={mode.id}
+                  onClick={() => setNumberingMode(mode.id as TableNumberingMode)}
+                  className={`rounded-md px-2 py-1 text-xs font-semibold transition ${
+                    numberingMode === mode.id
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+
+            {numberingMode === 'auto' && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-700">Auto-Numbering</span>
+                <button
+                  onClick={() => setIsNumberingEnabled(!isNumberingEnabled)}
+                  className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    isNumberingEnabled ? 'bg-blue-600' : 'bg-slate-300'
+                  }`}
+                >
+                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    isNumberingEnabled ? 'translate-x-5' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-600">Start At</span>
-              <input
-                type="number"
-                value={startingNumber}
-                onChange={(e) => setStartingNumber(Math.max(1, parseInt(e.target.value) || 1))}
-                className="sidebar-input w-20 text-center text-xs"
-                min={1}
-              />
-            </div>
+            {numberingMode === 'auto' && (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-600">Start At</span>
+                  <input
+                    type="number"
+                    value={startingNumber}
+                    onChange={(e) => setStartingNumber(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="sidebar-input w-20 text-center text-xs"
+                    min={1}
+                  />
+                </div>
 
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-600">Direction</span>
-              <select
-                value={numberingDirection}
-                onChange={(e) => setNumberingDirection(e.target.value as any)}
-                className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-28 focus:ring-1 focus:ring-blue-500 outline-none"
-              >
-                <option value="left-to-right">Left → Right</option>
-                <option value="right-to-left">Right → Left</option>
-                <option value="top-to-bottom">Top ↓ Bottom</option>
-                <option value="bottom-to-top">Bottom ↑ Top</option>
-                <option value="snake">S Position</option>
-              </select>
-            </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-600">Pattern</span>
+                  <select
+                    value={numberingPattern}
+                    onChange={(e) => setNumberingPattern(e.target.value as any)}
+                    className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-36 focus:ring-1 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="linear">Linear</option>
+                    <option value="s-direction">S Direction</option>
+                  </select>
+                </div>
 
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-600">Start Point</span>
-              <select
-                value={numberingStartingPoint}
-                onChange={(e) => setNumberingStartingPoint(e.target.value as any)}
-                className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-28 focus:ring-1 focus:ring-blue-500 outline-none"
-              >
-                <option value="top-left">Top Left</option>
-                <option value="top-right">Top Right</option>
-                <option value="bottom-left">Bottom Left</option>
-                <option value="bottom-right">Bottom Right</option>
-                <option value="top">Top</option>
-                <option value="bottom">Bottom</option>
-                <option value="left">Left</option>
-                <option value="right">Right</option>
-                <option value="center">Center (Out)</option>
-              </select>
-            </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-600">Direction</span>
+                  <select
+                    value={numberingDirection}
+                    onChange={(e) => setNumberingDirection(e.target.value as any)}
+                    className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-48 focus:ring-1 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="from-top-right-to-left">From Top (Right - Left)</option>
+                    <option value="from-bottom-right-to-left">From Bottom (Right - Left)</option>
+                    <option value="from-top-left-to-right">From Top (Left - Right)</option>
+                    <option value="from-bottom-left-to-right">From Bottom (Left - Right)</option>
+                    <option value="radial">Radial</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {numberingMode === 'manual' && (
+              <div className="pt-3 mt-3 border-t border-slate-200/60 space-y-2">
+                <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                  Manual Table Numbers
+                </div>
+                <div className="max-h-48 overflow-y-auto pr-1 space-y-1">
+                  {tableNumberingItems.map((table, index) => (
+                    <div key={`${table.type}-${table.id}`} className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-slate-500" title={table.label}>
+                        {index + 1}. {table.label}
+                      </span>
+                      <input
+                        type="text"
+                        value={table.name || ''}
+                        onChange={(e) => {
+                          const updates = { tableName: e.target.value };
+                          if (table.type === 'asset') updateAsset(table.id, updates);
+                          else updateShape(table.id, updates);
+                        }}
+                        className="sidebar-input w-16 text-center text-xs"
+                        placeholder="#"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Position commented out per user request
             <div className="flex items-center justify-between">
@@ -2915,6 +3313,70 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     {mode.label}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div className="pt-3 mt-3 border-t border-slate-200/60 space-y-2">
+              <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                Table Numbering Text
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-600">Font</span>
+                <select
+                  value={globalTableNumberingFontFamily}
+                  onChange={(e) => setGlobalTableNumberingTextStyle({ fontFamily: e.target.value }, true)}
+                  className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-36 focus:ring-1 focus:ring-blue-500 outline-none"
+                >
+                  {textStyleFonts.map((font) => (
+                    <option key={font} value={font}>{getFontDisplayName(font)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-600">Size</span>
+                <input
+                  type="number"
+                  value={globalTableNumberingFontSize || 0}
+                  onChange={(e) => setGlobalTableNumberingTextStyle({ fontSize: Math.max(0, Number(e.target.value) || 0) }, true)}
+                  className="sidebar-input w-20 text-center text-xs"
+                  min={0}
+                  placeholder="Auto"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-600">Color</span>
+                <input
+                  type="color"
+                  value={globalTableNumberingColor || '#000000'}
+                  onChange={(e) => setGlobalTableNumberingTextStyle({ color: e.target.value }, true)}
+                  className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-600">Style</span>
+                <div className="flex gap-1 bg-white p-0.5 rounded border">
+                  <button
+                    onClick={() => setGlobalTableNumberingTextStyle({ fontWeight: globalTableNumberingFontWeight === '900' ? '600' : '900' }, true)}
+                    className={`p-1.5 rounded transition-colors ${globalTableNumberingFontWeight === '900' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                    title="Bold"
+                  >
+                    <FaBold size={12} />
+                  </button>
+                  <button
+                    onClick={() => setGlobalTableNumberingTextStyle({ fontStyle: globalTableNumberingFontStyle === 'italic' ? 'normal' : 'italic' }, true)}
+                    className={`p-1.5 rounded transition-colors ${globalTableNumberingFontStyle === 'italic' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                    title="Italic"
+                  >
+                    <FaItalic size={12} />
+                  </button>
+                  <button
+                    onClick={() => setGlobalTableNumberingTextStyle({ textDecoration: globalTableNumberingTextDecoration === 'underline' ? 'none' : 'underline' }, true)}
+                    className={`p-1.5 rounded transition-colors ${globalTableNumberingTextDecoration === 'underline' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                    title="Underline"
+                  >
+                    <FaUnderline size={12} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>

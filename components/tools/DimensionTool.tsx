@@ -1,22 +1,39 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { useSceneStore } from '@/store/sceneStore';
 import { useProjectStore, Dimension } from '@/store/projectStore';
 import { DimensionRenderer } from '../renderers/DimensionRenderer';
 import { findSnapPointInShapes } from '@/utils/snapToDrawing';
+import { ASSET_LIBRARY } from '@/lib/assets';
 
 interface DimensionToolProps {
     isActive: boolean;
 }
 
+const marqueeAssetTypes = new Set(
+    ASSET_LIBRARY
+        .filter((asset) => asset.category === 'Marquee')
+        .map((asset) => asset.id)
+);
+
 export default function DimensionTool({ isActive }: DimensionToolProps) {
     const { canvasOffset, zoom, panX, panY, dimensionType } = useEditorStore();
     const { snapToGridEnabled, gridSize } = useSceneStore();
-    const { addDimension, getNextZIndex } = useProjectStore();
+    const addDimension = useProjectStore(s => s.addDimension);
+    const getNextZIndex = useProjectStore(s => s.getNextZIndex);
+    const shapes = useProjectStore(s => s.shapes);
+    const walls = useProjectStore(s => s.walls);
+    const assets = useProjectStore(s => s.assets);
+    const marqueeAssets = useMemo(
+        () => assets.filter(asset => marqueeAssetTypes.has(asset.type)),
+        [assets]
+    );
 
     const [step, setStep] = useState<0 | 1 | 2>(0);
     const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
     const [endPoint, setEndPoint] = useState<{ x: number; y: number } | null>(null);
+    const [startTargetId, setStartTargetId] = useState<string | null>(null);
+    const [endTargetId, setEndTargetId] = useState<string | null>(null);
     const [centerPoint, setCenterPoint] = useState<{ x: number; y: number } | null>(null);
     const [currentMousePos, setCurrentMousePos] = useState<{ x: number; y: number } | null>(null);
 
@@ -26,6 +43,8 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
             setStep(0);
             setStartPoint(null);
             setEndPoint(null);
+            setStartTargetId(null);
+            setEndTargetId(null);
             setCenterPoint(null);
             setCurrentMousePos(null);
         }
@@ -41,26 +60,29 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
         };
     }, [canvasOffset, zoom, panX, panY]);
 
-    const getSnappedPos = useCallback((pos: { x: number; y: number }) => {
+    const getSnapInfo = useCallback((pos: { x: number; y: number }) => {
         // 1. Smart Snapping (Objects)
         const { snapToObjects } = useEditorStore.getState();
         if (snapToObjects) {
-            const { shapes, walls, assets } = useProjectStore.getState();
-            const allElements = [...shapes, ...walls, ...assets];
-            // Use findSnapPointInShapes
+            const allElements = [...shapes, ...walls, ...marqueeAssets];
             const snapResult = findSnapPointInShapes(pos, allElements, 20 / zoom);
             if (snapResult) {
-                return { x: snapResult.x, y: snapResult.y };
+                return { point: { x: snapResult.x, y: snapResult.y }, elementId: snapResult.elementId };
             }
         }
 
         // 2. Grid Snapping
-        if (!snapToGridEnabled) return pos;
+        if (!snapToGridEnabled) return { point: pos, elementId: null };
         return {
-            x: Math.round(pos.x / gridSize) * gridSize,
-            y: Math.round(pos.y / gridSize) * gridSize,
+            point: {
+                x: Math.round(pos.x / gridSize) * gridSize,
+                y: Math.round(pos.y / gridSize) * gridSize,
+            },
+            elementId: null,
         };
-    }, [snapToGridEnabled, gridSize, zoom]);
+    }, [snapToGridEnabled, gridSize, zoom, shapes, walls, marqueeAssets]);
+
+    const getSnappedPos = useCallback((pos: { x: number; y: number }) => getSnapInfo(pos).point, [getSnapInfo]);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!isActive) return;
@@ -79,16 +101,19 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
         }
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
-        const snapped = getSnappedPos(worldPos);
+        const snapInfo = getSnapInfo(worldPos);
+        const snapped = snapInfo.point;
 
         const mode = dimensionType;
 
         if (mode === 'linear') {
             if (step === 0) {
                 setStartPoint(snapped);
+                setStartTargetId(snapInfo.elementId);
                 setStep(1);
             } else if (step === 1) {
                 setEndPoint(snapped);
+                setEndTargetId(snapInfo.elementId);
                 setStep(2);
             } else if (step === 2) {
                 // Finalize Linear
@@ -111,17 +136,21 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
                             type: 'linear',
                             startPoint,
                             endPoint,
+                            targetIds: Array.from(new Set([startTargetId, endTargetId].filter((id): id is string => Boolean(id)))),
                             offset,
                             zIndex: getNextZIndex(),
                             strokeWidth: 1.5,
                             color: '#000000',
                             fontSize: 18,
+                            fontFamily: 'Inter, sans-serif',
                         });
                     }
                 }
                 setStep(0);
                 setStartPoint(null);
                 setEndPoint(null);
+                setStartTargetId(null);
+                setEndTargetId(null);
                 setCurrentMousePos(null);
                 useEditorStore.getState().setActiveTool('select');
             }
@@ -151,6 +180,7 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
                         strokeWidth: 1.5,
                         color: '#000000',
                         fontSize: 18,
+                        fontFamily: 'Inter, sans-serif',
                     });
                 }
                 setStep(0);
@@ -182,6 +212,7 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
                         strokeWidth: 1.5,
                         color: '#000000',
                         fontSize: 18,
+                        fontFamily: 'Inter, sans-serif',
                     });
                 }
                 setStep(0);
@@ -193,7 +224,7 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
             }
         }
 
-    }, [isActive, step, dimensionType, screenToWorld, getSnappedPos, startPoint, endPoint, centerPoint, addDimension, getNextZIndex]);
+    }, [isActive, step, dimensionType, screenToWorld, getSnapInfo, startPoint, endPoint, centerPoint, startTargetId, endTargetId, addDimension, getNextZIndex]);
 
     // Attach listeners
     useEffect(() => {

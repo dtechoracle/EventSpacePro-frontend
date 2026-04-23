@@ -1,8 +1,9 @@
 import { useSceneStore } from '@/store/sceneStore';
 import { calculateSmartSnap, Bounds } from '@/utils/smartSnapping';
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { useProjectStore, Shape, Wall, Asset, Dimension, TextAnnotation, LabelArrow } from '@/store/projectStore';
+import { SpatialIndex, getRotatedItemBounds } from '@/utils/spatialIndex';
 
 interface SelectionToolProps {
     isActive: boolean;
@@ -10,11 +11,23 @@ interface SelectionToolProps {
 }
 
 export default function SelectionTool({ isActive, viewportSize }: SelectionToolProps) {
-    const { selectedIds, screenToWorld, zoom, panX, panY, activeTool } = useEditorStore();
-    const { snapToGridEnabled, gridSize } = useSceneStore();
-    const { shapes, walls, assets, dimensions, textAnnotations, labelArrows, updateShape, updateWall, updateAsset, updateDimension, updateTextAnnotation, updateLabelArrow } = useProjectStore();
+    const selectedIds = useEditorStore(s => s.selectedIds);
+    const screenToWorld = useEditorStore(s => s.screenToWorld);
+    const zoom = useEditorStore(s => s.zoom);
+    const panX = useEditorStore(s => s.panX);
+    const panY = useEditorStore(s => s.panY);
+    const activeTool = useEditorStore(s => s.activeTool);
+    const snapToGridEnabled = useSceneStore(s => s.snapToGridEnabled);
+    const gridSize = useSceneStore(s => s.gridSize);
+    const shapes = useProjectStore(s => s.shapes);
+    const walls = useProjectStore(s => s.walls);
+    const assets = useProjectStore(s => s.assets);
+    const dimensions = useProjectStore(s => s.dimensions);
+    const textAnnotations = useProjectStore(s => s.textAnnotations);
+    const labelArrows = useProjectStore(s => s.labelArrows);
 
     const [dragHandle, setDragHandle] = useState<string | null>(null);
+    const lastMoveFrameRef = useRef(0);
     const [initialState, setInitialState] = useState<{
         items: Array<{
             type: 'shape' | 'wall' | 'asset' | 'dimension' | 'textAnnotation' | 'labelArrow';
@@ -29,26 +42,53 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
 
 
     // Populate selectedItems for logic below
-    const selectedItems: Array<{ type: 'shape' | 'wall' | 'asset' | 'dimension' | 'textAnnotation' | 'labelArrow'; object: Shape | Wall | Asset | Dimension | TextAnnotation | LabelArrow }> = [];
-    selectedIds.forEach(id => {
-        const shape = shapes.find(s => s.id === id);
-        if (shape) { selectedItems.push({ type: 'shape', object: shape }); return; }
-        const asset = assets.find(a => a.id === id);
-        if (asset) { selectedItems.push({ type: 'asset', object: asset }); return; }
-        const wall = walls.find(w => w.id === id);
-        if (wall) { selectedItems.push({ type: 'wall', object: wall }); return; }
-        const dim = dimensions.find(d => d.id === id);
-        if (dim) { selectedItems.push({ type: 'dimension', object: dim }); return; }
-        const ta = textAnnotations.find(t => t.id === id);
-        if (ta) { selectedItems.push({ type: 'textAnnotation', object: ta }); return; }
-        const la = labelArrows.find(l => l.id === id);
-        if (la) { selectedItems.push({ type: 'labelArrow', object: la }); return; }
-    });
+    const selectedItems = useMemo((): Array<{ type: 'shape' | 'wall' | 'asset' | 'dimension' | 'textAnnotation' | 'labelArrow'; object: Shape | Wall | Asset | Dimension | TextAnnotation | LabelArrow }> => {
+        const shapeMap = new Map(shapes.map(item => [item.id, item]));
+        const assetMap = new Map(assets.map(item => [item.id, item]));
+        const wallMap = new Map(walls.map(item => [item.id, item]));
+        const dimensionMap = new Map(dimensions.map(item => [item.id, item]));
+        const textMap = new Map(textAnnotations.map(item => [item.id, item]));
+        const labelMap = new Map(labelArrows.map(item => [item.id, item]));
+
+        const nextItems: Array<{ type: 'shape' | 'wall' | 'asset' | 'dimension' | 'textAnnotation' | 'labelArrow'; object: Shape | Wall | Asset | Dimension | TextAnnotation | LabelArrow }> = [];
+
+        selectedIds.forEach(id => {
+            const shape = shapeMap.get(id);
+            if (shape) { nextItems.push({ type: 'shape', object: shape }); return; }
+            const asset = assetMap.get(id);
+            if (asset) { nextItems.push({ type: 'asset', object: asset }); return; }
+            const wall = wallMap.get(id);
+            if (wall) { nextItems.push({ type: 'wall', object: wall }); return; }
+            const dim = dimensionMap.get(id);
+            if (dim) { nextItems.push({ type: 'dimension', object: dim }); return; }
+            const ta = textMap.get(id);
+            if (ta) { nextItems.push({ type: 'textAnnotation', object: ta }); return; }
+            const la = labelMap.get(id);
+            if (la) nextItems.push({ type: 'labelArrow', object: la });
+        });
+
+        return nextItems;
+    }, [selectedIds, shapes, assets, walls, dimensions, textAnnotations, labelArrows]);
+
+    const assetSpatialIndex = useMemo(
+        () => new SpatialIndex(
+            assets
+                .filter(asset => !asset.isExploded)
+                .map(asset => ({
+                    id: asset.id,
+                    item: asset,
+                    bounds: getRotatedItemBounds(asset),
+                    zIndex: asset.zIndex || 0,
+                }))
+        ),
+        [assets]
+    );
 
     // Calculate group bounding box
-    let groupBounds = { x: 0, y: 0, width: 0, height: 0, rotation: 0 };
-    
-    if (selectedIds.length > 0) {
+    const groupBounds = useMemo(() => {
+        let nextGroupBounds = { x: 0, y: 0, width: 0, height: 0, rotation: 0 };
+
+        if (selectedIds.length === 0) return nextGroupBounds;
 
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         let singleRotation = 0;
@@ -104,7 +144,7 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                 addPoint(dim.endPoint.x, dim.endPoint.y);
             } else if (item.type === 'textAnnotation') {
                 const ta = item.object as TextAnnotation;
-                const fs = ta.fontSize || 14;
+                const fs = ta.fontSize || 250;
                 const lineHeight = ta.lineHeight || 1.2;
                 const lines = (ta.text || '').split('\n');
                 const maxChars = Math.max(...lines.map(l => l.length), 1);
@@ -134,31 +174,36 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                 const item = selectedItems[0].object as any;
                 const type = selectedItems[0].type;
                 if (type === 'asset') {
-                    groupBounds = { x: item.x || 0, y: item.y || 0, width: (item.width || 0) * (item.scale || 1), height: (item.height || 0) * (item.scale || 1), rotation: item.rotation || 0 };
+                    nextGroupBounds = { x: item.x || 0, y: item.y || 0, width: (item.width || 0) * (item.scale || 1), height: (item.height || 0) * (item.scale || 1), rotation: item.rotation || 0 };
                 } else if (type === 'shape') {
-                    groupBounds = { x: item.x || 0, y: item.y || 0, width: item.width || 0, height: item.height || 0, rotation: item.rotation || 0 };
+                    nextGroupBounds = { x: item.x || 0, y: item.y || 0, width: item.width || 0, height: item.height || 0, rotation: item.rotation || 0 };
                 } else if (type === 'textAnnotation') {
-                    const fs = item.fontSize || 14;
+                    const fs = item.fontSize || 250;
                     const lineHeight = item.lineHeight || 1.2;
                     const lines = (item.text || '').split('\n');
                     const maxChars = Math.max(...lines.map((l: string) => l.length), 1);
                     const width = maxChars * fs * 0.6;
                     const height = lines.length * fs * lineHeight;
-                    groupBounds = { x: item.x || 0, y: item.y || 0, width, height, rotation: item.rotation || 0 };
+                    nextGroupBounds = { x: item.x || 0, y: item.y || 0, width, height, rotation: item.rotation || 0 };
                 } else {
-                    groupBounds = { x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY, rotation: isFinite(singleRotation) ? singleRotation : 0 };
+                    nextGroupBounds = { x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY, rotation: isFinite(singleRotation) ? singleRotation : 0 };
                 }
             } else {
-                groupBounds = { x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY, rotation: 0 };
+                nextGroupBounds = { x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY, rotation: 0 };
             }
         }
-    }
+        return nextGroupBounds;
+    }, [selectedIds.length, selectedItems]);
 
     const handleMouseDown = useCallback((e: React.MouseEvent, handle: string) => {
         if (selectedIds.length === 0) return;
         e.stopPropagation();
         const worldPos = screenToWorld(e.clientX, e.clientY);
         useProjectStore.getState().saveToHistory();
+        if (selectedIds.length > 3) {
+            useSceneStore.getState().setSnapGuides([]);
+        }
+        lastMoveFrameRef.current = 0;
         setDragHandle(handle);
         setInitialState({
             items: selectedItems.map(it => ({ id: (it.object as any).id, type: it.type, object: JSON.parse(JSON.stringify(it.object)) })),
@@ -173,6 +218,10 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!dragHandle || !initialState) return;
 
+        const now = performance.now();
+        if (now - lastMoveFrameRef.current < 16) return;
+        lastMoveFrameRef.current = now;
+
         const worldPos = screenToWorld(e.clientX, e.clientY);
         const dx = worldPos.x - initialState.startX;
         const dy = worldPos.y - initialState.startY;
@@ -186,7 +235,8 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
             let finalDx = dx;
             let finalDy = dy;
 
-            if (snapToObjects) {
+            const shouldUseObjectSnap = snapToObjects && selectedIds.length <= 3;
+            if (shouldUseObjectSnap) {
                 const currentBounds: Bounds = {
                     x: initialState.groupBounds.x + dx,
                     y: initialState.groupBounds.y + dy,
@@ -195,25 +245,36 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                     rotation: initialState.groupBounds.rotation
                 };
                 const store = useProjectStore.getState();
+                const selectedIdSet = new Set(selectedIds);
+                const snapSearchPadding = Math.max(currentBounds.width, currentBounds.height, 300 / zoom, 120);
+                const nearbyAssets = assetSpatialIndex
+                    .query({
+                        left: currentBounds.x - currentBounds.width / 2 - snapSearchPadding,
+                        top: currentBounds.y - currentBounds.height / 2 - snapSearchPadding,
+                        right: currentBounds.x + currentBounds.width / 2 + snapSearchPadding,
+                        bottom: currentBounds.y + currentBounds.height / 2 + snapSearchPadding,
+                    })
+                    .map(entry => entry.item)
+                    .filter(asset => !selectedIdSet.has(asset.id));
                 const others = [
-                    ...store.shapes.filter(s => !selectedIds.includes(s.id)).map(s => {
+                    ...store.shapes.filter(s => !selectedIdSet.has(s.id)).map(s => {
                         const rad = ((s.rotation || 0) * Math.PI) / 180;
                         const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
                         return { ...s, width: s.width * cos + s.height * sin, height: s.width * sin + s.height * cos, type: 'shape' };
                     }),
-                    ...store.assets.filter(a => !selectedIds.includes(a.id)).map(a => {
+                    ...nearbyAssets.map(a => {
                         const rad = ((a.rotation || 0) * Math.PI) / 180;
                         const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
                         const w = a.width * (a.scale || 1), h = a.height * (a.scale || 1);
                         return { ...a, width: w * cos + h * sin, height: w * sin + h * cos, type: 'asset' };
                     }),
-                    ...store.walls.filter(w => !selectedIds.includes(w.id)).map(w => {
+                    ...store.walls.filter(w => !selectedIdSet.has(w.id)).map(w => {
                         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
                         w.nodes.forEach(n => { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); });
                         return { id: w.id, x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY, type: 'wall' };
                     }),
-                    ...store.textAnnotations.filter(t => !selectedIds.includes(t.id)).map(t => {
-                        const fs = t.fontSize || 14;
+                    ...store.textAnnotations.filter(t => !selectedIdSet.has(t.id)).map(t => {
+                        const fs = t.fontSize || 250;
                         const lines = (t.text || '').split('\n');
                         const maxChars = Math.max(...lines.map(l => l.length), 1);
                         const w = maxChars * fs * 0.6;
@@ -395,15 +456,16 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                 if (dragHandle.includes('e')) nMaxX += finalDx;
                 const sX = (nMaxX - nMinX) / iW, sY = (nMaxY - nMinY) / iH;
                 const newNodes = initialWall.nodes.map(n => ({ ...n, x: nMinX + (n.x - minX) * sX, y: nMinY + (n.y - minY) * sY }));
-                store.updateWall(item.id, { nodes: newNodes }, true);
+            store.updateWall(item.id, { nodes: newNodes }, true);
             }
         });
-    }, [dragHandle, initialState, screenToWorld, selectedIds, zoom]);
+    }, [dragHandle, initialState, screenToWorld, selectedIds, zoom, assetSpatialIndex]);
 
     const handleMouseUp = useCallback(() => {
         setDragHandle(null);
         setInitialState(null);
         setCurrentRotation(0);
+        lastMoveFrameRef.current = 0;
 
         useSceneStore.getState().setSnapGuides([]);
     }, []);
@@ -451,6 +513,7 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
     const isTooLarge = width > 50000 || height > 50000;
     const overlayFill = isTooLarge ? "none" : "rgba(59, 130, 246, 0.05)";
     const overlayDash = isTooLarge ? "2 2" : "none";
+    const allowOverlayMove = selectedItems.length < 12;
 
     const isSingleStraightLine = selectedItems.length === 1 && selectedItems[0].type === 'shape' && (((selectedItems[0].object as Shape).type === 'line' || (selectedItems[0].object as Shape).type === 'arrow') && !(selectedItems[0].object as Shape).points);
     const isSingleDimension = selectedItems.length === 1 && selectedItems[0].type === 'dimension';
@@ -538,8 +601,8 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                 strokeWidth={isTooLarge ? 1 : 2} 
                 strokeDasharray={overlayDash}
                 vectorEffect="non-scaling-stroke" 
-                onMouseDown={(e) => handleMouseDown(e, 'move')} 
-                style={{ cursor: 'move' }}
+                onMouseDown={allowOverlayMove ? (e) => handleMouseDown(e, 'move') : undefined} 
+                style={{ cursor: allowOverlayMove ? 'move' : 'default', pointerEvents: allowOverlayMove ? 'auto' : 'none' }}
             />
             
             {['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w'].map(h => {
