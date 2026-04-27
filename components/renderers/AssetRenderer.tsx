@@ -11,6 +11,7 @@ import { getRasterAssetPath } from '@/utils/assetRasterPath';
 const svgCache: Record<string, string> = {};
 const pendingSvgCache: Record<string, Promise<string>> = {};
 const processedSvgCache: Record<string, string> = {};
+
 // Helper to extract dimensions from SVG string
 function getSvgSize(svgText: string) {
     const widthMatch = svgText.match(/width=["']([\d.]+)[a-z%]*["']/i);
@@ -46,7 +47,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const [rawSvgContent, setRawSvgContent] = useState<string | null>(null);
     const [rasterImageFailed, setRasterImageFailed] = useState(false);
     const updateAsset = useSceneStore(s => s.updateAsset);
-    
+
     // Global numbering settings from store
     const globalPos = useProjectStore(s => s.globalTableNumberingPosition);
     const globalOrientation = useProjectStore(s => s.globalTableNumberingOrientation);
@@ -66,7 +67,10 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const showHighlight = isSelected || isHovered;
     const highlightColor = isSelected ? '#3b82f6' : '#60a5fa';
     const defaultStrokeWidth = isPreview ? 0.4 : DEFAULT_ASSET_STROKE_WIDTH;
-    const canUseFastImage = !!assetPath && !asset.isExploded && canRenderAssetAsImage(asset, isPreview);
+    const disableFastImageForAsset =
+        !!definition?.path &&
+        definition.path.toLowerCase().includes('10 seater round table 02.svg');
+    const canUseFastImage = !!assetPath && !asset.isExploded && !disableFastImageForAsset && canRenderAssetAsImage(asset, isPreview);
     const fastImageHref = canUseFastImage && rasterAssetPath && !rasterImageFailed ? rasterAssetPath : assetPath;
 
     useEffect(() => {
@@ -102,6 +106,16 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             const { width: svgWidth, height: svgHeight } = getSvgSize(text);
 
             if (svgWidth && svgHeight) {
+                const currentW = asset.width;
+                const currentH = asset.height;
+                const hasLegacyTwentySeaterSize =
+                    asset.type === '20-seater-doughtnut-table' &&
+                    currentW !== undefined &&
+                    currentH !== undefined &&
+                    (
+                        (Math.abs(currentW - 23978) < 1 && Math.abs(currentH - 33854) < 1) ||
+                        (Math.abs(currentW - 4600) < 1 && Math.abs(currentH - 4600) < 1)
+                    );
                 const needsUpdate = !currentW || !currentH || hasLegacyTwentySeaterSize;
 
                 if (needsUpdate) {
@@ -142,7 +156,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         if (canUseFastImage) return null;
         if (!rawSvgContent || typeof window === 'undefined' || !definition?.path) return null;
 
-        const cacheKey = `${definition.path}_workspace`;
+        const cacheKey = `${definition.path}_workspace_v29_group_fill_fix`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
@@ -151,18 +165,42 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             const svg = doc.querySelector("svg");
             if (!svg) return rawSvgContent;
 
+            // IMPORTANT:
+            // Some QCAD SVGs put fill="none" on a parent <g>.
+            // If we only set fill on the outer <svg>, that inner group blocks the fill,
+            // so circles / auto-fill paths still render as unfilled.
+            // Remove inherited fill/stroke blockers from containers only.
+            doc.querySelectorAll("svg, g").forEach(container => {
+                container.removeAttribute("fill");
+                container.removeAttribute("stroke");
+                container.removeAttribute("stroke-width");
+
+                const styleAttr = container.getAttribute("style");
+                if (styleAttr) {
+                    const cleaned = styleAttr
+                        .replace(/fill\s*:[^;]+;?/gi, "")
+                        .replace(/stroke\s*:[^;]+;?/gi, "")
+                        .replace(/stroke-width\s*:[^;]+;?/gi, "");
+
+                    if (cleaned.trim()) container.setAttribute("style", cleaned);
+                    else container.removeAttribute("style");
+                }
+            });
+
+            const hasExplicitAutoFill = !!doc.querySelector('[id="auto-fill"], .auto-fill, [data-auto-fill="true"]');
+
             const styleId = "dynamic-asset-style";
             if (!doc.getElementById(styleId)) {
                 const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
                 styleEl.setAttribute("id", styleId);
-                styleEl.textContent = `* { vector-effect: non-scaling-stroke !important; } .fill-none-el { fill: none !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } .stroke-top-layer { pointer-events: none; }`;
+                styleEl.textContent = `* { vector-effect: non-scaling-stroke !important; } .fill-none-el { fill: none !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } .auto-fill-el { fill: inherit !important; stroke: none !important; } .stroke-top-layer { pointer-events: none; }`;
                 svg.prepend(styleEl);
             }
 
             const children = Array.from(doc.querySelectorAll('path, circle, rect, line, polyline, ellipse'));
             const circles = Array.from(doc.querySelectorAll('circle'));
             const innerCircles = new Set();
-            
+
             if (circles.length > 1) {
                 const sorted = [...circles].sort((a, b) => parseFloat(a.getAttribute("r") || "0") - parseFloat(b.getAttribute("r") || "0"));
                 for (let i = 0; i < sorted.length - 1; i++) {
@@ -175,19 +213,19 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 const dAttr = el.getAttribute("d") || "";
                 const fillAttr = el.getAttribute("fill");
                 const styleAttr = el.getAttribute("style");
-                
+
                 const wasExplicitlyNone = fillAttr === 'none' || (styleAttr && /fill\s*:\s*none/i.test(styleAttr));
                 const isLineElement = tag === 'line' || tag === 'polyline';
                 const hasFillRule = el.hasAttribute("fill-rule") || (styleAttr && /fill-rule/i.test(styleAttr));
-                
+
                 const dClean = dAttr.trim();
                 const isZClosed = dClean.toLowerCase().includes('z');
-                
+
                 let isCoordClosed = false;
                 if (!isZClosed && dClean.startsWith('M')) {
                     const firstMatch = dClean.match(/^M\s*(-?[\d.]+)\s*[, \s]\s*(-?[\d.]+)/i);
                     const lastMatch = dClean.match(/(-?[\d.]+)\s*[, \s]\s*(-?[\d.]+)\s*$/);
-                    
+
                     if (firstMatch && lastMatch) {
                         const startX = parseFloat(firstMatch[1]);
                         const startY = parseFloat(firstMatch[2]);
@@ -199,8 +237,11 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
 
                 const isClosed = isZClosed || isCoordClosed;
                 const isOpenPath = tag === 'path' && !isClosed;
-                const isAutoFill = el.getAttribute("id") === "auto-fill";
-                
+                const isAutoFill =
+                    el.getAttribute("id") === "auto-fill" ||
+                    el.classList.contains("auto-fill") ||
+                    el.getAttribute("data-auto-fill") === "true";
+
                 // On workspace, we determine if it's furniture by checking the path/type
                 // But for simplicity, we treat workspace assets with categories from the library
                 const category = (definition as any).category || "";
@@ -215,22 +256,28 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                     if (cleaned.trim()) el.setAttribute("style", cleaned);
                     else el.removeAttribute("style");
                 }
-                
+
                 el.removeAttribute("fill");
                 el.removeAttribute("stroke");
                 el.removeAttribute("stroke-width");
 
-                let shouldBeNone = wasExplicitlyNone || isLineElement;
-                
+                let shouldBeNone = wasExplicitlyNone || isLineElement || isOpenPath;
+
+                if (hasExplicitAutoFill && tag === 'path' && !isAutoFill) {
+                    shouldBeNone = true;
+                }
+
                 if (!isFurniture) {
                     const isConsentricOuter = tag === 'circle' && circles.length > 1 && !innerCircles.has(el);
-                    if (isOpenPath || isConsentricOuter) {
+                    if (isConsentricOuter) {
                         shouldBeNone = true;
                     }
                 }
 
                 if (shouldBeNone && !hasFillRule && !isAutoFill) {
                     el.classList.add("fill-none-el");
+                } else if (isAutoFill) {
+                    el.classList.add("auto-fill-el");
                 } else {
                     el.classList.add("fill-inherit-el");
                 }
@@ -239,7 +286,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             // ── Z-ORDER FIX ─────────────────────────────────────────────────────────
             // Move details to top layer
             const rootGroup = svg.querySelector('g');
-            if (rootGroup) {
+            if (rootGroup && !hasExplicitAutoFill) {
                 const strokeOnlyEls = Array.from(rootGroup.querySelectorAll('.fill-none-el'));
                 if (strokeOnlyEls.length > 0) {
                     const topLayer = doc.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -328,7 +375,9 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                         stroke={highlightColor}
                         strokeWidth={2}
                         rx={8}
-                        style={{ pointerEvents: 'none' }}
+                        style={{
+                            filter: `drop-shadow(0 0 6px ${highlightColor}) drop-shadow(0 0 2px ${highlightColor})`
+                        }}
                     />
                 )
             ) : (

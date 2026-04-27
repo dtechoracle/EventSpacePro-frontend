@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
+    "assets:repair-gaps": "node scripts/repair-asset-fill-gaps.js",
     "assets:webp": "node scripts/generate-asset-webp.js",
     "start": "next start",
     "lint": "next lint"

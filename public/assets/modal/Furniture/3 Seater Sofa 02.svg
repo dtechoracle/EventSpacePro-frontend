@@ -26,6 +26,18 @@
         Z
     " style="stroke-width:6;"/>
 
+    <path id="auto-fill" fill="inherit" stroke="none" d="
+        M 195,633
+        Q 195,688 223,727
+        Q 251,766 291,785
+        L 1709,785
+        Q 1749,766 1777,727
+        Q 1805,688 1805,633
+        L 1709,633
+        L 291,633
+        Z
+    "/>
+
     <!-- Back inner edge -->
     <path fill="none" d="
         M 150,187
