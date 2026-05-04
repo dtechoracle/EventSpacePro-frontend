@@ -16,6 +16,34 @@ export function getLineIntersection(p1: Point, p2: Point, p3: Point, p4: Point):
     };
 }
 
+function getLineIntersectionWithParams(
+    p1: Point,
+    p2: Point,
+    p3: Point,
+    p4: Point
+): { point: Point; t1: number; t2: number } | null {
+    const dx1 = p2.x - p1.x;
+    const dy1 = p2.y - p1.y;
+    const dx2 = p4.x - p3.x;
+    const dy2 = p4.y - p3.y;
+    const det = dx1 * dy2 - dx2 * dy1;
+    if (Math.abs(det) < 0.000001) return null;
+
+    const cx = p3.x - p1.x;
+    const cy = p3.y - p1.y;
+    const t1 = (cx * dy2 - cy * dx2) / det;
+    const t2 = (cx * dy1 - cy * dx1) / det;
+
+    return {
+        point: {
+            x: p1.x + t1 * dx1,
+            y: p1.y + t1 * dy1,
+        },
+        t1,
+        t2,
+    };
+}
+
 /**
  * Sorts edges connected to a node by angle.
  * Returns an array of edges sorted counter-clockwise.
@@ -45,6 +73,10 @@ export function getPerpendicularVector(p1: Point, p2: Point, length: number = 1)
     };
 }
 
+function distanceBetween(a: Point, b: Point): number {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
 /**
  * Calculates the corners of a polygon formed by joining multiple wall segments at a node.
  * Returns a map of edge ID to the two corner points at this node (left and right relative to the edge looking away from node).
@@ -59,6 +91,7 @@ export function calculateNodeJunctions(
 
     const sortedEdges = sortEdgesByAngle(centerNode, edges);
     const results: Record<string, { left: Point; right: Point }> = {};
+    const sideSet: Record<string, { left: boolean; right: boolean }> = {};
 
     // Single edge - endpoint with perpendicular cap
     if (sortedEdges.length === 1) {
@@ -68,11 +101,13 @@ export function calculateNodeJunctions(
             left: { x: centerNode.x + perp.x, y: centerNode.y + perp.y },
             right: { x: centerNode.x - perp.x, y: centerNode.y - perp.y },
         };
+        sideSet[edge.id] = { left: true, right: true };
         return results;
     }
 
-    // For 2+ edges, calculate junctions between adjacent edges
-    // Process all adjacent pairs, including wrapping around for 2 edges to close the miter
+    // For 2+ edges, calculate junctions between adjacent edges.
+    // When a miter would land too far away or behind the wall rays, fall back
+    // to a bevel-style join instead of clamping a bad spike into place.
     const numPairs = sortedEdges.length;
 
     for (let i = 0; i < numPairs; i++) {
@@ -97,39 +132,53 @@ export function calculateNodeJunctions(
         const p1_next = { x: centerNode.x + offset2.x, y: centerNode.y + offset2.y };
         const p2_next = { x: next.otherNode.x + offset2.x, y: next.otherNode.y + offset2.y };
 
-        // Find intersection of offset lines
-        let intersection = getLineIntersection(p1_curr, p2_curr, p1_next, p2_next);
+        // Find intersection of offset rays. If the infinite-line intersection lands
+        // "behind" either wall ray, use a small bevel midpoint instead of creating a spike.
+        const rawIntersection = getLineIntersectionWithParams(p1_curr, p2_curr, p1_next, p2_next);
 
-        if (!intersection) {
-            intersection = p1_curr;
+        let currentRightPoint: Point;
+        let nextLeftPoint: Point;
+
+        if (!rawIntersection) {
+            currentRightPoint = p1_curr;
+            nextLeftPoint = p1_next;
         } else {
-            // Clamp extreme intersections
-            const maxDist = Math.max(current.thickness, next.thickness) * 3;
-            const dist = Math.sqrt(
-                (intersection.x - centerNode.x) ** 2 + (intersection.y - centerNode.y) ** 2
-            );
-            if (dist > maxDist) {
-                const angle = Math.atan2(intersection.y - centerNode.y, intersection.x - centerNode.x);
-                intersection = {
-                    x: centerNode.x + Math.cos(angle) * maxDist,
-                    y: centerNode.y + Math.sin(angle) * maxDist,
-                };
+            const intersectionPoint = rawIntersection.point;
+            const miterLimit = Math.max(current.thickness, next.thickness) * 1.6;
+            const miterDistance = distanceBetween(centerNode, intersectionPoint);
+
+            // Overly long miters are what produce the visible spikes/caps at
+            // corner joins. Fall back to each wall's own offset point so the
+            // wall width stays stable and the union forms a bevel naturally.
+            if (!Number.isFinite(miterDistance) || miterDistance > miterLimit) {
+                currentRightPoint = p1_curr;
+                nextLeftPoint = p1_next;
+            } else {
+                currentRightPoint = intersectionPoint;
+                nextLeftPoint = intersectionPoint;
             }
         }
 
         // Initialize if needed
         if (!results[current.id]) results[current.id] = { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } };
         if (!results[next.id]) results[next.id] = { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } };
+        if (!sideSet[current.id]) sideSet[current.id] = { left: false, right: false };
+        if (!sideSet[next.id]) sideSet[next.id] = { left: false, right: false };
 
         // Assign junction point
-        results[current.id].right = intersection;
-        results[next.id].left = intersection;
+        results[current.id].right = currentRightPoint;
+        results[next.id].left = nextLeftPoint;
+        sideSet[current.id].right = true;
+        sideSet[next.id].left = true;
     }
 
     // Fill in missing sides with perpendiculars (for 2-edge case)
     for (const edge of sortedEdges) {
         if (!results[edge.id]) {
             results[edge.id] = { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } };
+        }
+        if (!sideSet[edge.id]) {
+            sideSet[edge.id] = { left: false, right: false };
         }
 
         // Calculate perpendicular offset matching the junction calculation coordinate system
@@ -146,13 +195,15 @@ export function calculateNodeJunctions(
         const rightOffset = { x: rightNorm.x * (edge.thickness / 2), y: rightNorm.y * (edge.thickness / 2) };
 
         // If left is not set (first edge in 2-edge case)
-        if (results[edge.id].left.x === 0 && results[edge.id].left.y === 0) {
+        if (!sideSet[edge.id].left) {
             results[edge.id].left = { x: centerNode.x + leftOffset.x, y: centerNode.y + leftOffset.y };
+            sideSet[edge.id].left = true;
         }
 
         // If right is not set (last edge in 2-edge case)
-        if (results[edge.id].right.x === 0 && results[edge.id].right.y === 0) {
+        if (!sideSet[edge.id].right) {
             results[edge.id].right = { x: centerNode.x + rightOffset.x, y: centerNode.y + rightOffset.y };
+            sideSet[edge.id].right = true;
         }
     }
 

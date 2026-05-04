@@ -42,6 +42,16 @@ const multiPolygonToPath = (multiPolygon: MultiPolygon): string => {
         .join(' ');
 };
 
+const ringsToPath = (rings: Ring[]): string => {
+    return rings
+        .map((ring) => {
+            if (ring.length === 0) return '';
+            const [first, ...rest] = ring;
+            return `M ${first[0]} ${first[1]} ${rest.map(([x, y]) => `L ${x} ${y}`).join(' ')} Z`;
+        })
+        .join(' ');
+};
+
 const getEdgeNodes = (wall: Wall, edge: Wall['edges'][number]) => {
     const nodeA = wall.nodes.find((node) => node.id === edge.nodeA);
     const nodeB = wall.nodes.find((node) => node.id === edge.nodeB);
@@ -91,49 +101,49 @@ const collinearOverlap = (aStart: Point, aEnd: Point, bStart: Point, bEnd: Point
     return overlapEnd - overlapStart > 0.01 ? { startT: overlapStart, endT: overlapEnd } : null;
 };
 
-const pointToSegmentDistance = (point: Point, start: Point, end: Point) => {
-    const dx = end.x - start.x;
-    const dy = end.y - start.y;
-    const lengthSq = dx * dx + dy * dy;
-    if (lengthSq < 0.0001) return Math.hypot(point.x - start.x, point.y - start.y);
-
-    const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSq));
-    const projected = {
-        x: start.x + t * dx,
-        y: start.y + t * dy,
-    };
-
-    return Math.hypot(point.x - projected.x, point.y - projected.y);
-};
-
-const segmentDistance = (aStart: Point, aEnd: Point, bStart: Point, bEnd: Point) => {
-    if (lineIntersection(aStart, aEnd, bStart, bEnd)) return 0;
-
-    return Math.min(
-        pointToSegmentDistance(aStart, bStart, bEnd),
-        pointToSegmentDistance(aEnd, bStart, bEnd),
-        pointToSegmentDistance(bStart, aStart, aEnd),
-        pointToSegmentDistance(bEnd, aStart, aEnd)
-    );
-};
-
 const wallsTouchOrIntersect = (wallA: Wall, wallB: Wall) => {
-    if (wallA.nodes.some((a) => wallB.nodes.some((b) => Math.hypot(a.x - b.x, a.y - b.y) <= POSITION_TOLERANCE))) {
+    const pointTolerance = 2;
+    const lineTolerance = 1.5;
+
+    if (wallA.nodes.some((a) => wallB.nodes.some((b) => Math.hypot(a.x - b.x, a.y - b.y) <= pointTolerance))) {
         return true;
     }
 
     for (const edgeA of wallA.edges) {
         const pointsA = getEdgeNodes(wallA, edgeA);
         if (!pointsA) continue;
+
         for (const edgeB of wallB.edges) {
             const pointsB = getEdgeNodes(wallB, edgeB);
             if (!pointsB) continue;
-            if (collinearOverlap(pointsA.nodeA, pointsA.nodeB, pointsB.nodeA, pointsB.nodeB)) return true;
-            if (lineIntersection(pointsA.nodeA, pointsA.nodeB, pointsB.nodeA, pointsB.nodeB)) return true;
+            const { nodeA: a1, nodeB: a2 } = pointsA;
+            const { nodeA: b1, nodeB: b2 } = pointsB;
+            const ax = a2.x - a1.x;
+            const ay = a2.y - a1.y;
+            const bx = b2.x - b1.x;
+            const by = b2.y - b1.y;
+            const denom = ax * by - ay * bx;
 
-            const edgeSurfaceDistance = segmentDistance(pointsA.nodeA, pointsA.nodeB, pointsB.nodeA, pointsB.nodeB);
-            const combinedHalfThickness = ((edgeA.thickness || 150) + (edgeB.thickness || 150)) / 2;
-            if (edgeSurfaceDistance <= combinedHalfThickness + POSITION_TOLERANCE) return true;
+            if (Math.abs(denom) > 0.0001) {
+                const cx = b1.x - a1.x;
+                const cy = b1.y - a1.y;
+                const t = (cx * by - cy * bx) / denom;
+                const u = (cx * ay - cy * ax) / denom;
+                if (t >= -0.01 && t <= 1.01 && u >= -0.01 && u <= 1.01) return true;
+                continue;
+            }
+
+            const lenSq = ax * ax + ay * ay;
+            if (lenSq < 0.0001) continue;
+            const lineDistanceA = Math.abs((b1.x - a1.x) * ay - (b1.y - a1.y) * ax) / Math.sqrt(lenSq);
+            const lineDistanceB = Math.abs((b2.x - a1.x) * ay - (b2.y - a1.y) * ax) / Math.sqrt(lenSq);
+            if (lineDistanceA > lineTolerance || lineDistanceB > lineTolerance) continue;
+
+            const projectionA = ((b1.x - a1.x) * ax + (b1.y - a1.y) * ay) / lenSq;
+            const projectionB = ((b2.x - a1.x) * ax + (b2.y - a1.y) * ay) / lenSq;
+            const overlapStart = Math.max(0, Math.min(projectionA, projectionB));
+            const overlapEnd = Math.min(1, Math.max(projectionA, projectionB));
+            if (overlapEnd - overlapStart > 0.001) return true;
         }
     }
 
@@ -300,6 +310,7 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
     const setSelectedEdgeId = useEditorStore(s => s.setSelectedEdgeId);
     const selectedIds = useEditorStore(s => s.selectedIds);
     const hoveredId = useEditorStore(s => s.hoveredId);
+    const isDragging = useEditorStore(s => s.isDragging);
     const currentDrawingWallId = useEditorStore(s => s.currentDrawingWallId);
     
     // Keep the store selector cheap; filtering every store update gets expensive with large asset counts.
@@ -323,32 +334,48 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
         [connectedWalls]
     );
     const isPrimaryRenderer = wall.id === primaryWallId;
+    const drawingWallId = currentDrawingWallId;
+    const isDraggingInteraction = isDragging;
+
+    const interactiveWallSurfaceRings = useMemo(() => {
+        if (!isPrimaryRenderer || !isDraggingInteraction) return null;
+
+        return connectedWalls.flatMap((entry) =>
+            getWallEdgeRectPolygons(entry).map(({ ring }) => ring)
+        );
+    }, [connectedWalls, isDraggingInteraction, isPrimaryRenderer]);
 
     const unionedWallSurface = useMemo(() => {
-        if (!isPrimaryRenderer) return null;
+        if (!isPrimaryRenderer || isDraggingInteraction) return null;
 
-        const stableWalls = currentDrawingWallId
-            ? connectedWalls.filter((entry) => entry.id !== currentDrawingWallId)
-            : connectedWalls;
+        try {
+            const stableWalls = drawingWallId
+                ? connectedWalls.filter((entry) => entry.id !== drawingWallId)
+                : connectedWalls;
+            const drawingWalls = drawingWallId
+                ? connectedWalls.filter((entry) => entry.id === drawingWallId)
+                : [];
 
-        const wallPolygons = connectedWalls
-            .flatMap((entry) => (
-                entry.id === currentDrawingWallId
-                    ? getWallEdgeRectPolygons(entry)
-                    : getWallEdgePolygons(entry, stableWalls.length > 0 ? stableWalls : [entry])
-            ))
-            .map((entry) => [entry.ring] as polygonClipping.Polygon);
+            const wallPolygons = [
+                ...stableWalls.flatMap((entry) => getWallEdgePolygons(entry, stableWalls.length > 0 ? stableWalls : [entry])),
+                ...drawingWalls.flatMap((entry) => getWallEdgeRectPolygons(entry)),
+            ]
+                .map((entry) => [entry.ring] as polygonClipping.Polygon);
 
-        if (wallPolygons.length === 0) return null;
+            if (wallPolygons.length === 0) return null;
 
-        let surface = polygonClipping.union(wallPolygons[0], ...wallPolygons.slice(1));
-        const cutoutPolygons = getCutoutPolygonsForGroup(connectedWalls, wallCutouts);
-        if (cutoutPolygons.length > 0) {
-            surface = polygonClipping.difference(surface, ...cutoutPolygons);
+            let surface = polygonClipping.union(wallPolygons[0], ...wallPolygons.slice(1));
+            const cutoutPolygons = getCutoutPolygonsForGroup(connectedWalls, wallCutouts);
+            if (cutoutPolygons.length > 0) {
+                surface = polygonClipping.difference(surface, ...cutoutPolygons);
+            }
+
+            return surface;
+        } catch (error) {
+            console.error('Wall boolean merge failed; falling back to interactive wall rendering.', error);
+            return null;
         }
-
-        return surface;
-    }, [connectedWalls, currentDrawingWallId, isPrimaryRenderer, wallCutouts]);
+    }, [connectedWalls, drawingWallId, isDraggingInteraction, isPrimaryRenderer, wallCutouts]);
 
     // Handle edge double-click for selection
     const handleEdgeDoubleClick = useCallback((edgeId: string, e: React.MouseEvent) => {
@@ -384,6 +411,32 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
                 ) : (
                     <path
                         d={multiPolygonToPath(unionedWallSurface)}
+                        fill={wallFill}
+                        stroke={groupStrokeColor}
+                        strokeWidth={groupStrokeWidth}
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                        vectorEffect="non-scaling-stroke"
+                        fillRule="evenodd"
+                    />
+                )
+            )}
+
+            {isPrimaryRenderer && !unionedWallSurface && interactiveWallSurfaceRings && (
+                isHighlightOnly ? (
+                    (groupSelected || groupHovered) && (
+                        <path
+                            d={ringsToPath(interactiveWallSurfaceRings)}
+                            fill="#3b82f6"
+                            fillOpacity={groupSelected ? 0.2 : 0.1}
+                            stroke="none"
+                            fillRule="evenodd"
+                            pointerEvents="none"
+                        />
+                    )
+                ) : (
+                    <path
+                        d={ringsToPath(interactiveWallSurfaceRings)}
                         fill={wallFill}
                         stroke={groupStrokeColor}
                         strokeWidth={groupStrokeWidth}

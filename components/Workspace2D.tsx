@@ -554,6 +554,7 @@ export default function Workspace2D({
   const panBy = useEditorStore(s => s.panBy);
   const isPanning = useEditorStore(s => s.isPanning);
   const setPanning = useEditorStore(s => s.setPanning);
+  const setDragging = useEditorStore(s => s.setDragging);
   const zoomIn = useEditorStore(s => s.zoomIn);
   const zoomOut = useEditorStore(s => s.zoomOut);
   const canvasOffset = useEditorStore(s => s.canvasOffset);
@@ -627,11 +628,14 @@ export default function Workspace2D({
     });
   }, [setViewportTransform]);
 
+  const wallIdSet = useMemo(() => new Set(walls.map((wall) => wall.id)), [walls]);
+
   const shouldUseDragPreviewForIds = useCallback((ids: string[]) => {
+    if (ids.length > 0 && ids.every(id => wallIdSet.has(id))) return true;
     if (ids.length > 0 && ids.every(id => assetById.has(id))) return true;
     if (ids.length >= LARGE_SELECTION_DRAG_PREVIEW_THRESHOLD) return true;
     return ids.length > 0 && ids.every(id => canvasBackedAssetIds.has(id));
-  }, [assetById, canvasBackedAssetIds]);
+  }, [assetById, canvasBackedAssetIds, wallIdSet]);
 
   // Top-level memoized list of all renderable items for efficient hit-testing and rendering
   const allRenderables = useMemo(() => {
@@ -2005,6 +2009,7 @@ export default function Workspace2D({
                 if (idsToSelect.some(id => selectedIds.includes(id))) {
                   saveToHistory();
                   setIsDraggingItem(true);
+                  setDragging(true);
                   const dragPoint = { x: worldX, y: worldY };
                   draggedItemStartRef.current = dragPoint;
                   setDraggedItemStart(dragPoint);
@@ -2018,6 +2023,7 @@ export default function Workspace2D({
                   // Allow immediate drag on first click if not shifting
                   if (!e.shiftKey) {
                     setIsDraggingItem(true);
+                    setDragging(true);
                     const dragPoint = { x: worldX, y: worldY };
                     draggedItemStartRef.current = dragPoint;
                     setDraggedItemStart(dragPoint);
@@ -2064,7 +2070,7 @@ export default function Workspace2D({
         // For other tools (wall, shape-*, freehand, dimension), don't handle - let tool handle it
       }
     },
-    [activeTool, setPanning, screenToWorld, shapes, assets, walls, setSelectedIds, clearSelection, selectedIds, setIsDraggingItem, setDraggedItemStart, selectMultipleAssets, isRectangularSelectionMode, snapToGridEnabled, gridSize, snapToGridFn, snapToObjectsEnabled, isSnapMode, snapSourceId, snapAnchor, setSnapMode, updateShape, updateAsset, zoom, textAnnotations, resolveIdsWithGroups, saveToHistory, setSelectedEdgeId, removeDimension, dimensions, shouldUseDragPreviewForIds, visibleRenderables, findTopAssetAtPoint]
+    [activeTool, setPanning, screenToWorld, shapes, assets, walls, setSelectedIds, clearSelection, selectedIds, setIsDraggingItem, setDragging, setDraggedItemStart, selectMultipleAssets, isRectangularSelectionMode, snapToGridEnabled, gridSize, snapToGridFn, snapToObjectsEnabled, isSnapMode, snapSourceId, snapAnchor, setSnapMode, updateShape, updateAsset, zoom, textAnnotations, resolveIdsWithGroups, saveToHistory, setSelectedEdgeId, removeDimension, dimensions, shouldUseDragPreviewForIds, visibleRenderables, findTopAssetAtPoint]
   );
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
@@ -2376,13 +2382,14 @@ export default function Workspace2D({
     }
 
     setPanning(false);
+    setDragging(false);
     setDragStart(null);
     setIsDraggingItem(false);
     draggedItemStartRef.current = null;
     setDraggedItemStart(null);
     setDraggedPoint(null);
     setSnapGuides([]); // Clear snap guides
-  }, [setPanning, selectionRect, shapes, assetSpatialIndex, walls, textAnnotations, labelArrows, dimensions, batchUpdateItems, clearDragPreview, setSelectedIds, selectMultipleAssets, setSnapGuides, draggedPoint, clearSelection, setPan, zoom, placementMode, addWall, addAsset, addShape, setPlacementMode, resolveIdsWithGroups, updateTyping]);
+  }, [setPanning, setDragging, selectionRect, shapes, assetSpatialIndex, walls, textAnnotations, labelArrows, dimensions, batchUpdateItems, clearDragPreview, setSelectedIds, selectMultipleAssets, setSnapGuides, draggedPoint, clearSelection, setPan, zoom, placementMode, addWall, addAsset, addShape, setPlacementMode, resolveIdsWithGroups, updateTyping]);
 
   const handleAssetDrop = useCallback(
     async (e: React.DragEvent<HTMLDivElement>) => {

@@ -43,6 +43,12 @@ const expandBoundsWithPoint = (bounds: ExportBounds, x: number, y: number, pad =
   bounds.maxY = Math.max(bounds.maxY, y + pad);
 };
 
+const isVisibleFillColor = (fill: string | undefined | null) => {
+  if (!fill) return false;
+  const normalized = fill.trim().toLowerCase();
+  return normalized !== 'transparent' && normalized !== 'none' && normalized !== 'rgba(0,0,0,0)' && normalized !== 'rgba(0, 0, 0, 0)';
+};
+
 const expandBoundsWithDimension = (bounds: ExportBounds, dim: any, viewportZoom = 1) => {
   const startPoint = dim.startPoint;
   const endPoint = dim.endPoint;
@@ -469,7 +475,7 @@ export default function ExportPanel() {
     }
   };
 
-  const renderAssetToCanvas = (
+const renderAssetToCanvas = (
     ctx: CanvasRenderingContext2D,
     asset: AssetInstance,
     minX: number,
@@ -477,7 +483,10 @@ export default function ExportPanel() {
     padding: number,
     contentShift: number,
     MM_TO_PX: number,
-    loadedImages: Map<string, HTMLImageElement>
+    loadedImages: Map<string, HTMLImageElement>,
+    options?: {
+      wallFillOnly?: boolean;
+    }
   ) => {
     const worldX = asset.x - minX + padding + (contentShift / MM_TO_PX);
     const worldY = asset.y - minY + padding;
@@ -492,6 +501,7 @@ export default function ExportPanel() {
       const strokeColor = asset.strokeColor || asset.lineColor || "#000000";
       const fillColor = asset.backgroundColor || 'transparent';
       const wallThickness = (asset.wallThickness || 150) * (asset.scale || 1);
+      const wallFillOnly = options?.wallFillOnly === true;
       
       if (asset.wallNodes && asset.wallEdges) {
         asset.wallEdges.forEach(edge => {
@@ -514,11 +524,13 @@ export default function ExportPanel() {
 
           ctx.fillStyle = fillColor;
           ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); pts.forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath();
-          if (fillColor !== 'transparent') ctx.fill();
-          ctx.strokeStyle = strokeColor;
-          ctx.lineWidth = (asset.strokeWidth !== undefined ? asset.strokeWidth : 2) * MM_TO_PX;
-          ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[1].x, pts[1].y); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(pts[2].x, pts[2].y); ctx.lineTo(pts[3].x, pts[3].y); ctx.stroke();
+          if (isVisibleFillColor(fillColor)) ctx.fill();
+          if (!wallFillOnly) {
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = (asset.strokeWidth !== undefined ? asset.strokeWidth : 2) * MM_TO_PX;
+            ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[1].x, pts[1].y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(pts[2].x, pts[2].y); ctx.lineTo(pts[3].x, pts[3].y); ctx.stroke();
+          }
         });
       }
     } else if (asset.type === 'freehand') {
@@ -1268,8 +1280,12 @@ export default function ExportPanel() {
       const canvasBackedAssetsToDraw = assetsToExport
         .filter(asset => canvasBackedAssetIds.has(asset.id))
         .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+      const wallSegmentsToDraw = assetsToExport
+        .filter(asset => asset.type === 'wall-segments')
+        .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
       if (workspaceSnapshot) {
+        wallSegmentsToDraw.forEach(a => renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, new Map(), { wallFillOnly: true }));
         if (canvasBackedAssetsToDraw.length > 0) {
           const loadedImages = await loadSvgAssets(canvasBackedAssetsToDraw);
           canvasBackedAssetsToDraw.forEach(a => renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages));
