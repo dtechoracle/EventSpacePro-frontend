@@ -14,6 +14,7 @@ interface PlanPreviewProps {
   width?: number;
   height?: number;
   className?: string;
+  stretchToContainer?: boolean;
 }
 
 export default function PlanPreview({
@@ -23,8 +24,10 @@ export default function PlanPreview({
   textAnnotations = [],
   width = 300,
   height = 200,
-  className = ""
+  className = "",
+  stretchToContainer = false,
 }: PlanPreviewProps) {
+  const hasWalls = walls.length > 0;
   // Combine all items for rendering and bounds calculation
   const allItems = useMemo(() => {
     return [
@@ -48,12 +51,21 @@ export default function PlanPreview({
       if (!item) return;
 
       if (item.type === 'wall-segments' || (item.nodes && item.edges)) {
+        const wallThickness =
+          item.wallThickness ||
+          Math.max(
+            0,
+            ...(Array.isArray(item.edges) ? item.edges.map((edge: any) => Number(edge.thickness) || 0) : []),
+            ...(Array.isArray(item.wallSegments) ? item.wallSegments.map((seg: any) => Number(seg.thickness) || 0) : [])
+          ) ||
+          150;
+        const wallPad = wallThickness / 2;
         const checkNode = (x: number, y: number) => {
           if (isFinite(x) && isFinite(y)) {
-            minX = Math.min(minX, x);
-            minY = Math.min(minY, y);
-            maxX = Math.max(maxX, x);
-            maxY = Math.max(maxY, y);
+            minX = Math.min(minX, x - wallPad);
+            minY = Math.min(minY, y - wallPad);
+            maxX = Math.max(maxX, x + wallPad);
+            maxY = Math.max(maxY, y + wallPad);
             hasValidBounds = true;
           }
         };
@@ -107,9 +119,29 @@ export default function PlanPreview({
 
     const w = maxX - minX;
     const h = maxY - minY;
+    const isWallOnlyPreview =
+      walls.length > 0 &&
+      assets.length === 0 &&
+      shapes.length === 0 &&
+      textAnnotations.length === 0;
 
-    // Add padding
-    const padding = Math.max(200, Math.min(w * 0.1, h * 0.1));
+    const maxWallThickness = Math.max(
+      0,
+      ...walls.flatMap((wall: any) => [
+        Number(wall.wallThickness) || 0,
+        ...(Array.isArray(wall.edges)
+          ? wall.edges.map((edge: any) => Number(edge.thickness) || 0)
+          : []),
+        ...(Array.isArray(wall.wallSegments)
+          ? wall.wallSegments.map((seg: any) => Number(seg.thickness) || 0)
+          : []),
+      ])
+    );
+
+    // Keep room-only previews snug so the wall outline fills the card naturally.
+    const padding = isWallOnlyPreview
+      ? Math.max(24, maxWallThickness * 0.75)
+      : Math.max(80, Math.min(w, h) * 0.04);
     return {
       minX: minX - padding,
       minY: minY - padding,
@@ -266,12 +298,84 @@ export default function PlanPreview({
     const isWall = (asset as any).nodes || (asset as any).wallNodes || asset.type === 'wall-segments';
     if (!isWall && (!isFinite(asset.x) || !isFinite(asset.y))) return null;
 
+    // Walls should always render through the wall-specific path first.
+    const nodes = (asset as any).nodes || (asset as any).wallNodes;
+    const edges = (asset as any).edges || (asset as any).wallEdges;
+
+    if (nodes && edges) {
+      const stroke = (asset as any).strokeColor || (asset as any).stroke || '#1e293b';
+      const thickness = (asset as any).wallThickness || 150;
+      const rectLikeXs = Array.from(
+        new Set<number>(nodes.map((n: any) => Number(n.x)).filter((v: number) => isFinite(v)))
+      );
+      const rectLikeYs = Array.from(
+        new Set<number>(nodes.map((n: any) => Number(n.y)).filter((v: number) => isFinite(v)))
+      );
+      const isSimpleEnclosure =
+        Boolean((asset as any).isClosed) &&
+        Array.isArray(nodes) &&
+        Array.isArray(edges) &&
+        nodes.length === 4 &&
+        edges.length === 4 &&
+        rectLikeXs.length === 2 &&
+        rectLikeYs.length === 2;
+
+      if (isSimpleEnclosure) {
+        const minRectX = Math.min(...rectLikeXs);
+        const maxRectX = Math.max(...rectLikeXs);
+        const minRectY = Math.min(...rectLikeYs);
+        const maxRectY = Math.max(...rectLikeYs);
+        return (
+          <rect
+            key={asset.id}
+            x={minRectX}
+            y={minRectY}
+            width={maxRectX - minRectX}
+            height={maxRectY - minRectY}
+            fill="none"
+            stroke={stroke}
+            strokeWidth={3}
+            strokeLinejoin="miter"
+            vectorEffect="non-scaling-stroke"
+          />
+        );
+      }
+
+      return (
+        <g key={asset.id}>
+          {edges.map((edge: any, i: number) => {
+            const nAId = edge.nodeA !== undefined ? edge.nodeA : edge.a;
+            const nBId = edge.nodeB !== undefined ? edge.nodeB : edge.b;
+
+            const nA = typeof nAId === 'string' ? nodes.find((n: any) => n.id === nAId) : nodes[nAId];
+            const nB = typeof nBId === 'string' ? nodes.find((n: any) => n.id === nBId) : nodes[nBId];
+
+            if (!nA || !nB) return null;
+            return (
+              <React.Fragment key={`${asset.id}-edge-${i}`}>
+                <line
+                  x1={nA.x} y1={nA.y}
+                  x2={nB.x} y2={nB.y}
+                  stroke={stroke}
+                  strokeWidth={3}
+                  strokeLinecap="butt"
+                  vectorEffect="non-scaling-stroke"
+                />
+              </React.Fragment>
+            );
+          })}
+        </g>
+      );
+    }
+
     // Library Asset (SVG)
     const def = ASSET_LIBRARY.find(a => a.id === asset.type);
     if (def?.path) {
-      const w = (asset.width ?? def.width ?? 500) * (asset.scale || 1);
-      const h = (asset.height ?? def.height ?? 500) * (asset.scale || 1);
+      const previewScaleBoost = hasWalls ? 1.12 : 1;
+      const w = (asset.width ?? def.width ?? 500) * (asset.scale || 1) * previewScaleBoost;
+      const h = (asset.height ?? def.height ?? 500) * (asset.scale || 1) * previewScaleBoost;
       const rotation = isFinite(asset.rotation || 0) ? asset.rotation : 0;
+      const previewStrokeWidth = Math.max(asset.strokeWidth || 0.6, hasWalls ? 1.15 : 0.8);
 
       return (
         <g key={asset.id} transform={`translate(${asset.x}, ${asset.y}) rotate(${rotation || 0})`}>
@@ -284,7 +388,7 @@ export default function PlanPreview({
               src={def.path}
               fill={getFill(asset)}
               stroke={asset.strokeColor}
-              strokeWidth={asset.strokeWidth}
+              strokeWidth={previewStrokeWidth}
               category={def.category}
             />
           </foreignObject>
@@ -316,7 +420,7 @@ export default function PlanPreview({
       );
     }
 
-    if (asset.type === 'rect' || asset.type === 'square' || asset.type?.includes('rectangular') || !asset.type || (asset as any).fillType === 'texture') {
+    if (asset.type === 'rect' || asset.type === 'square' || asset.type?.includes('rectangular') || (asset as any).fillType === 'texture') {
       return (
         <rect
           key={asset.id}
@@ -344,38 +448,6 @@ export default function PlanPreview({
           strokeWidth={(asset.strokeWidth || 2) * (asset.scale || 1)}
           transform={asset.rotation ? `rotate(${asset.rotation} ${asset.x} ${asset.y})` : undefined}
         />
-      );
-    }
-
-    // Wall (Standard format / Legacy)
-    const nodes = (asset as any).nodes || (asset as any).wallNodes;
-    const edges = (asset as any).edges || (asset as any).wallEdges;
-
-    if (nodes && edges) {
-      const stroke = (asset as any).strokeColor || (asset as any).stroke || '#1e293b';
-      const thickness = (asset as any).wallThickness || 150;
-      return (
-        <g key={asset.id}>
-          {edges.map((edge: any, i: number) => {
-            const nAId = edge.nodeA !== undefined ? edge.nodeA : edge.a;
-            const nBId = edge.nodeB !== undefined ? edge.nodeB : edge.b;
-
-            const nA = typeof nAId === 'string' ? nodes.find((n: any) => n.id === nAId) : nodes[nAId];
-            const nB = typeof nBId === 'string' ? nodes.find((n: any) => n.id === nBId) : nodes[nBId];
-
-            if (!nA || !nB) return null;
-            return (
-              <line
-                key={`${asset.id}-edge-${i}`}
-                x1={nA.x} y1={nA.y}
-                x2={nB.x} y2={nB.y}
-                stroke={stroke}
-                strokeWidth={edge.thickness || thickness}
-                strokeLinecap="round"
-              />
-            );
-          })}
-        </g>
       );
     }
 
@@ -464,7 +536,7 @@ export default function PlanPreview({
         width="100%"
         height="100%"
         viewBox={`${minX} ${minY} ${contentWidth} ${contentHeight}`}
-        preserveAspectRatio="xMidYMid meet"
+        preserveAspectRatio={stretchToContainer ? "none" : "xMidYMid meet"}
         style={{ display: 'block' }}
       >
         {renderDefs()}

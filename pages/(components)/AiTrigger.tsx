@@ -10,8 +10,9 @@ import { useSceneStore, AssetInstance } from "@/store/sceneStore";
 import { useProjectStore, Asset as ProjectAsset, Shape, Wall } from "@/store/projectStore";
 import { useEditorStore } from "@/store/editorStore";
 import PlanPreview from "./dashboard/PlanPreview";
-import { ASSET_LIBRARY } from "@/lib/assets";
+import { ASSET_LIBRARY, compareAssetsForDisplay } from "@/lib/assets";
 import { texturePatterns } from "@/utils/texturePatterns";
+import { DEFAULT_ASSET_STROKE_WIDTH } from "@/utils/assetRenderMode";
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -19,13 +20,142 @@ export interface ChatMessage {
   assetSelection?: {
     category: string;
     message: string;
-    options: { id: string; name: string; category: string; path: string }[];
+    options: { id: string; name: string; category: string; path: string; width?: number; height?: number }[];
   };
   choices?: string[];
   previewData?: any[]; // Array of combined assets for PlanPreview
+  previewPlanData?: any;
   planData?: any;
   rawPlan?: any;
 }
+
+const AI_DEFAULT_STROKE_WIDTH = DEFAULT_ASSET_STROKE_WIDTH;
+
+const buildAssetSelectionOptions = (filter: (asset: typeof ASSET_LIBRARY[number]) => boolean) =>
+  ASSET_LIBRARY
+    .filter(filter)
+    .sort(compareAssetsForDisplay)
+    .map((asset) => ({
+      id: asset.id,
+      name: asset.label,
+      category: asset.category,
+      path: asset.path,
+      width: asset.width,
+      height: asset.height,
+    }));
+
+const MarqueeOptionPreview = ({ width, height }: { width?: number; height?: number }) => {
+  const w = Math.max(1000, width || 1200);
+  const h = Math.max(1000, height || 900);
+  const strokeOuter = Math.max(w, h) * 0.018;
+  const strokeInner = Math.max(w, h) * 0.01;
+  const inset = Math.max(w, h) * 0.08;
+  const post = Math.max(w, h) * 0.05;
+  const dashLen = Math.max(w, h) * 0.035;
+  const dashGap = dashLen * 0.8;
+
+  const horizontalSegments = Math.max(2, Math.floor((w - inset * 2) / (dashLen + dashGap)));
+  const verticalSegments = Math.max(2, Math.floor((h - inset * 2) / (dashLen + dashGap)));
+
+  return (
+    <div className="w-full h-full bg-slate-50 flex items-center justify-center p-2">
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        className="w-full h-full"
+        preserveAspectRatio="xMidYMid meet"
+        aria-hidden="true"
+      >
+        <rect x="0" y="0" width={w} height={h} rx={Math.max(w, h) * 0.03} fill="#f8fafc" />
+        <rect
+          x={inset}
+          y={inset}
+          width={w - inset * 2}
+          height={h - inset * 2}
+          fill="none"
+          stroke="#1f2937"
+          strokeWidth={strokeOuter}
+        />
+        <rect
+          x={inset + strokeOuter * 1.4}
+          y={inset + strokeOuter * 1.4}
+          width={w - (inset + strokeOuter * 1.4) * 2}
+          height={h - (inset + strokeOuter * 1.4) * 2}
+          fill="none"
+          stroke="#475569"
+          strokeWidth={strokeInner}
+        />
+
+        {[0, 1, 2, 3].map((i) => {
+          const x = i % 2 === 0 ? inset - post / 2 : w - inset - post / 2;
+          const y = i < 2 ? inset - post / 2 : h - inset - post / 2;
+          return (
+            <rect
+              key={`post-${i}`}
+              x={x}
+              y={y}
+              width={post}
+              height={post}
+              rx={post * 0.12}
+              fill="#e2e8f0"
+              stroke="#475569"
+              strokeWidth={strokeInner}
+            />
+          );
+        })}
+
+        {Array.from({ length: horizontalSegments }).map((_, i) => {
+          const startX = inset + ((w - inset * 2) / horizontalSegments) * i + dashGap / 2;
+          const endX = Math.min(startX + dashLen, w - inset);
+          return (
+            <g key={`h-${i}`}>
+              <line
+                x1={startX}
+                y1={inset}
+                x2={endX}
+                y2={inset}
+                stroke="#475569"
+                strokeWidth={strokeInner}
+              />
+              <line
+                x1={startX}
+                y1={h - inset}
+                x2={endX}
+                y2={h - inset}
+                stroke="#475569"
+                strokeWidth={strokeInner}
+              />
+            </g>
+          );
+        })}
+
+        {Array.from({ length: verticalSegments }).map((_, i) => {
+          const startY = inset + ((h - inset * 2) / verticalSegments) * i + dashGap / 2;
+          const endY = Math.min(startY + dashLen, h - inset);
+          return (
+            <g key={`v-${i}`}>
+              <line
+                x1={inset}
+                y1={startY}
+                x2={inset}
+                y2={endY}
+                stroke="#475569"
+                strokeWidth={strokeInner}
+              />
+              <line
+                x1={w - inset}
+                y1={startY}
+                x2={w - inset}
+                y2={endY}
+                stroke="#475569"
+                strokeWidth={strokeInner}
+              />
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+};
 
 export default function AiTrigger() {
   const [isOpen, setIsOpen] = useState(false);
@@ -277,11 +407,208 @@ export default function AiTrigger() {
   // LAYOUT ENGINE — Calculates positions from first principles.
   // We do NOT trust AI coordinates. We compute them from room size + counts.
   // ═══════════════════════════════════════════════════════════════════════════
+  const buildFallbackAssetSelectionFromFollowUp = (followUpText: string) => {
+    const lower = (followUpText || '').toLowerCase();
+    const asksForGuestCount =
+      lower.includes('how many guests') ||
+      lower.includes('number of guests') ||
+      lower.includes('guest count') ||
+      lower.includes('how many people') ||
+      lower.includes('how many attendees') ||
+      lower.includes('capacity');
+    if (asksForGuestCount) return undefined;
+
+    const userHistory = messages
+      .filter((m) => m.role === 'user')
+      .map((m) => m.content.toLowerCase())
+      .join('\n');
+
+    const marqueeContext =
+      userHistory.includes('marquee') ||
+      userHistory.includes('tent') ||
+      lower.includes('marquee') ||
+      lower.includes('tent');
+
+    if (lower.includes('which marquee') || lower.includes('which tent')) {
+      return {
+        category: 'marquee',
+        message: 'Select a marquee',
+        options: buildAssetSelectionOptions((asset) => asset.category === 'Marquee'),
+      };
+    }
+
+    const asksForTables =
+      lower.includes('table') ||
+      lower.includes('round tables') ||
+      lower.includes('rectangular tables');
+    const asksForChairs = lower.includes('chair') || lower.includes('chairs') || lower.includes('seating');
+
+    if (marqueeContext && (lower.includes('what would you like to add') || asksForTables || asksForChairs)) {
+      return {
+        category: 'furniture',
+        message: 'Select furniture to add',
+        options: buildAssetSelectionOptions((asset) => asset.category === 'Furniture'),
+      };
+    }
+
+    if (asksForTables && asksForChairs) {
+      return {
+        category: 'furniture',
+        message: 'Select furniture',
+        options: buildAssetSelectionOptions((asset) => asset.category === 'Furniture'),
+      };
+    }
+
+    if (asksForTables) {
+      const wantsRound = lower.includes('round');
+      const wantsRectangular = lower.includes('rectangular') || lower.includes('rectangle');
+      return {
+        category: 'table',
+        message: 'Select a table',
+        options: buildAssetSelectionOptions((asset) => {
+          if (asset.category !== 'Furniture') return false;
+          const label = asset.label.toLowerCase();
+          if (!label.includes('table')) return false;
+          if (wantsRound && !label.includes('round')) return false;
+          if (wantsRectangular && !label.includes('rectangular')) return false;
+          return true;
+        }),
+      };
+    }
+
+    if (asksForChairs) {
+      return {
+        category: 'chair',
+        message: 'Select seating',
+        options: buildAssetSelectionOptions((asset) => {
+          if (asset.category !== 'Furniture') return false;
+          const label = asset.label.toLowerCase();
+          return (
+            label.includes('chair') ||
+            label.includes('stool') ||
+            label.includes('sofa') ||
+            label.includes('seater')
+          );
+        }),
+      };
+    }
+
+    return undefined;
+  };
+
+  const buildFallbackMarqueePreview = (source: string) => {
+    const joinedHistory = messages
+      .filter((m: any) => m.role === 'user')
+      .map((m: any) => m.content || '')
+      .join('\n');
+    const text = `${joinedHistory}\n${source || ''}`.toLowerCase();
+    const selectedMarquee = ASSET_LIBRARY
+      .filter((asset) => asset.category === 'Marquee')
+      .sort((a, b) => b.label.length - a.label.length)
+      .find((asset) => text.includes(asset.label.toLowerCase()) || text.includes(asset.id.toLowerCase()));
+
+    if (!selectedMarquee) return undefined;
+
+    const previewWidth = Math.max((selectedMarquee.width || 1000) + 1200, 2400);
+    const previewHeight = Math.max((selectedMarquee.height || 1000) + 1200, 1800);
+    const previewAsset = {
+      id: `preview-${selectedMarquee.id}`,
+      type: selectedMarquee.id,
+      x: previewWidth / 2,
+      y: previewHeight / 2,
+      width: selectedMarquee.width || 1000,
+      height: selectedMarquee.height || 1000,
+      strokeWidth: AI_DEFAULT_STROKE_WIDTH,
+      strokeColor: '#1a1a1a',
+      fillColor: 'transparent',
+      scale: 1,
+      zIndex: 5,
+    };
+
+    return {
+      walls: [],
+      assets: [previewAsset],
+      shapes: [],
+      textAnnotations: [],
+      width: previewWidth,
+      height: previewHeight,
+      combined: [previewAsset],
+    };
+  };
+
+  const isWallsOnlyPreviewPlan = (preview: any) =>
+    Boolean(
+      preview &&
+        Array.isArray(preview.walls) &&
+        preview.walls.length > 0 &&
+        (!Array.isArray(preview.assets) || preview.assets.length === 0) &&
+        (!Array.isArray(preview.shapes) || preview.shapes.length === 0) &&
+        (!Array.isArray(preview.textAnnotations) || preview.textAnnotations.length === 0)
+    );
+
+  const getLatestPreviewPlanData = () => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const msg: any = messages[i];
+      if (msg?.previewPlanData) return msg.previewPlanData;
+      if (msg?.planData) return msg.planData;
+    }
+    return undefined;
+  };
+
+  const rebuildCombinedPreviewItems = (preview: any) => [
+    ...(Array.isArray(preview?.walls) ? preview.walls : []),
+    ...(Array.isArray(preview?.assets) ? preview.assets : []),
+    ...(Array.isArray(preview?.shapes) ? preview.shapes : []),
+    ...(Array.isArray(preview?.textAnnotations) ? preview.textAnnotations : []),
+  ];
+
+  const mergePreviewPlans = (basePreview: any, incomingPreview: any) => {
+    if (!basePreview) return incomingPreview;
+    if (!incomingPreview) {
+      const mergedOnlyBase = { ...basePreview };
+      mergedOnlyBase.combined = rebuildCombinedPreviewItems(mergedOnlyBase);
+      return mergedOnlyBase;
+    }
+
+    const merged = {
+      ...basePreview,
+      ...incomingPreview,
+      walls:
+        Array.isArray(incomingPreview.walls) && incomingPreview.walls.length > 0
+          ? incomingPreview.walls
+          : basePreview.walls || [],
+      assets:
+        Array.isArray(incomingPreview.assets) && incomingPreview.assets.length > 0
+          ? incomingPreview.assets
+          : basePreview.assets || [],
+      shapes:
+        Array.isArray(incomingPreview.shapes) && incomingPreview.shapes.length > 0
+          ? incomingPreview.shapes
+          : basePreview.shapes || [],
+      textAnnotations:
+        Array.isArray(incomingPreview.textAnnotations) && incomingPreview.textAnnotations.length > 0
+          ? incomingPreview.textAnnotations
+          : basePreview.textAnnotations || [],
+      width: Math.max(
+        Number(incomingPreview.width || 0) || 0,
+        Number(basePreview.width || 0) || 0
+      ),
+      height: Math.max(
+        Number(incomingPreview.height || 0) || 0,
+        Number(basePreview.height || 0) || 0
+      ),
+    } as any;
+
+    merged.combined = rebuildCombinedPreviewItems(merged);
+    return merged;
+  };
+
   const processPlan = (plan: any, canvasRef: any) => {
     const generatedWalls: any[] = [];
     const generatedAssets: any[] = [];
     const generatedShapes: any[] = [];
     const generatedTextAnnotations: any[] = [];
+    const planAssetList: any[] = Array.isArray(plan.assets) ? plan.assets : [];
 
     const canvasCenter = canvasRef?.width
       ? { x: canvasRef.width / 2, y: canvasRef.height / 2 }
@@ -290,14 +617,44 @@ export default function AiTrigger() {
     // Helper: resolve loose name → { id, width, height } using ASSET_LIBRARY as source of truth
     const resolveAsset = (raw: string): { id: string; width: number; height: number } => {
       const r = (raw || '').toLowerCase();
+      const canonicalRaw = String(raw || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
       // Try direct library match first (exact id)
       const direct = ASSET_LIBRARY.find(a => a.id === raw);
       if (direct) return { id: direct.id, width: direct.width || 823, height: direct.height || 1018 };
 
+      const directByName = ASSET_LIBRARY.find((a) =>
+        a.label?.toLowerCase() === r ||
+        a.name?.toLowerCase() === r
+      );
+      if (directByName) {
+        return { id: directByName.id, width: directByName.width || 823, height: directByName.height || 1018 };
+      }
+
+      const fuzzyLibraryMatch = ASSET_LIBRARY.find((a) => {
+        const canonicalId = a.id.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const canonicalLabel = String(a.label || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const canonicalName = String(a.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return (
+          canonicalRaw === canonicalId ||
+          canonicalRaw === canonicalLabel ||
+          canonicalRaw === canonicalName ||
+          canonicalRaw.includes(canonicalId) ||
+          canonicalRaw.includes(canonicalLabel) ||
+          canonicalRaw.includes(canonicalName)
+        );
+      });
+      if (fuzzyLibraryMatch) {
+        return {
+          id: fuzzyLibraryMatch.id,
+          width: fuzzyLibraryMatch.width || 823,
+          height: fuzzyLibraryMatch.height || 1018
+        };
+      }
+
       // Fuzzy match by checking includes
       let id = raw;
-      if (r.includes('stage')) id = '1m-x-1m-modular-stage-2';
+      if (r.includes('stage')) id = '1m-x-1m-modular-stage';
       else if (r.includes('6-seater') || r === '6-seater-rectangular-table-6') id = '6-seater-rectangular-table-6';
       else if (r.includes('10-seater') && r.includes('rect')) id = '10-seater-rectangular-table-6';
       else if (r.includes('round') && r.includes('6')) id = '6-seater-round-table';
@@ -358,6 +715,21 @@ export default function AiTrigger() {
     // ─── 1. Parse Room ────────────────────────────────────────────────────────
     const WALL_THICKNESS = 150;
     const WALL_MARGIN = 700; // min clearance from inner wall face to any asset
+    const primaryMarqueePlanAsset = planAssetList.find((asset: any) =>
+      (asset?.assetType || asset?.assetName || '').toLowerCase().includes('marquee')
+    );
+    const primaryMarqueeLibraryDef = primaryMarqueePlanAsset
+      ? ASSET_LIBRARY.find((def) => {
+          const raw = String(primaryMarqueePlanAsset.assetType || primaryMarqueePlanAsset.assetName || '').toLowerCase();
+          return (
+            def.id.toLowerCase() === raw ||
+            def.label.toLowerCase() === raw ||
+            raw.includes(def.id.toLowerCase()) ||
+            raw.includes(def.label.toLowerCase())
+          );
+        })
+      : null;
+    const standaloneMarqueePlan = Boolean(primaryMarqueePlanAsset);
 
     let roomW = 10000, roomH = 10000;
     if (Array.isArray(plan.walls) && plan.walls[0]) {
@@ -368,12 +740,41 @@ export default function AiTrigger() {
       roomW = w; roomH = h;
     }
 
+    if (!(Array.isArray(plan.walls) && plan.walls[0]) && primaryMarqueePlanAsset) {
+      let marqueeW = Number(primaryMarqueePlanAsset.widthMm || primaryMarqueeLibraryDef?.width || roomW);
+      let marqueeH = Number(primaryMarqueePlanAsset.heightMm || primaryMarqueeLibraryDef?.height || roomH);
+      if (marqueeW < 200) marqueeW *= 1000;
+      if (marqueeH < 200) marqueeH *= 1000;
+      roomW = marqueeW;
+      roomH = marqueeH;
+    }
+
     const roomCX = canvasCenter.x;
     const roomCY = canvasCenter.y;
     const wallMinX = roomCX - roomW / 2;
     const wallMinY = roomCY - roomH / 2;
     const wallMaxX = roomCX + roomW / 2;
     const wallMaxY = roomCY + roomH / 2;
+    const createRoomEnclosureWall = (wallId: string, thickness = WALL_THICKNESS) => {
+      const nIds = [`${wallId}-n0`, `${wallId}-n1`, `${wallId}-n2`, `${wallId}-n3`];
+      return {
+        id: wallId,
+        nodes: [
+          { id: nIds[0], x: wallMinX, y: wallMinY },
+          { id: nIds[1], x: wallMaxX, y: wallMinY },
+          { id: nIds[2], x: wallMaxX, y: wallMaxY },
+          { id: nIds[3], x: wallMinX, y: wallMaxY },
+        ],
+        edges: [
+          { id: `${wallId}-e0`, nodeA: nIds[0], nodeB: nIds[1], thickness },
+          { id: `${wallId}-e1`, nodeA: nIds[1], nodeB: nIds[2], thickness },
+          { id: `${wallId}-e2`, nodeA: nIds[2], nodeB: nIds[3], thickness },
+          { id: `${wallId}-e3`, nodeA: nIds[3], nodeB: nIds[0], thickness },
+        ],
+        zIndex: 0,
+        isClosed: true,
+      };
+    };
 
     // Generate wall
     if (Array.isArray(plan.walls) && plan.walls.length > 0) {
@@ -408,23 +809,7 @@ export default function AiTrigger() {
           );
           
           if (!hasMarquee) {
-            const nIds = ['rn-0', 'rn-1', 'rn-2', 'rn-3'];
-            generatedWalls.push({
-              id: 'wall-room',
-              nodes: [
-                { id: nIds[0], x: wallMinX, y: wallMinY },
-                { id: nIds[1], x: wallMaxX, y: wallMinY },
-                { id: nIds[2], x: wallMaxX, y: wallMaxY },
-                { id: nIds[3], x: wallMinX, y: wallMaxY },
-              ],
-              edges: [
-                { id: 're-0', nodeA: nIds[0], nodeB: nIds[1], thickness: WALL_THICKNESS },
-                { id: 're-1', nodeA: nIds[1], nodeB: nIds[2], thickness: WALL_THICKNESS },
-                { id: 're-2', nodeA: nIds[2], nodeB: nIds[3], thickness: WALL_THICKNESS },
-                { id: 're-3', nodeA: nIds[3], nodeB: nIds[0], thickness: WALL_THICKNESS },
-              ],
-              zIndex: 0, isClosed: true
-            });
+            generatedWalls.push(createRoomEnclosureWall('wall-room'));
           }
         }
       });
@@ -439,8 +824,14 @@ export default function AiTrigger() {
     // ─── 3. Place Fixed Elements (Stage, etc.) First ─────────────────────────
     const STAGE_GAP = 1500; // clearance between stage and nearest table
 
-    const assetList: any[] = Array.isArray(plan.assets) ? plan.assets : [];
+    const assetList: any[] = planAssetList;
     const chairsAroundList: any[] = Array.isArray(plan.chairsAround) ? plan.chairsAround : [];
+    const normalizeAiAssetStrokeWidth = (value: any) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || numeric <= 0) return AI_DEFAULT_STROKE_WIDTH;
+      if (numeric >= 4.5 && numeric <= 5.5) return AI_DEFAULT_STROKE_WIDTH;
+      return numeric;
+    };
 
     // Identify stages from assets
     const stageItems = assetList.filter((a: any) =>
@@ -489,6 +880,10 @@ export default function AiTrigger() {
       } else if (wallHint.includes('center') || wallHint.includes('middle')) {
         sx = roomCX;
         sy = roomCY;
+      } else if (standaloneMarqueePlan) {
+        sx = roomCX;
+        sy = wallMinY + WALL_MARGIN + sh / 2;
+        usableMinY = sy + sh / 2 + STAGE_GAP;
       } else {
         // Default: right wall (only if no coordinates AND no clear hint provided)
         sx = wallMaxX - WALL_MARGIN - sw / 2;
@@ -507,7 +902,7 @@ export default function AiTrigger() {
         x: sx, y: sy,
         width: a.widthMm || sw,
         height: a.heightMm || sh,
-        strokeWidth: a.strokeWidth || 5,
+        strokeWidth: normalizeAiAssetStrokeWidth(a.strokeWidth),
         strokeColor: a.strokeColor || '#1a1a1a',
         scale: 1, zIndex: 3
       });
@@ -529,11 +924,43 @@ export default function AiTrigger() {
       tableH: number;
       tableType: string;
       isRound: boolean;
+      hasBuiltInSeating: boolean;
     }
 
     const tableSpecs: TableSpec[] = [];
     const CHAIR_SIZE = 450;
     const CHAIR_GAP = 180; // gap from table edge to chair edge
+    let fallbackTableNumber = 1;
+
+    const assetHasBuiltInSeating = (assetId: string, assetLabel?: string) => {
+      const label = `${assetLabel || ''} ${assetId}`.toLowerCase();
+      return (
+        /\b\d+\s*seater\b/.test(label) ||
+        label.includes('executive table') ||
+        label.includes('curve sofa') ||
+        label.includes('serpentine table') ||
+        label.includes('doughtnut table') ||
+        label.includes('doughnut table') ||
+        label.includes('vip table')
+      );
+    };
+
+    const getRepeatedTableName = (spec: any, repeatIndex: number) => {
+      const explicitStart = Number(spec.startTableNumber);
+      if (Number.isFinite(explicitStart) && explicitStart > 0) {
+        return String(explicitStart + repeatIndex);
+      }
+
+      const explicitTableName = spec.tableName ?? spec.name ?? spec.label;
+      const parsedExplicit = Number(explicitTableName);
+      if (Number.isFinite(parsedExplicit) && explicitTableName !== undefined && explicitTableName !== null && String(explicitTableName).trim() !== '') {
+        return String(parsedExplicit + repeatIndex);
+      }
+
+      const next = fallbackTableNumber;
+      fallbackTableNumber += 1;
+      return String(next);
+    };
 
     // From assets
     nonStageItems.forEach((a: any, idx: number) => {
@@ -576,8 +1003,38 @@ export default function AiTrigger() {
       const tw = libDef?.width || 823;
       const th = libDef?.height || 1018;
       const isRound = resolved.id.includes('round');
+      const hasBuiltInSeating = assetHasBuiltInSeating(resolved.id, libDef?.label || a.assetName || a.assetType);
+      const repeatCount = Math.max(1, Math.min(1000, Number(a.count || 1) || 1));
+      const placementHint = String(a.wall || a.position || '').toLowerCase();
+      const isDoorWindow = rawType.includes('door') || rawType.includes('window');
+      const inferWallAttachedRotation = () => {
+        if (!isDoorWindow) return Number(a.rotation || 0);
+        if (placementHint.includes('left')) return 270;
+        if (placementHint.includes('right')) return 90;
+        if (placementHint.includes('bottom')) return 180;
+        if (placementHint.includes('top')) return 0;
+        return Number(a.rotation || 0);
+      };
+      const shouldUseArrangement =
+        (Boolean(plan.tableArrangement?.type) || repeatCount > 1) &&
+        (rawType.includes('table') || hasBuiltInSeating);
 
       if (typeof a.xMm === 'number' && typeof a.yMm === 'number') {
+        if (shouldUseArrangement) {
+          for (let repeatIndex = 0; repeatIndex < repeatCount; repeatIndex++) {
+            tableSpecs.push({
+              name: getRepeatedTableName(a, repeatIndex),
+              chairCount: Number(a.chairCount || a.chairs || 4),
+              tableW: tw,
+              tableH: isRound ? tw : th,
+              tableType: resolved.id,
+              isRound,
+              hasBuiltInSeating,
+            });
+          }
+          return;
+        }
+
         // AI explicit dimensions take precedence over library defaults
         const w = a.widthMm ?? libDef?.width ?? tw;
         const h = a.heightMm ?? libDef?.height ?? th;
@@ -591,8 +1048,23 @@ export default function AiTrigger() {
         const fillProps = getResolvedFill(a);
 
         // Don't clamp doors/windows strictly inside, they belong on the wall edge or slightly intersecting!
-        const isDoorWindow = rawType.includes('door') || rawType.includes('window');
-        if (!isDoorWindow) {
+        if (isDoorWindow) {
+          const depth = Math.min(w, h);
+          const halfDepth = depth / 2;
+          if (placementHint.includes('left')) {
+            safeX = wallMinX + halfDepth;
+            safeY = Math.max(wallMinY + 200, Math.min(wallMaxY - 200, safeY));
+          } else if (placementHint.includes('right')) {
+            safeX = wallMaxX - halfDepth;
+            safeY = Math.max(wallMinY + 200, Math.min(wallMaxY - 200, safeY));
+          } else if (placementHint.includes('top')) {
+            safeY = wallMinY + halfDepth;
+            safeX = Math.max(wallMinX + 200, Math.min(wallMaxX - 200, safeX));
+          } else if (placementHint.includes('bottom')) {
+            safeY = wallMaxY - halfDepth;
+            safeX = Math.max(wallMinX + 200, Math.min(wallMaxX - 200, safeX));
+          }
+        } else {
           const margin = 200; // Keep tables/sofas at least 200mm from the wall inner edge
           safeX = Math.max(wallMinX + w / 2 + margin, Math.min(wallMaxX - w / 2 - margin, safeX));
           safeY = Math.max(wallMinY + h / 2 + margin, Math.min(wallMaxY - h / 2 - margin, safeY));
@@ -607,8 +1079,8 @@ export default function AiTrigger() {
           y: safeY,
           width: w,
           height: h,
-          rotation: a.rotation || 0,
-          strokeWidth: a.strokeWidth || 5, // Respect AI request
+          rotation: inferWallAttachedRotation(),
+          strokeWidth: normalizeAiAssetStrokeWidth(a.strokeWidth),
           tableName: a.tableName || a.name || a.label, // NEW: Table Numbering
           scale: 1,
           zIndex: rawType.includes('rug') || rawType.includes('carpet') ? 2 : 5
@@ -621,15 +1093,53 @@ export default function AiTrigger() {
       // But skip standalone chairs without coordinates, since grid only does tables.
       const isChair = rawType.includes('chair') || rawType.includes('stool');
       if (isChair) return;
+      if (isDoorWindow) {
+        const w = a.widthMm ?? libDef?.width ?? tw;
+        const h = a.heightMm ?? libDef?.height ?? th;
+        const depth = Math.min(w, h);
+        let x = roomCX;
+        let y = roomCY;
 
-      tableSpecs.push({
-        name: a.tableName || a.name || a.label,
-        chairCount: Number(a.chairCount || a.chairs || 4),
-        tableW: tw,
-        tableH: isRound ? tw : th,
-        tableType: resolved.id,
-        isRound,
-      });
+        if (placementHint.includes('left')) {
+          x = wallMinX + depth / 2;
+        } else if (placementHint.includes('right')) {
+          x = wallMaxX - depth / 2;
+        } else if (placementHint.includes('top')) {
+          y = wallMinY + depth / 2;
+        } else if (placementHint.includes('bottom')) {
+          y = wallMaxY - depth / 2;
+        } else {
+          y = wallMinY + depth / 2;
+        }
+
+        generatedAssets.push({
+          ...a,
+          ...getResolvedFill(a),
+          id: `ai-door-window-${idx}`,
+          type: resolved.id,
+          x,
+          y,
+          width: w,
+          height: h,
+          rotation: inferWallAttachedRotation(),
+          strokeWidth: normalizeAiAssetStrokeWidth(a.strokeWidth),
+          scale: 1,
+          zIndex: 5,
+        });
+        return;
+      }
+
+      for (let repeatIndex = 0; repeatIndex < repeatCount; repeatIndex++) {
+        tableSpecs.push({
+          name: getRepeatedTableName(a, repeatIndex),
+          chairCount: Number(a.chairCount || a.chairs || 4),
+          tableW: tw,
+          tableH: isRound ? tw : th,
+          tableType: resolved.id,
+          isRound,
+          hasBuiltInSeating,
+        });
+      }
     });
 
     // From chairsAround
@@ -639,6 +1149,7 @@ export default function AiTrigger() {
       const tw = libDef?.width || 823;
       const th = libDef?.height || 1018;
       const isRound = resolved.id.includes('round');
+      const hasBuiltInSeating = assetHasBuiltInSeating(resolved.id, libDef?.label || spec.tableAsset);
 
       // If AI explicitly provided X/Y, build the exact circle right away, no grid
       if (typeof spec.centerX === 'number' && typeof spec.centerY === 'number') {
@@ -666,18 +1177,21 @@ export default function AiTrigger() {
         // Add chairs
         const cCount = Number(spec.count || 4);
 
-        for (let ci = 0; ci < cCount; ci++) {
-          const angle = (ci / cCount) * Math.PI * 2 - Math.PI / 2;
-          generatedAssets.push({
-            id: `ai-explicit-roundchair-${idx}-${ci}`,
-            type: 'normal-chair',
-            x: cx + Math.cos(angle) * radius,
-            y: cy + Math.sin(angle) * radius,
-            rotation: (angle * 180 / Math.PI) + 90,
-            width: CHAIR_SIZE, height: CHAIR_SIZE,
-            fillColor: 'transparent',
-            scale: 1, zIndex: 15
-          });
+        if (!hasBuiltInSeating) {
+          for (let ci = 0; ci < cCount; ci++) {
+            const angle = (ci / cCount) * Math.PI * 2 - Math.PI / 2;
+            generatedAssets.push({
+              id: `ai-explicit-roundchair-${idx}-${ci}`,
+              type: 'normal-chair',
+              x: cx + Math.cos(angle) * radius,
+              y: cy + Math.sin(angle) * radius,
+              rotation: (angle * 180 / Math.PI) + 90,
+              width: CHAIR_SIZE, height: CHAIR_SIZE,
+              fillColor: 'transparent',
+              strokeWidth: AI_DEFAULT_STROKE_WIDTH,
+              scale: 1, zIndex: 15
+            });
+          }
         }
 
         return; // Skip grid
@@ -690,6 +1204,7 @@ export default function AiTrigger() {
         tableH: isRound ? tw : th,
         tableType: resolved.id,
         isRound,
+        hasBuiltInSeating,
       });
     });
 
@@ -697,24 +1212,186 @@ export default function AiTrigger() {
     let layoutWarning = '';
     if (tableSpecs.length > 0) {
       const N = tableSpecs.length;
+      const TABLE_GAP = 900;
+      const usableW = Math.max(1, usableMaxX - usableMinX);
+      const usableH = Math.max(1, usableMaxY - usableMinY);
+      const arrangementType = String(plan.tableArrangement?.type || 'grid').toLowerCase();
+      const arrangementDirection =
+        plan.tableArrangement?.direction ||
+        (usableW >= usableH ? 'horizontal' : 'vertical');
+
+      type LayoutSlot = { x: number; y: number };
       const gridCols = plan.gridLayout?.columns || Math.ceil(Math.sqrt(N));
       const gridRows = Math.ceil(N / gridCols);
 
-      const TABLE_GAP = 900;
-
-      const usableW = Math.max(1, usableMaxX - usableMinX);
-      const usableH = Math.max(1, usableMaxY - usableMinY);
-
-      // Compute natural (unscaled) cell dimensions
-      // cellW = chairs-left + table + chairs-right + gap-to-next-cell
+      // Compute natural (unscaled) cell dimensions.
+      // Built-in seating assets already include their chairs, so do not reserve
+      // extra loose-chair footprint around them or the whole arrangement shrinks too aggressively.
       const repTW0 = tableSpecs[0].tableW;
       const repTH0 = tableSpecs[0].tableH;
-      const cellW0 = repTW0 + 2 * (CHAIR_SIZE + CHAIR_GAP) + TABLE_GAP;
-      const cellH0 = repTH0 + 2 * (CHAIR_SIZE + CHAIR_GAP) + TABLE_GAP;
+      const builtInSeating = tableSpecs[0].hasBuiltInSeating;
+      const cellW0 = builtInSeating
+        ? repTW0 + TABLE_GAP
+        : repTW0 + 2 * (CHAIR_SIZE + CHAIR_GAP) + TABLE_GAP;
+      const cellH0 = builtInSeating
+        ? repTH0 + TABLE_GAP
+        : repTH0 + 2 * (CHAIR_SIZE + CHAIR_GAP) + TABLE_GAP;
+      const buildRectanglePerimeterSlots = (
+        count: number,
+        width: number,
+        height: number
+      ): LayoutSlot[] => {
+        if (count <= 0) return [];
+        if (count === 1) return [{ x: 0, y: 0 }];
+
+        const slots: LayoutSlot[] = [];
+        const halfW = width / 2;
+        const halfH = height / 2;
+        const perimeter = 2 * (width + height);
+
+        for (let i = 0; i < count; i++) {
+          const distance = (i / count) * perimeter;
+          if (distance < width) {
+            slots.push({ x: -halfW + distance, y: -halfH });
+          } else if (distance < width + height) {
+            slots.push({ x: halfW, y: -halfH + (distance - width) });
+          } else if (distance < 2 * width + height) {
+            slots.push({
+              x: halfW - (distance - width - height),
+              y: halfH,
+            });
+          } else {
+            slots.push({
+              x: -halfW,
+              y: halfH - (distance - 2 * width - height),
+            });
+          }
+        }
+
+        return slots;
+      };
+      const rawSlots: LayoutSlot[] =
+        arrangementType === 'linear'
+          ? arrangementDirection === 'vertical'
+            ? tableSpecs.map((_, i) => ({ x: 0, y: i * cellH0 }))
+            : tableSpecs.map((_, i) => ({ x: i * cellW0, y: 0 }))
+          : arrangementType === 'boardroom'
+            ? arrangementDirection === 'vertical'
+              ? tableSpecs.map((_, i) => ({ x: 0, y: i * (cellH0 * 0.8) }))
+              : tableSpecs.map((_, i) => ({ x: i * (cellW0 * 0.8), y: 0 }))
+            : arrangementType === 'classroom'
+              ? (() => {
+                  const cols = Math.max(
+                    2,
+                    plan.gridLayout?.columns || Math.ceil(Math.sqrt(N))
+                  );
+                  const rowGap = cellH0 * 1.2;
+                  const colGap = cellW0 * 0.95;
+                  return tableSpecs.map((_, i) => {
+                    const col = i % cols;
+                    const row = Math.floor(i / cols);
+                    return { x: col * colGap, y: row * rowGap };
+                  });
+                })()
+              : arrangementType === 'chevron'
+                ? (() => {
+                    const cols = Math.max(
+                      2,
+                      plan.gridLayout?.columns || Math.ceil(Math.sqrt(N))
+                    );
+                    const rowGap = cellH0 * 1.05;
+                    const colGap = cellW0 * 0.92;
+                    return tableSpecs.map((_, i) => {
+                      const col = i % cols;
+                      const row = Math.floor(i / cols);
+                      const offset = (row % 2 === 0 ? -0.25 : 0.25) * cellW0;
+                      return { x: col * colGap + offset, y: row * rowGap };
+                    });
+                  })()
+          : arrangementType === 'circular'
+            ? (() => {
+                if (N === 1) return [{ x: 0, y: 0 }];
+                const slots: LayoutSlot[] = [];
+                const baseRadius =
+                  Number(plan.tableArrangement?.radiusMm) ||
+                  Math.max(cellW0, cellH0) * 1.25;
+                const ringStep = Math.max(cellW0, cellH0) * 1.15;
+                let remaining = N;
+                let ringIndex = 0;
+
+                while (remaining > 0) {
+                  const radius = baseRadius + ringIndex * ringStep;
+                  const ringCapacity = Math.max(
+                    ringIndex === 0 ? 6 : 8,
+                    Math.floor((2 * Math.PI * radius) / Math.max(cellW0, cellH0))
+                  );
+                  const countThisRing = Math.min(remaining, ringCapacity);
+                  for (let i = 0; i < countThisRing; i++) {
+                    const angle = -Math.PI / 2 + (i / countThisRing) * Math.PI * 2;
+                    slots.push({
+                      x: Math.cos(angle) * radius,
+                      y: Math.sin(angle) * radius,
+                    });
+                  }
+                  remaining -= countThisRing;
+                  ringIndex += 1;
+                }
+
+                return slots;
+              })()
+            : arrangementType === 'perimeter'
+              ? (() => {
+                  const aspect = usableW / Math.max(1, usableH);
+                  const approxCols = Math.max(2, Math.round(Math.sqrt(N * aspect)));
+                  const approxRows = Math.max(2, Math.ceil(N / approxCols));
+                  const width = Math.max(cellW0 * 2, (approxCols - 1) * cellW0);
+                  const height = Math.max(cellH0 * 2, (approxRows - 1) * cellH0);
+                  return buildRectanglePerimeterSlots(N, width, height);
+                })()
+              : arrangementType === 'u-shape'
+                ? (() => {
+                    if (N === 1) return [{ x: 0, y: 0 }];
+                    const slots: LayoutSlot[] = [];
+                    const topCount = Math.max(2, Math.ceil(N / 2));
+                    const sideCount = Math.max(0, Math.ceil((N - topCount) / 2));
+                    const width = Math.max(cellW0 * 2, (topCount - 1) * cellW0);
+                    const halfW = width / 2;
+
+                    for (let i = 0; i < topCount && slots.length < N; i++) {
+                      const x =
+                        topCount === 1
+                          ? 0
+                          : -halfW + (i * width) / Math.max(1, topCount - 1);
+                      slots.push({ x, y: 0 });
+                    }
+
+                    for (let i = 0; i < sideCount && slots.length < N; i++) {
+                      slots.push({ x: -halfW, y: (i + 1) * cellH0 });
+                    }
+
+                    for (let i = 0; i < sideCount && slots.length < N; i++) {
+                      slots.push({ x: halfW, y: (i + 1) * cellH0 });
+                    }
+
+                    while (slots.length < N) {
+                      slots.push({ x: 0, y: (sideCount + 1) * cellH0 });
+                    }
+
+                    return slots;
+                  })()
+                : tableSpecs.map((_, i) => {
+                    const col = i % gridCols;
+                    const row = Math.floor(i / gridCols);
+                    return { x: col * cellW0, y: row * cellH0 };
+                  });
       // Total footprint = cols*cellW (each cell already contains the trailing gap)
       // But the LAST cell's trailing gap is excess, so subtract one TABLE_GAP
-      const gridW0 = gridCols * cellW0 - TABLE_GAP;
-      const gridH0 = gridRows * cellH0 - TABLE_GAP;
+      const minX0 = Math.min(...rawSlots.map((slot) => slot.x - cellW0 / 2));
+      const maxX0 = Math.max(...rawSlots.map((slot) => slot.x + cellW0 / 2));
+      const minY0 = Math.min(...rawSlots.map((slot) => slot.y - cellH0 / 2));
+      const maxY0 = Math.max(...rawSlots.map((slot) => slot.y + cellH0 / 2));
+      const gridW0 = Math.max(1, maxX0 - minX0);
+      const gridH0 = Math.max(1, maxY0 - minY0);
 
       // ── Auto-scale: shrink everything proportionally so it always fits
       const scaleX = gridW0 > usableW ? usableW / gridW0 : 1;
@@ -739,25 +1416,28 @@ export default function AiTrigger() {
       const repTH = Math.round(repTH0 * scaleFactor);
       const cellW = repTW + 2 * (effChairSize + effChairGap) + effTableGap;
       const cellH = repTH + 2 * (effChairSize + effChairGap) + effTableGap;
-      const gridW = gridCols * cellW - effTableGap;
-      const gridH = gridRows * cellH - effTableGap;
-
-      // Center the grid in the usable space
-      const gridOriginX = usableMinX + (usableW - gridW) / 2;
-      const gridOriginY = usableMinY + (usableH - gridH) / 2;
+      const layoutCenterX0 = (minX0 + maxX0) / 2;
+      const layoutCenterY0 = (minY0 + maxY0) / 2;
+      const centerOverrideX =
+        typeof plan.tableArrangement?.centerX === 'number'
+          ? wallMinX + plan.tableArrangement.centerX
+          : null;
+      const centerOverrideY =
+        typeof plan.tableArrangement?.centerY === 'number'
+          ? wallMinY + plan.tableArrangement.centerY
+          : null;
+      const gridOriginX = centerOverrideX ?? (usableMinX + usableW / 2);
+      const gridOriginY = centerOverrideY ?? (usableMinY + usableH / 2);
 
       tableSpecs.forEach((spec, i) => {
-        const col = i % gridCols;
-        const row = Math.floor(i / gridCols);
+        const slot = rawSlots[i];
 
         // Scale this table's individual dimensions
         const tw = Math.round(spec.tableW * scaleFactor);
         const th = Math.round(spec.tableH * scaleFactor);
 
-        // The cell starts at gridOriginX + col*cellW.
-        // Inside the cell, the table center is at: chairs-on-left + table/2
-        const tableCX = gridOriginX + col * cellW + (effChairSize + effChairGap) + tw / 2;
-        const tableCY = gridOriginY + row * cellH + (effChairSize + effChairGap) + th / 2;
+        const tableCX = gridOriginX + (slot.x - layoutCenterX0) * scaleFactor;
+        const tableCY = gridOriginY + (slot.y - layoutCenterY0) * scaleFactor;
 
         // Place table — use EXACT library dimensions, same as drag-and-drop
         const libDef = ASSET_LIBRARY.find(x => x.id === spec.tableType);
@@ -768,70 +1448,72 @@ export default function AiTrigger() {
           type: spec.tableType,
           x: tableCX, y: tableCY,
           width: renderW, height: renderH,
-          strokeWidth: 5, // Natural mode default
+          strokeWidth: AI_DEFAULT_STROKE_WIDTH,
           strokeColor: '#1a1a1a',
           fillColor: 'transparent', // No fill by default per user request
           tableName: spec.name, // NEW: Table Numbering
-          scale: 1, zIndex: 5
+          scale: scaleFactor, zIndex: 5
         });
 
         // ─── Chairs ──────────────────────────────────────────────────────────
-        const cCount = spec.chairCount;
-        const topChairY = tableCY - th / 2 - effChairGap - effChairSize / 2;
-        const botChairY = tableCY + th / 2 + effChairGap + effChairSize / 2;
-        const leftChairX = tableCX - tw / 2 - effChairGap - effChairSize / 2;
-        const rightChairX = tableCX + tw / 2 + effChairGap + effChairSize / 2;
+        if (!spec.hasBuiltInSeating) {
+          const cCount = spec.chairCount;
+          const topChairY = tableCY - th / 2 - effChairGap - effChairSize / 2;
+          const botChairY = tableCY + th / 2 + effChairGap + effChairSize / 2;
+          const leftChairX = tableCX - tw / 2 - effChairGap - effChairSize / 2;
+          const rightChairX = tableCX + tw / 2 + effChairGap + effChairSize / 2;
 
-        if (spec.isRound) {
-          const radius = tw / 2 + effChairGap + effChairSize / 2;
-          for (let ci = 0; ci < cCount; ci++) {
-            const angle = (ci / cCount) * Math.PI * 2 - Math.PI / 2;
-            generatedAssets.push({
-              id: `chair-${i}-${ci}`, type: 'normal-chair',
-              x: tableCX + Math.cos(angle) * radius,
-              y: tableCY + Math.sin(angle) * radius,
-              rotation: (angle * 180 / Math.PI) + 90,
-              width: effChairSize, height: effChairSize,
-              strokeWidth: 5, scale: 1, zIndex: 15,
-              fillColor: 'transparent'
-            });
+          if (spec.isRound) {
+            const radius = tw / 2 + effChairGap + effChairSize / 2;
+            for (let ci = 0; ci < cCount; ci++) {
+              const angle = (ci / cCount) * Math.PI * 2 - Math.PI / 2;
+              generatedAssets.push({
+                id: `chair-${i}-${ci}`, type: 'normal-chair',
+                x: tableCX + Math.cos(angle) * radius,
+                y: tableCY + Math.sin(angle) * radius,
+                rotation: (angle * 180 / Math.PI) + 90,
+                width: effChairSize, height: effChairSize,
+                strokeWidth: AI_DEFAULT_STROKE_WIDTH, scale: 1, zIndex: 15,
+                fillColor: 'transparent'
+              });
+            }
+          } else {
+            const perimeter = 2 * (tw + th);
+            const topCount = Math.max(1, Math.round(cCount * tw / perimeter));
+            const botCount = Math.max(1, Math.round(cCount * tw / perimeter));
+            const leftCount = Math.max(0, Math.round(cCount * th / perimeter));
+            const rightCount = Math.max(0, cCount - topCount - botCount - leftCount);
+
+            const addRow = (count: number, y: number, rot: number) => {
+              for (let ci = 0; ci < count; ci++) {
+                const x = tableCX - tw / 2 + (tw / (count + 1)) * (ci + 1);
+                generatedAssets.push({
+                  id: `chair-${i}-r-${ci}-${rot}`, type: 'normal-chair',
+                  x, y, rotation: rot,
+                  width: effChairSize, height: effChairSize,
+                  strokeWidth: AI_DEFAULT_STROKE_WIDTH, scale: 1, zIndex: 15,
+                  fillColor: 'transparent'
+                });
+              }
+            };
+            const addCol = (count: number, x: number, rot: number) => {
+              for (let ci = 0; ci < count; ci++) {
+                const y = tableCY - th / 2 + (th / (count + 1)) * (ci + 1);
+                generatedAssets.push({
+                  id: `chair-${i}-c-${ci}-${rot}`, type: 'normal-chair',
+                  x, y, rotation: rot,
+                  width: effChairSize, height: effChairSize,
+                  strokeWidth: AI_DEFAULT_STROKE_WIDTH, scale: 1, zIndex: 15,
+                  fillColor: 'transparent'
+                });
+              }
+            };
+
+            addRow(topCount, topChairY, 180);
+            addRow(botCount, botChairY, 0);
+            if (leftCount > 0) addCol(leftCount, leftChairX, 90);
+            if (rightCount > 0) addCol(rightCount, rightChairX, 270);
           }
-        } else {
-          const perimeter = 2 * (tw + th);
-          const topCount = Math.max(1, Math.round(cCount * tw / perimeter));
-          const botCount = Math.max(1, Math.round(cCount * tw / perimeter));
-          const leftCount = Math.max(0, Math.round(cCount * th / perimeter));
-          const rightCount = Math.max(0, cCount - topCount - botCount - leftCount);
-
-          const addRow = (count: number, y: number, rot: number) => {
-            for (let ci = 0; ci < count; ci++) {
-              const x = tableCX - tw / 2 + (tw / (count + 1)) * (ci + 1);
-              generatedAssets.push({
-                id: `chair-${i}-r-${ci}-${rot}`, type: 'normal-chair',
-                x, y, rotation: rot,
-                width: effChairSize, height: effChairSize,
-                strokeWidth: 5, scale: 1, zIndex: 15,
-                fillColor: 'transparent'
-              });
-            }
-          };
-          const addCol = (count: number, x: number, rot: number) => {
-            for (let ci = 0; ci < count; ci++) {
-              const y = tableCY - th / 2 + (th / (count + 1)) * (ci + 1);
-              generatedAssets.push({
-                id: `chair-${i}-c-${ci}-${rot}`, type: 'normal-chair',
-                x, y, rotation: rot,
-                width: effChairSize, height: effChairSize,
-                strokeWidth: 5, scale: 1, zIndex: 15,
-                fillColor: 'transparent'
-              });
-            }
-          };
-
-          addRow(topCount, topChairY, 180);
-          addRow(botCount, botChairY, 0);
-          if (leftCount > 0) addCol(leftCount, leftChairX, 90);
-          if (rightCount > 0) addCol(rightCount, rightChairX, 270);
         }
       });
     }
@@ -859,7 +1541,7 @@ export default function AiTrigger() {
           height: Number(s.heightMm ?? s.height ?? 1000),
           stroke: s.stroke || s.strokeColor || '#000000',
           strokeColor: s.stroke || s.strokeColor || '#000000',
-          strokeWidth: Number(s.strokeWidth ?? 5),
+          strokeWidth: Number(s.strokeWidth ?? AI_DEFAULT_STROKE_WIDTH),
           rotation: Number(s.rotation ?? 0),
           zIndex: 2,
         });
@@ -957,11 +1639,99 @@ export default function AiTrigger() {
         });
     }
 
+    const computeWallBounds = (wall: any) => {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let maxThickness = Number(wall?.wallThickness) || 0;
+      if (Array.isArray(wall?.edges)) {
+        wall.edges.forEach((edge: any) => {
+          maxThickness = Math.max(maxThickness, Number(edge?.thickness) || 0);
+        });
+      }
+      const pad = Math.max(1, maxThickness / 2);
+      const points = Array.isArray(wall?.nodes)
+        ? wall.nodes
+        : Array.isArray(wall?.wallNodes)
+          ? wall.wallNodes
+          : [];
+      points.forEach((node: any) => {
+        if (!Number.isFinite(node?.x) || !Number.isFinite(node?.y)) return;
+        minX = Math.min(minX, node.x - pad);
+        minY = Math.min(minY, node.y - pad);
+        maxX = Math.max(maxX, node.x + pad);
+        maxY = Math.max(maxY, node.y + pad);
+      });
+      if (!Number.isFinite(minX)) return null;
+      return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+    };
+
+    const computeNonWallBounds = () => {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      const includePoint = (x: number, y: number) => {
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      };
+      const includeRect = (cx: number, cy: number, w: number, h: number) => {
+        const halfW = Math.max(1, Math.abs(w) / 2);
+        const halfH = Math.max(1, Math.abs(h) / 2);
+        includePoint(cx - halfW, cy - halfH);
+        includePoint(cx + halfW, cy + halfH);
+      };
+
+      generatedAssets.forEach((asset: any) => {
+        const scale = Number(asset?.scale) || 1;
+        includeRect(asset.x, asset.y, (Number(asset?.width) || 0) * scale, (Number(asset?.height) || 0) * scale);
+      });
+
+      generatedShapes.forEach((shape: any) => {
+        includeRect(shape.x, shape.y, Number(shape?.width) || 0, Number(shape?.height) || 0);
+      });
+
+      generatedTextAnnotations.forEach((annotation: any) => {
+        const fontSize = Number(annotation?.fontSize) || 400;
+        const textLength = String(annotation?.text || '').length || 1;
+        includeRect(annotation.x, annotation.y, textLength * fontSize * 0.6, fontSize * 1.2);
+      });
+
+      if (!Number.isFinite(minX)) return null;
+      return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+    };
+
+    if (generatedWalls.length === 1) {
+      const wallBounds = computeWallBounds(generatedWalls[0]);
+      const contentBounds = computeNonWallBounds();
+      const contentEscapesWall = Boolean(
+        wallBounds &&
+          contentBounds &&
+          (
+            contentBounds.minX < wallBounds.minX - 300 ||
+            contentBounds.maxX > wallBounds.maxX + 300 ||
+            contentBounds.minY < wallBounds.minY - 300 ||
+            contentBounds.maxY > wallBounds.maxY + 300
+          )
+      );
+      const wallLooksTooSmall = Boolean(
+        wallBounds &&
+          (
+            wallBounds.width < roomW * 0.6 ||
+            wallBounds.height < roomH * 0.6
+          )
+      );
+
+      if (contentEscapesWall && wallLooksTooSmall) {
+        generatedWalls[0] = createRoomEnclosureWall(generatedWalls[0].id || 'wall-room-repaired');
+      }
+    }
+
     return {
       walls: generatedWalls,
       assets: generatedAssets,
       shapes: generatedShapes,
       textAnnotations: generatedTextAnnotations,
+      width: roomW,
+      height: roomH,
       combined: [...generatedWalls, ...generatedAssets, ...generatedShapes, ...generatedTextAnnotations],
       warning: layoutWarning || undefined
     };
@@ -980,7 +1750,9 @@ export default function AiTrigger() {
           walls: result.walls,
           assets: result.assets,
           shapes: result.shapes,
-          textAnnotations: result.textAnnotations
+          textAnnotations: result.textAnnotations,
+          width: result.width,
+          height: result.height
         }
       });
       const parts: string[] = [];
@@ -1685,12 +2457,114 @@ export default function AiTrigger() {
     }
   };
 
-  const handleSubmit = async (overridePrompt?: string) => {
-    if (!inputValue.trim() && !overridePrompt) return;
-    const prompt = overridePrompt || inputValue.trim();
-    setInputValue(""); // Clear immediately to prevent double-sends
-    setMessages((m: any) => [...m, { role: 'user', content: prompt }]);
-    setIsLoading(true);
+  const buildFallbackPreviewFromPrompt = (source: string) => {
+    const marqueePreview = buildFallbackMarqueePreview(source);
+    if (marqueePreview) return marqueePreview;
+
+    const joinedHistory = messages
+      .filter((m: any) => m.role === 'user')
+      .map((m: any) => m.content || '')
+      .join('\n');
+    const text = `${joinedHistory}\n${source || ''}`;
+
+    const match = text.match(
+      /(\d+(?:\.\d+)?)\s*(mm|m)?\s*(?:x|by)\s*(\d+(?:\.\d+)?)\s*(mm|m)?/i
+    );
+    if (!match) return undefined;
+
+    const toMm = (value: string, unit?: string) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return null;
+      return (unit || '').toLowerCase() === 'm' ? numeric * 1000 : numeric;
+    };
+
+    const widthMm = toMm(match[1], match[2]);
+    const heightMm = toMm(match[3], match[4] || match[2]);
+    if (!widthMm || !heightMm) return undefined;
+
+    const guestMatch = text.match(/(?:about\s+)?(\d+)\s*guest/i);
+    const guestCount = guestMatch ? Number(guestMatch[1]) : null;
+    const seaterMatch = text.match(/(\d+)\s*seater/i);
+    const seatCount = seaterMatch ? Number(seaterMatch[1]) : null;
+
+    const lower = text.toLowerCase();
+    const arrangementType = lower.includes('u-shape') || lower.includes('u shape')
+      ? 'u-shape'
+      : lower.includes('boardroom')
+        ? 'boardroom'
+        : lower.includes('classroom')
+          ? 'classroom'
+          : lower.includes('chevron')
+            ? 'chevron'
+            : lower.includes('perimeter')
+              ? 'perimeter'
+              : lower.includes('circular')
+                ? 'circular'
+                : lower.includes('linear')
+                  ? 'linear'
+                  : lower.includes('grid')
+                    ? 'grid'
+                    : 'grid';
+
+    const wantsRound = lower.includes('round');
+    const wantsRectangular = lower.includes('rectangular') || lower.includes('rectangle');
+    const inferredAsset = ASSET_LIBRARY.find((asset) => {
+      const label = `${asset.label || ''} ${asset.id}`.toLowerCase();
+      if (!label.includes('table')) return false;
+      if (seatCount && !new RegExp(`\\b${seatCount}\\s*seater\\b`).test(label)) return false;
+      if (wantsRound && !label.includes('round')) return false;
+      if (wantsRectangular && !label.includes('rectangular')) return false;
+      return true;
+    });
+
+    const count =
+      guestCount && seatCount
+        ? Math.max(1, Math.ceil(guestCount / seatCount))
+        : 0;
+
+    const previewPlan: any = {
+      walls: [{ widthMm, heightMm, wallType: 'enclosure-150' }],
+    };
+
+    if (inferredAsset && count > 0) {
+      previewPlan.assets = [
+        {
+          assetName: inferredAsset.label || inferredAsset.id,
+          count,
+          chairCount: seatCount || 4,
+          startTableNumber: 1,
+        },
+      ];
+      previewPlan.tableArrangement = { type: arrangementType };
+    }
+
+    if (/\byes stage\b|\badd a stage\b|\bwith stage\b/.test(lower)) {
+      previewPlan.assets = [
+        ...(previewPlan.assets || []),
+        {
+          assetName: '1m x 1m Modular Stage 2',
+          wall: 'top',
+          widthMm: 4000,
+          heightMm: 2000,
+        },
+      ];
+    }
+
+    return processPlan(previewPlan, canvas);
+  };
+
+    const handleSubmit = async (overridePrompt?: string) => {
+      if (!inputValue.trim() && !overridePrompt) return;
+      const prompt = overridePrompt || inputValue.trim();
+      const isAssetSelectionReply = /^i want to use the\s+/i.test(prompt);
+      setInputValue(""); // Clear immediately to prevent double-sends
+      if (isAssetSelectionReply) {
+        setMessages((m: any) =>
+          m.map((msg: any) => (msg.assetSelection ? { ...msg, assetSelection: undefined } : msg))
+        );
+      }
+      setMessages((m: any) => [...m, { role: 'user', content: prompt }]);
+      setIsLoading(true);
 
     const selectedAssets = getCurrentSelectedAssets();
 
@@ -1761,9 +2635,11 @@ export default function AiTrigger() {
       const data = await res.json();
 
       let previewData: any[] | undefined;
+      let previewPlanData: any | undefined;
       let planData: any | undefined;
       let rawPlan: any | undefined;
       let assetSelection: any | undefined;
+      let inferredAssetSelection: any | undefined;
 
       if (data?.assetSelection) {
         assetSelection = data.assetSelection;
@@ -1777,30 +2653,63 @@ export default function AiTrigger() {
       if (data?.preview) {
         try {
           const processed = processPlan(data.preview, canvas);
+          previewPlanData = processed;
           previewData = processed.combined;
         } catch (e) {
           console.error("Preview processing failed", e);
         }
       }
 
-      // Handle followUp (AI asking a clarifying question)
-      const followUpText = data.followUp || null;
+        // Handle followUp (AI asking a clarifying question)
+        const followUpText = data.followUp || null;
+        if (!assetSelection && followUpText && !isAssetSelectionReply) {
+          inferredAssetSelection = buildFallbackAssetSelectionFromFollowUp(followUpText);
+        }
+      if ((!previewData || previewData.length === 0) && followUpText) {
+        const fallbackProcessed = buildFallbackPreviewFromPrompt(prompt);
+        if (fallbackProcessed) {
+          previewPlanData = fallbackProcessed;
+          previewData = fallbackProcessed.combined;
+        }
+      }
 
-      if (assetSelection || planData || previewData || data.message || followUpText) {
+      const previousPreviewPlan = getLatestPreviewPlanData();
+      if (
+        isWallsOnlyPreviewPlan(previewPlanData) &&
+        previousPreviewPlan &&
+        !isWallsOnlyPreviewPlan(previousPreviewPlan)
+      ) {
+        previewPlanData = mergePreviewPlans(previousPreviewPlan, previewPlanData);
+        previewData = previewPlanData.combined;
+      } else if (
+        !previewPlanData &&
+        previousPreviewPlan &&
+        isAssetSelectionReply
+      ) {
+        previewPlanData = mergePreviewPlans(previousPreviewPlan, undefined);
+        previewData = previewPlanData.combined;
+      }
+
+      if (assetSelection || inferredAssetSelection || planData || previewData || previewPlanData || data.message || followUpText) {
         let content = '';
         if (data.message) content = data.message;
         else if (followUpText) content = followUpText;
-        else if (planData) content = 'I have generated your plan draft. Click "Apply to Canvas" to use it.';
+        else if (planData) {
+          content = planData.warning
+            ? `${planData.warning} I have still generated a draft preview. Click "Apply to Canvas" to use it, or adjust the room size/guest count first.`
+            : 'I have generated your plan draft. Click "Apply to Canvas" to use it.';
+        }
         else if (assetSelection) content = assetSelection.message || 'Please select an asset type:';
         else content = 'Done!';
 
         setMessages((m: any) => [...m, {
           role: 'assistant',
           content,
-          assetSelection,
+          assetSelection: assetSelection || inferredAssetSelection,
           planData,
           rawPlan,
           previewData,
+          previewPlanData,
           choices: data.choices, // FIX: Pass choices to state so buttons show
           rawAssistantMessage: JSON.stringify(data)
         }]);
@@ -2069,6 +2978,14 @@ export default function AiTrigger() {
 
                         {/* Layout Preview */}
                         {m.planData && (
+                          (() => {
+                            const wallOnlyPlanPreview =
+                              Array.isArray(m.planData?.walls) &&
+                              m.planData.walls.length > 0 &&
+                              (!Array.isArray(m.planData?.assets) || m.planData.assets.length === 0) &&
+                              (!Array.isArray(m.planData?.shapes) || m.planData.shapes.length === 0) &&
+                              (!Array.isArray(m.planData?.textAnnotations) || m.planData.textAnnotations.length === 0);
+                            return (
                           <div className="w-full mt-2 rounded-xl border border-slate-200 overflow-hidden bg-slate-50 relative group shadow-sm">
                             <div className="p-2 bg-white border-b border-slate-100 flex items-center justify-between">
                               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Draft Preview</span>
@@ -2079,7 +2996,20 @@ export default function AiTrigger() {
                                 Apply to Canvas
                               </button>
                             </div>
-                            <div className="aspect-video relative">
+                            <div
+                              className="relative"
+                              style={
+                                wallOnlyPlanPreview
+                                  ? {
+                                      aspectRatio: `${Math.max(1, m.planData.width || 600)} / ${Math.max(1, m.planData.height || 300)}`,
+                                      minHeight: 240,
+                                    }
+                                  : {
+                                      aspectRatio: `${Math.max(1, m.planData.width || 600)} / ${Math.max(1, m.planData.height || 300)}`,
+                                      minHeight: 220
+                                    }
+                              }
+                            >
                               <PlanPreview
                                 assets={m.planData.assets}
                                 walls={m.planData.walls}
@@ -2088,29 +3018,59 @@ export default function AiTrigger() {
                                 width={600}
                                 height={300}
                                 className="w-full h-full"
+                                stretchToContainer={false}
                               />
                             </div>
                           </div>
+                            );
+                          })()
                         )}
 
-                        {m.previewData && (
-                          <div className="w-full mt-2 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 aspect-video relative group">
+                        {m.previewPlanData && (
+                          (() => {
+                            const wallOnlyPreview =
+                              Array.isArray(m.previewPlanData?.walls) &&
+                              m.previewPlanData.walls.length > 0 &&
+                              (!Array.isArray(m.previewPlanData?.assets) || m.previewPlanData.assets.length === 0) &&
+                              (!Array.isArray(m.previewPlanData?.shapes) || m.previewPlanData.shapes.length === 0) &&
+                              (!Array.isArray(m.previewPlanData?.textAnnotations) || m.previewPlanData.textAnnotations.length === 0);
+                            return (
+                          <div
+                            className="w-full mt-2 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 relative group"
+                            style={
+                              wallOnlyPreview
+                                ? {
+                                    aspectRatio: `${Math.max(1, m.previewPlanData.width || 600)} / ${Math.max(1, m.previewPlanData.height || 300)}`,
+                                    minHeight: 240,
+                                  }
+                                : {
+                                    aspectRatio: `${Math.max(1, m.previewPlanData.width || 600)} / ${Math.max(1, m.previewPlanData.height || 300)}`,
+                                    minHeight: 180
+                                  }
+                            }
+                          >
                             <PlanPreview
-                              assets={m.previewData}
+                              assets={m.previewPlanData.assets}
+                              walls={m.previewPlanData.walls}
+                              shapes={m.previewPlanData.shapes}
+                              textAnnotations={m.previewPlanData.textAnnotations}
                               width={600}
                               height={300}
                               className="w-full h-full"
+                              stretchToContainer={false}
                             />
                             <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                               <span className="bg-white/90 px-3 py-1.5 rounded-full text-xs font-medium shadow-sm border">Draft Preview</span>
                             </div>
                           </div>
+                            );
+                          })()
                         )}
 
                         {/* Asset Selection Grid */}
                         {m.assetSelection && (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full max-w-lg mt-1">
-                            {m.assetSelection.options.map((option: { id: string; name: string; category: string; path: string }) => (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full max-w-2xl mt-1">
+                            {m.assetSelection.options.map((option: { id: string; name: string; category: string; path: string; width?: number; height?: number }) => (
                               <button
                                 key={option.id}
                                 onClick={() => {
@@ -2118,14 +3078,42 @@ export default function AiTrigger() {
                                 }}
                                 className="flex flex-col items-center p-2 rounded-md border border-gray-200 bg-white hover:border-[var(--accent)] hover:bg-blue-50 transition-all text-left"
                               >
-                                <div className="w-full h-16 bg-white rounded mb-2 overflow-hidden flex items-center justify-center p-2 border border-gray-100 shadow-sm group-hover:bg-blue-50 transition-colors relative">
-                                  {/* Contrast layer for white/transparent SVGs */}
-                                  <div className="absolute inset-0 bg-gray-50/30 pointer-events-none" />
-                                  <img
-                                    src={encodeURI(option.path)}
-                                    alt={option.name}
-                                    className="max-w-full max-h-full object-contain relative z-10 filter drop-shadow-[0_0_0.5px_rgba(0,0,0,0.5)]"
-                                  />
+                                  <div
+                                    className={`w-full rounded mb-2 overflow-hidden flex items-center justify-center border border-gray-100 shadow-sm transition-colors relative ${
+                                      option.category === 'Marquee'
+                                        ? 'bg-slate-50 group-hover:bg-slate-100'
+                                        : 'bg-white group-hover:bg-blue-50'
+                                    }`}
+                                    style={{
+                                      aspectRatio: `${Math.max(1, option.width || 1200)} / ${Math.max(1, option.height || 900)}`,
+                                      minHeight: 72
+                                    }}
+                                  >
+                                    {option.category === 'Marquee' ? (
+                                      <MarqueeOptionPreview
+                                        width={option.width}
+                                        height={option.height}
+                                      />
+                                    ) : (
+                                      <PlanPreview
+                                        assets={[{
+                                        id: `asset-selection-${option.id}`,
+                                        type: option.id,
+                                        x: Math.max(1, option.width || 1200) / 2,
+                                        y: Math.max(1, option.height || 900) / 2,
+                                        width: option.width || 1200,
+                                        height: option.height || 900,
+                                        strokeWidth: AI_DEFAULT_STROKE_WIDTH,
+                                        strokeColor: '#1a1a1a',
+                                        fillColor: 'transparent',
+                                        scale: 1,
+                                        zIndex: 5
+                                      } as any]}
+                                      width={Math.max(1, option.width || 1200)}
+                                      height={Math.max(1, option.height || 900)}
+                                      className="w-full h-full"
+                                    />
+                                  )}
                                 </div>
                                 <span className="text-[10px] font-bold text-slate-700 line-clamp-1 w-full">{option.name}</span>
                                 <span className="text-[8px] text-slate-400 uppercase tracking-widest w-full font-bold">{option.category}</span>

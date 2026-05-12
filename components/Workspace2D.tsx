@@ -871,7 +871,7 @@ export default function Workspace2D({
       // Update store position for other tools to access
       // Throttle mouse position updates to avoid excessive store-triggering re-renders
       const now = Date.now();
-      if (MOUSE_WORLD_POS_TOOLS.has(activeTool) && !isDraggingItem && (!(window as any)._lastMouseUpdate || now - (window as any)._lastMouseUpdate > 16)) {
+      if ((placementMode.active || MOUSE_WORLD_POS_TOOLS.has(activeTool)) && !isDraggingItem && (!(window as any)._lastMouseUpdate || now - (window as any)._lastMouseUpdate > 16)) {
         setMouseWorldPos({ x: worldX, y: worldY });
         (window as any)._lastMouseUpdate = now;
       }
@@ -1430,7 +1430,7 @@ export default function Workspace2D({
         }
       }
     },
-    [activeTool, panX, panY, zoom, isPanning, dragStart, panBy, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, walls, textAnnotations, labelArrows, dimensions, batchUpdateShapes, batchUpdateAssets, batchUpdateWalls, scheduleDragPreview, snapToGridFn, selectionRect, updateCursor, setHoveredId, draggedPoint, screenToWorld, setMouseWorldPos, canvasOffset, snapToObjectsEnabled, snapToGridEnabled, gridSize, updateTextAnnotation, updateLabelArrow, updateDimension, setSnapGuides, visibleRenderables, verticesMap, findTopAssetAtPoint, assetSpatialIndex]
+    [activeTool, panX, panY, zoom, isPanning, dragStart, panBy, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, walls, textAnnotations, labelArrows, dimensions, batchUpdateShapes, batchUpdateAssets, batchUpdateWalls, scheduleDragPreview, snapToGridFn, selectionRect, updateCursor, setHoveredId, draggedPoint, screenToWorld, setMouseWorldPos, canvasOffset, snapToObjectsEnabled, snapToGridEnabled, gridSize, updateTextAnnotation, updateLabelArrow, updateDimension, setSnapGuides, visibleRenderables, verticesMap, findTopAssetAtPoint, assetSpatialIndex, placementMode.active]
   );
 
   const handleDoubleClick = useCallback(

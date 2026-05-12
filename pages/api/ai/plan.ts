@@ -39,6 +39,680 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ? messages[messages.length - 1]?.content
         : '');
 
+    const normalizedCommand = String(commandText || '').trim().toLowerCase();
+    const exactCommandText = String(commandText || '').trim();
+    const normalizeIntentText = (value: string) =>
+      String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s']/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const normalizedIntentText = normalizeIntentText(exactCommandText);
+    const canonicalize = (value: string) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const commandCanonical = canonicalize(exactCommandText);
+    const collapseRepeats = (value: string) => value.replace(/(.)\1{2,}/g, '$1');
+    const intentTokens = normalizeIntentText(exactCommandText)
+      .split(' ')
+      .map((token) => collapseRepeats(token.trim()))
+      .filter(Boolean);
+    const isNearWord = (token: string, target: string, maxDistance = 1) => {
+      if (!token || !target) return false;
+      if (token === target) return true;
+      if (Math.abs(token.length - target.length) > maxDistance) return false;
+      const dp = Array.from({ length: token.length + 1 }, () => new Array(target.length + 1).fill(0));
+      for (let i = 0; i <= token.length; i++) dp[i][0] = i;
+      for (let j = 0; j <= target.length; j++) dp[0][j] = j;
+      for (let i = 1; i <= token.length; i++) {
+        let rowMin = Number.POSITIVE_INFINITY;
+        for (let j = 1; j <= target.length; j++) {
+          const cost = token[i - 1] === target[j - 1] ? 0 : 1;
+          dp[i][j] = Math.min(
+            dp[i - 1][j] + 1,
+            dp[i][j - 1] + 1,
+            dp[i - 1][j - 1] + cost
+          );
+          rowMin = Math.min(rowMin, dp[i][j]);
+        }
+        if (rowMin > maxDistance) return false;
+      }
+      return dp[token.length][target.length] <= maxDistance;
+    };
+    const hasNearToken = (targets: string[], maxDistance = 1) =>
+      intentTokens.some((token) => targets.some((target) => isNearWord(token, target, maxDistance)));
+    const hasAnyPhrase = (text: string, phrases: string[]) => phrases.some((phrase) => text.includes(phrase));
+    const isNegativeIntent = (text: string) => {
+      if (!text) return false;
+      return (
+        /(^|\b)(?:no|nah|nope|none|nothing|without|skip)\b/.test(text) ||
+        hasNearToken(['no', 'nah', 'nope', 'none', 'nothing', 'without', 'skip', 'dont', 'not'], 1) ||
+        hasAnyPhrase(text, [
+          "not at all",
+          "not really",
+          "no need",
+          "no thanks",
+          "don't add",
+          "dont add",
+          "do not add",
+          "don't include",
+          "dont include",
+          "do not include",
+          "don't need",
+          "dont need",
+          "do not need",
+          "don't want",
+          "dont want",
+          "do not want",
+          'no extras',
+          'no additional feature',
+          'no additional features',
+          'nothing else',
+          'none of that',
+          'without a stage',
+        ])
+      );
+    };
+    const isAffirmativeIntent = (text: string) => {
+      if (!text) return false;
+      return (
+        /(^|\b)(?:yes|yeah|yep|sure|okay|ok|alright|proceed|continue)\b/.test(text) ||
+        hasNearToken(['yes', 'yeah', 'yep', 'sure', 'okay', 'ok', 'alright', 'proceed', 'continue'], 1) ||
+        hasAnyPhrase(text, [
+          'go ahead',
+          'sounds good',
+          'that works',
+          'please do',
+          'add it',
+          'add one',
+          'include one',
+          'i want one',
+          'i need one',
+        ])
+      );
+    };
+    const selectedExactAsset = findAssetByName(exactCommandText);
+    const selectedMentionedAsset =
+      selectedExactAsset ||
+      assetList.find((asset) => normalizedCommand.includes(asset.name.toLowerCase())) ||
+      assetList.find((asset) => commandCanonical.includes(canonicalize(asset.name))) ||
+      null;
+    const conversationHistory = Array.isArray(messages)
+      ? messages
+        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .map((m) => ({ role: m.role, content: m.content }))
+      : [];
+    const userHistory = conversationHistory.filter((m) => m.role === 'user');
+    const assistantHistory = conversationHistory.filter((m) => m.role === 'assistant');
+    const combinedHistoryText = `${conversationHistory.map((m) => m.content || '').join('\n')}\n${commandText || ''}`;
+    const userHistoryText = `${userHistory.map((m) => m.content || '').join('\n')}\n${commandText || ''}`;
+    const lowerHistoryText = combinedHistoryText.toLowerCase();
+    const lowerUserHistoryText = userHistoryText.toLowerCase();
+    const roomDimMatch = userHistoryText.match(/(\d+(?:\.\d+)?)\s*(mm|m)?\s*(?:x|by)\s*(\d+(?:\.\d+)?)\s*(mm|m)?/i);
+    const toMm = (value?: string, unit?: string) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return null;
+      return (unit || '').toLowerCase() === 'm' ? numeric * 1000 : numeric;
+    };
+    const roomWidthMm = roomDimMatch ? toMm(roomDimMatch[1], roomDimMatch[2]) : null;
+    const roomHeightMm = roomDimMatch ? toMm(roomDimMatch[3], roomDimMatch[4] || roomDimMatch[2]) : null;
+    const extractGuestCount = (text: string) => {
+      const directMatch = String(text || '').match(/(?:about\s+)?(\d+)\s*[a-z]*\s*(?:guest|guests|attendee|attendees|people|persons)/i);
+      if (!directMatch) return null;
+      const value = Number(directMatch[1]);
+      return Number.isFinite(value) ? value : null;
+    };
+    const guestCount = extractGuestCount(userHistoryText);
+    const parseArrangementIntent = (text: string): string | null => {
+      const lower = String(text || '').toLowerCase();
+      const compact = canonicalize(lower);
+      if (
+        lower.includes('u-shape') ||
+        lower.includes('u shape') ||
+        lower.includes('u shaped') ||
+        compact.includes('ushape') ||
+        compact.includes('ushaped')
+      ) return 'u-shape';
+      if (lower.includes('boardroom') || compact.includes('boardroom') || hasNearToken(['boardroom'], 2)) return 'boardroom';
+      if (lower.includes('classroom') || compact.includes('classroom') || hasNearToken(['classroom'], 2)) return 'classroom';
+      if (lower.includes('chevron') || compact.includes('chevron') || hasNearToken(['chevron'], 2)) return 'chevron';
+      if (lower.includes('perimeter') || compact.includes('perimeter') || hasNearToken(['perimeter'], 2)) return 'perimeter';
+      if (
+        lower.includes('circular') ||
+        lower.includes('circle') ||
+        lower.includes('round arrangement') ||
+        compact.includes('circular') ||
+        compact.includes('rounded') ||
+        hasNearToken(['circular', 'circle', 'round'], 2)
+      ) return 'circular';
+      if (lower.includes('linear') || lower.includes('line') || compact.includes('linear') || hasNearToken(['linear', 'line'], 2)) return 'linear';
+      if (lower.includes('grid') || compact.includes('grid') || hasNearToken(['grid'], 1)) return 'grid';
+      return null;
+    };
+    const arrangementTypeFromHistory = parseArrangementIntent(lowerUserHistoryText);
+    const arrangementTypeFromCurrentInput = parseArrangementIntent(exactCommandText);
+    const arrangementAlreadyKnown = Boolean(arrangementTypeFromHistory || arrangementTypeFromCurrentInput);
+    const arrangementType = arrangementTypeFromCurrentInput || arrangementTypeFromHistory || 'grid';
+    const customConversation =
+      lowerUserHistoryText.includes('\ncustom') ||
+      lowerUserHistoryText.includes('custom\n') ||
+      lowerUserHistoryText.includes('custom space') ||
+      lowerUserHistoryText.includes('custom');
+    const tableAssets = assetList.filter(
+      (asset) => asset.category === 'Furniture' && asset.name.toLowerCase().includes('table')
+    );
+    const stageAssets = assetList.filter(
+      (asset) => asset.name.toLowerCase().includes('stage')
+    );
+    const selectedTableFromHistory =
+      tableAssets
+        .sort((a, b) => b.name.length - a.name.length)
+        .find((asset) => lowerUserHistoryText.includes(asset.name.toLowerCase())) || null;
+    const selectedStageFromHistory =
+      stageAssets
+        .sort((a, b) => b.name.length - a.name.length)
+        .find((asset) => lowerUserHistoryText.includes(asset.name.toLowerCase()) || lowerUserHistoryText.includes(canonicalize(asset.name))) || null;
+    const tableChoiceKnown = Boolean(selectedTableFromHistory);
+    const stageChoiceKnown = Boolean(selectedStageFromHistory);
+    const stageMentioned = /\bstage\b|\bno stage\b/.test(lowerUserHistoryText);
+    const extrasMentioned = /\bdance floor\b|\bentrance door\b|\bdoor\b|\bvip\b|\bbuffet\b|\bbar\b|\bpresentation\b|\bnone\b|\bno extras\b|\bnothing else\b/.test(lowerUserHistoryText);
+    const arrangementReply = Boolean(arrangementTypeFromCurrentInput);
+    const lastAssistantPromptType = (() => {
+      for (let i = assistantHistory.length - 1; i >= 0; i--) {
+        const content = String(assistantHistory[i]?.content || '');
+        if (/would you like to include any additional features/i.test(content)) return 'extras';
+        if (/where should i place the stage|where would you like the stage/i.test(content)) return 'stage-placement';
+        if (/what size would you like for the stage|select a stage/i.test(content)) return 'stage-size';
+        if (/would you like to add a stage/i.test(content)) return 'stage-yes-no';
+        if (/how many guests|number of guests|guest count|how many people|how many attendees|capacity|roughly how many guests/i.test(content)) return 'guest-count';
+        if (/what type of seating|what type of tables|what table|round tables|rectangular tables|select a table|select seating/i.test(content)) return 'table-choice';
+        if (/how would you like them arranged|arrangement/i.test(content)) return 'arrangement';
+        if (/would you like to proceed with generating|generate the layout now|generate now|ready to proceed|should i generate/i.test(content)) return 'generate';
+      }
+      return null;
+    })();
+    const assistantAskedForGuestCount = lastAssistantPromptType === 'guest-count';
+    const assistantAskedForStage = lastAssistantPromptType === 'stage-yes-no';
+    const assistantAskedForStageSize = lastAssistantPromptType === 'stage-size';
+    const assistantAskedForStagePlacement = lastAssistantPromptType === 'stage-placement';
+    const assistantAskedForExtras = lastAssistantPromptType === 'extras';
+    const assistantAskedForGeneration = lastAssistantPromptType === 'generate';
+    const parsedGuestCountFromCurrentReply = (() => {
+      if (!assistantAskedForGuestCount) return null;
+      const match = exactCommandText.match(/(\d{1,5})/);
+      if (!match) return null;
+      const value = Number(match[1]);
+      return Number.isFinite(value) ? value : null;
+    })();
+    const effectiveGuestCount = guestCount || parsedGuestCountFromCurrentReply;
+    const noStageReply =
+      assistantAskedForStage &&
+      isNegativeIntent(normalizedIntentText);
+    const yesStageReply =
+      assistantAskedForStage &&
+      !isNegativeIntent(normalizedIntentText) &&
+      (isAffirmativeIntent(normalizedIntentText) || normalizedIntentText.includes('stage'));
+    const noExtrasReply =
+      assistantAskedForExtras &&
+      isNegativeIntent(normalizedIntentText);
+    const extrasDecisionKnown =
+      extrasMentioned ||
+      noExtrasReply ||
+      (
+        assistantAskedForExtras &&
+        (
+          isAffirmativeIntent(normalizedIntentText) ||
+          hasAnyPhrase(normalizedIntentText, [
+            'dance floor',
+            'entrance door',
+            'doors',
+            'vip',
+            'buffet',
+            'bar',
+            'presentation',
+          ])
+        )
+      );
+    const proceedReply =
+      assistantAskedForGeneration &&
+      (
+        isAffirmativeIntent(normalizedIntentText) ||
+        hasAnyPhrase(normalizedIntentText, [
+          'generate',
+          'generate now',
+          'go ahead',
+          'go on',
+          'do it',
+          'finish it',
+          'proceed now',
+        ])
+      );
+    const parseMeasureToMm = (value?: string, unit?: string) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return null;
+      const normalizedUnit = String(unit || '').toLowerCase();
+      if (normalizedUnit === 'm') return numeric * 1000;
+      if (normalizedUnit === 'ft') return numeric * 304.8;
+      return numeric;
+    };
+    const stageDimMatch = exactCommandText.match(/(\d+(?:\.\d+)?)\s*(mm|m|ft)?\s*(?:x|by)\s*(\d+(?:\.\d+)?)\s*(mm|m|ft)?/i);
+    const findClosestStageAsset = (widthMm: number, heightMm: number) => {
+      const candidates = [...stageAssets];
+      if (candidates.length === 0) return null;
+      return candidates
+        .map((asset) => {
+          const assetW = Number(asset.width || 1000);
+          const assetH = Number(asset.height || 1000);
+          const dw = Math.abs(assetW - widthMm);
+          const dh = Math.abs(assetH - heightMm);
+          return { asset, score: dw + dh };
+        })
+        .sort((a, b) => a.score - b.score)[0]?.asset || null;
+    };
+    const resolveStageChoiceFromText = (text: string) => {
+      const exactStage = findAssetByName(text);
+      if (exactStage && exactStage.name.toLowerCase().includes('stage')) return exactStage;
+      const canonicalText = canonicalize(text);
+      const fuzzyStage = stageAssets.find((asset) => canonicalText.includes(canonicalize(asset.name)));
+      if (fuzzyStage) return fuzzyStage;
+      const match = text.match(/(\d+(?:\.\d+)?)\s*(mm|m|ft)?\s*(?:x|by)\s*(\d+(?:\.\d+)?)\s*(mm|m|ft)?/i);
+      if (!match) return null;
+      const widthMm = parseMeasureToMm(match[1], match[2]);
+      const heightMm = parseMeasureToMm(match[3], match[4] || match[2]);
+      if (!widthMm || !heightMm) return null;
+      return findClosestStageAsset(widthMm, heightMm);
+    };
+    const stageChoiceFromCurrentInput =
+      assistantAskedForStageSize || normalizedCommand.includes('stage')
+        ? resolveStageChoiceFromText(exactCommandText)
+        : null;
+    const latestStageSizingReply = (() => {
+      for (let i = 0; i < conversationHistory.length - 1; i++) {
+        const current = conversationHistory[i];
+        const next = conversationHistory[i + 1];
+        if (
+          current?.role === 'assistant' &&
+          /what size would you like for the stage|select a stage/i.test(current.content || '') &&
+          next?.role === 'user'
+        ) {
+          return next.content || '';
+        }
+      }
+      return '';
+    })();
+    const stageChoiceFromSizingHistory = latestStageSizingReply
+      ? resolveStageChoiceFromText(latestStageSizingReply)
+      : null;
+    const selectedStageForFlow = stageChoiceFromCurrentInput || selectedStageFromHistory || stageChoiceFromSizingHistory;
+    const getStagePositionChoices = () => {
+      if (arrangementType === 'circular') {
+        return ['Center', 'Top', 'Bottom', 'Left', 'Right'];
+      }
+      if (arrangementType === 'u-shape') {
+        return ['Inside U opening', 'Top center', 'Bottom center', 'Left', 'Right'];
+      }
+      return ['Top center', 'Bottom center', 'Left', 'Right', 'Center'];
+    };
+    const resolveStagePlacement = (text: string) => {
+      const lower = String(text || '').toLowerCase();
+      if (lower.includes('top center') || lower.includes('top-centre') || lower.includes('top centre')) return 'top';
+      if (lower.includes('bottom center') || lower.includes('bottom-centre') || lower.includes('bottom centre')) return 'bottom';
+      if (lower.includes('inside u') || lower.includes('open end') || lower.includes('opening')) return 'open-end';
+      if (/\btop\b/.test(lower)) return 'top';
+      if (/\bbottom\b/.test(lower)) return 'bottom';
+      if (/\bleft\b/.test(lower)) return 'left';
+      if (/\bright\b/.test(lower)) return 'right';
+      if (lower.includes('center')) return 'center';
+      if (arrangementType === 'circular') return 'center';
+      if (arrangementType === 'u-shape') return 'open-end';
+      return 'top';
+    };
+    const stagePlacementFromCurrentInput = assistantAskedForStagePlacement
+      ? resolveStagePlacement(exactCommandText)
+      : null;
+    const stagePlacementFromHistory = /inside u|open end|opening|center|top|bottom|left|right/i.test(lowerUserHistoryText)
+      ? resolveStagePlacement(lowerUserHistoryText)
+      : null;
+    const selectedStagePlacement = stagePlacementFromCurrentInput || stagePlacementFromHistory;
+    const buildCustomTablePreview = (assetName: string, stageAsset?: any | null, stagePlacement?: string | null) => {
+      const assetNameLower = assetName.toLowerCase();
+      const seatCountMatch = assetNameLower.match(/(\d+)\s*seater/i);
+      const seatCount = seatCountMatch ? Number(seatCountMatch[1]) : null;
+      const inferredTableCount = effectiveGuestCount && seatCount ? Math.max(1, Math.ceil(effectiveGuestCount / seatCount)) : 1;
+      const preview: any = {
+        walls: [{ widthMm: roomWidthMm, heightMm: roomHeightMm, wallType: 'enclosure-150' }],
+        assets: [
+          {
+            assetName,
+            count: inferredTableCount,
+            chairCount: seatCount || undefined,
+            strokeWidth: 0.6,
+          },
+        ],
+        tableArrangement: { type: arrangementType },
+      };
+      if (stageAsset) {
+        const stageWidth = Number(stageAsset.width || 1000);
+        const stageHeight = Number(stageAsset.height || 1000);
+        const placement = stagePlacement || (arrangementType === 'circular' ? 'center' : arrangementType === 'u-shape' ? 'open-end' : 'top');
+        const centerX = (roomWidthMm || stageWidth) / 2;
+        const centerY = (roomHeightMm || stageHeight) / 2;
+        let stageX = centerX;
+        let stageY = Math.max(stageHeight / 2 + 500, 1200);
+        if (placement === 'center') {
+          stageX = centerX;
+          stageY = centerY;
+        } else if (placement === 'bottom' || placement === 'open-end') {
+          stageX = centerX;
+          stageY = Math.max(stageHeight / 2 + 500, (roomHeightMm || stageHeight) - stageHeight / 2 - 500);
+        } else if (placement === 'left') {
+          stageX = stageWidth / 2 + 500;
+          stageY = centerY;
+        } else if (placement === 'right') {
+          stageX = Math.max(stageWidth / 2 + 500, (roomWidthMm || stageWidth) - stageWidth / 2 - 500);
+          stageY = centerY;
+        }
+        preview.assets.push({
+          assetName: stageAsset.name,
+          xMm: stageX,
+          yMm: stageY,
+          widthMm: stageWidth,
+          heightMm: stageHeight,
+          strokeWidth: 0.6,
+        });
+      }
+      return preview;
+    };
+    const isNewLayoutIntent =
+      normalizedCommand === 'i want to create a new layout' ||
+      normalizedCommand === 'create a new layout' ||
+      normalizedCommand === 'new layout' ||
+      normalizedCommand === 'start a new layout' ||
+      normalizedCommand === 'create layout' ||
+      normalizedCommand === 'start a plan' ||
+      normalizedCommand === 'create a space' ||
+      normalizedCommand === 'design an event';
+
+    if (isNewLayoutIntent) {
+      return res.status(200).json({
+        followUp: 'Would you like to use one of our event location and space options?',
+        choices: ['Marquee', 'Grassy', 'Field', 'Park', 'Beach', 'Custom'],
+      });
+    }
+
+    if (normalizedCommand === 'custom') {
+      return res.status(200).json({
+        followUp: 'Great choice! What are the dimensions of your custom space? Please provide the width and height in meters or millimeters.',
+      });
+    }
+
+    if (
+      roomWidthMm &&
+      roomHeightMm &&
+      customConversation &&
+      !selectedMentionedAsset &&
+      !effectiveGuestCount
+    ) {
+      return res.status(200).json({
+        followUp: `I've drafted a ${roomWidthMm / 1000}m x ${roomHeightMm / 1000}m empty space for you. What kind of setup do you want here, and roughly how many guests should I plan for?`,
+        preview: {
+          walls: [{ widthMm: roomWidthMm, heightMm: roomHeightMm, wallType: 'enclosure-150' }],
+        },
+      });
+    }
+
+    if (
+      roomWidthMm &&
+      roomHeightMm &&
+      customConversation &&
+      effectiveGuestCount &&
+      !tableChoiceKnown &&
+      !selectedMentionedAsset
+    ) {
+      return res.status(200).json({
+        followUp: `For ${effectiveGuestCount} guests, what table or seating setup would you like to use?`,
+        assetSelection: {
+          category: 'furniture',
+          message: 'Select furniture',
+          options: assetList.filter((a) => a.category === 'Furniture'),
+        },
+        preview: {
+          walls: [{ widthMm: roomWidthMm, heightMm: roomHeightMm, wallType: 'enclosure-150' }],
+        },
+      });
+    }
+
+    if (normalizedCommand === 'marquee') {
+      const marqueeOptions = assetList.filter((a) => a.category === 'Marquee');
+      return res.status(200).json({
+        assetSelection: {
+          category: 'marquee',
+          message: 'Excellent! Which marquee would you like to use for your event?',
+          options: marqueeOptions,
+        },
+      });
+    }
+
+    if (selectedMentionedAsset && selectedMentionedAsset.category === 'Marquee') {
+      return res.status(200).json({
+        followUp: `Great choice. I have your ${selectedMentionedAsset.name} ready. What tables, chairs, or other furniture would you like to add inside it?`,
+        assetSelection: {
+          category: 'furniture',
+          message: 'Select furniture to add',
+          options: assetList.filter((a) => a.category === 'Furniture'),
+        },
+        preview: {
+          assets: [
+            {
+              assetName: selectedMentionedAsset.name,
+              xMm: (selectedMentionedAsset.width || 1000) / 2,
+              yMm: (selectedMentionedAsset.height || 1000) / 2,
+              widthMm: selectedMentionedAsset.width || 1000,
+              heightMm: selectedMentionedAsset.height || 1000,
+              strokeWidth: 0.6,
+            },
+          ],
+        },
+      });
+    }
+
+    const tableAssetSelected =
+      selectedMentionedAsset &&
+      selectedMentionedAsset.category === 'Furniture' &&
+      selectedMentionedAsset.name.toLowerCase().includes('table');
+    const assistantAskedForTableChoice = conversationHistory
+      .slice(-6)
+      .some((m) =>
+        m.role === 'assistant' &&
+        /what type of seating|what type of tables|what table|round tables|rectangular tables|select a table|select seating/i.test(m.content || '')
+      );
+
+    if (tableAssetSelected && (assistantAskedForTableChoice || roomWidthMm || roomHeightMm)) {
+      const assetNameLower = selectedMentionedAsset.name.toLowerCase();
+      const seatCountMatch = assetNameLower.match(/(\d+)\s*seater/i);
+      const seatCount = seatCountMatch ? Number(seatCountMatch[1]) : null;
+      const inferredTableCount = effectiveGuestCount && seatCount ? Math.max(1, Math.ceil(effectiveGuestCount / seatCount)) : null;
+      const preview: any = roomWidthMm && roomHeightMm
+        ? {
+            walls: [{ widthMm: roomWidthMm, heightMm: roomHeightMm, wallType: 'enclosure-150' }],
+            assets: [
+              {
+                assetName: selectedMentionedAsset.name,
+                count: inferredTableCount || 1,
+                chairCount: seatCount || undefined,
+                strokeWidth: 0.6,
+              },
+            ],
+          }
+        : {
+            assets: [
+              {
+                assetName: selectedMentionedAsset.name,
+                xMm: (selectedMentionedAsset.width || 1000) / 2,
+                yMm: (selectedMentionedAsset.height || 1000) / 2,
+                widthMm: selectedMentionedAsset.width || 1000,
+                heightMm: selectedMentionedAsset.height || 1000,
+                strokeWidth: 0.6,
+              },
+            ],
+          };
+
+      if (!effectiveGuestCount) {
+        return res.status(200).json({
+          followUp: `How many guests should I plan for with the ${selectedMentionedAsset.name}?`,
+          preview,
+        });
+      }
+
+      if (!arrangementAlreadyKnown) {
+        return res.status(200).json({
+          followUp: `Great choice! With ${selectedMentionedAsset.name}, I’ll use ${inferredTableCount || 1} table${(inferredTableCount || 1) > 1 ? 's' : ''} for ${effectiveGuestCount} guests. How would you like them arranged?`,
+          choices: ["Grid", "Linear", "Circular", "Perimeter", "U-Shape", "Boardroom", "Classroom", "Chevron"],
+          preview,
+        });
+      }
+
+      if (!stageMentioned) {
+        return res.status(200).json({
+          followUp: 'Would you like to add a stage to your layout?',
+          choices: ['Yes, add a stage', 'No stage'],
+          preview: {
+            ...preview,
+            tableArrangement: { type: arrangementType },
+          },
+        });
+      }
+
+      if (!extrasDecisionKnown) {
+        return res.status(200).json({
+          followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
+          preview: {
+            ...preview,
+            tableArrangement: { type: arrangementType },
+          },
+        });
+      }
+    }
+
+    if (
+      roomWidthMm &&
+      roomHeightMm &&
+      customConversation &&
+      effectiveGuestCount &&
+      tableChoiceKnown &&
+      arrangementReply
+    ) {
+      const assetNameLower = selectedTableFromHistory!.name.toLowerCase();
+      const seatCountMatch = assetNameLower.match(/(\d+)\s*seater/i);
+      const seatCount = seatCountMatch ? Number(seatCountMatch[1]) : null;
+      const inferredTableCount = effectiveGuestCount && seatCount ? Math.max(1, Math.ceil(effectiveGuestCount / seatCount)) : 1;
+      return res.status(200).json({
+        followUp: 'Would you like to add a stage to your layout?',
+        choices: ['Yes, add a stage', 'No stage'],
+        preview: {
+          ...buildCustomTablePreview(selectedTableFromHistory!.name),
+        },
+      });
+    }
+
+    if (
+      roomWidthMm &&
+      roomHeightMm &&
+      customConversation &&
+      effectiveGuestCount &&
+      tableChoiceKnown &&
+      arrangementAlreadyKnown &&
+      assistantAskedForStage &&
+      yesStageReply
+    ) {
+      return res.status(200).json({
+        followUp: 'Select a stage size or type the stage you want.',
+        assetSelection: {
+          category: 'stage',
+          message: 'Select a stage',
+          options: stageAssets,
+        },
+        preview: buildCustomTablePreview(selectedTableFromHistory!.name),
+      });
+    }
+
+    if (
+      roomWidthMm &&
+      roomHeightMm &&
+      customConversation &&
+      effectiveGuestCount &&
+      tableChoiceKnown &&
+      arrangementAlreadyKnown &&
+      assistantAskedForStageSize &&
+      stageChoiceFromCurrentInput
+    ) {
+      return res.status(200).json({
+        followUp: 'Where should I place the stage in relation to the arrangement?',
+        choices: getStagePositionChoices(),
+        preview: buildCustomTablePreview(selectedTableFromHistory!.name, stageChoiceFromCurrentInput),
+      });
+    }
+
+    if (
+      roomWidthMm &&
+      roomHeightMm &&
+      customConversation &&
+      effectiveGuestCount &&
+      tableChoiceKnown &&
+      arrangementAlreadyKnown &&
+      assistantAskedForStagePlacement &&
+      selectedStageForFlow
+    ) {
+      return res.status(200).json({
+        followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
+        preview: buildCustomTablePreview(selectedTableFromHistory!.name, selectedStageForFlow, selectedStagePlacement),
+      });
+    }
+
+    if (
+      roomWidthMm &&
+      roomHeightMm &&
+      customConversation &&
+      effectiveGuestCount &&
+      tableChoiceKnown &&
+      arrangementAlreadyKnown &&
+      assistantAskedForStage &&
+      noStageReply
+    ) {
+      return res.status(200).json({
+        followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
+        preview: buildCustomTablePreview(selectedTableFromHistory!.name),
+      });
+    }
+
+    if (
+      roomWidthMm &&
+      roomHeightMm &&
+      customConversation &&
+      effectiveGuestCount &&
+      tableChoiceKnown &&
+      arrangementAlreadyKnown &&
+      assistantAskedForExtras &&
+      noExtrasReply
+    ) {
+      return res.status(200).json({
+        plan: buildCustomTablePreview(selectedTableFromHistory!.name, selectedStageForFlow, selectedStagePlacement),
+      });
+    }
+
+    if (
+      roomWidthMm &&
+      roomHeightMm &&
+      customConversation &&
+      effectiveGuestCount &&
+      tableChoiceKnown &&
+      arrangementAlreadyKnown &&
+      assistantAskedForGeneration &&
+      proceedReply
+    ) {
+      return res.status(200).json({
+        plan: buildCustomTablePreview(selectedTableFromHistory!.name, selectedStageForFlow, selectedStagePlacement),
+      });
+    }
+
 
     if (!OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
 
@@ -74,7 +748,14 @@ Your goal is to guide the user through creating their event space by being inter
         - **Beach**: Use "fillTexture": "sand-01" or "sand-02" for a large background rectangle.
     - **STANDALONE STRUCTURES**: Marquees (and tents) are standalone. DO NOT add walls or rooms around them unless the user explicitly asks for a "room inside a marquee".
     - **PREVIEW DURING SELECTION**: Whenever an asset category or specific asset is selected, ALWAYS include it in the "preview" object so the user can see it in the chat bubble while you continue the conversation.
-    - ALWAYS ask for dimensions (e.g., "What are the dimensions of your space?") if the user hasn't provided them yet. You can combine this with the asset selection message.
+    - ALWAYS ask for dimensions (e.g., "What are the dimensions of your space?") if the user hasn't provided them yet, EXCEPT when they are selecting a standalone marquee/tent asset, because the marquee itself defines the space footprint.
+    - For banquet / table-based layouts, once you know the room size or marquee size, guest count, and table type, ASK for arrangement preference before final generation unless the user already gave one.
+    - Arrangement choices to offer: ["Grid", "Linear", "Circular", "Perimeter", "U-Shape", "Boardroom", "Classroom", "Chevron"].
+    - Also ask whether they want a stage if they have not mentioned one yet. Stage choices: ["Yes, add a stage", "No stage"].
+    - Ask about at least one more planning detail before final generation if it has not been mentioned yet: center aisle, dance floor, entrance doors, VIP area, buffet/bar area, or presentation space.
+    - If the user says "surprise me" or "best arrangement", choose the arrangement type that fits the room best and explain it briefly in the follow-up.
+    - If the user replies with "none", "no extras", "nothing else", or "none of that" after you ask about optional extras, treat that as confirmation to proceed with generation if enough planning details are already known.
+    - During consultative follow-ups, if you already know the room size, guest count, and table type, ALWAYS include a preview that shows the repeated table asset count, not just the room walls.
 2.  **TABLE NUMBERING (STRICT)**:
     - Whenever you generate tables (banquet, round, etc.), YOU MUST assign a sequential 'tableName' to each one.
     - **RULE**: Use ONLY the raw number (e.g., "1", "2", "3").
@@ -85,16 +766,32 @@ Your goal is to guide the user through creating their event space by being inter
     - Calculation: Total Guests / Capacity per Table = Total Tables.
     - Example: 500 guests / 10 per table = 50 tables.
     - YOU MUST add all 50 tables (or chairsAround groups) to the plan. DO NOT skip items for large numbers.
-4.  **CONFIRMATION BEFORE EXECUTION**:
+    - For repeated banquet tables, PREFER one asset object with "count" plus "tableArrangement" instead of one explicit xMm/yMm table object.
+    - If "count" is greater than 1, DO NOT provide the same xMm/yMm for the repeated table asset unless the user explicitly asked for a fixed anchor point.
+4.  **CAPACITY VS ROOM SIZE (STRICT)**:
+    - If the requested room dimensions are obviously too small for the requested guest count / table count, DO NOT quietly generate a cramped plan.
+    - Instead, return a "followUp" explaining the room is too small and ask whether to increase the room size or reduce the guest count.
+    - Example: 20 banquet tables inside a 3000mm x 3000mm room is impossible and must trigger a follow-up.
+5.  **CONFIRMATION BEFORE EXECUTION**:
     - Only return the JSON 'plan' when the user confirms the details.
-5.  **INTERACTIVE PLANNING**: 
+6.  **INTERACTIVE PLANNING**: 
     - NEVER assume dimensions. If missing, use 'followUp' to ask.
-6.  **SPATIAL MATH**: All coordinates/sizes are in MILLIMETRES (mm).
-7.  **AESTHETICS**: 
-    - Set strokeWidth: 5 by default for all new items.
+7.  **SPATIAL MATH**: All coordinates/sizes are in MILLIMETRES (mm).
+8.  **AESTHETICS**: 
+    - Set strokeWidth: 0.6 by default for all new assets unless the user specifies otherwise.
+    - Use lighter preview-friendly defaults that match the editor, not thick outlines.
     - Use realistic dimensions from the library.
-8.  **JSON RESPONSE**: Always include 'choices' array if you are asking a multi-option question like the preloaded spaces prompt.
-9.  **DOORS/WINDOWS**: Depth must match wall thickness (150mm).
+9.  **COMBINED SEATING ASSETS**:
+    - Assets named like "8 seater round table", "10 seater rectangular table", "VIP table", "curve sofa", etc. already include their seating/chairs in the asset artwork.
+    - DO NOT ask for separate chairs for those assets.
+    - DO NOT add extra chairsAround or separate chair assets around them unless the user explicitly asks for additional loose chairs.
+10.  **JSON RESPONSE**: Always include 'choices' array if you are asking a multi-option question like the preloaded spaces prompt.
+11.  **DOORS/WINDOWS**: Depth must match wall thickness (150mm).
+    - If a door or window is attached to the TOP wall, use rotation 0.
+    - If attached to the RIGHT wall, use rotation 90.
+    - If attached to the BOTTOM wall, use rotation 180.
+    - If attached to the LEFT wall, use rotation 270.
+    - Apply this to both single and double doors.
 
 ══════════════════════════════════════════════════════════════
   STRICT JSON RESPONSE FORMAT
@@ -110,6 +807,7 @@ Reply with ONE of these shapes. No prose, no markdown fences, pure JSON.
 { "plan": { 
     "walls": [...], 
     "assets": [{ "assetName": "...", "xMm": 0, "yMm": 0, "tableName": "1" }, ...], 
+    "tableArrangement": { "type": "grid" },
     "shapes": [{ "type": "rectangle", "fillType": "texture", "fillTexture": "sand-01", ... }],
     "annotations": [...]
   } 
@@ -165,7 +863,7 @@ IMPORTANT FOR SCALING & SIZING:
 - RELATIVE SCALING: If the user says "make it 2x bigger", multiply the base width and height by 2 and return them as "widthMm" and "heightMm".
 - EXPLICIT DIMENSIONS: Always prefer returning explicit "widthMm" and "heightMm" instead of a "scale" property to ensure maximum precision.
 - DOORS: Doors are special. Their "thickness" (width or height depending on rotation) MUST ALWAYS match the wall thickness (default 150mm). Their length should remain realistic (900mm-1200mm).
-- STROKE WIDTH: Use "strokeWidth": 5 for ALL assets, tables, and shapes by default unless the user specifies otherwise.
+- STROKE WIDTH: Use "strokeWidth": 0.6 for assets and "strokeWidth": 2 for walls/shapes by default unless the user specifies otherwise.
 
 DYNAMIC SPACING STANDARDS:
 Because assets scale dynamically with the room, space them out proportionately! If you make chairs 10x bigger for a huge room (e.g., 5000mm chair), also make the distance between tables 10x larger.
@@ -177,6 +875,11 @@ Because assets scale dynamically with the room, space them out proportionately! 
 
 DOORS AND WINDOWS:
 Doors MUST fit perfectly into the wall. You MUST constrain the depth/thickness (heightMm/widthMm depending on rotation) of the door to match the wall thickness exactly (usually 150mm). Ensure door widths remain proportional to human scale (e.g., 900mm-1200mm), even if the room is very large, so they always look like realistic openings rather than massive oversized blocks.
+When a door/window is assigned to a wall side, rotations are strict:
+- top = 0
+- right = 90
+- bottom = 180
+- left = 270
 
 ══════════════════════════════════════════════════════════════
   NATURAL LANGUAGE — SYNONYM MAPPINGS
@@ -253,6 +956,13 @@ ARRANGEMENT & LAYOUT SYNONYMS:
   "in a column" / "vertical column" / "stacked" → column layout
   "grid" / "matrix" / "X by Y" / "X columns, Y rows" → grid layout
   "in a circle" / "around the table" / "ring formation" / "circular" → chairsAround
+  "circular arrangement" / "tables in a circle" → tableArrangement.type = "circular"
+  "linear arrangement" / "single row" / "single column" → tableArrangement.type = "linear"
+  "perimeter arrangement" / "around the wall" / "edge arrangement" → tableArrangement.type = "perimeter"
+  "u-shape arrangement" / "horseshoe" → tableArrangement.type = "u-shape"
+  "boardroom arrangement" / "boardroom style" / "conference row" → tableArrangement.type = "boardroom"
+  "classroom arrangement" / "training room style" / "rows facing front" → tableArrangement.type = "classroom"
+  "chevron arrangement" / "staggered rows" / "zigzag rows" → tableArrangement.type = "chevron"
   "theater" / "auditorium" / "stadium" / "seating block" / "rows" → seatingLayout
   "classroom style" / "seminar" / "lecture" → seatingLayout (type: "classroom")
   "line up" / "align left/right/top/bottom/center" → align operation
@@ -271,6 +981,10 @@ USE THE AVAILABLE ASSETS LIST TO FULFILL ALL REQUESTS.
  - colSpacingMm: default 700 for theater
  - orientation: "horizontal" (face the top/bottom) or "vertical" (face the sides)
  DO NOT list individual chairs in 'plan.assets' if they are in a grid/block; use 'seatingLayout' instead.
+ For LARGE repeated tables/assets, DO NOT emit hundreds of duplicate asset objects.
+ Instead emit ONE asset object with "count" and use gridLayout, for example:
+ { "assetName": "10 seater round table 01", "count": 40, "chairCount": 10, "startTableNumber": 1 }
+ The app will expand and place the repeated items automatically.
 
 ══════════════════════════════════════════════════════════════
   DEFAULT SPACING STANDARDS
@@ -327,7 +1041,7 @@ USE THE AVAILABLE ASSETS LIST TO FULFILL ALL REQUESTS.
     → plan.walls: [{ widthMm, heightMm, centerX?, centerY?, wallType? }]
 
 14. STYLING (for generated items)
-    → Use fillColor, strokeColor, strokeWidth, rotation on any asset/shape
+   → Use fillColor, strokeColor, strokeWidth, rotation on any asset/shape
 
 ══════════════════════════════════════════════════════════════
   COLOUR PALETTE (map common words to hex)
@@ -362,11 +1076,9 @@ User: "Make a plan for a 10m x 10m room with 4 tables in a grid, label them Tabl
   "plan": {
     "walls": [{ "widthMm": 10000, "heightMm": 10000, "wallType": "enclosure-150" }],
     "assets": [
-      { "assetName": "6 seater rectangular table 6", "xMm": 2500, "yMm": 2500, "widthMm": 1800, "heightMm": 900, "tableName": "Table 1", "strokeWidth": 10 },
-      { "assetName": "6 seater rectangular table 6", "xMm": 7500, "yMm": 2500, "widthMm": 1800, "heightMm": 900, "tableName": "Table 2", "strokeWidth": 10 },
-      { "assetName": "6 seater rectangular table 6", "xMm": 2500, "yMm": 7500, "widthMm": 1800, "heightMm": 900, "tableName": "Table 3", "strokeWidth": 10 },
-      { "assetName": "6 seater rectangular table 6", "xMm": 7500, "yMm": 7500, "widthMm": 1800, "heightMm": 900, "tableName": "Table 4", "strokeWidth": 10 }
+      { "assetName": "6 seater rectangular table 6", "count": 4, "chairCount": 6, "startTableNumber": 1, "strokeWidth": 0.6 }
     ],
+    "tableArrangement": { "type": "grid" },
     "annotations": [
       { "type": "label", "text": "Total Capacity: 24 Guests", "x": 9000, "y": 9500 }
     ]
@@ -375,7 +1087,7 @@ User: "Make a plan for a 10m x 10m room with 4 tables in a grid, label them Tabl
 
 User: "Create a 15m x 10m room for me."
 {
-  "followUp": "I've drafted a 15m x 10m empty space for you. What type of furniture or seating should we include in this room? (e.g., Banquets, Theater style, or a Lounge area?)",
+  "followUp": "I've drafted a 15m x 10m empty space for you. What kind of setup do you want here, and roughly how many guests should I plan for?",
   "preview": {
     "walls": [{ "widthMm": 15000, "heightMm": 10000, "wallType": "enclosure-150" }]
   }
@@ -396,8 +1108,7 @@ User: "No, just generate it."
     "walls": [{ "widthMm": 20000, "heightMm": 20000, "wallType": "enclosure-150" }],
     "assets": [
       { "assetName": "1m x 1m Modular Stage 2", "xMm": 10000, "yMm": 2000, "widthMm": 4000, "heightMm": 2000 },
-      { "assetName": "8 seater round table", "xMm": 5000, "yMm": 8000, "chairCount": 8 },
-      ... 9 more tables ...
+      { "assetName": "8 seater round table", "count": 10, "chairCount": 8, "startTableNumber": 1 }
     ]
   }
 }
@@ -423,11 +1134,20 @@ type Plan = {
     yMm?: number;
     widthMm?: number;
     heightMm?: number;
+    count?: number;         // use for repeated identical assets in auto-grid layouts
+    startTableNumber?: number; // optional starting number when count > 1
     rotation?: number;
     fillColor?: string;
     strokeColor?: string;
     strokeWidth?: number;
   }[];
+  tableArrangement?: {
+    type?: 'grid' | 'linear' | 'circular' | 'perimeter' | 'u-shape' | 'boardroom' | 'classroom' | 'chevron';
+    direction?: 'horizontal' | 'vertical';
+    centerX?: number;
+    centerY?: number;
+    radiusMm?: number;
+  };
   gridLayout?: { columns: number; rows: number };  // include when assets use grid auto-placement
   chairsAround?: {
     centerX: number; centerY: number; radiusMm: number; count: number;
@@ -495,7 +1215,7 @@ type Operation = {
 ══════════════════════════════════════════════════════════════
 1. Use EXACT asset names from the library.
 2. If this is the START of a session (no message history), and the user asks for a new layout/room, prioritize that NEW request over any existing obstacles on the canvas.
-3. INTERACTIVE BALANCE: If the user provides both room and content details, execute in a "plan" response. If they ONLY provide room details, use a "followUp" to ask about the event content before generating a plan.
+3. INTERACTIVE BALANCE: If the user provides both room and content details, execute in a "plan" response. If they ONLY provide room details, use a "followUp" to ask for the setup type and approximate guest count before generating a plan.
 4. COORDINATES: When returning plan.assets, remember xMm and yMm are relative to the (0,0) corner of the room you just generated or that already exists.
 
 ${selectedContext}
@@ -569,7 +1289,7 @@ ${obstaclesContext}`;
           }
 
           return {
-            strokeWidth: foundAsset.id.includes('marquee') ? 2 : 5, // Default stroke: thinner for marquees
+            strokeWidth: asset.strokeWidth ?? 0.6,
             ...asset,
             assetType: foundAsset.id,
             assetName: foundAsset.label,
@@ -619,6 +1339,74 @@ ${obstaclesContext}`;
       return res.status(200).json({ message: parsed.message });
     }
 
+      if (parsed.followUp && !parsed.assetSelection) {
+        const followUpLower = String(parsed.followUp).toLowerCase();
+        const combinedUserText = `${history.filter((m) => m.role === 'user').map((m) => m.content).join('\n')}\n${userContent}`.toLowerCase();
+        const marqueeConversation =
+          combinedUserText.includes('marquee') || combinedUserText.includes('tent');
+        const arrangementQuestion =
+          followUpLower.includes('arrangement') ||
+          followUpLower.includes('u-shape') ||
+          followUpLower.includes('grid') ||
+          followUpLower.includes('boardroom') ||
+          followUpLower.includes('classroom') ||
+          followUpLower.includes('chevron');
+        const tableAlreadyChosen =
+          assetList.some((asset) =>
+            asset.category === 'Furniture' &&
+            asset.name.toLowerCase().includes('table') &&
+            combinedUserText.includes(asset.name.toLowerCase())
+          );
+        const asksForGuestCount =
+          followUpLower.includes('how many guests') ||
+          followUpLower.includes('number of guests') ||
+          followUpLower.includes('guest count') ||
+          followUpLower.includes('how many people') ||
+          followUpLower.includes('how many attendees') ||
+          followUpLower.includes('capacity');
+
+        if (followUpLower.includes('which marquee') || followUpLower.includes('which tent')) {
+          parsed.assetSelection = { category: 'marquee', message: 'Select a marquee' };
+        } else if (
+          marqueeConversation &&
+          !asksForGuestCount &&
+          (
+            followUpLower.includes('what would you like to add') ||
+            followUpLower.includes('select furniture') ||
+            followUpLower.includes('choose furniture') ||
+            followUpLower.includes('select a table') ||
+            followUpLower.includes('choose a table') ||
+            followUpLower.includes('select seating') ||
+            followUpLower.includes('choose seating')
+          )
+        ) {
+          parsed.assetSelection = { category: 'furniture', message: 'Select furniture to add' };
+        } else if (!asksForGuestCount && (followUpLower.includes('round tables') || followUpLower.includes('rectangular tables') || followUpLower.includes('type of tables'))) {
+          parsed.assetSelection = { category: 'table', message: 'Select a table' };
+        } else if (arrangementQuestion && !tableAlreadyChosen) {
+          parsed.followUp = 'What table would you like to use for this layout?';
+          parsed.assetSelection = { category: 'table', message: 'Select a table' };
+        } else if (!asksForGuestCount && followUpLower.includes('chair') && followUpLower.includes('table')) {
+          parsed.assetSelection = { category: 'furniture', message: 'Select furniture' };
+        } else if (!asksForGuestCount && (followUpLower.includes('chair') || followUpLower.includes('seating'))) {
+          parsed.assetSelection = { category: 'chair', message: 'Select seating' };
+        }
+      }
+
+      if (parsed.followUp) {
+        const followUpLower = String(parsed.followUp).toLowerCase();
+        if (
+          followUpLower.includes('how many guests') ||
+          followUpLower.includes('number of guests') ||
+          followUpLower.includes('guest count') ||
+          followUpLower.includes('how many people') ||
+          followUpLower.includes('how many attendees') ||
+          followUpLower.includes('capacity')
+        ) {
+          delete parsed.assetSelection;
+        }
+      }
+
     // Enrich asset selection if present
     if (parsed.assetSelection) {
       const category = parsed.assetSelection.category?.toLowerCase() || 'all';
@@ -636,7 +1424,9 @@ ${obstaclesContext}`;
         } else if (['table', 'desk', 'surface', 'banquet'].some(t => cat.includes(t))) {
           tags = ['table', 'furniture', 'surface', 'desk', 'tables'];
         } else if (['marquee', 'tent', 'structure', 'cover'].some(t => cat.includes(t))) {
-          tags = ['marquee', 'structural', 'platform'];
+          tags = ['marquee', 'tent', 'canopy'];
+        } else if (['stage', 'platform'].some(t => cat.includes(t))) {
+          tags = ['stage', 'platform', 'layout'];
         }
 
         const filteredKnowledge = searchAssetsByTags(tags);

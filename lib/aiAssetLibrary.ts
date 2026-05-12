@@ -1,5 +1,5 @@
 // AI Asset Library - Comprehensive asset knowledge for AI operations
-import { ASSET_LIBRARY, AssetDef } from './assets';
+import { ASSET_LIBRARY, AssetDef, compareAssetsForDisplay } from './assets';
 
 export interface AIAssetKnowledge {
     id: string;
@@ -183,7 +183,7 @@ export function getAIAssetContext(): string {
 
 // Get compact asset list for AI (just names and IDs)
 export function getCompactAssetList(): { id: string; name: string; category: string; path: string; width: number; height: number }[] {
-    return ASSET_LIBRARY.map((a) => ({
+    return [...ASSET_LIBRARY].sort(compareAssetsForDisplay).map((a) => ({
         id: a.id,
         name: a.label,
         category: a.category,

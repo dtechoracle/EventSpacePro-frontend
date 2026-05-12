@@ -19,6 +19,95 @@ export const ASSET_CATEGORIES: AssetCategory[] = ["Furniture", "Layout", "Sittin
 
 import { MARQUEES } from './marquees';
 
+const CATEGORY_SORT_ORDER: Record<AssetCategory, number> = {
+  Furniture: 0,
+  Layout: 1,
+  Sitting_Styles: 2,
+  Space_Elements: 3,
+  Marquee: 4,
+};
+
+const getAssetArea = (asset: AssetDef) => (asset.width || 0) * (asset.height || 0);
+const getNormalizedDims = (asset: AssetDef) => {
+  const width = asset.width || 0;
+  const height = asset.height || 0;
+  return {
+    shortSide: Math.min(width, height),
+    longSide: Math.max(width, height),
+  };
+};
+
+const getFurnitureSeatCount = (asset: AssetDef) => {
+  const label = asset.label.toLowerCase();
+  const explicitSeater = label.match(/(\d+)\s*seater/);
+  if (explicitSeater) return Number(explicitSeater[1]);
+
+  if (
+    label.includes('chair') ||
+    label.includes('stool') ||
+    label.includes('seminar') ||
+    label.includes('office chair') ||
+    label.includes('event chair') ||
+    label.includes('bar stool')
+  ) {
+    return 1;
+  }
+
+  return Number.POSITIVE_INFINITY;
+};
+
+export const compareAssetsForDisplay = (a: AssetDef, b: AssetDef) => {
+  const categoryDelta = CATEGORY_SORT_ORDER[a.category] - CATEGORY_SORT_ORDER[b.category];
+  if (categoryDelta !== 0) return categoryDelta;
+
+  if (a.category === "Furniture") {
+    const seatDelta = getFurnitureSeatCount(a) - getFurnitureSeatCount(b);
+    if (seatDelta !== 0) return seatDelta;
+
+    const aDims = getNormalizedDims(a);
+    const bDims = getNormalizedDims(b);
+    const shortSideDelta = aDims.shortSide - bDims.shortSide;
+    if (shortSideDelta !== 0) return shortSideDelta;
+
+    const longSideDelta = aDims.longSide - bDims.longSide;
+    if (longSideDelta !== 0) return longSideDelta;
+
+    const areaDelta = getAssetArea(a) - getAssetArea(b);
+    if (areaDelta !== 0) return areaDelta;
+
+    const widthDelta = (a.width || 0) - (b.width || 0);
+    if (widthDelta !== 0) return widthDelta;
+
+    return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  if (a.category === "Marquee" || a.category === "Layout") {
+    const aDims = getNormalizedDims(a);
+    const bDims = getNormalizedDims(b);
+    const shortSideDelta = aDims.shortSide - bDims.shortSide;
+    if (shortSideDelta !== 0) return shortSideDelta;
+
+    const longSideDelta = aDims.longSide - bDims.longSide;
+    if (longSideDelta !== 0) return longSideDelta;
+
+    const areaDelta = getAssetArea(a) - getAssetArea(b);
+    if (areaDelta !== 0) return areaDelta;
+
+    const widthDelta = (a.width || 0) - (b.width || 0);
+    if (widthDelta !== 0) return widthDelta;
+
+    const heightDelta = (a.height || 0) - (b.height || 0);
+    if (heightDelta !== 0) return heightDelta;
+
+    return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  const areaDelta = getAssetArea(a) - getAssetArea(b);
+  if (areaDelta !== 0) return areaDelta;
+
+  return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' });
+};
+
 const MARQUEE_ASSETS: AssetDef[] = MARQUEES.map(m => ({
     id: m.id,
     label: m.name,
@@ -29,7 +118,7 @@ const MARQUEE_ASSETS: AssetDef[] = MARQUEES.map(m => ({
     name: m.name
 }));
 
-export const ASSET_LIBRARY: AssetDef[] = [
+const RAW_ASSET_LIBRARY: AssetDef[] = [
     ...MARQUEE_ASSETS,
   {
     "id": "10-seater-rectangular-table",
@@ -905,3 +994,5 @@ export const ASSET_LIBRARY: AssetDef[] = [
     "name": "900mm Window"
   }
 ];
+
+export const ASSET_LIBRARY: AssetDef[] = [...RAW_ASSET_LIBRARY].sort(compareAssetsForDisplay);

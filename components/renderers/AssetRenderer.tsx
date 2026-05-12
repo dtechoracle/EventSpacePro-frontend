@@ -70,7 +70,16 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const disableFastImageForAsset =
         !!definition?.path &&
         definition.path.toLowerCase().includes('10 seater round table 02.svg');
-    const canUseFastImage = !!assetPath && !asset.isExploded && !disableFastImageForAsset && canRenderAssetAsImage(asset, isPreview);
+    const prefersLiveSvgAtDefaultStroke =
+        !isPreview &&
+        ((asset.strokeWidth !== undefined && Math.abs(asset.strokeWidth - DEFAULT_ASSET_STROKE_WIDTH) <= 0.001) ||
+            asset.strokeWidth === undefined);
+    const canUseFastImage =
+        !!assetPath &&
+        !asset.isExploded &&
+        !disableFastImageForAsset &&
+        !prefersLiveSvgAtDefaultStroke &&
+        canRenderAssetAsImage(asset, isPreview);
     const fastImageHref = canUseFastImage && rasterAssetPath && !rasterImageFailed ? rasterAssetPath : assetPath;
 
     useEffect(() => {
@@ -156,7 +165,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         if (canUseFastImage) return null;
         if (!rawSvgContent || typeof window === 'undefined' || !definition?.path) return null;
 
-        const cacheKey = `${definition.path}_workspace_v29_group_fill_fix`;
+        const cacheKey = `${definition.path}_workspace_v34_eventchair3_filllayer_fix`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
@@ -237,10 +246,12 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
 
                 const isClosed = isZClosed || isCoordClosed;
                 const isOpenPath = tag === 'path' && !isClosed;
+                const autoFillContainer = el.closest('[id="auto-fill"], .auto-fill, [data-auto-fill="true"]');
                 const isAutoFill =
                     el.getAttribute("id") === "auto-fill" ||
                     el.classList.contains("auto-fill") ||
-                    el.getAttribute("data-auto-fill") === "true";
+                    el.getAttribute("data-auto-fill") === "true" ||
+                    !!autoFillContainer;
 
                 // On workspace, we determine if it's furniture by checking the path/type
                 // But for simplicity, we treat workspace assets with categories from the library

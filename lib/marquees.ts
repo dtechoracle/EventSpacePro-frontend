@@ -14,7 +14,7 @@ export type MarqueeGeometry = {
   markerCenters: { x: number; y: number }[];
 };
 
-export const MARQUEES: MarqueeDef[] = [
+const RAW_MARQUEES: MarqueeDef[] = [
   { id: "10m-x-10m-marquee", name: "10m X 10m Marquee", path: "/Marquees/10m X 10m Marquee.svg", width: 10000, height: 10000 },
   { id: "10m-x-20m-marquee", name: "10m X 20m Marquee", path: "/Marquees/10m X 20m Marquee.svg", width: 20000, height: 10000 },
   { id: "10m-x-30m-marquee", name: "10m X 30m Marquee", path: "/Marquees/10m X 30m Marquee.svg", width: 30000, height: 10000 },
@@ -48,6 +48,29 @@ export const MARQUEES: MarqueeDef[] = [
   { id: "9m-x-18m-marquee", name: "9m X 18m Marquee", path: "/Marquees/9m X 18m Marquee.svg", width: 18000, height: 9000 },
   { id: "9m-x-9m-marquee", name: "9m X 9m Marquee", path: "/Marquees/9m X 9m Marquee.svg", width: 9000, height: 9000 },
 ];
+
+export const MARQUEES: MarqueeDef[] = [...RAW_MARQUEES].sort((a, b) => {
+  const aShort = Math.min(a.width, a.height);
+  const bShort = Math.min(b.width, b.height);
+  const shortSideDelta = aShort - bShort;
+  if (shortSideDelta !== 0) return shortSideDelta;
+
+  const aLong = Math.max(a.width, a.height);
+  const bLong = Math.max(b.width, b.height);
+  const longSideDelta = aLong - bLong;
+  if (longSideDelta !== 0) return longSideDelta;
+
+  const areaDelta = a.width * a.height - b.width * b.height;
+  if (areaDelta !== 0) return areaDelta;
+
+  const widthDelta = a.width - b.width;
+  if (widthDelta !== 0) return widthDelta;
+
+  const heightDelta = a.height - b.height;
+  if (heightDelta !== 0) return heightDelta;
+
+  return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+});
 
 function createAxisStops(length: number, step: number) {
   const stops: number[] = [];

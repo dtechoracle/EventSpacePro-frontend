@@ -666,6 +666,32 @@ const normalizeLegacyWallStroke = (...values: Array<string | undefined | null>) 
   return stroke?.toUpperCase() === '#1E40AF' ? '#1f2937' : (stroke || '#1f2937');
 };
 
+const LOCAL_DRAFT_VERSION = 1;
+
+type LocalWorkspaceDraft = {
+  version: number;
+  eventId: string;
+  slug: string;
+  savedAt: number;
+  data: {
+    canvas: any;
+    walls: any[];
+    wallSegments: any[];
+    shapes: any[];
+    assets: any[];
+    layers: any[];
+    dimensions: any[];
+    textAnnotations: any[];
+    labelArrows: any[];
+    groups: any[];
+    activeLayerId: string | null;
+    comments: any[];
+  };
+};
+
+const getLocalDraftKey = (slug: string, eventId: string) =>
+  `esp-workspace-draft:${slug}:${eventId}`;
+
 export default function Editor() {
   const [showAssetsModal, setShowAssetsModal] = useState(false);
   const [show3D, setShow3D] = useState(false);
@@ -723,6 +749,8 @@ export default function Editor() {
   // Old scene store methods (for compatibility)
   const hasUnsavedChanges = useSceneStore((s) => s.hasUnsavedChanges);
   const projectHasUnsavedChanges = useProjectStore((s) => s.hasUnsavedChanges);
+  const sceneHistoryIndex = useSceneStore((s) => s.historyIndex);
+  const projectHistoryIndex = useProjectStore((s: any) => s.historyIndex);
   const syncToEventData = useSceneStore((s) => s.syncToEventData);
   const markAsSaved = useSceneStore((s) => s.markAsSaved);
 
@@ -767,6 +795,59 @@ export default function Editor() {
 
   // Track if we just saved to prevent reloading
   const justSavedRef = useRef(false);
+  const restoredLocalDraftRef = useRef<string | null>(null);
+  const isAutoSavingRef = useRef(false);
+  const pendingAutoSaveRef = useRef(false);
+  const lastSavedProjectHistoryRef = useRef<number | null>(null);
+  const lastSavedSceneHistoryRef = useRef<number | null>(null);
+
+  const writeLocalWorkspaceDraft = useCallback(() => {
+    if (typeof window === "undefined" || !id || !slug || typeof id !== "string" || typeof slug !== "string") return;
+
+    try {
+      const projectState = useProjectStore.getState();
+      const sceneState = useSceneStore.getState();
+      const sceneAssetsById = new Map(sceneState.assets.map((sceneAsset) => [sceneAsset.id, sceneAsset]));
+      const mergedAssets = projectState.assets.map((asset) => {
+        const sceneAsset = sceneAssetsById.get(asset.id);
+        return sceneAsset ? { ...asset, ...sceneAsset } : asset;
+      });
+
+      const draft: LocalWorkspaceDraft = {
+        version: LOCAL_DRAFT_VERSION,
+        eventId: id,
+        slug,
+        savedAt: Date.now(),
+        data: {
+          canvas: projectState.canvas,
+          walls: projectState.walls,
+          wallSegments: projectState.wallSegments,
+          shapes: projectState.shapes,
+          assets: mergedAssets,
+          layers: projectState.layers,
+          dimensions: projectState.dimensions,
+          textAnnotations: projectState.textAnnotations,
+          labelArrows: projectState.labelArrows,
+          groups: projectState.groups,
+          activeLayerId: projectState.activeLayerId,
+          comments: projectState.comments,
+        },
+      };
+
+      window.localStorage.setItem(getLocalDraftKey(slug, id), JSON.stringify(draft));
+    } catch (error) {
+      console.warn("[Editor] Failed to write local workspace draft", error);
+    }
+  }, [id, slug]);
+
+  const clearLocalWorkspaceDraft = useCallback(() => {
+    if (typeof window === "undefined" || !id || !slug || typeof id !== "string" || typeof slug !== "string") return;
+    try {
+      window.localStorage.removeItem(getLocalDraftKey(slug, id));
+    } catch (error) {
+      console.warn("[Editor] Failed to clear local workspace draft", error);
+    }
+  }, [id, slug]);
 
   // Mutation to save canvas assets
   const saveCanvasAssets = useMutation({
@@ -779,6 +860,7 @@ export default function Editor() {
     onSuccess: (savedData) => {
       console.log('[Editor] ✅ Saved successfully to DATABASE');
       markAsSaved();
+      clearLocalWorkspaceDraft();
       // Mark that we just saved to prevent reloading
       justSavedRef.current = true;
       // Update current event data but don't reload workspace
@@ -1556,17 +1638,45 @@ export default function Editor() {
   useEffect(() => {
     if (!currentEventData || !id || !slug) return;
 
-    if (!projectHasUnsavedChanges) return;
+    const hasAnyUnsavedChanges = projectHasUnsavedChanges || hasUnsavedChanges;
+    if (!hasAnyUnsavedChanges) {
+      lastSavedProjectHistoryRef.current = projectHistoryIndex;
+      lastSavedSceneHistoryRef.current = sceneHistoryIndex;
+      return;
+    }
 
-    console.log('[Editor] Auto-save triggered - saving to DATABASE');
+    const projectChangedSinceLastSave =
+      lastSavedProjectHistoryRef.current === null || lastSavedProjectHistoryRef.current !== projectHistoryIndex;
+    const sceneChangedSinceLastSave =
+      lastSavedSceneHistoryRef.current === null || lastSavedSceneHistoryRef.current !== sceneHistoryIndex;
+
+    if (!projectChangedSinceLastSave && !sceneChangedSinceLastSave) return;
 
     const timeoutId = setTimeout(() => {
-      // Check again after delay
-      const store = useProjectStore.getState();
-      const currentHasChanges = store.hasUnsavedChanges;
+      const projectStore = useProjectStore.getState();
+      const sceneStore = useSceneStore.getState();
+      const currentProjectHasChanges = projectStore.hasUnsavedChanges;
+      const currentSceneHasChanges = sceneStore.hasUnsavedChanges;
 
-      if (currentHasChanges && id && typeof id === 'string' && slug && typeof slug === 'string') {
-        const { walls, shapes, assets } = store;
+      if ((currentProjectHasChanges || currentSceneHasChanges) && id && typeof id === 'string' && slug && typeof slug === 'string') {
+        if (isAutoSavingRef.current) {
+          pendingAutoSaveRef.current = true;
+          return;
+        }
+
+        if (currentSceneHasChanges && sceneStore.assets.length > 0) {
+          const sceneAssetsById = new Map(sceneStore.assets.map((sceneAsset) => [sceneAsset.id, sceneAsset]));
+          useProjectStore.setState((state) => ({
+            assets: state.assets.map((asset) => {
+              const sceneAsset = sceneAssetsById.get(asset.id);
+              return sceneAsset ? { ...asset, ...sceneAsset } : asset;
+            }),
+            hasUnsavedChanges: true,
+          }));
+        }
+
+        const saveStore = useProjectStore.getState();
+        const { walls, shapes, assets } = saveStore;
 
         console.log('[Editor] Auto-save: Saving to DATABASE:', {
           eventId: id,
@@ -1576,25 +1686,170 @@ export default function Editor() {
         });
 
         // Mark that we're saving to prevent reload
+        isAutoSavingRef.current = true;
+        pendingAutoSaveRef.current = false;
         justSavedRef.current = true;
 
         // Save to database automatically
-        store.saveEvent(id, slug)
+        saveStore.saveEvent(id, slug)
           .then(() => {
+            useSceneStore.getState().markAsSaved();
+            lastSavedProjectHistoryRef.current = projectHistoryIndex;
+            lastSavedSceneHistoryRef.current = sceneHistoryIndex;
+            isAutoSavingRef.current = false;
+            if (pendingAutoSaveRef.current) {
+              pendingAutoSaveRef.current = false;
+              window.setTimeout(() => {
+                useProjectStore.setState((state) => ({ ...state }));
+              }, 0);
+            }
             console.log('[Editor] ✅ Auto-saved to DATABASE successfully');
-            setTimeout(() => {
-              justSavedRef.current = false;
-            }, 2000);
           })
           .catch((error) => {
             console.error('[Editor] ❌ Auto-save failed:', error);
-            justSavedRef.current = false;
+            isAutoSavingRef.current = false;
           });
+        setTimeout(() => {
+          justSavedRef.current = false;
+        }, 300);
+
+        const latestProjectStore = useProjectStore.getState();
+        const latestSceneStore = useSceneStore.getState();
+        const stillDirty = latestProjectStore.hasUnsavedChanges || latestSceneStore.hasUnsavedChanges;
+        const newChangesSinceSave =
+          lastSavedProjectHistoryRef.current !== projectHistoryIndex ||
+          lastSavedSceneHistoryRef.current !== sceneHistoryIndex;
+
+        if (pendingAutoSaveRef.current || (stillDirty && newChangesSinceSave)) {
+          pendingAutoSaveRef.current = false;
+          window.setTimeout(() => {
+            useProjectStore.setState((state) => ({ ...state }));
+          }, 0);
+        }
       }
-    }, 2000); // Auto-save after 2 seconds
+    }, 180); // Auto-save right after the action settles
 
     return () => clearTimeout(timeoutId);
-  }, [projectHasUnsavedChanges, currentEventData, id, slug]);
+  }, [projectHasUnsavedChanges, hasUnsavedChanges, currentEventData, id, slug, projectHistoryIndex, sceneHistoryIndex]);
+
+  // Restore local draft for this exact event if a recent unsaved checkpoint exists
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      !currentEventData ||
+      !id ||
+      !slug ||
+      typeof id !== "string" ||
+      typeof slug !== "string"
+    ) return;
+
+    const draftKey = getLocalDraftKey(slug, id);
+    if (restoredLocalDraftRef.current === draftKey) return;
+
+    try {
+      const raw = window.localStorage.getItem(draftKey);
+      if (!raw) {
+        restoredLocalDraftRef.current = draftKey;
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as LocalWorkspaceDraft;
+      if (
+        !parsed ||
+        parsed.version !== LOCAL_DRAFT_VERSION ||
+        parsed.eventId !== id ||
+        parsed.slug !== slug ||
+        !parsed.data
+      ) {
+        restoredLocalDraftRef.current = draftKey;
+        return;
+      }
+
+      useProjectStore.setState((state) => ({
+        ...state,
+        canvas: parsed.data.canvas || state.canvas,
+        walls: parsed.data.walls || [],
+        wallSegments: parsed.data.wallSegments || [],
+        shapes: parsed.data.shapes || [],
+        assets: parsed.data.assets || [],
+        layers: parsed.data.layers || state.layers,
+        dimensions: parsed.data.dimensions || [],
+        textAnnotations: parsed.data.textAnnotations || [],
+        labelArrows: parsed.data.labelArrows || [],
+        groups: parsed.data.groups || [],
+        activeLayerId: parsed.data.activeLayerId || state.activeLayerId,
+        comments: parsed.data.comments || [],
+        hasUnsavedChanges: true,
+      }));
+
+      useSceneStore.setState((state) => ({
+        ...state,
+        assets: parsed.data.assets || [],
+        canvas: parsed.data.canvas || state.canvas,
+        hasUnsavedChanges: true,
+      }));
+
+      restoredLocalDraftRef.current = draftKey;
+      toast.success("Recovered unsaved workspace draft");
+    } catch (error) {
+      console.warn("[Editor] Failed to restore local workspace draft", error);
+      restoredLocalDraftRef.current = draftKey;
+    }
+  }, [currentEventData, id, slug]);
+
+  // Fast local draft checkpoint for crash / shutdown recovery
+  useEffect(() => {
+    if (!currentEventData || !id || !slug || typeof id !== "string" || typeof slug !== "string") return;
+
+    const hasAnyUnsavedChanges = projectHasUnsavedChanges || hasUnsavedChanges;
+    if (!hasAnyUnsavedChanges) {
+      clearLocalWorkspaceDraft();
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      writeLocalWorkspaceDraft();
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    projectHasUnsavedChanges,
+    hasUnsavedChanges,
+    currentEventData,
+    id,
+    slug,
+    writeLocalWorkspaceDraft,
+    clearLocalWorkspaceDraft,
+  ]);
+
+  // Flush local draft immediately when the tab becomes hidden or page is closing
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const flushDraft = () => {
+      const projectStore = useProjectStore.getState();
+      const sceneStore = useSceneStore.getState();
+      if (projectStore.hasUnsavedChanges || sceneStore.hasUnsavedChanges) {
+        writeLocalWorkspaceDraft();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushDraft();
+      }
+    };
+
+    window.addEventListener("beforeunload", flushDraft);
+    window.addEventListener("pagehide", flushDraft);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("beforeunload", flushDraft);
+      window.removeEventListener("pagehide", flushDraft);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [writeLocalWorkspaceDraft]);
 
   // Save functionality is handled by PropertiesSidebar
 
