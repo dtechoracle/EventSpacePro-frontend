@@ -86,7 +86,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
           src={asset.path}
           fill="none"
           stroke="currentColor"
-          strokeWidth={1.2}
+          strokeWidth={0.6}
           category={asset.category}
         />
       </div>

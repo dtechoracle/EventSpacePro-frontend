@@ -165,7 +165,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         if (canUseFastImage) return null;
         if (!rawSvgContent || typeof window === 'undefined' || !definition?.path) return null;
 
-        const cacheKey = `${definition.path}_workspace_v34_eventchair3_filllayer_fix`;
+        const cacheKey = `${definition.path}_workspace_v40_lshaped_sofa_corner_fill_fix`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {

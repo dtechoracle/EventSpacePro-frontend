@@ -281,7 +281,7 @@ function ElementsPane() {
                           src={assetDef.path}
                           fill={item.asset.fillColor || (item.asset as any).fill || "none"}
                           stroke={item.asset.strokeColor || (item.asset as any).stroke || "currentColor"}
-                          strokeWidth={1.2}
+                          strokeWidth={0.6}
                           category={assetDef.category}
                         />
                       </div>
@@ -308,7 +308,7 @@ function ElementsPane() {
                             return item.shape.fill || "transparent";
                           })()}
                           stroke={item.shape.stroke || "#9CA3AF"}
-                          strokeWidth={1.2}
+                          strokeWidth={0.6}
                           rx={2}
                           ry={2}
                         />
@@ -328,7 +328,7 @@ function ElementsPane() {
                             return item.shape.fill || "transparent";
                           })()}
                           stroke={item.shape.stroke || "#9CA3AF"}
-                          strokeWidth={1.2}
+                          strokeWidth={0.6}
                         />
                       )}
                       {item.shape.type === "line" && (
@@ -370,7 +370,7 @@ function ElementsPane() {
                             return item.shape.fill || "transparent";
                           })()}
                           stroke={item.shape.stroke || "#9CA3AF"}
-                          strokeWidth={1.2}
+                          strokeWidth={0.6}
                           strokeLinejoin="round"
                         />
                       )}
@@ -398,7 +398,7 @@ function ElementsPane() {
                           return w.fill || "#cbd5e1";
                         })()}
                         stroke={(item as any).wall?.stroke || "#94a3b8"}
-                        strokeWidth={1.2}
+                        strokeWidth={0.6}
                         rx={1}
                       />
                       <line x1={4} y1={12} x2={20} y2={12} stroke="currentColor" strokeWidth={0.5} strokeOpacity={0.3} />
@@ -466,7 +466,7 @@ function ElementsPane() {
                         x2={18}
                         y2={16}
                         stroke={item.labelArrow.color || "#111827"}
-                        strokeWidth={1.2}
+                        strokeWidth={0.6}
                         strokeLinecap="round"
                       />
                       {/* arrow head */}
@@ -474,7 +474,7 @@ function ElementsPane() {
                         points="16,14 18,16 16,18"
                         fill="none"
                         stroke={item.labelArrow.color || "#111827"}
-                        strokeWidth={1.2}
+                        strokeWidth={0.6}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
@@ -593,7 +593,7 @@ function ElementsPane() {
                               x2={20}
                               y2={12}
                               stroke={s.stroke || "#9CA3AF"}
-                              strokeWidth={1.2}
+                              strokeWidth={0.6}
                               strokeLinecap="round"
                             />
                           )}

@@ -146,11 +146,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const userHistoryText = `${userHistory.map((m) => m.content || '').join('\n')}\n${commandText || ''}`;
     const lowerHistoryText = combinedHistoryText.toLowerCase();
     const lowerUserHistoryText = userHistoryText.toLowerCase();
-    const roomDimMatch = userHistoryText.match(/(\d+(?:\.\d+)?)\s*(mm|m)?\s*(?:x|by)\s*(\d+(?:\.\d+)?)\s*(mm|m)?/i);
+    const roomDimMatch = userHistoryText.match(/(\d+(?:\.\d+)?)\s*(mm|m|ft)?\s*(?:x|by)\s*(\d+(?:\.\d+)?)\s*(mm|m|ft)?/i);
     const toMm = (value?: string, unit?: string) => {
       const numeric = Number(value);
       if (!Number.isFinite(numeric)) return null;
-      return (unit || '').toLowerCase() === 'm' ? numeric * 1000 : numeric;
+      const normalizedUnit = (unit || '').toLowerCase();
+      if (normalizedUnit === 'm') return numeric * 1000;
+      if (normalizedUnit === 'ft') return numeric * 304.8;
+      return numeric;
     };
     const roomWidthMm = roomDimMatch ? toMm(roomDimMatch[1], roomDimMatch[2]) : null;
     const roomHeightMm = roomDimMatch ? toMm(roomDimMatch[3], roomDimMatch[4] || roomDimMatch[2]) : null;
@@ -434,13 +437,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (isNewLayoutIntent) {
       return res.status(200).json({
         followUp: 'Would you like to use one of our event location and space options?',
-        choices: ['Marquee', 'Grassy', 'Field', 'Park', 'Beach', 'Custom'],
+        choices: ['Marquee', 'Grassy field', 'Parking lot', 'Beach', 'Custom'],
       });
     }
 
     if (normalizedCommand === 'custom') {
       return res.status(200).json({
-        followUp: 'Great choice! What are the dimensions of your custom space? Please provide the width and height in meters or millimeters.',
+        followUp: 'Great choice! What are the dimensions of your custom space? Please provide the width and height in meters, millimeters, or feet.',
+      });
+    }
+
+    if (
+      normalizedCommand === 'grassy field' ||
+      normalizedCommand === 'grassy' ||
+      normalizedCommand === 'field'
+    ) {
+      return res.status(200).json({
+        followUp: 'Great choice! What are the dimensions of the grassy field space you want to use? Please provide the width and height in meters, millimeters, or feet.',
+      });
+    }
+
+    if (
+      normalizedCommand === 'parking lot' ||
+      normalizedCommand === 'parking' ||
+      normalizedCommand === 'car park' ||
+      normalizedCommand === 'park'
+    ) {
+      return res.status(200).json({
+        followUp: 'Great choice! What are the dimensions of the parking lot space you want to use? Please provide the width and height in meters, millimeters, or feet.',
+      });
+    }
+
+    if (normalizedCommand === 'beach') {
+      return res.status(200).json({
+        followUp: 'Great choice! What are the dimensions of the beach space you want to use? Please provide the width and height in meters, millimeters, or feet.',
       });
     }
 
@@ -739,12 +769,11 @@ Your goal is to guide the user through creating their event space by being inter
 ══════════════════════════════════════════════════════════════
 1.  **CONSULTATIVE PHASE (MANDATORY)**:
     - NEVER return a 'plan' object on the first turn unless the user explicitly says "Generate the plan now" or the request is extremely specific.
-    - **INITIAL FLOW**: If a user asks to "start a plan", "create a space", or "design an event", YOU MUST ASK: "Would you like to use one of our event location and space options?" and provide choices: ["Marquee", "Grassy", "Field", "Park", "Beach", "Custom"].
+    - **INITIAL FLOW**: If a user asks to "start a plan", "create a space", or "design an event", YOU MUST ASK: "Would you like to use one of our event location and space options?" and provide choices: ["Marquee", "Grassy field", "Parking lot", "Beach", "Custom"].
     - **PRELOADED SPACES**: If a user selects one:
         - **Marquee**: DO NOT return a plan or grass background immediately. Instead, use "assetSelection": { "category": "marquee", "message": "Excellent! Which marquee would you like to use for your event?" }.
-        - **Grassy**: Use "fillTexture": "grass-01" for the background.
-        - **Field**: Use "fillTexture": "grass-02" for the background.
-        - **Park**: Use "fillTexture": "grass-03" or "road-01" for the background.
+        - **Grassy field**: Use "fillTexture": "grass-01" or "grass-02" for the background.
+        - **Parking lot**: Use "fillTexture": "road-01" or another paved/parking-style background for the space.
         - **Beach**: Use "fillTexture": "sand-01" or "sand-02" for a large background rectangle.
     - **STANDALONE STRUCTURES**: Marquees (and tents) are standalone. DO NOT add walls or rooms around them unless the user explicitly asks for a "room inside a marquee".
     - **PREVIEW DURING SELECTION**: Whenever an asset category or specific asset is selected, ALWAYS include it in the "preview" object so the user can see it in the chat bubble while you continue the conversation.

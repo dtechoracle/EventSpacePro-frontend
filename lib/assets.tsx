@@ -602,8 +602,8 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "label": "Event Chair 4",
     "path": "/assets/modal/Furniture/Event Chair 4.svg",
     "category": "Furniture",
-    "width": 452,
-    "height": 486,
+    "width": 421,
+    "height": 470,
     "name": "Event Chair 4"
   },
   {
