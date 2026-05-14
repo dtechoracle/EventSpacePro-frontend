@@ -417,6 +417,29 @@ export default function AiTrigger() {
       lower.includes('how many attendees') ||
       lower.includes('capacity');
     if (asksForGuestCount) return undefined;
+    const asksForArrangement =
+      lower.includes('arranged') ||
+      lower.includes('arrangement') ||
+      lower.includes('u-shape') ||
+      lower.includes('grid') ||
+      lower.includes('circular') ||
+      lower.includes('linear') ||
+      lower.includes('perimeter') ||
+      lower.includes('boardroom') ||
+      lower.includes('classroom') ||
+      lower.includes('chevron');
+    const asksForChairsPerTable =
+      lower.includes('how many chairs should i place around each table') ||
+      lower.includes('how many seats should i place around each table') ||
+      lower.includes('chairs per table');
+    const asksForStageYesNo = lower.includes('would you like to add a stage');
+    const asksForStagePlacement =
+      lower.includes('where should i place the stage') ||
+      lower.includes('where would you like the stage');
+    const asksForExtras = lower.includes('would you like to include any additional features');
+    if (asksForArrangement || asksForChairsPerTable || asksForStageYesNo || asksForStagePlacement || asksForExtras) {
+      return undefined;
+    }
 
     const userHistory = messages
       .filter((m) => m.role === 'user')
@@ -920,6 +943,9 @@ export default function AiTrigger() {
     interface TableSpec {
       name?: string;
       chairCount: number;
+      chairType?: string;
+      chairW?: number;
+      chairH?: number;
       tableW: number;
       tableH: number;
       tableType: string;
@@ -1024,7 +1050,17 @@ export default function AiTrigger() {
           for (let repeatIndex = 0; repeatIndex < repeatCount; repeatIndex++) {
             tableSpecs.push({
               name: getRepeatedTableName(a, repeatIndex),
-              chairCount: Number(a.chairCount || a.chairs || 4),
+              chairCount: (() => {
+                const chairsPerTable = Number(a.chairCount || a.chairs || 4);
+                const totalGuests = Number(a.guestCount || 0);
+                if (!Number.isFinite(totalGuests) || totalGuests <= 0 || hasBuiltInSeating) return chairsPerTable;
+                const guestsPlacedBefore = repeatIndex * chairsPerTable;
+                const remainingGuests = Math.max(0, totalGuests - guestsPlacedBefore);
+                return Math.max(0, Math.min(chairsPerTable, remainingGuests));
+              })(),
+              chairType: resolveAsset(a.chairAsset || 'normal-chair').id,
+              chairW: resolveAsset(a.chairAsset || 'normal-chair').width,
+              chairH: resolveAsset(a.chairAsset || 'normal-chair').height,
               tableW: tw,
               tableH: isRound ? tw : th,
               tableType: resolved.id,
@@ -1132,7 +1168,17 @@ export default function AiTrigger() {
       for (let repeatIndex = 0; repeatIndex < repeatCount; repeatIndex++) {
         tableSpecs.push({
           name: getRepeatedTableName(a, repeatIndex),
-          chairCount: Number(a.chairCount || a.chairs || 4),
+          chairCount: (() => {
+            const chairsPerTable = Number(a.chairCount || a.chairs || 4);
+            const totalGuests = Number(a.guestCount || 0);
+            if (!Number.isFinite(totalGuests) || totalGuests <= 0 || hasBuiltInSeating) return chairsPerTable;
+            const guestsPlacedBefore = repeatIndex * chairsPerTable;
+            const remainingGuests = Math.max(0, totalGuests - guestsPlacedBefore);
+            return Math.max(0, Math.min(chairsPerTable, remainingGuests));
+          })(),
+          chairType: resolveAsset(a.chairAsset || 'normal-chair').id,
+          chairW: resolveAsset(a.chairAsset || 'normal-chair').width,
+          chairH: resolveAsset(a.chairAsset || 'normal-chair').height,
           tableW: tw,
           tableH: isRound ? tw : th,
           tableType: resolved.id,
@@ -1200,6 +1246,9 @@ export default function AiTrigger() {
       tableSpecs.push({
         name: spec.tableName || spec.name,
         chairCount: Number(spec.count || 4),
+        chairType: resolveAsset(spec.chairAsset || 'normal-chair').id,
+        chairW: resolveAsset(spec.chairAsset || 'normal-chair').width,
+        chairH: resolveAsset(spec.chairAsset || 'normal-chair').height,
         tableW: tw,
         tableH: isRound ? tw : th,
         tableType: resolved.id,
@@ -1458,6 +1507,9 @@ export default function AiTrigger() {
         // ─── Chairs ──────────────────────────────────────────────────────────
         if (!spec.hasBuiltInSeating) {
           const cCount = spec.chairCount;
+          const looseChairType = spec.chairType || 'normal-chair';
+          const looseChairW = spec.chairW || effChairSize;
+          const looseChairH = spec.chairH || effChairSize;
           const topChairY = tableCY - th / 2 - effChairGap - effChairSize / 2;
           const botChairY = tableCY + th / 2 + effChairGap + effChairSize / 2;
           const leftChairX = tableCX - tw / 2 - effChairGap - effChairSize / 2;
@@ -1468,11 +1520,11 @@ export default function AiTrigger() {
             for (let ci = 0; ci < cCount; ci++) {
               const angle = (ci / cCount) * Math.PI * 2 - Math.PI / 2;
               generatedAssets.push({
-                id: `chair-${i}-${ci}`, type: 'normal-chair',
+                id: `chair-${i}-${ci}`, type: looseChairType,
                 x: tableCX + Math.cos(angle) * radius,
                 y: tableCY + Math.sin(angle) * radius,
                 rotation: (angle * 180 / Math.PI) + 90,
-                width: effChairSize, height: effChairSize,
+                width: looseChairW, height: looseChairH,
                 strokeWidth: AI_DEFAULT_STROKE_WIDTH, scale: 1, zIndex: 15,
                 fillColor: 'transparent'
               });
@@ -1488,9 +1540,9 @@ export default function AiTrigger() {
               for (let ci = 0; ci < count; ci++) {
                 const x = tableCX - tw / 2 + (tw / (count + 1)) * (ci + 1);
                 generatedAssets.push({
-                  id: `chair-${i}-r-${ci}-${rot}`, type: 'normal-chair',
+                  id: `chair-${i}-r-${ci}-${rot}`, type: looseChairType,
                   x, y, rotation: rot,
-                  width: effChairSize, height: effChairSize,
+                  width: looseChairW, height: looseChairH,
                   strokeWidth: AI_DEFAULT_STROKE_WIDTH, scale: 1, zIndex: 15,
                   fillColor: 'transparent'
                 });
@@ -1500,9 +1552,9 @@ export default function AiTrigger() {
               for (let ci = 0; ci < count; ci++) {
                 const y = tableCY - th / 2 + (th / (count + 1)) * (ci + 1);
                 generatedAssets.push({
-                  id: `chair-${i}-c-${ci}-${rot}`, type: 'normal-chair',
+                  id: `chair-${i}-c-${ci}-${rot}`, type: looseChairType,
                   x, y, rotation: rot,
-                  width: effChairSize, height: effChairSize,
+                  width: looseChairW, height: looseChairH,
                   strokeWidth: AI_DEFAULT_STROKE_WIDTH, scale: 1, zIndex: 15,
                   fillColor: 'transparent'
                 });
@@ -2525,6 +2577,59 @@ export default function AiTrigger() {
     const previewPlan: any = {
       walls: [{ widthMm, heightMm, wallType: 'enclosure-150' }],
     };
+
+    if (lower.includes('grassy field') || lower.includes('grass')) {
+      previewPlan.shapes = [
+        {
+          type: 'rectangle',
+          x: widthMm / 2,
+          y: heightMm / 2,
+          widthMm,
+          heightMm,
+          fillType: 'texture',
+          fillTexture: 'grass-01',
+          fillTextureScale: 4,
+          fillTextureThickness: 1,
+          stroke: 'transparent',
+          strokeWidth: 0,
+          previewLayer: 'background',
+        },
+      ];
+    } else if (lower.includes('parking lot') || lower.includes('car park') || lower.includes('parking')) {
+      previewPlan.shapes = [
+        {
+          type: 'rectangle',
+          x: widthMm / 2,
+          y: heightMm / 2,
+          widthMm,
+          heightMm,
+          fillType: 'texture',
+          fillTexture: 'parking-lot',
+          fillTextureScale: 4,
+          fillTextureThickness: 1,
+          stroke: 'transparent',
+          strokeWidth: 0,
+          previewLayer: 'background',
+        },
+      ];
+    } else if (lower.includes('beach') || lower.includes('sand')) {
+      previewPlan.shapes = [
+        {
+          type: 'rectangle',
+          x: widthMm / 2,
+          y: heightMm / 2,
+          widthMm,
+          heightMm,
+          fillType: 'texture',
+          fillTexture: 'sand-01',
+          fillTextureScale: 4,
+          fillTextureThickness: 1,
+          stroke: 'transparent',
+          strokeWidth: 0,
+          previewLayer: 'background',
+        },
+      ];
+    }
 
     if (inferredAsset && count > 0) {
       previewPlan.assets = [

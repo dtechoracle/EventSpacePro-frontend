@@ -28,6 +28,7 @@ export default function PlanPreview({
   stretchToContainer = false,
 }: PlanPreviewProps) {
   const hasWalls = walls.length > 0;
+  const hasBackgroundTexture = shapes.some((shape: any) => shape?.previewLayer === 'background' || shape?.fillType === 'texture');
   // Combine all items for rendering and bounds calculation
   const allItems = useMemo(() => {
     return [
@@ -375,10 +376,23 @@ export default function PlanPreview({
       const w = (asset.width ?? def.width ?? 500) * (asset.scale || 1) * previewScaleBoost;
       const h = (asset.height ?? def.height ?? 500) * (asset.scale || 1) * previewScaleBoost;
       const rotation = isFinite(asset.rotation || 0) ? asset.rotation : 0;
-      const previewStrokeWidth = Math.max(asset.strokeWidth || 0.6, hasWalls ? 1.15 : 0.8);
+      const previewStrokeWidth = Math.max(asset.strokeWidth || 0.6, hasBackgroundTexture ? 2.4 : hasWalls ? 1.15 : 0.8);
 
       return (
         <g key={asset.id} transform={`translate(${asset.x}, ${asset.y}) rotate(${rotation || 0})`}>
+          {hasBackgroundTexture && (
+            <rect
+              x={-w / 2 - 24}
+              y={-h / 2 - 24}
+              width={w + 48}
+              height={h + 48}
+              rx={Math.min(48, Math.max(18, Math.min(w, h) * 0.08))}
+              ry={Math.min(48, Math.max(18, Math.min(w, h) * 0.08))}
+              fill="rgba(255,255,255,0.42)"
+              stroke="rgba(255,255,255,0.18)"
+              strokeWidth={1}
+            />
+          )}
           {/* Background */}
           {(asset.backgroundColor && asset.backgroundColor !== "transparent") && (
             <rect x={-w / 2} y={-h / 2} width={w} height={h} fill={asset.backgroundColor} />
@@ -403,6 +417,7 @@ export default function PlanPreview({
     const fill = getFill(asset);
     const stroke = (asset as any).stroke || asset.strokeColor || '#000000';
     const strokeWidth = Math.max(1, (asset.strokeWidth || 1) * (asset.scale || 1));
+    const previewOpacity = 1;
 
     if (asset.type === 'circle' || asset.type === 'ellipse' || asset.type === 'round-table') {
       return (
@@ -415,6 +430,7 @@ export default function PlanPreview({
           fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
+          opacity={previewOpacity}
           transform={asset.rotation ? `rotate(${asset.rotation} ${asset.x} ${asset.y})` : undefined}
         />
       );
@@ -431,6 +447,7 @@ export default function PlanPreview({
           fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
+          opacity={previewOpacity}
           transform={asset.rotation ? `rotate(${asset.rotation} ${asset.x} ${asset.y})` : undefined}
         />
       );
@@ -511,8 +528,21 @@ export default function PlanPreview({
     return null;
   };
 
-  const renderedAssets = allItems
-    ? allItems.map((item: any) => (
+  const orderedItems = allItems
+    ? [...allItems].sort((a: any, b: any) => {
+      const rank = (item: any) => {
+        if (item?.previewLayer === 'background') return 0;
+        if (item?.type === 'rect' && item?.strokeWidth === 0) return 0;
+        if ((item as any)?.nodes || (item as any)?.wallNodes || item?.type === 'wall-segments') return 1;
+        if (item?.text !== undefined || item?.type === 'text') return 3;
+        return 2;
+      };
+      return rank(a) - rank(b);
+    })
+    : [];
+
+  const renderedAssets = orderedItems
+    ? orderedItems.map((item: any) => (
       <g key={item.id} style={{ color: item.hatchColor || item.fillColor || item.fill || '#000000' }}>
         {renderAsset(item)}
       </g>

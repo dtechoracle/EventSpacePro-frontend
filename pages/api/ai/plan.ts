@@ -146,7 +146,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const userHistoryText = `${userHistory.map((m) => m.content || '').join('\n')}\n${commandText || ''}`;
     const lowerHistoryText = combinedHistoryText.toLowerCase();
     const lowerUserHistoryText = userHistoryText.toLowerCase();
-    const roomDimMatch = userHistoryText.match(/(\d+(?:\.\d+)?)\s*(mm|m|ft)?\s*(?:x|by)\s*(\d+(?:\.\d+)?)\s*(mm|m|ft)?/i);
+    const parseDimensionPair = (text: string) => {
+      const raw = String(text || '');
+      const patterns = [
+        /(\d+(?:\.\d+)?)\s*(mm|m|ft)?\s*(?:x|by)\s*(\d+(?:\.\d+)?)\s*(mm|m|ft)?/i,
+        /(?:about|roughly|around)?\s*(\d+(?:\.\d+)?)\s*(mm|m|ft)\s*(?:wide|width)?\s*(?:and|,)\s*(\d+(?:\.\d+)?)\s*(mm|m|ft)\s*(?:long|length|deep|height)?/i,
+        /(?:about|roughly|around)?\s*(\d+(?:\.\d+)?)\s*(mm|m|ft)\s*(?:long|length|deep|height)\s*(?:and|,)\s*(\d+(?:\.\d+)?)\s*(mm|m|ft)\s*(?:wide|width)?/i,
+      ];
+
+      for (const pattern of patterns) {
+        const match = raw.match(pattern);
+        if (match) {
+          return {
+            widthValue: match[1],
+            widthUnit: match[2],
+            heightValue: match[3],
+            heightUnit: match[4] || match[2],
+          };
+        }
+      }
+      return null;
+    };
+    const roomDimMatch = parseDimensionPair(userHistoryText);
     const toMm = (value?: string, unit?: string) => {
       const numeric = Number(value);
       if (!Number.isFinite(numeric)) return null;
@@ -155,8 +176,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (normalizedUnit === 'ft') return numeric * 304.8;
       return numeric;
     };
-    const roomWidthMm = roomDimMatch ? toMm(roomDimMatch[1], roomDimMatch[2]) : null;
-    const roomHeightMm = roomDimMatch ? toMm(roomDimMatch[3], roomDimMatch[4] || roomDimMatch[2]) : null;
+    const roomWidthMm = roomDimMatch ? toMm(roomDimMatch.widthValue, roomDimMatch.widthUnit) : null;
+    const roomHeightMm = roomDimMatch ? toMm(roomDimMatch.heightValue, roomDimMatch.heightUnit) : null;
     const extractGuestCount = (text: string) => {
       const directMatch = String(text || '').match(/(?:about\s+)?(\d+)\s*[a-z]*\s*(?:guest|guests|attendee|attendees|people|persons)/i);
       if (!directMatch) return null;
@@ -194,14 +215,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const arrangementTypeFromCurrentInput = parseArrangementIntent(exactCommandText);
     const arrangementAlreadyKnown = Boolean(arrangementTypeFromHistory || arrangementTypeFromCurrentInput);
     const arrangementType = arrangementTypeFromCurrentInput || arrangementTypeFromHistory || 'grid';
-    const customConversation =
-      lowerUserHistoryText.includes('\ncustom') ||
-      lowerUserHistoryText.includes('custom\n') ||
-      lowerUserHistoryText.includes('custom space') ||
-      lowerUserHistoryText.includes('custom');
+    const inferSpaceChoice = (text: string) => {
+      const lower = String(text || '').toLowerCase();
+      if (lower.includes('parking lot') || lower.includes('car park')) return 'parking lot';
+      if (lower.includes('grassy field')) return 'grassy field';
+      if (lower.includes('marquee')) return 'marquee';
+      if (lower.includes('beach')) return 'beach';
+      if (
+        lower.includes('\ncustom') ||
+        lower.includes('custom\n') ||
+        lower.includes('custom space') ||
+        lower.includes('custom')
+      ) return 'custom';
+      return null;
+    };
+    const selectedSpaceChoice = inferSpaceChoice(lowerUserHistoryText);
+    const roomBasedConversation =
+      selectedSpaceChoice === 'custom' ||
+      selectedSpaceChoice === 'grassy field' ||
+      selectedSpaceChoice === 'parking lot' ||
+      selectedSpaceChoice === 'beach';
+    const draftedSpaceLabel =
+      selectedSpaceChoice === 'grassy field'
+        ? 'grassy field space'
+        : selectedSpaceChoice === 'parking lot'
+          ? 'parking lot space'
+          : selectedSpaceChoice === 'beach'
+            ? 'beach space'
+            : 'empty space';
     const tableAssets = assetList.filter(
       (asset) => asset.category === 'Furniture' && asset.name.toLowerCase().includes('table')
     );
+    const chairAssets = assetList.filter((asset) => {
+      const label = asset.name.toLowerCase();
+      return (
+        asset.category === 'Furniture' &&
+        !label.includes('table') &&
+        !label.includes('sofa') &&
+        (label.includes('chair') || label.includes('stool'))
+      );
+    });
     const stageAssets = assetList.filter(
       (asset) => asset.name.toLowerCase().includes('stage')
     );
@@ -211,6 +264,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .find((asset) => lowerUserHistoryText.includes(asset.name.toLowerCase())) || null;
     const selectedStageFromHistory =
       stageAssets
+        .sort((a, b) => b.name.length - a.name.length)
+        .find((asset) => lowerUserHistoryText.includes(asset.name.toLowerCase()) || lowerUserHistoryText.includes(canonicalize(asset.name))) || null;
+    const selectedChairFromHistory =
+      chairAssets
         .sort((a, b) => b.name.length - a.name.length)
         .find((asset) => lowerUserHistoryText.includes(asset.name.toLowerCase()) || lowerUserHistoryText.includes(canonicalize(asset.name))) || null;
     const tableChoiceKnown = Boolean(selectedTableFromHistory);
@@ -225,6 +282,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (/where should i place the stage|where would you like the stage/i.test(content)) return 'stage-placement';
         if (/what size would you like for the stage|select a stage/i.test(content)) return 'stage-size';
         if (/would you like to add a stage/i.test(content)) return 'stage-yes-no';
+        if (/what chair would you like to pair|select a chair|select seating for this table|what seating would you like to pair/i.test(content)) return 'chair-choice';
+        if (/how many chairs should i place around each table|how many seats should i place around each table|chairs per table/i.test(content)) return 'chairs-per-table';
         if (/how many guests|number of guests|guest count|how many people|how many attendees|capacity|roughly how many guests/i.test(content)) return 'guest-count';
         if (/what type of seating|what type of tables|what table|round tables|rectangular tables|select a table|select seating/i.test(content)) return 'table-choice';
         if (/how would you like them arranged|arrangement/i.test(content)) return 'arrangement';
@@ -236,6 +295,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const assistantAskedForStage = lastAssistantPromptType === 'stage-yes-no';
     const assistantAskedForStageSize = lastAssistantPromptType === 'stage-size';
     const assistantAskedForStagePlacement = lastAssistantPromptType === 'stage-placement';
+    const assistantAskedForChairChoice = lastAssistantPromptType === 'chair-choice';
+    const assistantAskedForChairsPerTable = lastAssistantPromptType === 'chairs-per-table';
     const assistantAskedForExtras = lastAssistantPromptType === 'extras';
     const assistantAskedForGeneration = lastAssistantPromptType === 'generate';
     const parsedGuestCountFromCurrentReply = (() => {
@@ -245,7 +306,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const value = Number(match[1]);
       return Number.isFinite(value) ? value : null;
     })();
-    const effectiveGuestCount = guestCount || parsedGuestCountFromCurrentReply;
+    const guestCountFromPromptHistory = (() => {
+      for (let i = conversationHistory.length - 2; i >= 0; i--) {
+        const current = conversationHistory[i];
+        const next = conversationHistory[i + 1];
+        if (
+          current?.role === 'assistant' &&
+          /how many guests|number of guests|guest count|how many people|how many attendees|capacity|roughly how many guests/i.test(current.content || '') &&
+          next?.role === 'user'
+        ) {
+          const explicit = extractGuestCount(next.content || '');
+          if (explicit) return explicit;
+          const numeric = String(next.content || '').match(/(\d{1,5})/);
+          if (numeric) {
+            const value = Number(numeric[1]);
+            if (Number.isFinite(value)) return value;
+          }
+        }
+      }
+      return null;
+    })();
+    const effectiveGuestCount = guestCount || parsedGuestCountFromCurrentReply || guestCountFromPromptHistory;
     const noStageReply =
       assistantAskedForStage &&
       isNegativeIntent(normalizedIntentText);
@@ -296,7 +377,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (normalizedUnit === 'ft') return numeric * 304.8;
       return numeric;
     };
-    const stageDimMatch = exactCommandText.match(/(\d+(?:\.\d+)?)\s*(mm|m|ft)?\s*(?:x|by)\s*(\d+(?:\.\d+)?)\s*(mm|m|ft)?/i);
+    const stageDimMatch = parseDimensionPair(exactCommandText);
     const findClosestStageAsset = (widthMm: number, heightMm: number) => {
       const candidates = [...stageAssets];
       if (candidates.length === 0) return null;
@@ -316,10 +397,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const canonicalText = canonicalize(text);
       const fuzzyStage = stageAssets.find((asset) => canonicalText.includes(canonicalize(asset.name)));
       if (fuzzyStage) return fuzzyStage;
-      const match = text.match(/(\d+(?:\.\d+)?)\s*(mm|m|ft)?\s*(?:x|by)\s*(\d+(?:\.\d+)?)\s*(mm|m|ft)?/i);
+      const match = parseDimensionPair(text);
       if (!match) return null;
-      const widthMm = parseMeasureToMm(match[1], match[2]);
-      const heightMm = parseMeasureToMm(match[3], match[4] || match[2]);
+      const widthMm = parseMeasureToMm(match.widthValue, match.widthUnit);
+      const heightMm = parseMeasureToMm(match.heightValue, match.heightUnit);
       if (!widthMm || !heightMm) return null;
       return findClosestStageAsset(widthMm, heightMm);
     };
@@ -375,18 +456,110 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? resolveStagePlacement(lowerUserHistoryText)
       : null;
     const selectedStagePlacement = stagePlacementFromCurrentInput || stagePlacementFromHistory;
-    const buildCustomTablePreview = (assetName: string, stageAsset?: any | null, stagePlacement?: string | null) => {
-      const assetNameLower = assetName.toLowerCase();
-      const seatCountMatch = assetNameLower.match(/(\d+)\s*seater/i);
-      const seatCount = seatCountMatch ? Number(seatCountMatch[1]) : null;
-      const inferredTableCount = effectiveGuestCount && seatCount ? Math.max(1, Math.ceil(effectiveGuestCount / seatCount)) : 1;
+    const selectedChairForFlow =
+      (
+        selectedMentionedAsset &&
+        selectedMentionedAsset.category === 'Furniture' &&
+        !selectedMentionedAsset.name.toLowerCase().includes('table') &&
+        !selectedMentionedAsset.name.toLowerCase().includes('sofa') &&
+        (
+          selectedMentionedAsset.name.toLowerCase().includes('chair') ||
+          selectedMentionedAsset.name.toLowerCase().includes('stool')
+        )
+          ? selectedMentionedAsset
+          : null
+      ) ||
+      selectedChairFromHistory ||
+      null;
+    const parseChairsPerTable = (text: string) => {
+      const raw = String(text || '');
+      const explicit = raw.match(/(\d{1,2})\s*(?:chairs?|seats?|stools?)\s*(?:per|around each|on each)/i);
+      if (explicit) {
+        const value = Number(explicit[1]);
+        return Number.isFinite(value) ? value : null;
+      }
+      if (assistantAskedForChairsPerTable) {
+        const numeric = raw.match(/(\d{1,2})/);
+        if (numeric) {
+          const value = Number(numeric[1]);
+          return Number.isFinite(value) ? value : null;
+        }
+      }
+      return null;
+    };
+    const chairsPerTableFromHistory = (() => {
+      for (let i = conversationHistory.length - 2; i >= 0; i--) {
+        const current = conversationHistory[i];
+        const next = conversationHistory[i + 1];
+        if (
+          current?.role === 'assistant' &&
+          /how many chairs should i place around each table|how many seats should i place around each table|chairs per table/i.test(current.content || '') &&
+          next?.role === 'user'
+        ) {
+          const explicit = parseChairsPerTable(next.content || '');
+          if (explicit) return explicit;
+          const numeric = String(next.content || '').match(/(\d{1,2})/);
+          if (numeric) {
+            const value = Number(numeric[1]);
+            if (Number.isFinite(value)) return value;
+          }
+        }
+      }
+      return null;
+    })();
+    const chairsPerTableForFlow = parseChairsPerTable(exactCommandText) || chairsPerTableFromHistory;
+    const arrangementChoices = ["Grid", "Linear", "Circular", "Perimeter", "U-Shape", "Boardroom", "Classroom", "Chevron"];
+    const getSpaceSurfaceShape = () => {
+      if (!roomWidthMm || !roomHeightMm) return null;
+      if (selectedSpaceChoice === 'custom' || !selectedSpaceChoice) return null;
+      const fillTexture =
+        selectedSpaceChoice === 'grassy field'
+          ? 'grass-01'
+          : selectedSpaceChoice === 'parking lot'
+            ? 'parking-lot'
+            : selectedSpaceChoice === 'beach'
+              ? 'sand-01'
+              : null;
+      if (!fillTexture) return null;
+      return {
+        id: `space-surface-${selectedSpaceChoice.replace(/\s+/g, '-')}`,
+        type: 'rectangle',
+        previewLayer: 'background',
+        x: roomWidthMm / 2,
+        y: roomHeightMm / 2,
+        width: roomWidthMm,
+        height: roomHeightMm,
+        fillType: 'texture',
+        fillTexture,
+        fillTextureScale: 4,
+        fillTextureThickness: 1,
+        fill: 'transparent',
+        stroke: 'transparent',
+        strokeWidth: 0,
+      };
+    };
+    const buildRoomShellPreview = () => {
       const preview: any = {
         walls: [{ widthMm: roomWidthMm, heightMm: roomHeightMm, wallType: 'enclosure-150' }],
+      };
+      const surfaceShape = getSpaceSurfaceShape();
+      if (surfaceShape) preview.shapes = [surfaceShape];
+      return preview;
+    };
+    const buildCustomTablePreview = (assetName: string, stageAsset?: any | null, stagePlacement?: string | null, chairCountOverride?: number | null, chairAssetName?: string | null) => {
+      const assetNameLower = assetName.toLowerCase();
+      const seatCountMatch = assetNameLower.match(/(\d+)\s*seater/i);
+      const seatCount = chairCountOverride || (seatCountMatch ? Number(seatCountMatch[1]) : null);
+      const inferredTableCount = effectiveGuestCount && seatCount ? Math.max(1, Math.ceil(effectiveGuestCount / seatCount)) : 1;
+      const preview: any = {
+        ...buildRoomShellPreview(),
         assets: [
           {
             assetName,
             count: inferredTableCount,
             chairCount: seatCount || undefined,
+            chairAsset: chairAssetName || undefined,
+            guestCount: effectiveGuestCount || undefined,
             strokeWidth: 0.6,
           },
         ],
@@ -423,6 +596,247 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
       return preview;
+    };
+    const getSeatCountForFlowTable = (tableName: string) => {
+      const seatCountMatch = tableName.toLowerCase().match(/(\d+)\s*seater/i);
+      return chairsPerTableForFlow || (seatCountMatch ? Number(seatCountMatch[1]) : null);
+    };
+    const getChairAssetNameForFlow = () => selectedChairForFlow?.name || undefined;
+    const selectedTableForFlow =
+      (
+        selectedMentionedAsset &&
+        selectedMentionedAsset.category === 'Furniture' &&
+        selectedMentionedAsset.name.toLowerCase().includes('table')
+          ? selectedMentionedAsset
+          : null
+      ) ||
+      selectedTableFromHistory ||
+      null;
+    const isWeakAssistantFallback = (text: string) => {
+      const lower = String(text || '').toLowerCase().trim();
+      if (!lower) return true;
+      return (
+        lower === 'done' ||
+        lower === 'done!' ||
+        lower === 'ok' ||
+        lower === 'okay' ||
+        lower === 'alright' ||
+        lower.includes('i did not understand') ||
+        lower.includes('could you rephrase') ||
+        lower.includes('please rephrase')
+      );
+    };
+    const buildContextualRecovery = () => {
+      if (roomWidthMm && roomHeightMm && roomBasedConversation && !effectiveGuestCount) {
+        return {
+          followUp: `I've drafted a ${roomWidthMm / 1000}m x ${roomHeightMm / 1000}m ${draftedSpaceLabel} for you. What kind of setup do you want here, and roughly how many guests should I plan for?`,
+          preview: buildRoomShellPreview(),
+        };
+      }
+
+      if (assistantAskedForGuestCount && !effectiveGuestCount) {
+        return {
+          followUp: selectedTableForFlow
+            ? `About how many guests should I plan for with the ${selectedTableForFlow.name}?`
+            : 'About how many guests should I plan for here?',
+          preview: roomWidthMm && roomHeightMm
+            ? buildRoomShellPreview()
+            : undefined,
+        };
+      }
+
+      if ((assistantAskedForTableChoice || (roomWidthMm && roomHeightMm && effectiveGuestCount)) && !selectedTableForFlow) {
+        return {
+          followUp: effectiveGuestCount
+            ? `For ${effectiveGuestCount} guests, what table or seating setup would you like to use?`
+            : 'What table or seating setup would you like to use?',
+          assetSelection: {
+            category: 'furniture',
+            message: 'Select furniture',
+            options: assetList.filter((a) => a.category === 'Furniture'),
+          },
+          preview: roomWidthMm && roomHeightMm
+            ? buildRoomShellPreview()
+            : undefined,
+        };
+      }
+
+      if (selectedMentionedAsset && selectedMentionedAsset.category === 'Marquee' && !tableChoiceKnown) {
+        return {
+          followUp: `Great choice. I have your ${selectedMentionedAsset.name} ready. What tables, chairs, or other furniture would you like to add inside it?`,
+          assetSelection: {
+            category: 'furniture',
+            message: 'Select furniture to add',
+            options: assetList.filter((a) => a.category === 'Furniture'),
+          },
+          preview: {
+            assets: [
+              {
+                assetName: selectedMentionedAsset.name,
+                xMm: (selectedMentionedAsset.width || 1000) / 2,
+                yMm: (selectedMentionedAsset.height || 1000) / 2,
+                widthMm: selectedMentionedAsset.width || 1000,
+                heightMm: selectedMentionedAsset.height || 1000,
+                strokeWidth: 0.6,
+              },
+            ],
+          },
+        };
+      }
+
+      if (selectedTableForFlow && effectiveGuestCount && !arrangementAlreadyKnown) {
+        const standaloneTableNeedsChairs =
+          !/\b\d+\s*seater\b/i.test(selectedTableForFlow.name) &&
+          !selectedTableForFlow.name.toLowerCase().includes('executive table') &&
+          !selectedTableForFlow.name.toLowerCase().includes('vip table');
+        if (standaloneTableNeedsChairs && !selectedChairForFlow) {
+          return {
+            followUp: `What chair would you like to pair with the ${selectedTableForFlow.name}?`,
+            assetSelection: {
+              category: 'chair',
+              message: 'Select seating',
+              options: chairAssets,
+            },
+            preview: roomWidthMm && roomHeightMm
+              ? buildCustomTablePreview(selectedTableForFlow.name)
+              : undefined,
+          };
+        }
+        if (standaloneTableNeedsChairs && !chairsPerTableForFlow) {
+          const suggestedChairCount = selectedTableForFlow.name.toLowerCase().includes('cocktail') ? 4 : 6;
+          return {
+            followUp: `How many chairs should I place around each table? I can suggest ${suggestedChairCount} for the ${selectedTableForFlow.name} unless you want a different number.`,
+            preview: roomWidthMm && roomHeightMm
+              ? buildCustomTablePreview(selectedTableForFlow.name, undefined, undefined, suggestedChairCount, selectedChairForFlow?.name || undefined)
+              : undefined,
+          };
+        }
+        const assetNameLower = selectedTableForFlow.name.toLowerCase();
+        const seatCountMatch = assetNameLower.match(/(\d+)\s*seater/i);
+        const seatCount = chairsPerTableForFlow || (seatCountMatch ? Number(seatCountMatch[1]) : null);
+        const inferredTableCount = effectiveGuestCount && seatCount ? Math.max(1, Math.ceil(effectiveGuestCount / seatCount)) : 1;
+        return {
+          followUp: `Great choice! With ${selectedTableForFlow.name}, I’ll use ${inferredTableCount} table${inferredTableCount > 1 ? 's' : ''} for ${effectiveGuestCount} guests. How would you like them arranged?`,
+          choices: arrangementChoices,
+          preview: roomWidthMm && roomHeightMm
+            ? buildCustomTablePreview(selectedTableForFlow.name, undefined, undefined, seatCount, selectedChairForFlow?.name || undefined)
+            : {
+                assets: [
+                  {
+                    assetName: selectedTableForFlow.name,
+                    xMm: (selectedTableForFlow.width || 1000) / 2,
+                    yMm: (selectedTableForFlow.height || 1000) / 2,
+                    widthMm: selectedTableForFlow.width || 1000,
+                    heightMm: selectedTableForFlow.height || 1000,
+                    strokeWidth: 0.6,
+                  },
+                ],
+              },
+        };
+      }
+
+      if (selectedTableForFlow && effectiveGuestCount && arrangementAlreadyKnown && assistantAskedForStage) {
+        if (yesStageReply) {
+          return {
+            followUp: 'Select a stage size or type the stage you want.',
+            assetSelection: {
+              category: 'stage',
+              message: 'Select a stage',
+              options: stageAssets,
+            },
+            preview: buildCustomTablePreview(selectedTableForFlow.name),
+          };
+        }
+        if (noStageReply) {
+          return {
+            followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
+            preview: buildCustomTablePreview(selectedTableForFlow.name),
+          };
+        }
+        return {
+          followUp: 'Would you like to add a stage to your layout?',
+          choices: ['Yes, add a stage', 'No stage'],
+          preview: buildCustomTablePreview(selectedTableForFlow.name),
+        };
+      }
+
+      if (selectedTableForFlow && effectiveGuestCount && arrangementAlreadyKnown && assistantAskedForStageSize) {
+        if (selectedStageForFlow) {
+          return {
+            followUp: 'Where should I place the stage in relation to the arrangement?',
+            choices: getStagePositionChoices(),
+            preview: buildCustomTablePreview(selectedTableForFlow.name, selectedStageForFlow),
+          };
+        }
+        return {
+          followUp: 'Select a stage size or type the stage you want.',
+          assetSelection: {
+            category: 'stage',
+            message: 'Select a stage',
+            options: stageAssets,
+          },
+          preview: buildCustomTablePreview(selectedTableForFlow.name),
+        };
+      }
+
+      if (selectedTableForFlow && effectiveGuestCount && arrangementAlreadyKnown && assistantAskedForStagePlacement) {
+        if (selectedStageForFlow && selectedStagePlacement) {
+          return {
+            followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
+            preview: buildCustomTablePreview(selectedTableForFlow.name, selectedStageForFlow, selectedStagePlacement),
+          };
+        }
+        return {
+          followUp: 'Where should I place the stage in relation to the arrangement?',
+          choices: getStagePositionChoices(),
+          preview: buildCustomTablePreview(selectedTableForFlow.name, selectedStageForFlow),
+        };
+      }
+
+      if (selectedTableForFlow && effectiveGuestCount && arrangementAlreadyKnown && assistantAskedForExtras) {
+        if (noExtrasReply) {
+          return {
+            plan: buildCustomTablePreview(selectedTableForFlow.name, selectedStageForFlow, selectedStagePlacement),
+          };
+        }
+        if (extrasDecisionKnown) {
+          return {
+            followUp: 'What extra feature would you like to add first?',
+            preview: buildCustomTablePreview(selectedTableForFlow.name, selectedStageForFlow, selectedStagePlacement),
+          };
+        }
+        return {
+          followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
+          preview: buildCustomTablePreview(selectedTableForFlow.name, selectedStageForFlow, selectedStagePlacement),
+        };
+      }
+
+      if (selectedTableForFlow && effectiveGuestCount && arrangementAlreadyKnown && assistantAskedForGeneration) {
+        if (proceedReply) {
+          return {
+            plan: buildCustomTablePreview(selectedTableForFlow.name, selectedStageForFlow, selectedStagePlacement),
+          };
+        }
+        return {
+          followUp: 'Would you like me to generate the layout now?',
+          choices: ['Generate now', 'Add more details'],
+          preview: buildCustomTablePreview(selectedTableForFlow.name, selectedStageForFlow, selectedStagePlacement),
+        };
+      }
+
+      if (selectedSpaceChoice === 'marquee' && !selectedMentionedAsset && !selectedTableForFlow) {
+        return {
+          assetSelection: {
+            category: 'marquee',
+            message: 'Excellent! Which marquee would you like to use for your event?',
+            options: assetList.filter((a) => a.category === 'Marquee'),
+          },
+        };
+      }
+
+      return {
+        followUp: 'I’m with you. What would you like to set up next: the space, the guest count, the furniture, or the extras?',
+      };
     };
     const isNewLayoutIntent =
       normalizedCommand === 'i want to create a new layout' ||
@@ -477,22 +891,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (
       roomWidthMm &&
       roomHeightMm &&
-      customConversation &&
+      roomBasedConversation &&
       !selectedMentionedAsset &&
       !effectiveGuestCount
     ) {
       return res.status(200).json({
-        followUp: `I've drafted a ${roomWidthMm / 1000}m x ${roomHeightMm / 1000}m empty space for you. What kind of setup do you want here, and roughly how many guests should I plan for?`,
-        preview: {
-          walls: [{ widthMm: roomWidthMm, heightMm: roomHeightMm, wallType: 'enclosure-150' }],
-        },
+        followUp: `I've drafted a ${roomWidthMm / 1000}m x ${roomHeightMm / 1000}m ${draftedSpaceLabel} for you. What kind of setup do you want here, and roughly how many guests should I plan for?`,
+        preview: buildRoomShellPreview(),
       });
     }
 
     if (
       roomWidthMm &&
       roomHeightMm &&
-      customConversation &&
+      roomBasedConversation &&
       effectiveGuestCount &&
       !tableChoiceKnown &&
       !selectedMentionedAsset
@@ -504,9 +916,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           message: 'Select furniture',
           options: assetList.filter((a) => a.category === 'Furniture'),
         },
-        preview: {
-          walls: [{ widthMm: roomWidthMm, heightMm: roomHeightMm, wallType: 'enclosure-150' }],
-        },
+        preview: buildRoomShellPreview(),
       });
     }
 
@@ -558,16 +968,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (tableAssetSelected && (assistantAskedForTableChoice || roomWidthMm || roomHeightMm)) {
       const assetNameLower = selectedMentionedAsset.name.toLowerCase();
       const seatCountMatch = assetNameLower.match(/(\d+)\s*seater/i);
-      const seatCount = seatCountMatch ? Number(seatCountMatch[1]) : null;
+      const standaloneTableNeedsChairs =
+        !seatCountMatch &&
+        !assetNameLower.includes('executive table') &&
+        !assetNameLower.includes('vip table');
+      const seatCount = chairsPerTableForFlow || (seatCountMatch ? Number(seatCountMatch[1]) : null);
       const inferredTableCount = effectiveGuestCount && seatCount ? Math.max(1, Math.ceil(effectiveGuestCount / seatCount)) : null;
       const preview: any = roomWidthMm && roomHeightMm
         ? {
-            walls: [{ widthMm: roomWidthMm, heightMm: roomHeightMm, wallType: 'enclosure-150' }],
+            ...buildRoomShellPreview(),
             assets: [
               {
                 assetName: selectedMentionedAsset.name,
                 count: inferredTableCount || 1,
                 chairCount: seatCount || undefined,
+                chairAsset: selectedChairForFlow?.name || undefined,
+                guestCount: effectiveGuestCount || undefined,
                 strokeWidth: 0.6,
               },
             ],
@@ -589,6 +1005,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json({
           followUp: `How many guests should I plan for with the ${selectedMentionedAsset.name}?`,
           preview,
+        });
+      }
+
+      if (standaloneTableNeedsChairs && !selectedChairForFlow) {
+        return res.status(200).json({
+          followUp: `What chair would you like to pair with the ${selectedMentionedAsset.name}?`,
+          assetSelection: {
+            category: 'chair',
+            message: 'Select seating',
+            options: chairAssets,
+          },
+          preview,
+        });
+      }
+
+      if (standaloneTableNeedsChairs && !chairsPerTableForFlow) {
+        const suggestedChairCount = assetNameLower.includes('cocktail') ? 4 : 6;
+        return res.status(200).json({
+          followUp: `How many chairs should I place around each table? I can suggest ${suggestedChairCount} for the ${selectedMentionedAsset.name} unless you want a different number.`,
+          preview: roomWidthMm && roomHeightMm
+            ? {
+                ...buildRoomShellPreview(),
+                assets: [
+                  {
+                    assetName: selectedMentionedAsset.name,
+                    count: Math.max(1, Math.ceil(effectiveGuestCount / suggestedChairCount)),
+                    chairCount: suggestedChairCount,
+                    chairAsset: selectedChairForFlow?.name || undefined,
+                    guestCount: effectiveGuestCount || undefined,
+                    strokeWidth: 0.6,
+                  },
+                ],
+              }
+            : preview,
         });
       }
 
@@ -625,7 +1075,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (
       roomWidthMm &&
       roomHeightMm &&
-      customConversation &&
+      roomBasedConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementReply
@@ -638,7 +1088,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         followUp: 'Would you like to add a stage to your layout?',
         choices: ['Yes, add a stage', 'No stage'],
         preview: {
-          ...buildCustomTablePreview(selectedTableFromHistory!.name),
+          ...buildCustomTablePreview(
+            selectedTableFromHistory!.name,
+            undefined,
+            undefined,
+            getSeatCountForFlowTable(selectedTableFromHistory!.name),
+            getChairAssetNameForFlow()
+          ),
         },
       });
     }
@@ -646,7 +1102,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (
       roomWidthMm &&
       roomHeightMm &&
-      customConversation &&
+      roomBasedConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementAlreadyKnown &&
@@ -660,14 +1116,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           message: 'Select a stage',
           options: stageAssets,
         },
-        preview: buildCustomTablePreview(selectedTableFromHistory!.name),
+        preview: buildCustomTablePreview(
+          selectedTableFromHistory!.name,
+          undefined,
+          undefined,
+          getSeatCountForFlowTable(selectedTableFromHistory!.name),
+          getChairAssetNameForFlow()
+        ),
       });
     }
 
     if (
       roomWidthMm &&
       roomHeightMm &&
-      customConversation &&
+      roomBasedConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementAlreadyKnown &&
@@ -677,14 +1139,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({
         followUp: 'Where should I place the stage in relation to the arrangement?',
         choices: getStagePositionChoices(),
-        preview: buildCustomTablePreview(selectedTableFromHistory!.name, stageChoiceFromCurrentInput),
+        preview: buildCustomTablePreview(
+          selectedTableFromHistory!.name,
+          stageChoiceFromCurrentInput,
+          undefined,
+          getSeatCountForFlowTable(selectedTableFromHistory!.name),
+          getChairAssetNameForFlow()
+        ),
       });
     }
 
     if (
       roomWidthMm &&
       roomHeightMm &&
-      customConversation &&
+      roomBasedConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementAlreadyKnown &&
@@ -693,14 +1161,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ) {
       return res.status(200).json({
         followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
-        preview: buildCustomTablePreview(selectedTableFromHistory!.name, selectedStageForFlow, selectedStagePlacement),
+        preview: buildCustomTablePreview(
+          selectedTableFromHistory!.name,
+          selectedStageForFlow,
+          selectedStagePlacement,
+          getSeatCountForFlowTable(selectedTableFromHistory!.name),
+          getChairAssetNameForFlow()
+        ),
       });
     }
 
     if (
       roomWidthMm &&
       roomHeightMm &&
-      customConversation &&
+      roomBasedConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementAlreadyKnown &&
@@ -709,14 +1183,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ) {
       return res.status(200).json({
         followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
-        preview: buildCustomTablePreview(selectedTableFromHistory!.name),
+        preview: buildCustomTablePreview(
+          selectedTableFromHistory!.name,
+          undefined,
+          undefined,
+          getSeatCountForFlowTable(selectedTableFromHistory!.name),
+          getChairAssetNameForFlow()
+        ),
       });
     }
 
     if (
       roomWidthMm &&
       roomHeightMm &&
-      customConversation &&
+      roomBasedConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementAlreadyKnown &&
@@ -724,14 +1204,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       noExtrasReply
     ) {
       return res.status(200).json({
-        plan: buildCustomTablePreview(selectedTableFromHistory!.name, selectedStageForFlow, selectedStagePlacement),
+        plan: buildCustomTablePreview(
+          selectedTableFromHistory!.name,
+          selectedStageForFlow,
+          selectedStagePlacement,
+          getSeatCountForFlowTable(selectedTableFromHistory!.name),
+          getChairAssetNameForFlow()
+        ),
       });
     }
 
     if (
       roomWidthMm &&
       roomHeightMm &&
-      customConversation &&
+      roomBasedConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementAlreadyKnown &&
@@ -739,7 +1225,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       proceedReply
     ) {
       return res.status(200).json({
-        plan: buildCustomTablePreview(selectedTableFromHistory!.name, selectedStageForFlow, selectedStagePlacement),
+        plan: buildCustomTablePreview(
+          selectedTableFromHistory!.name,
+          selectedStageForFlow,
+          selectedStagePlacement,
+          getSeatCountForFlowTable(selectedTableFromHistory!.name),
+          getChairAssetNameForFlow()
+        ),
       });
     }
 
@@ -1289,6 +1781,16 @@ ${obstaclesContext}`;
 
     let parsed: any = {};
     try { parsed = JSON.parse(content); } catch (e) { console.error('JSON parse error', e, content); }
+
+    const recoveryNeeded =
+      !parsed ||
+      Object.keys(parsed).length === 0 ||
+      (parsed.followUp && isWeakAssistantFallback(parsed.followUp)) ||
+      (parsed.message && isWeakAssistantFallback(parsed.message) && !parsed.plan && !parsed.followUp && !parsed.operation && !parsed.assetSelection);
+
+    if (recoveryNeeded) {
+      parsed = buildContextualRecovery();
+    }
 
     // Validate and resolve asset names
     if (parsed.plan?.assets) {
