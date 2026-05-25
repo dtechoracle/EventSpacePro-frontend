@@ -3,6 +3,27 @@ import { DEFAULT_ASSET_STROKE_WIDTH } from "@/utils/assetRenderMode";
 
 const svgCache: Record<string, string> = {};
 const processedSvgCache: Record<string, string> = {};
+const failedSvgCache: Record<string, true> = {};
+
+export const isKnownMissingSvg = (src: string) => Boolean(failedSvgCache[src]);
+export const validateSvgPath = async (src: string) => {
+    if (!src) return false;
+    if (svgCache[src]) return true;
+    if (failedSvgCache[src]) return false;
+    try {
+        const res = await fetch(encodeURI(src));
+        if (!res.ok) {
+            failedSvgCache[src] = true;
+            return false;
+        }
+        const text = await res.text();
+        svgCache[src] = text;
+        return true;
+    } catch {
+        failedSvgCache[src] = true;
+        return false;
+    }
+};
 
 type InlineSvgProps = {
     src: string;
@@ -10,28 +31,48 @@ type InlineSvgProps = {
     stroke?: string;
     strokeWidth?: number;
     category?: string;
+    onLoadError?: () => void;
 };
 
-export const InlineSvg = ({ src, fill, stroke, strokeWidth, category }: InlineSvgProps) => {
+export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadError }: InlineSvgProps) => {
     const [rawSvg, setRawSvg] = useState<string | null>(svgCache[src] || null);
+    const [loadFailed, setLoadFailed] = useState<boolean>(Boolean(failedSvgCache[src]));
 
     useEffect(() => {
+        setLoadFailed(Boolean(failedSvgCache[src]));
         if (svgCache[src]) {
             setRawSvg(svgCache[src]);
+            return;
+        }
+        if (failedSvgCache[src]) {
+            setRawSvg(null);
             return;
         }
 
         let active = true;
         fetch(encodeURI(src))
-            .then(res => res.text())
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`Failed to load SVG: ${res.status}`);
+                }
+                return res.text();
+            })
             .then(text => {
                 if (!active) return;
                 svgCache[src] = text;
                 setRawSvg(text);
+                setLoadFailed(false);
             })
-            .catch(err => console.error("Failed to load SVG", src, err));
+            .catch(err => {
+                failedSvgCache[src] = true;
+                if (!active) return;
+                console.warn("Missing or unreadable SVG asset", src, err);
+                setRawSvg(null);
+                setLoadFailed(true);
+                onLoadError?.();
+            });
         return () => { active = false; };
-    }, [src]);
+    }, [src, onLoadError]);
 
     // 1. Base SVG processing (Heavy - runs once per unique SVG content + category combination)
     const baseSvg = useMemo(() => {
@@ -201,7 +242,16 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category }: InlineSv
         });
     }, [baseSvg, fill, stroke, strokeWidth]);
 
-    if (!svgContent) return null;
+    if (!svgContent) {
+        if (!loadFailed) return null;
+        const fallbackStroke = stroke ?? "#94a3b8";
+        return (
+            <svg viewBox="0 0 64 64" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block', width: '100%', height: '100%' }}>
+                <rect x="10" y="10" width="44" height="44" rx="8" ry="8" fill="none" stroke={fallbackStroke} strokeWidth="3" strokeDasharray="4 4" />
+                <path d="M18 46 L46 18" fill="none" stroke={fallbackStroke} strokeWidth="3" strokeLinecap="round" />
+            </svg>
+        );
+    }
 
     return <div dangerouslySetInnerHTML={{ __html: svgContent }} style={{ width: '100%', height: '100%' }} />;
 };

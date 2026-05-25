@@ -12,6 +12,14 @@ interface CommentPopoverProps {
 export default function CommentPopover({ comment, onUpdate, onDelete, onClose }: CommentPopoverProps) {
     const [text, setText] = useState(comment.content);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+    const commitTextIfNeeded = () => {
+        const trimmed = text.trim();
+        const original = (comment.content || '').trim();
+        if (trimmed === '') return;
+        if (trimmed !== original) {
+            onUpdate(comment.id, { content: trimmed });
+        }
+    };
 
     useEffect(() => {
         if (inputRef.current) {
@@ -28,7 +36,7 @@ export default function CommentPopover({ comment, onUpdate, onDelete, onClose }:
             if (text.trim() === '') {
                 onDelete(comment.id);
             } else {
-                onUpdate(comment.id, { content: text });
+                onUpdate(comment.id, { content: text.trim() });
                 onClose();
             }
         } else if (e.key === 'Escape') {
@@ -51,6 +59,10 @@ export default function CommentPopover({ comment, onUpdate, onDelete, onClose }:
                     ref={inputRef}
                     value={text}
                     onChange={(e) => setText(e.target.value)}
+                    onBlur={() => {
+                        if (text.trim() === '' && comment.content === '') return;
+                        commitTextIfNeeded();
+                    }}
                     onKeyDown={handleKeyDown}
                     placeholder="Write a comment..."
                     className="w-full text-sm border-none focus:ring-0 resize-none p-2 text-gray-800 placeholder-gray-400 bg-transparent leading-relaxed"
@@ -64,7 +76,10 @@ export default function CommentPopover({ comment, onUpdate, onDelete, onClose }:
                     <button
                         onClick={() => {
                             if (text.trim() === '') onDelete(comment.id);
-                            else onClose();
+                            else {
+                                commitTextIfNeeded();
+                                onClose();
+                            }
                         }}
                         className="text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
                     >

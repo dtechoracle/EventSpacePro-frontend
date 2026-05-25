@@ -83,7 +83,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const isNegativeIntent = (text: string) => {
       if (!text) return false;
       return (
-        /(^|\b)(?:no|nah|nope|none|nothing|without|skip)\b/.test(text) ||
+        /(^|\b)(?:no+|nah+|nope|none|nothing|without|skip)\b/.test(text) ||
         hasNearToken(['no', 'nah', 'nope', 'none', 'nothing', 'without', 'skip', 'dont', 'not'], 1) ||
         hasAnyPhrase(text, [
           "not at all",
@@ -128,6 +128,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           'i need one',
         ])
       );
+    };
+    const resolveLayoutScaleMode = (text: string) => {
+      const lower = normalizeIntentText(text || '');
+      if (!lower) return null;
+      if (
+        hasAnyPhrase(lower, [
+          'fit to space',
+          'fit the space',
+          'fill the space',
+          'use more of the space',
+          'scale to fit',
+          'make it bigger',
+          'spread it out',
+          'fit to room',
+          'fit to wall',
+          'fit to plan',
+          'fill more of the room',
+        ])
+      ) return 'fit-space';
+      if (
+        hasAnyPhrase(lower, [
+          'default size',
+          'keep default',
+          'keep it default',
+          'original size',
+          'actual size',
+          'real size',
+          'keep it as is',
+          'leave it as is',
+        ]) ||
+        isNegativeIntent(lower)
+      ) return 'default-size';
+      return null;
     };
     const selectedExactAsset = findAssetByName(exactCommandText);
     const selectedMentionedAsset =
@@ -192,29 +225,74 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         lower.includes('u-shape') ||
         lower.includes('u shape') ||
         lower.includes('u shaped') ||
+        lower.includes('horseshoe') ||
+        lower.includes('horse shoe') ||
         compact.includes('ushape') ||
-        compact.includes('ushaped')
+        compact.includes('ushaped') ||
+        compact.includes('horseshoe')
       ) return 'u-shape';
       if (lower.includes('boardroom') || compact.includes('boardroom') || hasNearToken(['boardroom'], 2)) return 'boardroom';
-      if (lower.includes('classroom') || compact.includes('classroom') || hasNearToken(['classroom'], 2)) return 'classroom';
-      if (lower.includes('chevron') || compact.includes('chevron') || hasNearToken(['chevron'], 2)) return 'chevron';
-      if (lower.includes('perimeter') || compact.includes('perimeter') || hasNearToken(['perimeter'], 2)) return 'perimeter';
+      if (
+        lower.includes('classroom') ||
+        lower.includes('lecture style') ||
+        lower.includes('seminar style') ||
+        lower.includes('rows facing front') ||
+        compact.includes('classroom') ||
+        hasNearToken(['classroom', 'lecture', 'seminar'], 2)
+      ) return 'classroom';
+      if (
+        lower.includes('chevron') ||
+        lower.includes('zig zag') ||
+        lower.includes('zig-zag') ||
+        lower.includes('zigzag') ||
+        lower.includes('staggered') ||
+        lower.includes('angled rows') ||
+        compact.includes('chevron') ||
+        compact.includes('zigzag') ||
+        hasNearToken(['chevron', 'zigzag', 'staggered'], 2)
+      ) return 'chevron';
+      if (
+        lower.includes('perimeter') ||
+        lower.includes('around the wall') ||
+        lower.includes('around the edge') ||
+        lower.includes('by the edges') ||
+        lower.includes('around the room') ||
+        compact.includes('perimeter') ||
+        hasNearToken(['perimeter', 'edge'], 2)
+      ) return 'perimeter';
       if (
         lower.includes('circular') ||
         lower.includes('circle') ||
         lower.includes('round arrangement') ||
+        lower.includes('semi circle') ||
+        lower.includes('semi-circle') ||
+        lower.includes('arc arrangement') ||
+        lower.includes('around the center') ||
         compact.includes('circular') ||
         compact.includes('rounded') ||
-        hasNearToken(['circular', 'circle', 'round'], 2)
+        compact.includes('semicircle') ||
+        hasNearToken(['circular', 'circle', 'round', 'arc'], 2)
       ) return 'circular';
-      if (lower.includes('linear') || lower.includes('line') || compact.includes('linear') || hasNearToken(['linear', 'line'], 2)) return 'linear';
-      if (lower.includes('grid') || compact.includes('grid') || hasNearToken(['grid'], 1)) return 'grid';
+      if (
+        lower.includes('linear') ||
+        lower.includes('single row') ||
+        lower.includes('single file') ||
+        lower.includes('in a line') ||
+        lower.includes('straight line') ||
+        compact.includes('linear') ||
+        hasNearToken(['linear', 'line', 'row'], 2)
+      ) return 'linear';
+      if (
+        lower.includes('grid') ||
+        lower.includes('matrix') ||
+        lower.includes('even rows and columns') ||
+        lower.includes('balanced rows') ||
+        compact.includes('grid') ||
+        compact.includes('matrix') ||
+        hasNearToken(['grid', 'matrix'], 1)
+      ) return 'grid';
       return null;
     };
-    const arrangementTypeFromHistory = parseArrangementIntent(lowerUserHistoryText);
-    const arrangementTypeFromCurrentInput = parseArrangementIntent(exactCommandText);
-    const arrangementAlreadyKnown = Boolean(arrangementTypeFromHistory || arrangementTypeFromCurrentInput);
-    const arrangementType = arrangementTypeFromCurrentInput || arrangementTypeFromHistory || 'grid';
     const inferSpaceChoice = (text: string) => {
       const lower = String(text || '').toLowerCase();
       if (lower.includes('parking lot') || lower.includes('car park')) return 'parking lot';
@@ -235,7 +313,57 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       selectedSpaceChoice === 'grassy field' ||
       selectedSpaceChoice === 'parking lot' ||
       selectedSpaceChoice === 'beach';
+    const marqueeAssets = assetList.filter((asset) => asset.category === 'Marquee');
+    const selectedMarqueeFromHistory =
+      marqueeAssets
+        .sort((a, b) => b.name.length - a.name.length)
+        .find((asset) => lowerUserHistoryText.includes(asset.name.toLowerCase()) || lowerUserHistoryText.includes(canonicalize(asset.name))) || null;
+    const selectedMarqueeForFlow =
+      ((selectedMentionedAsset && selectedMentionedAsset.category === 'Marquee') ? selectedMentionedAsset : null) ||
+      selectedMarqueeFromHistory ||
+      null;
+    const latestDimensionUserMessageIndex = (() => {
+      for (let i = userHistory.length - 1; i >= 0; i--) {
+        if (parseDimensionPair(userHistory[i]?.content || '')) return i;
+      }
+      return -1;
+    })();
+    const userRepliesAfterDimensions =
+      latestDimensionUserMessageIndex >= 0
+        ? userHistory
+            .slice(latestDimensionUserMessageIndex + 1)
+            .map((m) => String(m.content || '').trim())
+            .filter(Boolean)
+        : [];
+    const storedLayoutBriefFromHistory = (() => {
+      for (let i = 0; i < conversationHistory.length - 1; i++) {
+        const current = conversationHistory[i];
+        const next = conversationHistory[i + 1];
+        if (
+          current?.role === 'assistant' &&
+          /in plain language, tell me what you want for this event layout|describe what you want for this event layout|describe the event layout you want/i.test(current.content || '') &&
+          next?.role === 'user'
+        ) {
+          return String(next.content || '').trim();
+        }
+      }
+      return '';
+    })();
+    const activeSpaceWidthMm =
+      roomWidthMm ||
+      (selectedMarqueeForFlow ? Number(selectedMarqueeForFlow.width || 0) : null) ||
+      null;
+    const activeSpaceHeightMm =
+      roomHeightMm ||
+      (selectedMarqueeForFlow ? Number(selectedMarqueeForFlow.height || 0) : null) ||
+      null;
+    const structuredSpaceConversation =
+      roomBasedConversation ||
+      (selectedSpaceChoice === 'marquee' && Boolean(selectedMarqueeForFlow));
     const draftedSpaceLabel =
+      selectedSpaceChoice === 'marquee'
+        ? `${selectedMarqueeForFlow?.name || 'marquee'} space`
+        :
       selectedSpaceChoice === 'grassy field'
         ? 'grassy field space'
         : selectedSpaceChoice === 'parking lot'
@@ -243,9 +371,153 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           : selectedSpaceChoice === 'beach'
             ? 'beach space'
             : 'empty space';
+    const roomDraftLabel =
+      activeSpaceWidthMm && activeSpaceHeightMm
+        ? `${activeSpaceWidthMm / 1000}m x ${activeSpaceHeightMm / 1000}m ${draftedSpaceLabel}`
+        : draftedSpaceLabel;
+    const roomSummaryPrompt =
+      `I've drafted a ${roomDraftLabel} for you. In plain language, tell me what you want for this event layout. For example: "40 guests on the left side, a table with 2 chairs on the right, and a stage at the top."`;
+    const currentPromptIsDimensionPair = Boolean(parseDimensionPair(exactCommandText));
+    const latestAssistantPromptContent = String(assistantHistory[assistantHistory.length - 1]?.content || '');
+    const currentPromptAlreadyInBriefHistory =
+      storedLayoutBriefFromHistory.length > 0 &&
+      normalizeIntentText(storedLayoutBriefFromHistory) === normalizedIntentText;
+    const layoutBriefText = /in plain language, tell me what you want for this event layout|describe what you want for this event layout|describe the event layout you want/i.test(latestAssistantPromptContent) && exactCommandText && !currentPromptIsDimensionPair
+      ? exactCommandText
+      : (storedLayoutBriefFromHistory || userRepliesAfterDimensions[0] || '');
+    const normalizedLayoutBriefText = normalizeIntentText(layoutBriefText);
+    const hasLayoutBrief = normalizedLayoutBriefText.length > 0;
+    const parsePlanShare = (text: string) => {
+      const fraction = String(text || '').match(/(\d+)\s*\/\s*(\d+)\s+of (?:the )?(?:entire )?(?:plan|space|room|layout)/i);
+      if (fraction) {
+        const numerator = Number(fraction[1]);
+        const denominator = Number(fraction[2]);
+        if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator > 0) {
+          return Math.max(0.2, Math.min(0.95, numerator / denominator));
+        }
+      }
+      if (/\bhalf\b|\bone half\b|50\s*%/i.test(text)) return 0.5;
+      if (/\bthird\b|\bone third\b/i.test(text)) return 1 / 3;
+      if (/\btwo thirds\b/i.test(text)) return 2 / 3;
+      if (/\bquarter\b|\bone quarter\b|25\s*%/i.test(text)) return 0.25;
+      if (/\bthree quarters\b|75\s*%/i.test(text)) return 0.75;
+      return null;
+    };
+    const detectBriefSide = (text: string) => {
+      const lower = String(text || '').toLowerCase();
+      if (/\bleft\b/.test(lower)) return 'left';
+      if (/\bright\b/.test(lower)) return 'right';
+      if (/\btop\b/.test(lower)) return 'top';
+      if (/\bbottom\b/.test(lower)) return 'bottom';
+      if (/\bcenter\b|\bcentre\b|\bmiddle\b/.test(lower)) return 'center';
+      return null;
+    };
+    const detectNamedZoneLabel = (text: string) => {
+      const lower = String(text || '').toLowerCase();
+      if (/\bjudges?\b/.test(lower)) return 'judges';
+      if (/\bpanel\b/.test(lower)) return 'panel';
+      if (/\bvips?\b/.test(lower)) return 'VIP';
+      if (/\bspeakers?\b/.test(lower)) return 'speakers';
+      if (/\bcouple(?:\s+table)?\b/.test(lower)) return 'couple';
+      return null;
+    };
+    const guestZoneFromBrief = (() => {
+      const share = parsePlanShare(layoutBriefText);
+      const onlyChairs =
+        /(\d+)\s*(?:chairs?|seats?|stools?)\s+(?:only|just)\b/i.test(layoutBriefText) ||
+        /\b(?:with\s+)?only\s+(?:chairs?|seats?|stools?)\b/i.test(layoutBriefText) ||
+        /\b(?:chairs?|seats?|stools?)\s+only\b/i.test(layoutBriefText) ||
+        /\bjust\s+(?:chairs?|seats?|stools?)\b/i.test(layoutBriefText) ||
+        /\b(?:chairs?|seats?|stools?)\s+(?:and\s+)?no\s+tables?\b/i.test(layoutBriefText) ||
+        /\bno\s+tables?\b.{0,30}\b(?:chairs?|seats?|stools?)\b/i.test(layoutBriefText);
+      const direct = layoutBriefText.match(/(\d+)\s*(?:guests?|people|attendees?).{0,50}?\b(left|right|top|bottom|center|centre|middle)\b/i);
+      if (direct) {
+        return { count: Number(direct[1]), side: detectBriefSide(direct[0]), share, onlyChairs };
+      }
+      const reverse = layoutBriefText.match(/\b(left|right|top|bottom|center|centre|middle)\b.{0,50}?(\d+)\s*(?:guests?|people|attendees?)/i);
+      if (reverse) {
+        return { count: Number(reverse[2]), side: detectBriefSide(reverse[0]), share, onlyChairs };
+      }
+      const chairsOnlyDirect = layoutBriefText.match(/(\d+)\s*(?:chairs?|seats?|stools?).{0,50}?\b(left|right|top|bottom|center|centre|middle)\b/i);
+      if (chairsOnlyDirect) {
+        return { count: Number(chairsOnlyDirect[1]), side: detectBriefSide(chairsOnlyDirect[0]), share, onlyChairs: true };
+      }
+      const chairsOnlyReverse = layoutBriefText.match(/\b(left|right|top|bottom|center|centre|middle)\b.{0,50}?(\d+)\s*(?:chairs?|seats?|stools?)/i);
+      if (chairsOnlyReverse) {
+        return { count: Number(chairsOnlyReverse[2]), side: detectBriefSide(chairsOnlyReverse[0]), share, onlyChairs: true };
+      }
+      const genericGuests = layoutBriefText.match(/(\d+)\s*(?:guests?|people|attendees?)/i);
+      if (genericGuests) {
+        let inferredSide: string | null = null;
+        if (/\bright\b.{0,80}\btable\b/i.test(layoutBriefText) || /\bremaining\b.{0,80}\bright\b/i.test(layoutBriefText)) {
+          inferredSide = 'left';
+        } else if (/\bleft\b.{0,80}\btable\b/i.test(layoutBriefText) || /\bremaining\b.{0,80}\bleft\b/i.test(layoutBriefText)) {
+          inferredSide = 'right';
+        }
+        return { count: Number(genericGuests[1]), side: inferredSide, share, onlyChairs };
+      }
+      return null;
+    })();
+    const secondaryTableZoneFromBrief = (() => {
+      const direct = layoutBriefText.match(/table(?:(?:\s+\w+){0,12}?\s+(?:with|and|plus|just)\s+(\d+)\s+chairs?)?.{0,50}?\b(left|right|top|bottom|center|centre|middle)\b/i);
+      if (direct) {
+        return {
+          chairCount: direct[1] ? Number(direct[1]) : null,
+          side: detectBriefSide(direct[0]),
+          zoneLabel: detectNamedZoneLabel(direct[0]),
+          zoneCount: null,
+          requiresSeating: Boolean(direct[1]),
+        };
+      }
+      const reverse = layoutBriefText.match(/\b(left|right|top|bottom|center|centre|middle)\b.{0,50}?table(?:(?:\s+\w+){0,12}?\s+(?:with|and|plus|just)\s+(\d+)\s+chairs?)?/i);
+      if (reverse) {
+        return {
+          chairCount: reverse[2] ? Number(reverse[2]) : null,
+          side: detectBriefSide(reverse[0]),
+          zoneLabel: detectNamedZoneLabel(reverse[0]),
+          zoneCount: null,
+          requiresSeating: Boolean(reverse[2]),
+        };
+      }
+      const namedZoneMatch = layoutBriefText.match(/(\d+)\s*(judges?|panel|vips?|speakers?|couple)(?:\s+\w+){0,8}?\b(left|right|top|bottom|center|centre|middle)\b(?:\s+\w+){0,12}?\btable\b/i);
+      if (namedZoneMatch) {
+        return {
+          chairCount: null,
+          side: detectBriefSide(namedZoneMatch[0]),
+          zoneLabel: detectNamedZoneLabel(namedZoneMatch[2]),
+          zoneCount: Number(namedZoneMatch[1]),
+          requiresSeating: true,
+        };
+      }
+      const namedZoneReverse = layoutBriefText.match(/\b(left|right|top|bottom|center|centre|middle)\b(?:\s+\w+){0,10}?(\d+)\s*(judges?|panel|vips?|speakers?|couple)(?:\s+\w+){0,12}?\btable\b/i);
+      if (namedZoneReverse) {
+        return {
+          chairCount: null,
+          side: detectBriefSide(namedZoneReverse[0]),
+          zoneLabel: detectNamedZoneLabel(namedZoneReverse[3]),
+          zoneCount: Number(namedZoneReverse[2]),
+          requiresSeating: true,
+        };
+      }
+      return null;
+    })();
+    const briefMentionsDirectionalZones = /\b(left|right|top|bottom|center|centre|middle|front|back)\b/i.test(layoutBriefText);
+    const briefMentionsMultipleZones =
+      ((/\bleft\b/i.test(layoutBriefText) ? 1 : 0) +
+        (/\bright\b/i.test(layoutBriefText) ? 1 : 0) +
+        (/\btop\b/i.test(layoutBriefText) ? 1 : 0) +
+        (/\bbottom\b/i.test(layoutBriefText) ? 1 : 0) +
+        (/\bcenter\b|\bcentre\b|\bmiddle\b/i.test(layoutBriefText) ? 1 : 0)) >= 2;
     const tableAssets = assetList.filter(
       (asset) => asset.category === 'Furniture' && asset.name.toLowerCase().includes('table')
     );
+    const guestSetupAssets = assetList.filter((asset) => {
+      if (asset.category !== 'Furniture') return false;
+      const lower = asset.name.toLowerCase();
+      if (lower.includes('chair') || lower.includes('stool') || lower.includes('sofa')) return false;
+      if (lower.includes('table')) return true;
+      return /\b\d+\s*seater\b/i.test(lower);
+    });
     const chairAssets = assetList.filter((asset) => {
       const label = asset.name.toLowerCase();
       return (
@@ -258,6 +530,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const stageAssets = assetList.filter(
       (asset) => asset.name.toLowerCase().includes('stage')
     );
+    const STAGE_MODULE_MM = 500;
+    const buildStageSpec = (widthMm: number, heightMm: number, name?: string) => ({
+      name: name || `${Math.max(1, Math.round(widthMm / STAGE_MODULE_MM))} x ${Math.max(1, Math.round(heightMm / STAGE_MODULE_MM))} Modular Stage`,
+      width: Math.max(STAGE_MODULE_MM, Math.round(widthMm)),
+      height: Math.max(STAGE_MODULE_MM, Math.round(heightMm)),
+    });
+    const resolveMentionedFurnitureAsset = (
+      text: string,
+      predicate: (asset: typeof assetList[number]) => boolean
+    ) => {
+      const exact = findAssetByName(text);
+      if (exact && predicate(exact as any)) return exact as any;
+      const normalized = String(text || '').toLowerCase();
+      const canonical = canonicalize(text);
+      return (
+        assetList
+          .filter(predicate)
+          .sort((a, b) => b.name.length - a.name.length)
+          .find(
+            (asset) =>
+              normalized.includes(asset.name.toLowerCase()) ||
+              canonical.includes(canonicalize(asset.name))
+          ) || null
+      );
+    };
     const selectedTableFromHistory =
       tableAssets
         .sort((a, b) => b.name.length - a.name.length)
@@ -270,15 +567,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       chairAssets
         .sort((a, b) => b.name.length - a.name.length)
         .find((asset) => lowerUserHistoryText.includes(asset.name.toLowerCase()) || lowerUserHistoryText.includes(canonicalize(asset.name))) || null;
-    const tableChoiceKnown = Boolean(selectedTableFromHistory);
+    const mainGuestTableFromHistory = (() => {
+      for (let i = 0; i < conversationHistory.length - 1; i++) {
+        const current = conversationHistory[i];
+        const next = conversationHistory[i + 1];
+        if (
+          current?.role === 'assistant' &&
+          /what table or seating setup should i use first|what table would you like me to pair it with|what table or seating setup would you like to use(?: first)?/i.test(current.content || '') &&
+          next?.role === 'user'
+        ) {
+          return resolveMentionedFurnitureAsset(next.content || '', (asset) =>
+            asset.category === 'Furniture' && asset.name.toLowerCase().includes('table')
+          );
+        }
+      }
+      return null;
+    })();
+    const mainGuestChairFromHistory = (() => {
+      for (let i = 0; i < conversationHistory.length - 1; i++) {
+        const current = conversationHistory[i];
+        const next = conversationHistory[i + 1];
+        if (
+          current?.role === 'assistant' &&
+          /what chair or stool would you like me to use for the .* seats|what chair should i use for the .* guest area|select seating for the guest area/i.test(current.content || '') &&
+          next?.role === 'user'
+        ) {
+          return resolveMentionedFurnitureAsset(next.content || '', (asset) => {
+            const label = asset.name.toLowerCase();
+            return asset.category === 'Furniture' && !label.includes('table') && !label.includes('sofa') && (label.includes('chair') || label.includes('stool'));
+          });
+        }
+      }
+      return null;
+    })();
     const stageChoiceKnown = Boolean(selectedStageFromHistory);
     const stageMentioned = /\bstage\b|\bno stage\b/.test(lowerUserHistoryText);
     const extrasMentioned = /\bdance floor\b|\bentrance door\b|\bdoor\b|\bvip\b|\bbuffet\b|\bbar\b|\bpresentation\b|\bnone\b|\bno extras\b|\bnothing else\b/.test(lowerUserHistoryText);
-    const arrangementReply = Boolean(arrangementTypeFromCurrentInput);
     const lastAssistantPromptType = (() => {
       for (let i = assistantHistory.length - 1; i >= 0; i--) {
         const content = String(assistantHistory[i]?.content || '');
+        if (/in plain language, tell me what you want for this event layout|describe what you want for this event layout|describe the event layout you want/i.test(content)) return 'layout-summary';
+        if (/what table should i use on the .* side for that smaller table area|what table should i use for the .* side table area|what table should i use there/i.test(content)) return 'secondary-zone-table';
+        if (/what chair should i pair with that .* side table|what seating should i use for that .* side table|what chair should i pair with the .* table area|what chair would you like to pair with the .* (?:right|left|top|bottom) side|would you like to add any specific chairs around the .* table.*select the chair type|which chair would you like around the .* table|which chair would you like to use(?: for| with)? the .* right side|what chair would you like to use(?: for| with)? the .* right side/i.test(content)) return 'secondary-zone-chair';
         if (/would you like to include any additional features/i.test(content)) return 'extras';
+        if (/would you like me to scale the layout to use more of the available space|keep it at default size|fit to space|keep default size/i.test(content)) return 'layout-scale';
         if (/where should i place the stage|where would you like the stage/i.test(content)) return 'stage-placement';
         if (/what size would you like for the stage|select a stage/i.test(content)) return 'stage-size';
         if (/would you like to add a stage/i.test(content)) return 'stage-yes-no';
@@ -286,19 +618,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (/how many chairs should i place around each table|how many seats should i place around each table|chairs per table/i.test(content)) return 'chairs-per-table';
         if (/how many guests|number of guests|guest count|how many people|how many attendees|capacity|roughly how many guests/i.test(content)) return 'guest-count';
         if (/what type of seating|what type of tables|what table|round tables|rectangular tables|select a table|select seating/i.test(content)) return 'table-choice';
-        if (/how would you like them arranged|arrangement/i.test(content)) return 'arrangement';
+        if (/how would you like those .* arranged|how would you like them arranged|arrangement/i.test(content)) return 'arrangement';
         if (/would you like to proceed with generating|generate the layout now|generate now|ready to proceed|should i generate/i.test(content)) return 'generate';
       }
       return null;
     })();
+    const assistantAskedForLayoutSummary = lastAssistantPromptType === 'layout-summary';
+    const assistantAskedForSecondaryZoneTable = lastAssistantPromptType === 'secondary-zone-table';
+    const assistantAskedForSecondaryZoneChair = lastAssistantPromptType === 'secondary-zone-chair';
     const assistantAskedForGuestCount = lastAssistantPromptType === 'guest-count';
     const assistantAskedForStage = lastAssistantPromptType === 'stage-yes-no';
     const assistantAskedForStageSize = lastAssistantPromptType === 'stage-size';
     const assistantAskedForStagePlacement = lastAssistantPromptType === 'stage-placement';
     const assistantAskedForChairChoice = lastAssistantPromptType === 'chair-choice';
     const assistantAskedForChairsPerTable = lastAssistantPromptType === 'chairs-per-table';
+    const assistantAskedForArrangement = lastAssistantPromptType === 'arrangement';
+    const assistantAskedForLayoutScale = lastAssistantPromptType === 'layout-scale';
     const assistantAskedForExtras = lastAssistantPromptType === 'extras';
     const assistantAskedForGeneration = lastAssistantPromptType === 'generate';
+    const arrangementTypeFromHistory = (() => {
+      for (let i = 0; i < conversationHistory.length - 1; i++) {
+        const current = conversationHistory[i];
+        const next = conversationHistory[i + 1];
+        if (
+          current?.role === 'assistant' &&
+          /how would you like those .* arranged|how would you like them arranged|what arrangement would you like/i.test(current.content || '') &&
+          next?.role === 'user'
+        ) {
+          const parsed = parseArrangementIntent(next.content || '');
+          if (parsed) return parsed;
+        }
+      }
+      return null;
+    })();
+    const arrangementTypeFromCurrentInput = assistantAskedForArrangement
+      ? parseArrangementIntent(exactCommandText)
+      : null;
+    const arrangementAlreadyKnown = Boolean(arrangementTypeFromHistory || arrangementTypeFromCurrentInput);
+    const arrangementType = arrangementTypeFromCurrentInput || arrangementTypeFromHistory || 'grid';
+    const arrangementReply = Boolean(arrangementTypeFromCurrentInput);
     const parsedGuestCountFromCurrentReply = (() => {
       if (!assistantAskedForGuestCount) return null;
       const match = exactCommandText.match(/(\d{1,5})/);
@@ -326,7 +684,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       return null;
     })();
-    const effectiveGuestCount = guestCount || parsedGuestCountFromCurrentReply || guestCountFromPromptHistory;
+    const effectiveGuestCount =
+      guestCount ||
+      parsedGuestCountFromCurrentReply ||
+      guestCountFromPromptHistory ||
+      guestZoneFromBrief?.count ||
+      null;
     const noStageReply =
       assistantAskedForStage &&
       isNegativeIntent(normalizedIntentText);
@@ -334,9 +697,54 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       assistantAskedForStage &&
       !isNegativeIntent(normalizedIntentText) &&
       (isAffirmativeIntent(normalizedIntentText) || normalizedIntentText.includes('stage'));
+    const stageDecisionFromHistory = (() => {
+      for (let i = conversationHistory.length - 2; i >= 0; i--) {
+        const current = conversationHistory[i];
+        const next = conversationHistory[i + 1];
+        if (
+          current?.role === 'assistant' &&
+          /would you like to add a stage/i.test(current.content || '') &&
+          next?.role === 'user'
+        ) {
+          const reply = normalizeIntentText(next.content || '');
+          if (isNegativeIntent(reply)) return 'declined';
+          if (isAffirmativeIntent(reply) || reply.includes('stage')) return 'accepted';
+        }
+      }
+      return null;
+    })();
+    const stageDeclinedForFlow = noStageReply || stageDecisionFromHistory === 'declined';
+    const stageAcceptedForFlow = yesStageReply || stageDecisionFromHistory === 'accepted';
+    const stageDecisionKnown = stageDeclinedForFlow || stageAcceptedForFlow;
+    const stageStillRequested = (stageMentioned || stageAcceptedForFlow) && !stageDeclinedForFlow;
     const noExtrasReply =
       assistantAskedForExtras &&
       isNegativeIntent(normalizedIntentText);
+    const layoutScaleModeFromHistory = (() => {
+      for (let i = conversationHistory.length - 2; i >= 0; i--) {
+        const current = conversationHistory[i];
+        const next = conversationHistory[i + 1];
+        if (
+          current?.role === 'assistant' &&
+          /would you like me to scale the layout to use more of the available space|keep it at default size|fit to space|keep default size/i.test(current.content || '') &&
+          next?.role === 'user'
+        ) {
+          return resolveLayoutScaleMode(next.content || '');
+        }
+      }
+      return null;
+    })();
+    const layoutScaleModeForFlow =
+      (assistantAskedForLayoutScale
+        ? (
+            resolveLayoutScaleMode(exactCommandText) ||
+            (isAffirmativeIntent(normalizedIntentText) ? 'fit-space' : null) ||
+            (isNegativeIntent(normalizedIntentText) ? 'default-size' : null)
+          )
+        : null) ||
+      layoutScaleModeFromHistory ||
+      null;
+    const layoutScaleKnown = Boolean(layoutScaleModeForFlow);
     const extrasDecisionKnown =
       extrasMentioned ||
       noExtrasReply ||
@@ -378,31 +786,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return numeric;
     };
     const stageDimMatch = parseDimensionPair(exactCommandText);
-    const findClosestStageAsset = (widthMm: number, heightMm: number) => {
-      const candidates = [...stageAssets];
-      if (candidates.length === 0) return null;
-      return candidates
-        .map((asset) => {
-          const assetW = Number(asset.width || 1000);
-          const assetH = Number(asset.height || 1000);
-          const dw = Math.abs(assetW - widthMm);
-          const dh = Math.abs(assetH - heightMm);
-          return { asset, score: dw + dh };
-        })
-        .sort((a, b) => a.score - b.score)[0]?.asset || null;
-    };
     const resolveStageChoiceFromText = (text: string) => {
+      const lower = String(text || '').toLowerCase();
       const exactStage = findAssetByName(text);
-      if (exactStage && exactStage.name.toLowerCase().includes('stage')) return exactStage;
+      if (exactStage && exactStage.name.toLowerCase().includes('stage')) {
+        return buildStageSpec(Number((exactStage as any).width || 1000), Number((exactStage as any).height || 1000), exactStage.name);
+      }
       const canonicalText = canonicalize(text);
       const fuzzyStage = stageAssets.find((asset) => canonicalText.includes(canonicalize(asset.name)));
-      if (fuzzyStage) return fuzzyStage;
+      if (fuzzyStage) {
+        return buildStageSpec(Number(fuzzyStage.width || 1000), Number(fuzzyStage.height || 1000), fuzzyStage.name);
+      }
+      if (/\bsmall\b/.test(lower)) return buildStageSpec(2000, 1500, 'Small Modular Stage');
+      if (/\bmedium\b/.test(lower)) return buildStageSpec(3000, 2000, 'Medium Modular Stage');
+      if (/\blarge\b/.test(lower)) return buildStageSpec(4000, 2500, 'Large Modular Stage');
       const match = parseDimensionPair(text);
       if (!match) return null;
       const widthMm = parseMeasureToMm(match.widthValue, match.widthUnit);
       const heightMm = parseMeasureToMm(match.heightValue, match.heightUnit);
       if (!widthMm || !heightMm) return null;
-      return findClosestStageAsset(widthMm, heightMm);
+      const snappedWidth = Math.max(STAGE_MODULE_MM, Math.round(widthMm / STAGE_MODULE_MM) * STAGE_MODULE_MM);
+      const snappedHeight = Math.max(STAGE_MODULE_MM, Math.round(heightMm / STAGE_MODULE_MM) * STAGE_MODULE_MM);
+      return buildStageSpec(snappedWidth, snappedHeight);
     };
     const stageChoiceFromCurrentInput =
       assistantAskedForStageSize || normalizedCommand.includes('stage')
@@ -452,11 +857,86 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const stagePlacementFromCurrentInput = assistantAskedForStagePlacement
       ? resolveStagePlacement(exactCommandText)
       : null;
-    const stagePlacementFromHistory = /inside u|open end|opening|center|top|bottom|left|right/i.test(lowerUserHistoryText)
-      ? resolveStagePlacement(lowerUserHistoryText)
-      : null;
+    const stagePlacementFromHistory = (() => {
+      for (let i = 0; i < conversationHistory.length - 1; i++) {
+        const current = conversationHistory[i];
+        const next = conversationHistory[i + 1];
+        if (
+          current?.role === 'assistant' &&
+          /where should i place the stage|where would you like the stage/i.test(current.content || '') &&
+          next?.role === 'user'
+        ) {
+          return resolveStagePlacement(next.content || '');
+        }
+      }
+      return null;
+    })();
     const selectedStagePlacement = stagePlacementFromCurrentInput || stagePlacementFromHistory;
-    const selectedChairForFlow =
+    const tableNeedsLooseChairs = (tableName: string) => {
+      const lower = String(tableName || '').toLowerCase();
+      return !/\b\d+\s*seater\b/i.test(lower);
+    };
+    const getSuggestedChairCountForTable = (tableName: string) => {
+      const lower = String(tableName || '').toLowerCase();
+      if (lower.includes('coffee table')) return 2;
+      if (lower.includes('cocktail')) return 4;
+      if (lower.includes('rectangular')) return 6;
+      if (lower.includes('round')) return 4;
+      return 4;
+    };
+    const secondaryZoneTableFromHistory = (() => {
+      for (let i = 0; i < conversationHistory.length - 1; i++) {
+        const current = conversationHistory[i];
+        const next = conversationHistory[i + 1];
+        if (
+          current?.role === 'assistant' &&
+          /what table should i use on the .* side for that smaller table area|what table should i use for the .* side table area|what table should i use there/i.test(current.content || '') &&
+          next?.role === 'user'
+        ) {
+          return resolveMentionedFurnitureAsset(next.content || '', (asset) =>
+            asset.category === 'Furniture' && asset.name.toLowerCase().includes('table')
+          );
+        }
+      }
+      if (guestZoneFromBrief?.onlyChairs && secondaryTableZoneFromBrief) {
+        for (let i = conversationHistory.length - 1; i >= 0; i--) {
+          const entry = conversationHistory[i];
+          if (entry?.role !== 'user') continue;
+          const resolved = resolveMentionedFurnitureAsset(entry.content || '', (asset) =>
+            asset.category === 'Furniture' && asset.name.toLowerCase().includes('table')
+          );
+          if (resolved) return resolved;
+        }
+      }
+      return null;
+    })();
+    const secondaryZoneChairFromHistory = (() => {
+      for (let i = 0; i < conversationHistory.length - 1; i++) {
+        const current = conversationHistory[i];
+        const next = conversationHistory[i + 1];
+        if (
+          current?.role === 'assistant' &&
+          /what chair should i pair with that .* side table|what seating should i use for that .* side table|what chair should i pair with the .* table area|what chair would you like to pair with the .* (?:right|left|top|bottom) side|would you like to add any specific chairs around the .* table.*select the chair type|which chair would you like around the .* table|which chair would you like to use(?: for| with)? the .* right side|what chair would you like to use(?: for| with)? the .* right side/i.test(current.content || '') &&
+          next?.role === 'user'
+        ) {
+          return resolveMentionedFurnitureAsset(next.content || '', (asset) => {
+            const label = asset.name.toLowerCase();
+            return asset.category === 'Furniture' && !label.includes('table') && (label.includes('chair') || label.includes('stool'));
+          });
+        }
+      }
+      return null;
+    })();
+    const selectedSecondaryZoneTableForFlow =
+      ((assistantAskedForSecondaryZoneTable || (guestZoneFromBrief?.onlyChairs && secondaryTableZoneFromBrief && !mainGuestTableFromHistory)) && selectedMentionedAsset && selectedMentionedAsset.category === 'Furniture' && selectedMentionedAsset.name.toLowerCase().includes('table')
+        ? selectedMentionedAsset
+        : null) ||
+      secondaryZoneTableFromHistory ||
+      null;
+    const secondaryZoneLabelForPrompt = secondaryTableZoneFromBrief?.zoneLabel
+      ? `${secondaryTableZoneFromBrief.zoneLabel} ${secondaryTableZoneFromBrief.side || 'secondary'} side table area`
+      : `${secondaryTableZoneFromBrief?.side || 'secondary'} side table area`;
+    const currentSelectedChair =
       (
         selectedMentionedAsset &&
         selectedMentionedAsset.category === 'Furniture' &&
@@ -469,8 +949,71 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ? selectedMentionedAsset
           : null
       ) ||
-      selectedChairFromHistory ||
       null;
+    const secondaryZoneChairPromptContext =
+      assistantAskedForSecondaryZoneChair ||
+      Boolean(
+        assistantAskedForChairChoice &&
+        arrangementAlreadyKnown &&
+        secondaryTableZoneFromBrief?.requiresSeating &&
+        selectedSecondaryZoneTableForFlow
+      );
+    const currentChairShouldBelongToSecondaryZone = Boolean(
+      currentSelectedChair &&
+      secondaryTableZoneFromBrief?.requiresSeating &&
+      selectedSecondaryZoneTableForFlow &&
+      secondaryZoneChairPromptContext
+    );
+    const selectedSecondaryZoneChairForFlow =
+      ((secondaryZoneChairPromptContext || currentChairShouldBelongToSecondaryZone) && currentSelectedChair
+        ? currentSelectedChair
+        : null) ||
+      secondaryZoneChairFromHistory ||
+      null;
+    const inferredSecondaryZoneChairCount =
+      secondaryTableZoneFromBrief?.chairCount || secondaryTableZoneFromBrief?.zoneCount || null;
+    const secondaryZoneNeedsChairCount =
+      Boolean(secondaryTableZoneFromBrief && secondaryTableZoneFromBrief.requiresSeating && selectedSecondaryZoneTableForFlow && tableNeedsLooseChairs(selectedSecondaryZoneTableForFlow.name) && !inferredSecondaryZoneChairCount);
+    const secondaryZoneNeedsChairSelection =
+      Boolean(secondaryTableZoneFromBrief && secondaryTableZoneFromBrief.requiresSeating && selectedSecondaryZoneTableForFlow && tableNeedsLooseChairs(selectedSecondaryZoneTableForFlow.name) && inferredSecondaryZoneChairCount && !selectedSecondaryZoneChairForFlow);
+    const secondaryZoneNeedsTableSelection =
+      Boolean(secondaryTableZoneFromBrief && !selectedSecondaryZoneTableForFlow);
+    const secondaryZoneIsPresentationStyle =
+      Boolean(secondaryTableZoneFromBrief?.zoneLabel && ['judges', 'panel', 'speakers', 'vip', 'couple'].includes(String(secondaryTableZoneFromBrief.zoneLabel).toLowerCase()));
+    const secondaryZoneNeedsOneSideWarning =
+      Boolean(
+        secondaryZoneIsPresentationStyle &&
+        selectedSecondaryZoneTableForFlow &&
+        inferredSecondaryZoneChairCount &&
+        inferredSecondaryZoneChairCount > 4 &&
+        tableNeedsLooseChairs(selectedSecondaryZoneTableForFlow.name)
+      );
+    const getSecondaryZoneSeatingGuidance = () => {
+      if (!secondaryZoneNeedsOneSideWarning || !selectedSecondaryZoneTableForFlow) return '';
+      const lower = selectedSecondaryZoneTableForFlow.name.toLowerCase();
+      if (lower.includes('round') || lower.includes('circular')) {
+        return ` You mentioned ${inferredSecondaryZoneChairCount} panel seats. On a circular table, that may work better as a curved/front arc or a distributed round-table setup; if you want everyone on one speaking side, you may want a larger table or a second table.`;
+      }
+      return ` You mentioned ${inferredSecondaryZoneChairCount} panel seats. On one speaking side of a single rectangular table, that may get tight; if needed I may fall back to a more standard around-table layout unless you switch to a larger/circular table or add another table.`;
+    };
+    const selectedChairForFlow =
+      (!secondaryZoneChairPromptContext && !currentChairShouldBelongToSecondaryZone ? currentSelectedChair : null) ||
+      mainGuestChairFromHistory ||
+      (!hasLayoutBrief && ((!guestZoneFromBrief?.onlyChairs || !secondaryTableZoneFromBrief) ? selectedChairFromHistory : null)) ||
+      null;
+    const selectedTableForFlow =
+      (
+        selectedMentionedAsset &&
+        selectedMentionedAsset.category === 'Furniture' &&
+        selectedMentionedAsset.name.toLowerCase().includes('table') &&
+        !(guestZoneFromBrief?.onlyChairs && secondaryTableZoneFromBrief)
+          ? selectedMentionedAsset
+          : null
+      ) ||
+      mainGuestTableFromHistory ||
+      (!hasLayoutBrief && (!guestZoneFromBrief?.onlyChairs ? selectedTableFromHistory : null)) ||
+      null;
+    const tableChoiceKnown = Boolean(selectedTableForFlow);
     const parseChairsPerTable = (text: string) => {
       const raw = String(text || '');
       const explicit = raw.match(/(\d{1,2})\s*(?:chairs?|seats?|stools?)\s*(?:per|around each|on each)/i);
@@ -510,8 +1053,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const chairsPerTableForFlow = parseChairsPerTable(exactCommandText) || chairsPerTableFromHistory;
     const arrangementChoices = ["Grid", "Linear", "Circular", "Perimeter", "U-Shape", "Boardroom", "Classroom", "Chevron"];
     const getSpaceSurfaceShape = () => {
-      if (!roomWidthMm || !roomHeightMm) return null;
+      if (!activeSpaceWidthMm || !activeSpaceHeightMm) return null;
       if (selectedSpaceChoice === 'custom' || !selectedSpaceChoice) return null;
+      if (selectedSpaceChoice === 'marquee') return null;
       const fillTexture =
         selectedSpaceChoice === 'grassy field'
           ? 'grass-01'
@@ -525,10 +1069,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: `space-surface-${selectedSpaceChoice.replace(/\s+/g, '-')}`,
         type: 'rectangle',
         previewLayer: 'background',
-        x: roomWidthMm / 2,
-        y: roomHeightMm / 2,
-        width: roomWidthMm,
-        height: roomHeightMm,
+        x: activeSpaceWidthMm / 2,
+        y: activeSpaceHeightMm / 2,
+        width: activeSpaceWidthMm,
+        height: activeSpaceHeightMm,
         fillType: 'texture',
         fillTexture,
         fillTextureScale: 4,
@@ -539,18 +1083,200 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
     };
     const buildRoomShellPreview = () => {
-      const preview: any = {
-        walls: [{ widthMm: roomWidthMm, heightMm: roomHeightMm, wallType: 'enclosure-150' }],
-      };
+      const preview: any =
+        selectedSpaceChoice === 'marquee' && selectedMarqueeForFlow
+          ? {
+              walls: [],
+              assets: [
+                {
+                  assetName: selectedMarqueeForFlow.name,
+                  xMm: (activeSpaceWidthMm || Number(selectedMarqueeForFlow.width || 1000)) / 2,
+                  yMm: (activeSpaceHeightMm || Number(selectedMarqueeForFlow.height || 1000)) / 2,
+                  widthMm: Number(selectedMarqueeForFlow.width || 1000),
+                  heightMm: Number(selectedMarqueeForFlow.height || 1000),
+                  strokeWidth: 0.6,
+                },
+              ],
+            }
+          : {
+              walls: [{ widthMm: activeSpaceWidthMm, heightMm: activeSpaceHeightMm, wallType: 'enclosure-150' }],
+            };
       const surfaceShape = getSpaceSurfaceShape();
       if (surfaceShape) preview.shapes = [surfaceShape];
       return preview;
+    };
+    const buildStageShapeBundle = (stageSpec: { name: string; width: number; height: number }, placement?: string | null) => {
+      const stageWidth = Number(stageSpec.width || 1000);
+      const stageHeight = Number(stageSpec.height || 1000);
+      const resolvedPlacement = placement || (arrangementType === 'circular' ? 'center' : arrangementType === 'u-shape' ? 'open-end' : 'top');
+      const centerX = (activeSpaceWidthMm || stageWidth) / 2;
+      const centerY = (activeSpaceHeightMm || stageHeight) / 2;
+      let stageX = centerX;
+      let stageY = Math.max(stageHeight / 2 + 500, 1200);
+      if (resolvedPlacement === 'center') {
+        stageX = centerX;
+        stageY = centerY;
+      } else if (resolvedPlacement === 'bottom' || resolvedPlacement === 'open-end') {
+        stageX = centerX;
+        stageY = Math.max(stageHeight / 2 + 500, (activeSpaceHeightMm || stageHeight) - stageHeight / 2 - 500);
+      } else if (resolvedPlacement === 'left') {
+        stageX = stageWidth / 2 + 500;
+        stageY = centerY;
+      } else if (resolvedPlacement === 'right') {
+        stageX = Math.max(stageWidth / 2 + 500, (activeSpaceWidthMm || stageWidth) - stageWidth / 2 - 500);
+        stageY = centerY;
+      }
+
+      const shapes: any[] = [
+        {
+          id: 'ai-stage-base',
+          type: 'rectangle',
+          xMm: stageX,
+          yMm: stageY,
+          widthMm: stageWidth,
+          heightMm: stageHeight,
+          fill: '#f3f4f6',
+          fillColor: '#f3f4f6',
+          stroke: '#475569',
+          strokeColor: '#475569',
+          strokeWidth: 2,
+        },
+      ];
+
+      const cols = Math.max(1, Math.round(stageWidth / STAGE_MODULE_MM));
+      const rows = Math.max(1, Math.round(stageHeight / STAGE_MODULE_MM));
+      const left = stageX - stageWidth / 2;
+      const top = stageY - stageHeight / 2;
+
+      for (let c = 1; c < cols; c++) {
+        const x = left + c * STAGE_MODULE_MM;
+        shapes.push({
+          id: `ai-stage-grid-v-${c}`,
+          type: 'line',
+          xMm: x,
+          yMm: stageY,
+          widthMm: 1,
+          heightMm: stageHeight,
+          stroke: '#94a3b8',
+          strokeColor: '#94a3b8',
+          strokeWidth: 1,
+          opacity: 0.45,
+          rotation: 90,
+        });
+      }
+      for (let r = 1; r < rows; r++) {
+        const y = top + r * STAGE_MODULE_MM;
+        shapes.push({
+          id: `ai-stage-grid-h-${r}`,
+          type: 'line',
+          xMm: stageX,
+          yMm: y,
+          widthMm: stageWidth,
+          heightMm: 1,
+          stroke: '#94a3b8',
+          strokeColor: '#94a3b8',
+          strokeWidth: 1,
+          opacity: 0.45,
+        });
+      }
+
+      const textAnnotations = [
+        {
+          id: 'ai-stage-label',
+          text: stageSpec.name || 'Stage',
+          xMm: stageX,
+          yMm: stageY,
+          fontSize: 320,
+          color: '#334155',
+        },
+      ];
+
+      return { shapes, textAnnotations };
+    };
+    const getZoneRect = (side?: string | null, share?: number | null) => {
+      const roomW = activeSpaceWidthMm || 10000;
+      const roomH = activeSpaceHeightMm || 10000;
+      const fraction = Math.max(0.2, Math.min(0.95, share || ((side === 'left' || side === 'right' || side === 'top' || side === 'bottom') ? 0.5 : 1)));
+
+      if (side === 'left') {
+        return { xMm: 0, yMm: 0, widthMm: roomW * fraction, heightMm: roomH };
+      }
+      if (side === 'right') {
+        return { xMm: roomW * (1 - fraction), yMm: 0, widthMm: roomW * fraction, heightMm: roomH };
+      }
+      if (side === 'top') {
+        return { xMm: 0, yMm: 0, widthMm: roomW, heightMm: roomH * fraction };
+      }
+      if (side === 'bottom') {
+        return { xMm: 0, yMm: roomH * (1 - fraction), widthMm: roomW, heightMm: roomH * fraction };
+      }
+      if (side === 'center') {
+        return {
+          xMm: roomW * ((1 - fraction) / 2),
+          yMm: roomH * ((1 - fraction) / 2),
+          widthMm: roomW * fraction,
+          heightMm: roomH * fraction,
+        };
+      }
+      return { xMm: 0, yMm: 0, widthMm: roomW, heightMm: roomH };
+    };
+    const getZoneCenter = (side?: string | null) => {
+      const rect = getZoneRect(side, guestZoneFromBrief?.share);
+      return {
+        x: rect.xMm + rect.widthMm / 2,
+        y: rect.yMm + rect.heightMm / 2,
+      };
+    };
+    const getFacingRotationForSide = (side?: string | null) => {
+      if (side === 'left') return 270;
+      if (side === 'right') return 90;
+      return 0;
+    };
+    const getChairFacingSide = (side?: string | null) => {
+      if (side === 'left') return 'right';
+      if (side === 'right') return 'left';
+      if (side === 'top') return 'bottom';
+      if (side === 'bottom') return 'top';
+      return null;
+    };
+    const getSideZoneTableRotation = (side?: string | null) => {
+      if (side === 'left' || side === 'right') return 90;
+      return 0;
+    };
+    const applyLayoutScalePreference = (preview: any) => {
+      if (!preview) return preview;
+      return {
+        ...preview,
+        layoutPreferences: {
+          ...(preview.layoutPreferences || {}),
+          scaleMode: layoutScaleModeForFlow || 'default-size',
+        },
+      };
+    };
+    const buildSecondaryZoneAsset = () => {
+      if (!secondaryTableZoneFromBrief || !selectedSecondaryZoneTableForFlow) return null;
+      const anchor = getZoneCenter(secondaryTableZoneFromBrief.side);
+      return {
+        assetName: selectedSecondaryZoneTableForFlow.name,
+        xMm: anchor.x,
+        yMm: anchor.y,
+        widthMm: selectedSecondaryZoneTableForFlow.width || undefined,
+        heightMm: selectedSecondaryZoneTableForFlow.height || undefined,
+        chairCount: inferredSecondaryZoneChairCount || undefined,
+        chairAsset: selectedSecondaryZoneChairForFlow?.name || undefined,
+        guestCount: inferredSecondaryZoneChairCount || undefined,
+        rotation: getSideZoneTableRotation(secondaryTableZoneFromBrief.side),
+        chairFacingSide: getChairFacingSide(secondaryTableZoneFromBrief.side),
+        chairWorldSide: secondaryTableZoneFromBrief.side || undefined,
+        strokeWidth: 0.6,
+      };
     };
     const buildCustomTablePreview = (assetName: string, stageAsset?: any | null, stagePlacement?: string | null, chairCountOverride?: number | null, chairAssetName?: string | null) => {
       const assetNameLower = assetName.toLowerCase();
       const seatCountMatch = assetNameLower.match(/(\d+)\s*seater/i);
       const seatCount = chairCountOverride || (seatCountMatch ? Number(seatCountMatch[1]) : null);
       const inferredTableCount = effectiveGuestCount && seatCount ? Math.max(1, Math.ceil(effectiveGuestCount / seatCount)) : 1;
+      const mainZoneAnchor = getZoneCenter(guestZoneFromBrief?.side);
       const preview: any = {
         ...buildRoomShellPreview(),
         assets: [
@@ -563,55 +1289,61 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             strokeWidth: 0.6,
           },
         ],
-        tableArrangement: { type: arrangementType },
+        tableArrangement: {
+          type: arrangementType,
+          centerX: mainZoneAnchor.x,
+          centerY: mainZoneAnchor.y,
+          zone: getZoneRect(guestZoneFromBrief?.side, guestZoneFromBrief?.share),
+          rotationDegrees: 0,
+          chairFacingSide: getChairFacingSide(guestZoneFromBrief?.side),
+        },
       };
+      const secondaryZoneAsset = buildSecondaryZoneAsset();
+      if (secondaryZoneAsset) preview.assets.push(secondaryZoneAsset);
       if (stageAsset) {
-        const stageWidth = Number(stageAsset.width || 1000);
-        const stageHeight = Number(stageAsset.height || 1000);
-        const placement = stagePlacement || (arrangementType === 'circular' ? 'center' : arrangementType === 'u-shape' ? 'open-end' : 'top');
-        const centerX = (roomWidthMm || stageWidth) / 2;
-        const centerY = (roomHeightMm || stageHeight) / 2;
-        let stageX = centerX;
-        let stageY = Math.max(stageHeight / 2 + 500, 1200);
-        if (placement === 'center') {
-          stageX = centerX;
-          stageY = centerY;
-        } else if (placement === 'bottom' || placement === 'open-end') {
-          stageX = centerX;
-          stageY = Math.max(stageHeight / 2 + 500, (roomHeightMm || stageHeight) - stageHeight / 2 - 500);
-        } else if (placement === 'left') {
-          stageX = stageWidth / 2 + 500;
-          stageY = centerY;
-        } else if (placement === 'right') {
-          stageX = Math.max(stageWidth / 2 + 500, (roomWidthMm || stageWidth) - stageWidth / 2 - 500);
-          stageY = centerY;
-        }
-        preview.assets.push({
-          assetName: stageAsset.name,
-          xMm: stageX,
-          yMm: stageY,
-          widthMm: stageWidth,
-          heightMm: stageHeight,
-          strokeWidth: 0.6,
-        });
+        const stageBundle = buildStageShapeBundle(stageAsset, stagePlacement);
+        preview.shapes = [...(preview.shapes || []), ...stageBundle.shapes];
+        preview.textAnnotations = [...(preview.textAnnotations || []), ...stageBundle.textAnnotations];
       }
-      return preview;
+      return applyLayoutScalePreference(preview);
+    };
+    const buildChairOnlyZonePreview = (chairAssetName: string, stageAsset?: any | null, stagePlacement?: string | null) => {
+      const zoneRect = getZoneRect(guestZoneFromBrief?.side, guestZoneFromBrief?.share);
+      const preview: any = {
+        ...buildRoomShellPreview(),
+        seatingLayout: [
+          {
+            type: arrangementType === 'u-shape' || arrangementType === 'boardroom' || arrangementType === 'classroom'
+              ? arrangementType
+              : 'theater',
+            count: guestZoneFromBrief?.count || effectiveGuestCount || 1,
+            assetName: chairAssetName,
+            centerX: zoneRect.xMm + zoneRect.widthMm / 2,
+            centerY: zoneRect.yMm + zoneRect.heightMm / 2,
+            zone: zoneRect,
+            rotationDegrees: getFacingRotationForSide(guestZoneFromBrief?.side),
+            chairFacingSide: getChairFacingSide(guestZoneFromBrief?.side),
+            columns: undefined,
+            rows: undefined,
+          },
+        ],
+      };
+      const secondaryZoneAsset = buildSecondaryZoneAsset();
+      if (secondaryZoneAsset) {
+        preview.assets = [...(preview.assets || []), secondaryZoneAsset];
+      }
+      if (stageAsset) {
+        const stageBundle = buildStageShapeBundle(stageAsset, stagePlacement);
+        preview.shapes = [...(preview.shapes || []), ...stageBundle.shapes];
+        preview.textAnnotations = [...(preview.textAnnotations || []), ...stageBundle.textAnnotations];
+      }
+      return applyLayoutScalePreference(preview);
     };
     const getSeatCountForFlowTable = (tableName: string) => {
       const seatCountMatch = tableName.toLowerCase().match(/(\d+)\s*seater/i);
       return chairsPerTableForFlow || (seatCountMatch ? Number(seatCountMatch[1]) : null);
     };
     const getChairAssetNameForFlow = () => selectedChairForFlow?.name || undefined;
-    const selectedTableForFlow =
-      (
-        selectedMentionedAsset &&
-        selectedMentionedAsset.category === 'Furniture' &&
-        selectedMentionedAsset.name.toLowerCase().includes('table')
-          ? selectedMentionedAsset
-          : null
-      ) ||
-      selectedTableFromHistory ||
-      null;
     const isWeakAssistantFallback = (text: string) => {
       const lower = String(text || '').toLowerCase().trim();
       if (!lower) return true;
@@ -627,11 +1359,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       );
     };
     const buildContextualRecovery = () => {
-      if (roomWidthMm && roomHeightMm && roomBasedConversation && !effectiveGuestCount) {
+      if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && !hasLayoutBrief) {
         return {
-          followUp: `I've drafted a ${roomWidthMm / 1000}m x ${roomHeightMm / 1000}m ${draftedSpaceLabel} for you. What kind of setup do you want here, and roughly how many guests should I plan for?`,
+          followUp: roomSummaryPrompt,
           preview: buildRoomShellPreview(),
         };
+      }
+
+      if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && assistantAskedForLayoutSummary) {
+        if (!effectiveGuestCount) {
+          return {
+            followUp: briefMentionsMultipleZones || briefMentionsDirectionalZones
+              ? 'I understand the overall layout idea. Roughly how many guests should I plan for in total?'
+              : 'Thanks, that helps. Roughly how many guests should I plan for in total?',
+            preview: buildRoomShellPreview(),
+          };
+        }
+
+        if (guestZoneFromBrief?.onlyChairs && !selectedChairForFlow) {
+          return {
+            followUp: `For the ${guestZoneFromBrief.side || 'main'} side guest area, what chair or stool would you like me to use for the ${guestZoneFromBrief.count || effectiveGuestCount} seats?`,
+            assetSelection: {
+              category: 'chair',
+              message: 'Select seating for the guest area',
+              options: chairAssets,
+            },
+            preview: buildRoomShellPreview(),
+          };
+        }
+
+        if (!selectedTableForFlow) {
+          return {
+            followUp: briefMentionsMultipleZones
+              ? `I understand you want more than one zone in this layout. What table or seating setup should I use first for the ${guestZoneFromBrief?.side || 'main'} side guest area for ${guestZoneFromBrief?.count || effectiveGuestCount} guests?`
+              : `For ${effectiveGuestCount} guests, what table or seating setup would you like to use first?`,
+            assetSelection: {
+              category: 'table',
+              message: 'Select a table or seating setup',
+              options: guestSetupAssets,
+            },
+            preview: buildRoomShellPreview(),
+          };
+        }
       }
 
       if (assistantAskedForGuestCount && !effectiveGuestCount) {
@@ -639,56 +1408,90 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           followUp: selectedTableForFlow
             ? `About how many guests should I plan for with the ${selectedTableForFlow.name}?`
             : 'About how many guests should I plan for here?',
-          preview: roomWidthMm && roomHeightMm
+          preview: activeSpaceWidthMm && activeSpaceHeightMm
             ? buildRoomShellPreview()
             : undefined,
         };
       }
 
-      if ((assistantAskedForTableChoice || (roomWidthMm && roomHeightMm && effectiveGuestCount)) && !selectedTableForFlow) {
+      if (guestZoneFromBrief?.onlyChairs && selectedChairForFlow && !arrangementAlreadyKnown) {
+        return {
+          followUp: `How would you like those ${guestZoneFromBrief.count || effectiveGuestCount} ${selectedChairForFlow.name} seats arranged on the ${guestZoneFromBrief.side || 'main'} side?`,
+          choices: arrangementChoices,
+          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+        };
+      }
+
+      if (guestZoneFromBrief?.onlyChairs && selectedChairForFlow && arrangementAlreadyKnown && secondaryZoneNeedsTableSelection) {
+        return {
+          followUp: `You also mentioned the ${secondaryZoneLabelForPrompt}. What table should I use there?`,
+          assetSelection: {
+            category: 'table',
+            message: 'Select a table for the smaller area',
+            options: tableAssets,
+          },
+          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+        };
+      }
+
+      if (guestZoneFromBrief?.onlyChairs && selectedChairForFlow && arrangementAlreadyKnown && secondaryZoneNeedsChairSelection) {
+        return {
+          followUp: `What chair should I pair with the ${secondaryZoneLabelForPrompt}?`,
+          assetSelection: {
+            category: 'chair',
+            message: 'Select seating for the smaller area',
+            options: chairAssets,
+          },
+          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+        };
+      }
+
+      if (guestZoneFromBrief?.onlyChairs && selectedChairForFlow && arrangementAlreadyKnown && secondaryZoneNeedsChairCount) {
+        return {
+          followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
+          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+        };
+      }
+
+      if (guestZoneFromBrief?.onlyChairs && selectedChairForFlow && arrangementAlreadyKnown && assistantAskedForStage) {
+        if (yesStageReply) {
+          return {
+            followUp: 'What size would you like for the stage? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
+            preview: buildChairOnlyZonePreview(selectedChairForFlow.name),
+          };
+        }
+        if (noStageReply) {
+          return {
+            followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
+            preview: buildChairOnlyZonePreview(selectedChairForFlow.name),
+          };
+        }
+      }
+
+      if (guestZoneFromBrief?.onlyChairs && selectedChairForFlow && arrangementAlreadyKnown && assistantAskedForExtras && noExtrasReply) {
+        return {
+          plan: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+        };
+      }
+
+      if ((assistantAskedForTableChoice || (activeSpaceWidthMm && activeSpaceHeightMm && effectiveGuestCount)) && !selectedTableForFlow) {
         return {
           followUp: effectiveGuestCount
             ? `For ${effectiveGuestCount} guests, what table or seating setup would you like to use?`
             : 'What table or seating setup would you like to use?',
           assetSelection: {
-            category: 'furniture',
-            message: 'Select furniture',
-            options: assetList.filter((a) => a.category === 'Furniture'),
+            category: 'table',
+            message: 'Select a table',
+            options: guestSetupAssets,
           },
-          preview: roomWidthMm && roomHeightMm
+          preview: activeSpaceWidthMm && activeSpaceHeightMm
             ? buildRoomShellPreview()
             : undefined,
         };
       }
 
-      if (selectedMentionedAsset && selectedMentionedAsset.category === 'Marquee' && !tableChoiceKnown) {
-        return {
-          followUp: `Great choice. I have your ${selectedMentionedAsset.name} ready. What tables, chairs, or other furniture would you like to add inside it?`,
-          assetSelection: {
-            category: 'furniture',
-            message: 'Select furniture to add',
-            options: assetList.filter((a) => a.category === 'Furniture'),
-          },
-          preview: {
-            assets: [
-              {
-                assetName: selectedMentionedAsset.name,
-                xMm: (selectedMentionedAsset.width || 1000) / 2,
-                yMm: (selectedMentionedAsset.height || 1000) / 2,
-                widthMm: selectedMentionedAsset.width || 1000,
-                heightMm: selectedMentionedAsset.height || 1000,
-                strokeWidth: 0.6,
-              },
-            ],
-          },
-        };
-      }
-
       if (selectedTableForFlow && effectiveGuestCount && !arrangementAlreadyKnown) {
-        const standaloneTableNeedsChairs =
-          !/\b\d+\s*seater\b/i.test(selectedTableForFlow.name) &&
-          !selectedTableForFlow.name.toLowerCase().includes('executive table') &&
-          !selectedTableForFlow.name.toLowerCase().includes('vip table');
+        const standaloneTableNeedsChairs = tableNeedsLooseChairs(selectedTableForFlow.name);
         if (standaloneTableNeedsChairs && !selectedChairForFlow) {
           return {
             followUp: `What chair would you like to pair with the ${selectedTableForFlow.name}?`,
@@ -697,16 +1500,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               message: 'Select seating',
               options: chairAssets,
             },
-            preview: roomWidthMm && roomHeightMm
+            preview: activeSpaceWidthMm && activeSpaceHeightMm
               ? buildCustomTablePreview(selectedTableForFlow.name)
               : undefined,
           };
         }
         if (standaloneTableNeedsChairs && !chairsPerTableForFlow) {
-          const suggestedChairCount = selectedTableForFlow.name.toLowerCase().includes('cocktail') ? 4 : 6;
+          const suggestedChairCount = getSuggestedChairCountForTable(selectedTableForFlow.name);
           return {
             followUp: `How many chairs should I place around each table? I can suggest ${suggestedChairCount} for the ${selectedTableForFlow.name} unless you want a different number.`,
-            preview: roomWidthMm && roomHeightMm
+            preview: activeSpaceWidthMm && activeSpaceHeightMm
               ? buildCustomTablePreview(selectedTableForFlow.name, undefined, undefined, suggestedChairCount, selectedChairForFlow?.name || undefined)
               : undefined,
           };
@@ -718,7 +1521,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return {
           followUp: `Great choice! With ${selectedTableForFlow.name}, I’ll use ${inferredTableCount} table${inferredTableCount > 1 ? 's' : ''} for ${effectiveGuestCount} guests. How would you like them arranged?`,
           choices: arrangementChoices,
-          preview: roomWidthMm && roomHeightMm
+          preview: activeSpaceWidthMm && activeSpaceHeightMm
             ? buildCustomTablePreview(selectedTableForFlow.name, undefined, undefined, seatCount, selectedChairForFlow?.name || undefined)
             : {
                 assets: [
@@ -735,15 +1538,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         };
       }
 
+      if (selectedTableForFlow && effectiveGuestCount && arrangementAlreadyKnown) {
+        if (secondaryZoneNeedsTableSelection) {
+          return {
+            followUp: `You also mentioned the ${secondaryZoneLabelForPrompt}. What table should I use there?`,
+            assetSelection: {
+              category: 'table',
+              message: 'Select a table for the smaller area',
+              options: tableAssets,
+            },
+            preview: buildCustomTablePreview(selectedTableForFlow.name, selectedStageForFlow, selectedStagePlacement, getSeatCountForFlowTable(selectedTableForFlow.name), getChairAssetNameForFlow()),
+          };
+        }
+        if (secondaryZoneNeedsChairSelection) {
+          return {
+            followUp: `What chair should I pair with the ${secondaryZoneLabelForPrompt}?`,
+            assetSelection: {
+              category: 'chair',
+              message: 'Select seating for the smaller area',
+              options: chairAssets,
+            },
+            preview: buildCustomTablePreview(selectedTableForFlow.name, selectedStageForFlow, selectedStagePlacement, getSeatCountForFlowTable(selectedTableForFlow.name), getChairAssetNameForFlow()),
+          };
+        }
+        if (secondaryZoneNeedsChairCount) {
+          return {
+            followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
+            preview: buildCustomTablePreview(selectedTableForFlow.name, selectedStageForFlow, selectedStagePlacement, getSeatCountForFlowTable(selectedTableForFlow.name), getChairAssetNameForFlow()),
+          };
+        }
+      }
+
       if (selectedTableForFlow && effectiveGuestCount && arrangementAlreadyKnown && assistantAskedForStage) {
         if (yesStageReply) {
           return {
-            followUp: 'Select a stage size or type the stage you want.',
-            assetSelection: {
-              category: 'stage',
-              message: 'Select a stage',
-              options: stageAssets,
-            },
+            followUp: 'What size would you like for the stage? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
             preview: buildCustomTablePreview(selectedTableForFlow.name),
           };
         }
@@ -769,12 +1598,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           };
         }
         return {
-          followUp: 'Select a stage size or type the stage you want.',
-          assetSelection: {
-            category: 'stage',
-            message: 'Select a stage',
-            options: stageAssets,
-          },
+          followUp: 'What size would you like for the stage? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
           preview: buildCustomTablePreview(selectedTableForFlow.name),
         };
       }
@@ -824,7 +1648,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         };
       }
 
-      if (selectedSpaceChoice === 'marquee' && !selectedMentionedAsset && !selectedTableForFlow) {
+      if (selectedSpaceChoice === 'marquee' && !selectedMarqueeForFlow) {
         return {
           assetSelection: {
             category: 'marquee',
@@ -889,32 +1713,372 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (
-      roomWidthMm &&
-      roomHeightMm &&
-      roomBasedConversation &&
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
+      !hasLayoutBrief
+    ) {
+      return res.status(200).json({
+        followUp: roomSummaryPrompt,
+        preview: buildRoomShellPreview(),
+      });
+    }
+
+    const buildStructuredZonePreview = () => {
+      if (guestZoneFromBrief?.onlyChairs && selectedChairForFlow) {
+        return buildChairOnlyZonePreview(
+          selectedChairForFlow.name,
+          stageDeclinedForFlow ? undefined : selectedStageForFlow,
+          stageDeclinedForFlow ? undefined : selectedStagePlacement
+        );
+      }
+
+      if (selectedTableForFlow) {
+        return buildCustomTablePreview(
+          selectedTableForFlow.name,
+          stageDeclinedForFlow ? undefined : selectedStageForFlow,
+          stageDeclinedForFlow ? undefined : selectedStagePlacement,
+          getSeatCountForFlowTable(selectedTableForFlow.name),
+          getChairAssetNameForFlow()
+        );
+      }
+
+      const preview: any = buildRoomShellPreview();
+      const secondaryZoneAsset = buildSecondaryZoneAsset();
+      if (secondaryZoneAsset) {
+        preview.assets = [...(preview.assets || []), secondaryZoneAsset];
+      }
+      if (!stageDeclinedForFlow && selectedStageForFlow) {
+        const stageBundle = buildStageShapeBundle(selectedStageForFlow, selectedStagePlacement);
+        preview.shapes = [...(preview.shapes || []), ...stageBundle.shapes];
+        preview.textAnnotations = [...(preview.textAnnotations || []), ...stageBundle.textAnnotations];
+      }
+      return preview;
+    };
+
+    if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && hasLayoutBrief) {
+      const structuredPreview = buildStructuredZonePreview();
+      const mainZoneIsChairOnly = Boolean(guestZoneFromBrief?.onlyChairs);
+      const mainZoneNeedsSetup = !mainZoneIsChairOnly && !selectedTableForFlow;
+      const mainZoneNeedsChairChoice =
+        mainZoneIsChairOnly
+          ? !selectedChairForFlow
+          : Boolean(selectedTableForFlow && tableNeedsLooseChairs(selectedTableForFlow.name) && !selectedChairForFlow);
+      const mainZoneNeedsChairCount =
+        !mainZoneIsChairOnly &&
+        Boolean(selectedTableForFlow && tableNeedsLooseChairs(selectedTableForFlow.name) && !chairsPerTableForFlow);
+      const mainZoneNeedsArrangement =
+        mainZoneIsChairOnly
+          ? Boolean(selectedChairForFlow && !arrangementAlreadyKnown)
+          : Boolean(
+              selectedTableForFlow &&
+              (!tableNeedsLooseChairs(selectedTableForFlow.name) || (selectedChairForFlow && chairsPerTableForFlow)) &&
+              !arrangementAlreadyKnown
+            );
+      const secondaryZoneNeedsChairType =
+        Boolean(
+          secondaryTableZoneFromBrief &&
+          secondaryTableZoneFromBrief.requiresSeating &&
+          selectedSecondaryZoneTableForFlow &&
+          tableNeedsLooseChairs(selectedSecondaryZoneTableForFlow.name) &&
+          !selectedSecondaryZoneChairForFlow
+        );
+      const secondaryZoneResolved =
+        !secondaryTableZoneFromBrief ||
+        (
+          !!selectedSecondaryZoneTableForFlow &&
+          (
+            !secondaryTableZoneFromBrief.requiresSeating ||
+            !tableNeedsLooseChairs(selectedSecondaryZoneTableForFlow.name) ||
+            (!!selectedSecondaryZoneChairForFlow && !!inferredSecondaryZoneChairCount)
+          )
+        );
+      const stageResolved =
+        !stageStillRequested ||
+        stageDeclinedForFlow ||
+        (Boolean(selectedStageForFlow) && Boolean(selectedStagePlacement));
+      const extrasResolved = assistantAskedForExtras && noExtrasReply;
+
+      if (
+        assistantAskedForLayoutSummary &&
+        !effectiveGuestCount &&
+        !guestZoneFromBrief?.count &&
+        !secondaryTableZoneFromBrief?.zoneCount
+      ) {
+        return res.status(200).json({
+          followUp: briefMentionsMultipleZones || briefMentionsDirectionalZones
+            ? 'I understand the overall layout idea. Roughly how many guests should I plan for in total?'
+            : 'Thanks, that helps. Roughly how many guests should I plan for in total?',
+          preview: buildRoomShellPreview(),
+        });
+      }
+
+      if (mainZoneNeedsSetup) {
+        return res.status(200).json({
+          followUp: briefMentionsMultipleZones
+            ? `I understand you want multiple zones in the layout. What table or seating setup should I use first for the ${guestZoneFromBrief?.side || 'main'} side guest area for ${guestZoneFromBrief?.count || effectiveGuestCount} guests?`
+            : `For ${guestZoneFromBrief?.count || effectiveGuestCount} guests, what table or seating setup would you like to use?`,
+          assetSelection: {
+            category: 'table',
+            message: 'Select a table or seating setup',
+            options: guestSetupAssets,
+          },
+          preview: structuredPreview,
+        });
+      }
+
+      if (mainZoneNeedsChairChoice) {
+        const followUp = mainZoneIsChairOnly
+          ? `For the ${guestZoneFromBrief?.side || 'main'} side guest area, what chair or stool would you like me to use for the ${guestZoneFromBrief?.count || effectiveGuestCount} seats?`
+          : `What chair would you like to pair with the ${selectedTableForFlow!.name}?`;
+        return res.status(200).json({
+          followUp,
+          assetSelection: {
+            category: 'chair',
+            message: mainZoneIsChairOnly ? 'Select seating for the guest area' : 'Select a chair or stool',
+            options: chairAssets,
+          },
+          preview: structuredPreview,
+        });
+      }
+
+      if (mainZoneNeedsChairCount) {
+        return res.status(200).json({
+          followUp: `How many chairs should I place around each ${selectedTableForFlow!.name}? I can suggest ${getSuggestedChairCountForTable(selectedTableForFlow!.name)} unless you want a different number.`,
+          preview: structuredPreview,
+        });
+      }
+
+      if (mainZoneNeedsArrangement) {
+        const arrangementSubject = mainZoneIsChairOnly
+          ? `${guestZoneFromBrief?.count || effectiveGuestCount} ${selectedChairForFlow!.name} seats`
+          : `${Math.max(1, Math.ceil((guestZoneFromBrief?.count || effectiveGuestCount || 1) / Math.max(1, getSeatCountForFlowTable(selectedTableForFlow!.name) || 1)))} table${Math.max(1, Math.ceil((guestZoneFromBrief?.count || effectiveGuestCount || 1) / Math.max(1, getSeatCountForFlowTable(selectedTableForFlow!.name) || 1))) > 1 ? 's' : ''} using ${selectedTableForFlow!.name}`;
+        return res.status(200).json({
+          followUp: `How would you like those ${arrangementSubject} arranged on the ${guestZoneFromBrief?.side || 'main'} side?`,
+          choices: arrangementChoices,
+          preview: structuredPreview,
+        });
+      }
+
+      if (secondaryZoneNeedsTableSelection) {
+        return res.status(200).json({
+          followUp: `You also mentioned the ${secondaryZoneLabelForPrompt}. What table should I use there?`,
+          assetSelection: {
+            category: 'table',
+            message: 'Select a table for the smaller area',
+            options: tableAssets,
+          },
+          preview: structuredPreview,
+        });
+      }
+
+      if (secondaryZoneNeedsChairType) {
+        return res.status(200).json({
+          followUp: `What chair would you like to pair with the ${selectedSecondaryZoneTableForFlow!.name} on the ${secondaryTableZoneFromBrief?.side || 'secondary'} side?${getSecondaryZoneSeatingGuidance()}`,
+          assetSelection: {
+            category: 'chair',
+            message: 'Select seating for the smaller area',
+            options: chairAssets,
+          },
+          preview: structuredPreview,
+        });
+      }
+
+      if (secondaryZoneNeedsChairCount) {
+        return res.status(200).json({
+          followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
+          preview: structuredPreview,
+        });
+      }
+
+      if (
+        !layoutScaleKnown &&
+        !mainZoneNeedsSetup &&
+        !mainZoneNeedsChairChoice &&
+        !mainZoneNeedsChairCount &&
+        !mainZoneNeedsArrangement &&
+        secondaryZoneResolved
+      ) {
+        return res.status(200).json({
+          followUp: 'Would you like me to scale the layout to use more of the available wall space, or keep it at default size?',
+          choices: ['Fit to space', 'Keep default size'],
+          preview: structuredPreview,
+        });
+      }
+
+      if (!stageResolved) {
+        if (!stageDecisionKnown) {
+          return res.status(200).json({
+            followUp: selectedStagePlacement
+              ? `Would you like to add a stage at the ${selectedStagePlacement === 'top' ? 'top' : selectedStagePlacement} of the layout?`
+              : 'Would you like to add a stage to your layout?',
+            choices: ['Yes, add a stage', 'No stage'],
+            preview: structuredPreview,
+          });
+        }
+
+        if (!selectedStageForFlow) {
+          return res.status(200).json({
+            followUp: 'What size would you like for the stage? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
+            preview: structuredPreview,
+          });
+        }
+
+        return res.status(200).json({
+          followUp: 'Where should I place the stage in relation to the arrangement?',
+          choices: getStagePositionChoices(),
+          preview: structuredPreview,
+        });
+      }
+
+      if (assistantAskedForExtras && noExtrasReply) {
+        return res.status(200).json({
+          plan: structuredPreview,
+        });
+      }
+
+      if (!extrasDecisionKnown) {
+        return res.status(200).json({
+          followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
+          preview: structuredPreview,
+        });
+      }
+
+      if (!assistantAskedForExtras && !extrasResolved && !hasAnyPhrase(normalizedIntentText, ['dance floor', 'entrance door', 'doors', 'vip', 'buffet', 'bar', 'presentation'])) {
+        return res.status(200).json({
+          followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
+          preview: structuredPreview,
+        });
+      }
+
+      if (
+        !mainZoneNeedsSetup &&
+        !mainZoneNeedsChairChoice &&
+        !mainZoneNeedsChairCount &&
+        !mainZoneNeedsArrangement &&
+        secondaryZoneResolved &&
+        stageResolved
+      ) {
+        return res.status(200).json({
+          plan: structuredPreview,
+        });
+      }
+    }
+
+    if (
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
+      assistantAskedForLayoutSummary &&
+      hasLayoutBrief &&
       !selectedMentionedAsset &&
       !effectiveGuestCount
     ) {
       return res.status(200).json({
-        followUp: `I've drafted a ${roomWidthMm / 1000}m x ${roomHeightMm / 1000}m ${draftedSpaceLabel} for you. What kind of setup do you want here, and roughly how many guests should I plan for?`,
+        followUp: briefMentionsMultipleZones || briefMentionsDirectionalZones
+          ? 'I understand the overall layout idea. Roughly how many guests should I plan for in total?'
+          : 'Thanks, that helps. Roughly how many guests should I plan for in total?',
         preview: buildRoomShellPreview(),
       });
     }
 
     if (
-      roomWidthMm &&
-      roomHeightMm &&
-      roomBasedConversation &&
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
+      effectiveGuestCount &&
+      guestZoneFromBrief?.onlyChairs &&
+      selectedChairForFlow &&
+      arrangementAlreadyKnown &&
+      secondaryZoneNeedsTableSelection &&
+      !selectedMentionedAsset
+    ) {
+      return res.status(200).json({
+        followUp: `You also mentioned the ${secondaryZoneLabelForPrompt}. What table should I use there?`,
+        assetSelection: {
+          category: 'table',
+          message: 'Select a table for the smaller area',
+          options: tableAssets,
+        },
+        preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+      });
+    }
+
+    if (
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
+      effectiveGuestCount &&
+      guestZoneFromBrief?.onlyChairs &&
+      selectedChairForFlow &&
+      arrangementAlreadyKnown &&
+      secondaryZoneNeedsChairSelection &&
+      !selectedMentionedAsset
+    ) {
+      return res.status(200).json({
+        followUp: `What chair should I pair with the ${secondaryZoneLabelForPrompt}?`,
+        assetSelection: {
+          category: 'chair',
+          message: 'Select seating for the smaller area',
+          options: chairAssets,
+        },
+        preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+      });
+    }
+
+    if (
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
+      effectiveGuestCount &&
+      guestZoneFromBrief?.onlyChairs &&
+      selectedChairForFlow &&
+      arrangementAlreadyKnown &&
+      secondaryZoneNeedsChairCount &&
+      !selectedMentionedAsset
+    ) {
+      return res.status(200).json({
+        followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
+        preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+      });
+    }
+
+    if (
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
+      effectiveGuestCount &&
+      guestZoneFromBrief?.onlyChairs &&
+      !selectedMentionedAsset &&
+      !selectedChairForFlow
+    ) {
+      return res.status(200).json({
+        followUp: `For the ${guestZoneFromBrief.side || 'main'} side guest area, what chair or stool would you like me to use for the ${guestZoneFromBrief.count || effectiveGuestCount} seats?`,
+        assetSelection: {
+          category: 'chair',
+          message: 'Select seating for the guest area',
+          options: chairAssets,
+        },
+        preview: buildRoomShellPreview(),
+      });
+    }
+
+    if (
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
       effectiveGuestCount &&
       !tableChoiceKnown &&
       !selectedMentionedAsset
     ) {
       return res.status(200).json({
-        followUp: `For ${effectiveGuestCount} guests, what table or seating setup would you like to use?`,
+        followUp: briefMentionsMultipleZones
+          ? `I understand you want multiple zones in the layout. What table or seating setup should I use first for the ${guestZoneFromBrief?.side || 'main'} side guest area for ${guestZoneFromBrief?.count || effectiveGuestCount} guests?`
+          : `For ${effectiveGuestCount} guests, what table or seating setup would you like to use?`,
         assetSelection: {
-          category: 'furniture',
-          message: 'Select furniture',
-          options: assetList.filter((a) => a.category === 'Furniture'),
+          category: 'table',
+          message: 'Select a table or seating setup',
+          options: guestSetupAssets,
         },
         preview: buildRoomShellPreview(),
       });
@@ -931,29 +2095,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    if (selectedMentionedAsset && selectedMentionedAsset.category === 'Marquee') {
-      return res.status(200).json({
-        followUp: `Great choice. I have your ${selectedMentionedAsset.name} ready. What tables, chairs, or other furniture would you like to add inside it?`,
-        assetSelection: {
-          category: 'furniture',
-          message: 'Select furniture to add',
-          options: assetList.filter((a) => a.category === 'Furniture'),
-        },
-        preview: {
-          assets: [
-            {
-              assetName: selectedMentionedAsset.name,
-              xMm: (selectedMentionedAsset.width || 1000) / 2,
-              yMm: (selectedMentionedAsset.height || 1000) / 2,
-              widthMm: selectedMentionedAsset.width || 1000,
-              heightMm: selectedMentionedAsset.height || 1000,
-              strokeWidth: 0.6,
-            },
-          ],
-        },
-      });
-    }
-
     const tableAssetSelected =
       selectedMentionedAsset &&
       selectedMentionedAsset.category === 'Furniture' &&
@@ -965,16 +2106,183 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         /what type of seating|what type of tables|what table|round tables|rectangular tables|select a table|select seating/i.test(m.content || '')
       );
 
-    if (tableAssetSelected && (assistantAskedForTableChoice || roomWidthMm || roomHeightMm)) {
+    if (
+      selectedMentionedAsset &&
+      selectedMentionedAsset.category === 'Furniture' &&
+      !selectedMentionedAsset.name.toLowerCase().includes('table') &&
+      (selectedMentionedAsset.name.toLowerCase().includes('chair') || selectedMentionedAsset.name.toLowerCase().includes('stool')) &&
+      assistantAskedForSecondaryZoneChair &&
+      structuredSpaceConversation
+    ) {
+      if (guestZoneFromBrief?.onlyChairs && selectedChairForFlow && arrangementAlreadyKnown) {
+        if (secondaryZoneNeedsChairCount) {
+          return res.status(200).json({
+            followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
+            preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+          });
+        }
+        if (stageStillRequested && !selectedStageForFlow) {
+          return res.status(200).json({
+            followUp: 'You mentioned a stage. What size would you like it to be? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
+            preview: buildChairOnlyZonePreview(selectedChairForFlow.name),
+          });
+        }
+        if (!stageDecisionKnown) {
+          return res.status(200).json({
+            followUp: 'Would you like to add a stage to your layout?',
+            choices: ['Yes, add a stage', 'No stage'],
+            preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+          });
+        }
+        return res.status(200).json({
+          followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
+          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+        });
+      }
+      return res.status(200).json({
+        followUp: secondaryZoneNeedsChairCount
+          ? `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`
+          : `Great choice. I’ll use ${selectedMentionedAsset.name} for the ${secondaryZoneLabelForPrompt}.`,
+        preview: buildCustomTablePreview(
+          selectedTableForFlow?.name || selectedTableFromHistory?.name || selectedMentionedAsset.name,
+          selectedStageForFlow,
+          selectedStagePlacement,
+          getSeatCountForFlowTable(selectedTableForFlow?.name || selectedTableFromHistory?.name || selectedMentionedAsset.name),
+          getChairAssetNameForFlow()
+        ),
+      });
+    }
+
+    if (
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
+      guestZoneFromBrief?.onlyChairs &&
+      selectedSecondaryZoneTableForFlow &&
+      !selectedChairForFlow
+    ) {
+      const preview: any = buildRoomShellPreview();
+      const secondaryZoneAsset = buildSecondaryZoneAsset();
+      if (secondaryZoneAsset) {
+        preview.assets = [secondaryZoneAsset];
+      }
+      return res.status(200).json({
+        followUp: `I’ll use ${selectedSecondaryZoneTableForFlow.name} for the ${secondaryZoneLabelForPrompt}. For the ${guestZoneFromBrief.side || 'main'} side guest area, what chair or stool would you like me to use for the ${guestZoneFromBrief.count || effectiveGuestCount || 1} seats?`,
+        assetSelection: {
+          category: 'chair',
+          message: 'Select seating for the guest area',
+          options: chairAssets,
+        },
+        preview,
+      });
+    }
+
+    if (
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
+      guestZoneFromBrief?.onlyChairs &&
+      selectedChairForFlow &&
+      arrangementAlreadyKnown &&
+      selectedSecondaryZoneTableForFlow &&
+      selectedMentionedAsset &&
+      selectedMentionedAsset.name === selectedSecondaryZoneTableForFlow.name
+    ) {
+      if (secondaryZoneNeedsChairSelection) {
+        return res.status(200).json({
+          followUp: `What chair should I pair with the ${secondaryZoneLabelForPrompt}?`,
+          assetSelection: {
+            category: 'chair',
+            message: 'Select seating for the smaller area',
+            options: chairAssets,
+          },
+          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+        });
+      }
+      if (secondaryZoneNeedsChairCount) {
+        return res.status(200).json({
+          followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
+          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+        });
+      }
+      if (noStageReply) {
+        return res.status(200).json({
+          followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
+          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+        });
+      }
+      if (stageStillRequested && !selectedStageForFlow) {
+        return res.status(200).json({
+          followUp: 'You mentioned a stage. What size would you like it to be? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
+          preview: buildChairOnlyZonePreview(selectedChairForFlow.name),
+        });
+      }
+      if (!stageDecisionKnown) {
+        return res.status(200).json({
+          followUp: 'Would you like to add a stage to your layout?',
+          choices: ['Yes, add a stage', 'No stage'],
+          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+        });
+      }
+      return res.status(200).json({
+        followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
+        preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
+      });
+    }
+
+    if (
+      selectedMentionedAsset &&
+      selectedMentionedAsset.category === 'Furniture' &&
+      !selectedMentionedAsset.name.toLowerCase().includes('table') &&
+      (selectedMentionedAsset.name.toLowerCase().includes('chair') || selectedMentionedAsset.name.toLowerCase().includes('stool')) &&
+      guestZoneFromBrief?.onlyChairs &&
+      !assistantAskedForSecondaryZoneChair &&
+      structuredSpaceConversation
+    ) {
+      return res.status(200).json({
+        followUp: `Great choice. How would you like those ${guestZoneFromBrief.count || effectiveGuestCount || 1} ${selectedMentionedAsset.name} seats arranged on the ${guestZoneFromBrief.side || 'main'} side?`,
+        choices: arrangementChoices,
+        preview: buildChairOnlyZonePreview(selectedMentionedAsset.name, selectedStageForFlow, selectedStagePlacement),
+      });
+    }
+
+    if (
+      selectedMentionedAsset &&
+      selectedMentionedAsset.category === 'Furniture' &&
+      !selectedMentionedAsset.name.toLowerCase().includes('table') &&
+      (selectedMentionedAsset.name.toLowerCase().includes('chair') || selectedMentionedAsset.name.toLowerCase().includes('stool')) &&
+      assistantAskedForTableChoice &&
+      structuredSpaceConversation
+    ) {
+      return res.status(200).json({
+        followUp: `I can use ${selectedMentionedAsset.name} as seating, but I still need the main table or seating setup for the ${guestZoneFromBrief?.side || 'main'} guest area. What table would you like me to pair it with?`,
+        assetSelection: {
+          category: 'table',
+          message: 'Select a table or seating setup',
+          options: guestSetupAssets,
+        },
+        preview: buildRoomShellPreview(),
+      });
+    }
+
+    if (
+      tableAssetSelected &&
+      (assistantAskedForTableChoice || activeSpaceWidthMm || activeSpaceHeightMm) &&
+      !(
+        guestZoneFromBrief?.onlyChairs &&
+        secondaryTableZoneFromBrief &&
+        selectedMentionedAsset &&
+        selectedSecondaryZoneTableForFlow &&
+        selectedMentionedAsset.name === selectedSecondaryZoneTableForFlow.name
+      )
+    ) {
       const assetNameLower = selectedMentionedAsset.name.toLowerCase();
+      const isCoffeeTable = assetNameLower.includes('coffee table');
       const seatCountMatch = assetNameLower.match(/(\d+)\s*seater/i);
-      const standaloneTableNeedsChairs =
-        !seatCountMatch &&
-        !assetNameLower.includes('executive table') &&
-        !assetNameLower.includes('vip table');
+      const standaloneTableNeedsChairs = tableNeedsLooseChairs(selectedMentionedAsset.name);
       const seatCount = chairsPerTableForFlow || (seatCountMatch ? Number(seatCountMatch[1]) : null);
       const inferredTableCount = effectiveGuestCount && seatCount ? Math.max(1, Math.ceil(effectiveGuestCount / seatCount)) : null;
-      const preview: any = roomWidthMm && roomHeightMm
+      const preview: any = activeSpaceWidthMm && activeSpaceHeightMm
         ? {
             ...buildRoomShellPreview(),
             assets: [
@@ -1001,6 +2309,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             ],
           };
 
+      if (effectiveGuestCount && isCoffeeTable && effectiveGuestCount > 8 && !selectedChairForFlow) {
+        return res.status(200).json({
+          followUp: `The ${selectedMentionedAsset.name} reads more like a lounge or side table than a main guest dining table for ${effectiveGuestCount} guests. Do you want to use it for the smaller side zone instead, or would you like to choose a larger main guest table first?`,
+          assetSelection: {
+            category: 'table',
+            message: 'Select a larger main guest table',
+            options: guestSetupAssets.filter((asset) => !asset.name.toLowerCase().includes('coffee table')),
+          },
+          preview,
+        });
+      }
+
       if (!effectiveGuestCount) {
         return res.status(200).json({
           followUp: `How many guests should I plan for with the ${selectedMentionedAsset.name}?`,
@@ -1021,10 +2341,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (standaloneTableNeedsChairs && !chairsPerTableForFlow) {
-        const suggestedChairCount = assetNameLower.includes('cocktail') ? 4 : 6;
+        const suggestedChairCount = getSuggestedChairCountForTable(selectedMentionedAsset.name);
         return res.status(200).json({
           followUp: `How many chairs should I place around each table? I can suggest ${suggestedChairCount} for the ${selectedMentionedAsset.name} unless you want a different number.`,
-          preview: roomWidthMm && roomHeightMm
+          preview: activeSpaceWidthMm && activeSpaceHeightMm
             ? {
                 ...buildRoomShellPreview(),
                 assets: [
@@ -1050,7 +2370,57 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
 
-      if (!stageMentioned) {
+      if (secondaryZoneNeedsTableSelection) {
+        return res.status(200).json({
+          followUp: `You also mentioned the ${secondaryZoneLabelForPrompt}. What table should I use there?`,
+          assetSelection: {
+            category: 'table',
+            message: 'Select a table for the smaller area',
+            options: tableAssets,
+          },
+          preview: {
+            ...preview,
+            tableArrangement: { type: arrangementType, centerX: getZoneCenter(guestZoneFromBrief?.side).x, centerY: getZoneCenter(guestZoneFromBrief?.side).y },
+          },
+        });
+      }
+
+      if (secondaryZoneNeedsChairSelection) {
+        return res.status(200).json({
+          followUp: `What chair should I pair with the ${secondaryZoneLabelForPrompt}?`,
+          assetSelection: {
+            category: 'chair',
+            message: 'Select seating for the smaller area',
+            options: chairAssets,
+          },
+          preview: {
+            ...preview,
+            tableArrangement: { type: arrangementType, centerX: getZoneCenter(guestZoneFromBrief?.side).x, centerY: getZoneCenter(guestZoneFromBrief?.side).y },
+          },
+        });
+      }
+
+      if (secondaryZoneNeedsChairCount) {
+        return res.status(200).json({
+          followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
+          preview: {
+            ...preview,
+            tableArrangement: { type: arrangementType, centerX: getZoneCenter(guestZoneFromBrief?.side).x, centerY: getZoneCenter(guestZoneFromBrief?.side).y },
+          },
+        });
+      }
+
+      if (stageStillRequested && !selectedStageForFlow) {
+        return res.status(200).json({
+          followUp: 'You mentioned a stage. What size would you like it to be? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
+          preview: {
+            ...preview,
+            tableArrangement: { type: arrangementType },
+          },
+        });
+      }
+
+      if (!stageDecisionKnown) {
         return res.status(200).json({
           followUp: 'Would you like to add a stage to your layout?',
           choices: ['Yes, add a stage', 'No stage'],
@@ -1073,25 +2443,101 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (
-      roomWidthMm &&
-      roomHeightMm &&
-      roomBasedConversation &&
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementReply
     ) {
-      const assetNameLower = selectedTableFromHistory!.name.toLowerCase();
-      const seatCountMatch = assetNameLower.match(/(\d+)\s*seater/i);
-      const seatCount = seatCountMatch ? Number(seatCountMatch[1]) : null;
-      const inferredTableCount = effectiveGuestCount && seatCount ? Math.max(1, Math.ceil(effectiveGuestCount / seatCount)) : 1;
+      if (secondaryZoneNeedsTableSelection) {
+        return res.status(200).json({
+          followUp: `You also mentioned the ${secondaryZoneLabelForPrompt}. What table should I use there?`,
+          assetSelection: {
+            category: 'table',
+            message: 'Select a table for the smaller area',
+            options: tableAssets,
+          },
+          preview: {
+            ...buildCustomTablePreview(
+              selectedTableFromHistory!.name,
+              undefined,
+              undefined,
+              getSeatCountForFlowTable(selectedTableFromHistory!.name),
+              getChairAssetNameForFlow()
+            ),
+          },
+        });
+      }
+      if (secondaryZoneNeedsChairSelection) {
+        return res.status(200).json({
+          followUp: `What chair should I pair with the ${secondaryZoneLabelForPrompt}?`,
+          assetSelection: {
+            category: 'chair',
+            message: 'Select seating for the smaller area',
+            options: chairAssets,
+          },
+          preview: {
+            ...buildCustomTablePreview(
+              selectedTableFromHistory!.name,
+              undefined,
+              undefined,
+              getSeatCountForFlowTable(selectedTableFromHistory!.name),
+              getChairAssetNameForFlow()
+            ),
+          },
+        });
+      }
+      if (secondaryZoneNeedsChairCount) {
+        return res.status(200).json({
+          followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
+          preview: {
+            ...buildCustomTablePreview(
+              selectedTableFromHistory!.name,
+              undefined,
+              undefined,
+              getSeatCountForFlowTable(selectedTableFromHistory!.name),
+              getChairAssetNameForFlow()
+            ),
+          },
+        });
+      }
+      if (stageStillRequested && !selectedStageForFlow) {
+        return res.status(200).json({
+          followUp: 'You mentioned a stage. What size would you like it to be? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
+          preview: {
+            ...buildCustomTablePreview(
+              selectedTableFromHistory!.name,
+              undefined,
+              undefined,
+              getSeatCountForFlowTable(selectedTableFromHistory!.name),
+              getChairAssetNameForFlow()
+            ),
+          },
+        });
+      }
+      if (!stageDecisionKnown) {
+        return res.status(200).json({
+          followUp: 'Would you like to add a stage to your layout?',
+          choices: ['Yes, add a stage', 'No stage'],
+          preview: {
+            ...buildCustomTablePreview(
+              selectedTableFromHistory!.name,
+              undefined,
+              undefined,
+              getSeatCountForFlowTable(selectedTableFromHistory!.name),
+              getChairAssetNameForFlow()
+            ),
+          },
+        });
+      }
       return res.status(200).json({
-        followUp: 'Would you like to add a stage to your layout?',
-        choices: ['Yes, add a stage', 'No stage'],
+        followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
         preview: {
           ...buildCustomTablePreview(
             selectedTableFromHistory!.name,
-            undefined,
-            undefined,
+            selectedStageForFlow,
+            selectedStagePlacement,
             getSeatCountForFlowTable(selectedTableFromHistory!.name),
             getChairAssetNameForFlow()
           ),
@@ -1100,9 +2546,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (
-      roomWidthMm &&
-      roomHeightMm &&
-      roomBasedConversation &&
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementAlreadyKnown &&
@@ -1110,12 +2556,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       yesStageReply
     ) {
       return res.status(200).json({
-        followUp: 'Select a stage size or type the stage you want.',
-        assetSelection: {
-          category: 'stage',
-          message: 'Select a stage',
-          options: stageAssets,
-        },
+        followUp: 'What size would you like for the stage? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
         preview: buildCustomTablePreview(
           selectedTableFromHistory!.name,
           undefined,
@@ -1127,9 +2568,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (
-      roomWidthMm &&
-      roomHeightMm &&
-      roomBasedConversation &&
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementAlreadyKnown &&
@@ -1150,9 +2591,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (
-      roomWidthMm &&
-      roomHeightMm &&
-      roomBasedConversation &&
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementAlreadyKnown &&
@@ -1172,9 +2613,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (
-      roomWidthMm &&
-      roomHeightMm &&
-      roomBasedConversation &&
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementAlreadyKnown &&
@@ -1194,9 +2635,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (
-      roomWidthMm &&
-      roomHeightMm &&
-      roomBasedConversation &&
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementAlreadyKnown &&
@@ -1215,9 +2656,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (
-      roomWidthMm &&
-      roomHeightMm &&
-      roomBasedConversation &&
+      activeSpaceWidthMm &&
+      activeSpaceHeightMm &&
+      structuredSpaceConversation &&
       effectiveGuestCount &&
       tableChoiceKnown &&
       arrangementAlreadyKnown &&
@@ -1261,6 +2702,7 @@ Your goal is to guide the user through creating their event space by being inter
 ══════════════════════════════════════════════════════════════
 1.  **CONSULTATIVE PHASE (MANDATORY)**:
     - NEVER return a 'plan' object on the first turn unless the user explicitly says "Generate the plan now" or the request is extremely specific.
+    - NEVER respond with "I did not understand", "Could you rephrase", or similar dead-end fallback text if the user's message is even partially understandable. Infer the most likely intent from context, continue the guided flow, and if something is still missing ask the narrowest next clarifying question.
     - **INITIAL FLOW**: If a user asks to "start a plan", "create a space", or "design an event", YOU MUST ASK: "Would you like to use one of our event location and space options?" and provide choices: ["Marquee", "Grassy field", "Parking lot", "Beach", "Custom"].
     - **PRELOADED SPACES**: If a user selects one:
         - **Marquee**: DO NOT return a plan or grass background immediately. Instead, use "assetSelection": { "category": "marquee", "message": "Excellent! Which marquee would you like to use for your event?" }.
@@ -1270,9 +2712,12 @@ Your goal is to guide the user through creating their event space by being inter
     - **STANDALONE STRUCTURES**: Marquees (and tents) are standalone. DO NOT add walls or rooms around them unless the user explicitly asks for a "room inside a marquee".
     - **PREVIEW DURING SELECTION**: Whenever an asset category or specific asset is selected, ALWAYS include it in the "preview" object so the user can see it in the chat bubble while you continue the conversation.
     - ALWAYS ask for dimensions (e.g., "What are the dimensions of your space?") if the user hasn't provided them yet, EXCEPT when they are selecting a standalone marquee/tent asset, because the marquee itself defines the space footprint.
+    - AFTER the user provides room dimensions for a room-based space, ask them for a plain-language event summary before you start the detailed planning questions. Example: "Tell me in plain language what you want for this event layout."
+    - Use that summary to extract key zones, guest counts, stage intent, and major furniture needs, then ask only the missing follow-up questions one by one.
     - For banquet / table-based layouts, once you know the room size or marquee size, guest count, and table type, ASK for arrangement preference before final generation unless the user already gave one.
     - Arrangement choices to offer: ["Grid", "Linear", "Circular", "Perimeter", "U-Shape", "Boardroom", "Classroom", "Chevron"].
     - Also ask whether they want a stage if they have not mentioned one yet. Stage choices: ["Yes, add a stage", "No stage"].
+    - Stages are NOT chosen from stage assets. Treat every stage as a modular rectangle sized by the user. Each 500mm x 500mm area is one module, and the stage preview should make those modules visible.
     - Ask about at least one more planning detail before final generation if it has not been mentioned yet: center aisle, dance floor, entrance doors, VIP area, buffet/bar area, or presentation space.
     - If the user says "surprise me" or "best arrangement", choose the arrangement type that fits the room best and explain it briefly in the follow-up.
     - If the user replies with "none", "no extras", "nothing else", or "none of that" after you ask about optional extras, treat that as confirmation to proceed with generation if enough planning details are already known.
@@ -1288,6 +2733,9 @@ Your goal is to guide the user through creating their event space by being inter
     - Example: 500 guests / 10 per table = 50 tables.
     - YOU MUST add all 50 tables (or chairsAround groups) to the plan. DO NOT skip items for large numbers.
     - For repeated banquet tables, PREFER one asset object with "count" plus "tableArrangement" instead of one explicit xMm/yMm table object.
+    - When asking the user to select a TABLE, show only table assets.
+    - When asking the user to select a CHAIR or STOOL, do NOT offer sofas.
+    - When you generate loose chairs or stools, preserve at least 600mm spacing between seating elements.
     - If "count" is greater than 1, DO NOT provide the same xMm/yMm for the repeated table asset unless the user explicitly asked for a fixed anchor point.
 4.  **CAPACITY VS ROOM SIZE (STRICT)**:
     - If the requested room dimensions are obviously too small for the requested guest count / table count, DO NOT quietly generate a cramped plan.
@@ -1481,6 +2929,8 @@ ARRANGEMENT & LAYOUT SYNONYMS:
   "linear arrangement" / "single row" / "single column" → tableArrangement.type = "linear"
   "perimeter arrangement" / "around the wall" / "edge arrangement" → tableArrangement.type = "perimeter"
   "u-shape arrangement" / "horseshoe" → tableArrangement.type = "u-shape"
+  "zig zag" / "zig-zag" / "zigzag" / "staggered rows" → tableArrangement.type = "chevron"
+  "semi-circle" / "semi circle" / "arc" / "around the center" → tableArrangement.type = "circular"
   "boardroom arrangement" / "boardroom style" / "conference row" → tableArrangement.type = "boardroom"
   "classroom arrangement" / "training room style" / "rows facing front" → tableArrangement.type = "classroom"
   "chevron arrangement" / "staggered rows" / "zigzag rows" → tableArrangement.type = "chevron"
@@ -1608,7 +3058,7 @@ User: "Make a plan for a 10m x 10m room with 4 tables in a grid, label them Tabl
 
 User: "Create a 15m x 10m room for me."
 {
-  "followUp": "I've drafted a 15m x 10m empty space for you. What kind of setup do you want here, and roughly how many guests should I plan for?",
+  "followUp": "I've drafted a 15m x 10m empty space for you. In plain language, tell me what you want for this event layout. For example: \"40 guests on the left side, a table with 2 chairs on the right, and a stage at the top.\"",
   "preview": {
     "walls": [{ "widthMm": 15000, "heightMm": 10000, "wallType": "enclosure-150" }]
   }
@@ -1950,8 +3400,8 @@ ${obstaclesContext}`;
         let tags = [cat, singularCat];
 
         // Map common synonyms to tags with broader scope
-        if (['chair', 'seat', 'stool', 'sofa', 'sitting'].some(t => cat.includes(t))) {
-          tags = ['chair', 'seating', 'stool', 'seat', 'sofa', 'sitting', 'furniture'];
+        if (['chair', 'seat', 'stool', 'sitting'].some(t => cat.includes(t))) {
+          tags = ['chair', 'seating', 'stool', 'seat', 'sitting', 'furniture'];
         } else if (['table', 'desk', 'surface', 'banquet'].some(t => cat.includes(t))) {
           tags = ['table', 'furniture', 'surface', 'desk', 'tables'];
         } else if (['marquee', 'tent', 'structure', 'cover'].some(t => cat.includes(t))) {
@@ -1975,6 +3425,20 @@ ${obstaclesContext}`;
       }
 
       // Safety limits: max 40 items if 'all' to avoid breaking the UI grid, but still show a comprehensive list
+      if (category.includes('chair') || category.includes('seat') || category.includes('stool')) {
+        options = options.filter((asset) => {
+          const label = asset.name.toLowerCase();
+          return (
+            (label.includes('chair') || label.includes('stool')) &&
+            !label.includes('sofa') &&
+            !label.includes('table')
+          );
+        });
+      }
+      if (category.includes('table')) {
+        options = options.filter((asset) => asset.name.toLowerCase().includes('table'));
+      }
+
       parsed.assetSelection.options = options.slice(0, 50);
     }
 

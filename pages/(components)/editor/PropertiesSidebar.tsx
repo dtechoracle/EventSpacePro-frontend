@@ -168,6 +168,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const labelArrows = useProjectStore(s => s.labelArrows);
   const dimensions = useProjectStore(s => s.dimensions);
   const groups = useProjectStore(s => s.groups);
+  const comments = useProjectStore(s => s.comments);
+  const resolveComment = useProjectStore(s => s.resolveComment);
+  const removeComment = useProjectStore(s => s.removeComment);
   const updateShape = useProjectStore(s => s.updateShape);
   const updateAsset = useProjectStore(s => s.updateAsset);
   const updateWall = useProjectStore(s => s.updateWall);
@@ -201,6 +204,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const [numberingMode, setNumberingMode] = useState<TableNumberingMode>('auto');
   const [numberingPattern, setNumberingPattern] = useState<TableNumberingPattern>('linear');
   const [numberingDirection, setNumberingDirection] = useState<TableNumberingDirection>('from-top-left-to-right');
+  const [activeInspectorTab, setActiveInspectorTab] = useState<'comments' | 'properties'>('properties');
   const textStyleFonts = TEXT_STYLE_FONTS;
 
   // Local state to prevent cursor jumping when typing text annotations
@@ -570,99 +574,199 @@ export default function PropertiesSidebar(): React.JSX.Element {
   };
 
   return (
-    <aside className="h-screen flex flex-col p-3 pb-24 overflow-y-auto text-sm bg-white text-gray-900">
+    <aside className="h-screen flex flex-col border-l border-slate-200 bg-[#fcfcfd] text-sm text-slate-900">
       {showShareModal && (
         <ShareModal onClose={() => setShowShareModal(false)} slug={slug as string} />
       )}
 
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center group cursor-pointer" onClick={() => setShowShareModal(true)}>
-          <div className="flex -space-x-3 transition-all duration-300">
-            {/* Current User */}
-            <div
-              className="inline-block h-5 w-5 rounded-full ring-2 ring-white bg-[#272235] flex items-center justify-center text-white text-xs font-bold z-40 shadow-sm relative transition-transform group-hover:scale-105"
-              title={`${userName} (You)`}
-            >
-              {user?.avatar ? (
-                <img src={user.avatar} className="h-full w-full rounded-full object-cover" />
-              ) : (
-                <span>{user?.firstName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'Y'}</span>
-              )}
-              {/* Active Status Indicator */}
-              <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full"></div>
+      <div className="sticky top-0 z-20 border-b border-slate-200 bg-[#fcfcfd]/95 px-3 pb-3 pt-3 backdrop-blur">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-slate-900">
+              {projectName || "Untitled Event"}
             </div>
-
-            {/* Collaborators */}
-            {collaborators.map((collab, idx) => (
-              <div
-                key={collab.email}
-                className={`inline-block h-5 w-5 rounded-full ring-2 ring-white flex items-center justify-center text-white text-[9px] font-bold shadow-sm relative transition-all duration-300 group-hover:translate-x-1 ${collab.isPending ? 'opacity-80' : ''}`}
-                style={{
-                  backgroundColor: getAvatarColor(collab.email),
-                  zIndex: 30 - idx,
-                  border: collab.isPending ? '2px dashed #d1d5db' : 'none'
-                }}
-                title={`${collab.name}${collab.isPending ? ' (Pending)' : ''}`}
-              >
-                {collab.avatar ? (
-                  <img src={collab.avatar} className="h-full w-full rounded-full object-cover" />
-                ) : (
-                  <span>{collab.name.charAt(0).toUpperCase()}</span>
-                )}
-                {collab.isPending && (
-                  <div className="absolute -top-1 -right-1 bg-amber-400 w-3 h-3 rounded-full border-2 border-white" title="Invitation Pending"></div>
-                )}
-              </div>
-            ))}
-
-            {collaborators.length > 5 && (
-              <div
-                className="inline-block h-5 w-5 rounded-full ring-2 ring-white bg-gray-50 flex items-center justify-center text-gray-400 text-[8px] font-bold z-0"
-                title={`+${collaborators.length - 5} more`}
-              >
-                +{collaborators.length - 5}
-              </div>
-            )}
           </div>
-
-          <button
-            className="ml-4 h-8 w-8 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center hover:bg-[#272235] hover:text-white transition-all duration-300 border border-transparent hover:shadow-lg"
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowShareModal(true);
-            }}
-          >
-            <FaPlus size={10} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                hasUnsavedChanges
+                  ? "border-blue-600 bg-white text-blue-600 hover:bg-blue-50"
+                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+              } ${isSaving ? "cursor-not-allowed opacity-50" : ""}`}
+              onClick={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? "Saving..." : hasUnsavedChanges ? "Save" : "Saved"}
+            </button>
+            <button
+              className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:bg-slate-50"
+              onClick={() => open3D && open3D()}
+              title="Preview in 3D"
+            >
+              <IoPlayOutline size={14} />
+            </button>
+            <button
+              className="rounded-lg bg-[var(--accent)] px-3 py-2 text-[11px] font-semibold text-white transition-opacity hover:opacity-90"
+              onClick={() => setShowShareModal(true)}
+            >
+              Share
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            className={`px-2 py-1.5 rounded text-xs border flex items-center gap-1 transition-colors
-                ${hasUnsavedChanges
-                ? 'border-blue-600 text-blue-600 bg-white hover:bg-blue-50'
-                : 'border-gray-200 text-gray-500 bg-white hover:bg-gray-50'
-              }
-                ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}
-            `}
-            onClick={handleSave}
-            disabled={isSaving}
-          >
-            {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save' : 'Saved'}
-          </button>
 
-          <button className="p-1 rounded hover:bg-gray-100" onClick={() => open3D && open3D()}>
-            <IoPlayOutline size={14} />
-          </button>
-          <button
-            className="border border-gray-300 text-gray-700 px-2 py-1.5 rounded text-xs bg-white hover:bg-gray-50 transition-colors"
-            onClick={() => setShowShareModal(true)}
-          >
-            Share
-          </button>
+        <div className="mb-3 border-b border-slate-200 pb-3">
+          <div className="flex items-center justify-between gap-3">
+            <div
+              className="flex min-w-0 items-center group cursor-pointer"
+              onClick={() => setShowShareModal(true)}
+            >
+              <div className="flex -space-x-3 transition-all duration-300">
+                <div
+                  className="relative z-40 inline-block h-6 w-6 rounded-full bg-[#272235] text-xs font-bold text-white ring-2 ring-white shadow-sm transition-transform group-hover:scale-105"
+                  title={`${userName} (You)`}
+                >
+                  {user?.avatar ? (
+                    <img src={user.avatar} className="h-full w-full rounded-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center">
+                      {user?.firstName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'Y'}
+                    </span>
+                  )}
+                  <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-green-500"></div>
+                </div>
 
+                {collaborators.map((collab, idx) => (
+                  <div
+                    key={collab.email}
+                    className={`relative inline-block h-6 w-6 rounded-full text-[9px] font-bold text-white ring-2 ring-white shadow-sm transition-all duration-300 group-hover:translate-x-1 ${collab.isPending ? 'opacity-80' : ''}`}
+                    style={{
+                      backgroundColor: getAvatarColor(collab.email),
+                      zIndex: 30 - idx,
+                      border: collab.isPending ? '2px dashed #d1d5db' : 'none'
+                    }}
+                    title={`${collab.name}${collab.isPending ? ' (Pending)' : ''}`}
+                  >
+                    {collab.avatar ? (
+                      <img src={collab.avatar} className="h-full w-full rounded-full object-cover" />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center">
+                        {collab.name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    {collab.isPending && (
+                      <div className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-white bg-amber-400" title="Invitation Pending"></div>
+                    )}
+                  </div>
+                ))}
+
+                {collaborators.length > 5 && (
+                  <div
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-50 text-[8px] font-bold text-slate-400 ring-2 ring-white"
+                    title={`+${collaborators.length - 5} more`}
+                  >
+                    +{collaborators.length - 5}
+                  </div>
+                )}
+              </div>
+
+              <div className="ml-4 min-w-0">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Collaborators
+                </div>
+                <div className="truncate text-xs text-slate-600">
+                  Manage access and workspace visibility
+                </div>
+              </div>
+            </div>
+            <button
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-400 transition-all duration-300 hover:bg-slate-900 hover:text-white hover:shadow-lg"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowShareModal(true);
+              }}
+              title="Add collaborator"
+            >
+              <FaPlus size={10} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+            <button
+              type="button"
+              onClick={() => setActiveInspectorTab('comments')}
+              className={`rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                activeInspectorTab === 'comments'
+                  ? 'border border-blue-100 bg-blue-50 text-[var(--accent)] shadow-sm'
+                  : 'text-slate-400'
+              }`}
+            >
+              Comments
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveInspectorTab('properties')}
+              className={`rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                activeInspectorTab === 'properties'
+                  ? 'border border-blue-100 bg-blue-50 text-[var(--accent)] shadow-sm'
+                  : 'text-slate-400'
+              }`}
+            >
+              Properties
+            </button>
+          </div>
         </div>
       </div>
 
+      <div className="flex-1 overflow-y-auto px-3 pb-24 pt-4">
+      {activeInspectorTab === 'comments' && (
+        <div className="mb-4 space-y-2">
+          {comments.length === 0 ? (
+            <div className="px-1 py-3 text-sm text-slate-500">
+              No comments added yet.
+            </div>
+          ) : (
+            comments
+              .slice()
+              .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+              .map((comment) => (
+                <div key={comment.id} className="border-b border-slate-200 pb-2 pt-1 last:border-b-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-semibold text-slate-800">{comment.author || 'Unknown'}</div>
+                      <div className="mt-0.5 text-[10px] text-slate-400">
+                        {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : 'No timestamp'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 whitespace-pre-wrap text-[12px] leading-5 text-slate-700">
+                    {comment.content || 'Empty comment'}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    {!comment.resolved && (
+                      <button
+                        type="button"
+                        onClick={() => resolveComment(comment.id)}
+                        className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-medium text-slate-600 transition-colors hover:bg-slate-50"
+                      >
+                        Resolved
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeComment(comment.id)}
+                      className="rounded-md border border-rose-200 px-2 py-1 text-[10px] font-medium text-rose-600 transition-colors hover:bg-rose-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))
+          )}
+        </div>
+      )}
+      <div className={activeInspectorTab === 'comments' ? 'hidden' : ''}>
       {/* Grouping Controls Removed as per request (moved to Context Menu) */}
 
       {/* Dimension Tool Properties - Show when tool is active */}
@@ -700,20 +804,19 @@ export default function PropertiesSidebar(): React.JSX.Element {
       )}
 
       {/* Model Section */}
-      <div className="mb-5">
+      <div className="mb-4 border-b border-slate-200 pb-2">
         <button
-          className="flex items-center gap-1 text-xs font-semibold tracking-wide mb-1"
+          className="flex w-full items-center justify-between px-0 py-3 text-left"
           onClick={() => setShowModel((s) => !s)}
         >
-          {showModel ? (
-            <FaChevronDown size={12} />
-          ) : (
-            <FaChevronRight size={12} />
-          )}{" "}
-          Model
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Modes</div>
+            <div className="mt-1 text-sm font-semibold text-slate-900">Workspace</div>
+          </div>
+          {showModel ? <FaChevronDown size={12} className="text-slate-400" /> : <FaChevronRight size={12} className="text-slate-400" />}
         </button>
         {showModel && (
-          <div className="space-y-3 pl-5 text-xs">
+          <div className="space-y-3 border-t border-slate-100 px-0 pb-4 pt-3 text-xs">
             <div className="flex justify-between items-center">
               <span className="text-black">Event Name</span>
               <input
@@ -789,20 +892,19 @@ export default function PropertiesSidebar(): React.JSX.Element {
       </div>
 
       {/* Canvas / Asset Properties Section */}
-      <div className="mb-3">
+      <div className="mb-4 border-b border-slate-200 pb-2">
         <button
-          className="flex items-center gap-1 text-xs font-semibold tracking-wide mb-1"
+          className="flex w-full items-center justify-between px-0 py-3 text-left"
           onClick={() => setShowCanvas((s) => !s)}
         >
-          {showCanvas ? (
-            <FaChevronDown size={12} />
-          ) : (
-            <FaChevronRight size={12} />
-          )}{" "}
-          Model Pages
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Layout</div>
+            <div className="mt-1 text-sm font-semibold text-slate-900">Canvas & Pages</div>
+          </div>
+          {showCanvas ? <FaChevronDown size={12} className="text-slate-400" /> : <FaChevronRight size={12} className="text-slate-400" />}
         </button>
         {showCanvas && (
-          <div className="space-y-1 pl-5 text-xs">
+          <div className="space-y-1 border-t border-slate-100 px-0 pb-4 pt-3 text-xs">
             {/* Canvas Name */}
             <div className="flex justify-between items-center">
               <span>Name</span>
@@ -3386,9 +3488,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
           </p>
         </div>
       )}
-
-
-      <ExportPanel />
+      </div>
+        <ExportPanel />
+      </div>
     </aside >
   );
 }

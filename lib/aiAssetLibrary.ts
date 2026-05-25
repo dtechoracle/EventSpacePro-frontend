@@ -30,7 +30,13 @@ export const AI_ASSET_KNOWLEDGE: AIAssetKnowledge[] = ASSET_LIBRARY.map((asset) 
     }
 
     if (!isMarquee && (name.includes('chair') || name.includes('stool') || name.includes('sofa') || name.includes('seating'))) {
-        tags.push('chair', 'seating', 'furniture', 'seat', 'sitting');
+        tags.push('furniture');
+        if (name.includes('chair') || name.includes('stool') || name.includes('seating')) {
+            tags.push('chair', 'seating', 'seat', 'sitting', 'stool');
+        }
+        if (name.includes('sofa')) {
+            tags.push('sofa', 'lounge', 'couch');
+        }
         if (name.includes('office')) aliases.push('desk chair', 'work chair');
         if (name.includes('event')) aliases.push('banquet chair', 'conference chair');
         if (name.includes('stool')) aliases.push('high chair', 'bar stool');

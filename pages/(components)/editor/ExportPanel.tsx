@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { FaDownload, FaExpand, FaTimes, FaPlus, FaUserCircle, FaCheckCircle, FaExclamationCircle } from "react-icons/fa";
+import { FaDownload, FaExpand, FaTimes, FaPlus, FaUserCircle, FaCheckCircle, FaExclamationCircle, FaChevronDown, FaChevronRight } from "react-icons/fa";
 import { Download, Plus, X, Upload } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { useEditorStore } from "@/store/editorStore";
@@ -385,6 +385,7 @@ export default function ExportPanel() {
   }, [projectName]);
 
   const hasSelection = selectedIds.length > 0;
+  const primaryOption = exportOptions[0];
 
   const allItems: AssetInstance[] = useMemo(() => {
     const items: any[] = [
@@ -1334,59 +1335,107 @@ const renderAssetToCanvas = (
   };
 
   return (
-    <div className="border-t border-gray-100 pt-6 mt-6 font-sans">
-      <div className="mb-4">
-        <h3 className="text-sm font-bold text-gray-900 flex items-center justify-between">
-          Export / Import
-          <button onClick={() => setIsExpanded(!isExpanded)} className="p-1 hover:bg-gray-100 rounded transition-colors">
-            {isExpanded ? <FaTimes size={10} className="text-gray-400" /> : <FaPlus size={10} className="text-gray-400" />}
-          </button>
-        </h3>
+    <div className="mt-4 border-t border-slate-200 pt-4 font-sans">
+      <div className="flex items-center justify-between pb-3">
+        <h3 className="text-sm font-semibold text-slate-900">Export</h3>
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50"
+          title={isExpanded ? "Collapse export" : "Expand export"}
+        >
+          {isExpanded ? <FaTimes size={10} /> : <FaPlus size={10} />}
+        </button>
       </div>
 
-      {isExpanded && (
-        <div className="space-y-4">
+      {primaryOption && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+            <select
+              className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none"
+              value={primaryOption.paperSize}
+              onChange={e => setExportOptions(exportOptions.map(o => o.id === primaryOption.id ? { ...o, paperSize: e.target.value as PaperSize } : o))}
+            >
+              {Object.keys(PAPER_SIZES).map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select
+              className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-800 outline-none"
+              value={primaryOption.format}
+              onChange={e => setExportOptions(exportOptions.map(o => o.id === primaryOption.id ? { ...o, format: e.target.value as ExportFormat } : o))}
+            >
+              <option value="pdf">PDF</option>
+              <option value="png">PNG</option>
+              <option value="jpg">JPG</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => setExportOptions([...exportOptions, { id: `${exportOptions.length + 1}`, paperSize: 'A4', format: 'pdf', exportSelection: false, isProfessional: true }])}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50"
+              title="Add export config"
+            >
+              <FaPlus size={10} />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-4 text-[11px] text-slate-600">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={primaryOption.exportSelection}
+                disabled={!hasSelection}
+                onChange={e => setExportOptions(exportOptions.map(o => o.id === primaryOption.id ? { ...o, exportSelection: e.target.checked } : o))}
+                className="h-3.5 w-3.5 rounded border-gray-300 text-slate-800"
+              />
+              <span className={!hasSelection ? "text-slate-300" : ""}>Selection only</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={primaryOption.isProfessional}
+                onChange={e => setExportOptions(exportOptions.map(o => o.id === primaryOption.id ? { ...o, isProfessional: e.target.checked } : o))}
+                className="h-3.5 w-3.5 rounded border-gray-300 text-slate-800"
+              />
+              <span>Professional</span>
+            </label>
+          </div>
+
+          <button
+            onClick={() => {
+              if (primaryOption.isProfessional) { setCurrentOption(primaryOption); setShowProfessionalModal(true); }
+              else handleExport(primaryOption);
+            }}
+            disabled={isExporting}
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-900 transition-colors hover:bg-slate-50"
+          >
+            {isExporting ? <FaExpand className="animate-spin" size={12} /> : <FaDownload size={12} />}
+            {isExporting ? `Exporting ${primaryOption.format.toUpperCase()}...` : `Export ${projectName || "Layout"}`}
+          </button>
+        </div>
+      )}
+
+      {isExpanded && primaryOption && (
+        <div className="space-y-3 border-t border-slate-100 pt-3">
           {exportOptions.map(opt => (
-            <div key={opt.id} className="p-3 bg-gray-50 border border-gray-100 rounded-xl hover:border-slate-300 transition-all group relative">
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <select className="bg-white border-gray-200 text-[10px] p-1.5 rounded-lg font-bold text-gray-700 outline-none" value={opt.paperSize} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, paperSize: e.target.value as PaperSize}:o))}>
+            <div key={opt.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Layout {opt.id}
+                </div>
+                <div className="text-[10px] font-medium text-slate-500">
+                  {opt.paperSize} · {opt.format.toUpperCase()}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700 outline-none" value={opt.paperSize} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, paperSize: e.target.value as PaperSize}:o))}>
                   {Object.keys(PAPER_SIZES).map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                <select className="bg-white border-gray-200 text-[10px] p-1.5 rounded-lg font-bold text-slate-800 outline-none" value={opt.format} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, format: e.target.value as ExportFormat}:o))}>
+                <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700 outline-none" value={opt.format} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, format: e.target.value as ExportFormat}:o))}>
                   <option value="pdf">PDF</option>
                   <option value="png">PNG</option>
                   <option value="jpg">JPG</option>
                 </select>
               </div>
-
-              <div className="flex flex-col gap-1 mb-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={opt.exportSelection} disabled={!hasSelection} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, exportSelection: e.target.checked}:o))} className="w-3 h-3 rounded border-gray-300 text-slate-800"/>
-                  <span className={`text-[10px] font-bold ${!hasSelection ? 'text-gray-300' : 'text-gray-600'}`}>Current Selection</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={opt.isProfessional} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, isProfessional: e.target.checked}:o))} className="w-3 h-3 rounded border-gray-300 text-slate-800"/>
-                  <span className="text-[10px] font-bold text-slate-800">Professional Layout</span>
-                </label>
-              </div>
-
-              <button 
-                onClick={() => {
-                  if (opt.isProfessional) { setCurrentOption(opt); setShowProfessionalModal(true); }
-                  else handleExport(opt);
-                }}
-                disabled={isExporting}
-                className="w-full h-11 border-2 border-[var(--accent)] text-[var(--accent)] rounded-xl text-xs font-bold hover:bg-[var(--accent)] hover:text-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-              >
-                {isExporting ? <FaExpand className="animate-spin" size={12}/> : <FaDownload size={12}/>}
-                {isExporting ? 'Exporting...' : `Export ${opt.format.toUpperCase()}`}
-              </button>
             </div>
           ))}
-          
-          <button onClick={() => setExportOptions([...exportOptions, { id: `${exportOptions.length+1}`, paperSize: 'A4', format: 'pdf', exportSelection: false, isProfessional: true }])} className="w-full py-2 border border-dashed border-gray-200 rounded-lg text-[10px] font-bold text-gray-400 hover:text-slate-800 hover:border-slate-300 transition-all">
-            + New Layout Config
-          </button>
         </div>
       )}
 

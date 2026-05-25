@@ -12,6 +12,8 @@ interface ProjectCollaborator {
   role: string;
   status?: string;
   isPending?: boolean;
+  name?: string;
+  avatar?: string;
 }
 
 export default function ShareModal({ onClose, slug: propSlug }: { onClose: () => void; slug?: string }) {
@@ -20,6 +22,8 @@ export default function ShareModal({ onClose, slug: propSlug }: { onClose: () =>
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("editor");
   const [isInviting, setIsInviting] = useState(false);
+  const [roleUpdatingEmail, setRoleUpdatingEmail] = useState<string | null>(null);
+  const [removingEmail, setRemovingEmail] = useState<string | null>(null);
 
   // Fallback to router slug if not provided via props
   const slug = propSlug;
@@ -57,10 +61,13 @@ export default function ShareModal({ onClose, slug: propSlug }: { onClose: () =>
 
     setIsInviting(true);
     try {
-      // Use the invites endpoint which handles pending users correctly
-      await apiRequest(`/projects/${slug}/invites`, "POST", { 
-        email,
-        role: role as any
+      await apiRequest(`/projects/${slug}/users`, "POST", {
+        users: [
+          {
+            email,
+            role: role as any,
+          },
+        ],
       }, true);
       
       toast.success(`Invitation sent to ${email}`);
@@ -76,17 +83,34 @@ export default function ShareModal({ onClose, slug: propSlug }: { onClose: () =>
 
   const handleCancelInvite = async (inviteEmail: string) => {
     if (!slug) return;
+    setRemovingEmail(inviteEmail);
     try {
-      // Try to cancel the invite
-      await apiRequest(`/projects/${slug}/invites/${inviteEmail}`, "DELETE", null, true).catch(async () => {
-         // Fallback if needed or different structure
-         return apiRequest(`/projects/${slug}/invites`, "DELETE", { email: inviteEmail }, true);
-      });
+      await apiRequest(`/projects/${slug}/users`, "DELETE", { email: inviteEmail }, true);
       toast.success(`Invitation for ${inviteEmail} cancelled`);
       refetchProject();
     } catch (err: any) {
       console.error("Failed to cancel invitation:", err);
       toast.error(err.message || "Failed to cancel invitation");
+    } finally {
+      setRemovingEmail(null);
+    }
+  };
+
+  const handleUpdateRole = async (targetEmail: string, nextRole: string) => {
+    if (!slug) return;
+    setRoleUpdatingEmail(targetEmail);
+    try {
+      await apiRequest(`/projects/${slug}/users/role`, "PUT", {
+        email: targetEmail,
+        role: nextRole,
+      }, true);
+      toast.success(`Updated ${targetEmail} to ${nextRole}`);
+      refetchProject();
+    } catch (err: any) {
+      console.error("Failed to update collaborator role:", err);
+      toast.error(err.message || "Failed to update collaborator role");
+    } finally {
+      setRoleUpdatingEmail(null);
     }
   };
 
@@ -266,16 +290,33 @@ export default function ShareModal({ onClose, slug: propSlug }: { onClose: () =>
                        {collab.isPending ? (
                          <div className="flex items-center gap-2">
                             <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 uppercase tracking-wider shadow-sm">Pending</span>
-                            <button 
+                           <button 
                               onClick={() => handleCancelInvite(collab.email)}
+                              disabled={removingEmail === collab.email}
                               className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                               title="Cancel Invitation"
                             >
-                              <FaTimes size={12} />
+                              {removingEmail === collab.email ? (
+                                <FaSpinner className="animate-spin" size={12} />
+                              ) : (
+                                <FaTimes size={12} />
+                              )}
                             </button>
                          </div>
                        ) : (
-                         <span className="text-[10px] font-bold text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg uppercase tracking-wider">{collab.role}</span>
+                         <div className="relative group">
+                           <select
+                             value={collab.role}
+                             disabled={roleUpdatingEmail === collab.email}
+                             onChange={(e) => handleUpdateRole(collab.email, e.target.value)}
+                             className="h-8 rounded-lg border border-slate-200 bg-slate-50 pl-3 pr-8 text-[10px] font-bold uppercase tracking-wider text-gray-500 outline-none transition-all hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                           >
+                             <option value="viewer">Viewer</option>
+                             <option value="editor">Editor</option>
+                             <option value="owner">Owner</option>
+                           </select>
+                           <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
+                         </div>
                        )}
                      </div>
                    </motion.div>

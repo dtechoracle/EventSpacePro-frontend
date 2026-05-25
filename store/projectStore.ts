@@ -261,6 +261,9 @@ export type Comment = {
     author: string;
     timestamp: number;
     resolved: boolean;
+    color?: string;
+    userId?: string;
+    createdAt?: string;
 };
 
 export type TextAnnotation = {
@@ -1318,6 +1321,25 @@ export const useProjectStore = create<ProjectState>()(
                 try {
                     const response = await apiRequest(`/projects/${slug}/events/${eventId}`, 'GET');
                     const data = response.data;
+                    const normalizeLoadedComments = (rawComments: any[] = []) =>
+                        rawComments
+                            .filter(Boolean)
+                            .map((comment: any) => ({
+                                id: String(comment.id || comment._id || crypto.randomUUID()),
+                                x: Number(comment.x || 0),
+                                y: Number(comment.y || 0),
+                                content: String(comment.content ?? comment.text ?? ''),
+                                author: String(comment.author || comment.userId || 'Unknown'),
+                                timestamp: comment.timestamp
+                                    ? Number(comment.timestamp)
+                                    : comment.createdAt
+                                        ? new Date(comment.createdAt).getTime()
+                                        : Date.now(),
+                                resolved: Boolean(comment.resolved),
+                                color: comment.color,
+                                userId: comment.userId,
+                                createdAt: comment.createdAt,
+                            }));
 
                     if (data.canvasData) {
                         // Load from rich canvasData if available
@@ -1342,14 +1364,18 @@ export const useProjectStore = create<ProjectState>()(
                             textAnnotations: textAnnotations || [],
                             dimensions: dimensions || [],
                             labelArrows: labelArrows || [],
-                            comments: comments || [],
+                            comments: normalizeLoadedComments(comments || data.comments || []),
                             hasUnsavedChanges: false,
                             lastSaved: new Date(),
                         });
                         console.log(`✓ Loaded event ${eventId} from backend with ${shapes?.length || 0} shapes and ${assets?.length || 0} assets`);
                     } else if (data.canvasAssets) {
                         // Fallback to legacy canvasAssets
-                        set({ hasUnsavedChanges: false, lastSaved: new Date() });
+                        set({
+                            comments: normalizeLoadedComments(data.comments || []),
+                            hasUnsavedChanges: false,
+                            lastSaved: new Date(),
+                        });
                         console.log(`✓ Loaded event ${eventId} from backend (legacy format)`);
                     }
                 } catch (error: any) {
@@ -1412,6 +1438,18 @@ export const useProjectStore = create<ProjectState>()(
                         textAnnotations, dimensions, labelArrows, groups, wallSegments,
                         activeLayerId, comments
                     };
+                    const eventComments = comments.map(comment => ({
+                        id: comment.id,
+                        x: comment.x,
+                        y: comment.y,
+                        text: comment.content,
+                        author: comment.author,
+                        color: comment.color,
+                        userId: comment.userId,
+                        resolved: comment.resolved,
+                        timestamp: comment.timestamp,
+                        createdAt: comment.createdAt,
+                    }));
 
                     // CRITICAL: Save complete asset data, not just id/type/x/y
                     // Convert shapes, assets, and walls to canvasAssets format with ALL properties
@@ -1523,7 +1561,8 @@ export const useProjectStore = create<ProjectState>()(
                         type: eventType,
                         canvases: canvases,
                         canvasData,
-                        canvasAssets
+                        canvasAssets,
+                        comments: eventComments,
                     };
 
                     console.log(`[projectStore] Saving to DATABASE via PUT /projects/${slug}/events/${eventId}:`, {

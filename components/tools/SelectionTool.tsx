@@ -11,6 +11,8 @@ interface SelectionToolProps {
 }
 
 export default function SelectionTool({ isActive, viewportSize }: SelectionToolProps) {
+    const ROTATION_SNAP_STEP = 15;
+    const ROTATION_SNAP_THRESHOLD = 4;
     const selectedIds = useEditorStore(s => s.selectedIds);
     const screenToWorld = useEditorStore(s => s.screenToWorld);
     const zoom = useEditorStore(s => s.zoom);
@@ -338,11 +340,14 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
             const angle = Math.atan2(worldPos.y - centerY, worldPos.x - centerX);
             const startAngleRaw = Math.atan2(initialState.startY - centerY, initialState.startX - centerX);
             const deltaRad = angle - startAngleRaw;
-            const deltaDeg = deltaRad * (180 / Math.PI);
+            const deltaDegRaw = deltaRad * (180 / Math.PI);
+            const nearestSnap = Math.round(deltaDegRaw / ROTATION_SNAP_STEP) * ROTATION_SNAP_STEP;
+            const deltaDeg = Math.abs(deltaDegRaw - nearestSnap) <= ROTATION_SNAP_THRESHOLD ? nearestSnap : deltaDegRaw;
             setCurrentRotation(deltaDeg);
 
-            const cosR = Math.cos(deltaRad);
-            const sinR = Math.sin(deltaRad);
+            const appliedDeltaRad = deltaDeg * (Math.PI / 180);
+            const cosR = Math.cos(appliedDeltaRad);
+            const sinR = Math.sin(appliedDeltaRad);
 
             const batchUpdates: any[] = [];
             initialState.items.forEach(item => {
@@ -509,6 +514,19 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
     const boxTopRight = { x: clampX(worldToScreenPoint(p2w.x, p2w.y).x), y: clampY(worldToScreenPoint(p2w.x, p2w.y).y) };
     const boxBottomLeft = { x: clampX(worldToScreenPoint(p3w.x, p3w.y).x), y: clampY(worldToScreenPoint(p3w.x, p3w.y).y) };
     const boxBottomRight = { x: clampX(worldToScreenPoint(p4w.x, p4w.y).x), y: clampY(worldToScreenPoint(p4w.x, p4w.y).y) };
+    const centerScreen = worldToScreenPoint(x, y);
+    const rotationGuideLength = Math.max(80, Math.max(width, height) * zoom * 0.7);
+    const rotationGuideAngle = (effectiveRotation * Math.PI) / 180;
+    const rotationGuideStart = {
+        x: centerScreen.x - Math.cos(rotationGuideAngle) * rotationGuideLength,
+        y: centerScreen.y - Math.sin(rotationGuideAngle) * rotationGuideLength
+    };
+    const rotationGuideEnd = {
+        x: centerScreen.x + Math.cos(rotationGuideAngle) * rotationGuideLength,
+        y: centerScreen.y + Math.sin(rotationGuideAngle) * rotationGuideLength
+    };
+    const isRotationSnapped = dragHandle === 'rotate' && Math.abs(currentRotation - Math.round(currentRotation / ROTATION_SNAP_STEP) * ROTATION_SNAP_STEP) < 0.001;
+    const rotationAngleLabel = `${Math.round((((effectiveRotation % 360) + 360) % 360))}°`;
 
     const isTooLarge = width > 50000 || height > 50000;
     const overlayFill = isTooLarge ? "none" : "rgba(59, 130, 246, 0.05)";
@@ -593,6 +611,64 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
 
     return (
         <g data-export-ignore="true">
+            {dragHandle === 'rotate' && (
+                <>
+                    <line
+                        x1={0}
+                        y1={centerScreen.y}
+                        x2={viewportSize.width}
+                        y2={centerScreen.y}
+                        stroke="#22c55e"
+                        strokeWidth={1.5}
+                        strokeDasharray="8 6"
+                        vectorEffect="non-scaling-stroke"
+                    />
+                    <line
+                        x1={centerScreen.x}
+                        y1={0}
+                        x2={centerScreen.x}
+                        y2={viewportSize.height}
+                        stroke="#ef4444"
+                        strokeWidth={1.5}
+                        strokeDasharray="8 6"
+                        vectorEffect="non-scaling-stroke"
+                    />
+                    <line
+                        x1={rotationGuideStart.x}
+                        y1={rotationGuideStart.y}
+                        x2={rotationGuideEnd.x}
+                        y2={rotationGuideEnd.y}
+                        stroke={isRotationSnapped ? "#f59e0b" : "#2563EB"}
+                        strokeWidth={isRotationSnapped ? 2 : 1.5}
+                        strokeDasharray="10 6"
+                        vectorEffect="non-scaling-stroke"
+                    />
+                    <g transform={`translate(${centerScreen.x + 14}, ${centerScreen.y - 14})`}>
+                        <rect
+                            x={0}
+                            y={-18}
+                            rx={6}
+                            ry={6}
+                            width={46}
+                            height={24}
+                            fill="white"
+                            stroke={isRotationSnapped ? "#f59e0b" : "#3B82F6"}
+                            strokeWidth={1}
+                            vectorEffect="non-scaling-stroke"
+                        />
+                        <text
+                            x={23}
+                            y={-2}
+                            textAnchor="middle"
+                            fontSize={12}
+                            fontWeight={600}
+                            fill={isRotationSnapped ? "#b45309" : "#1D4ED8"}
+                        >
+                            {rotationAngleLabel}
+                        </text>
+                    </g>
+                </>
+            )}
             {/* Move handle (transparent overlay) */}
             <polygon 
                 points={`${boxTopLeft.x},${boxTopLeft.y} ${boxTopRight.x},${boxTopRight.y} ${boxBottomRight.x},${boxBottomRight.y} ${boxBottomLeft.x},${boxBottomLeft.y}`} 

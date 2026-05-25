@@ -4,7 +4,7 @@ import Image from "next/image"
 import { ASSET_LIBRARY, AssetDef, AssetCategory, ASSET_CATEGORIES } from "@/lib/assets"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { InlineSvg } from "@/components/tools/InlineSvg"
+import { InlineSvg, isKnownMissingSvg, validateSvgPath } from "@/components/tools/InlineSvg"
 
 type AssetsModalProps = {
   isOpen: boolean
@@ -22,6 +22,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
   const [activeCategory, setActiveCategory] =
     useState<AssetCategory>("Furniture")
   const [searchTerm, setSearchTerm] = useState("")
+  const [missingAssetPaths, setMissingAssetPaths] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     setPosition({ x: window.innerWidth / 2 - 220, y: 90 })
@@ -39,6 +40,48 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
   const categoryAssets = useMemo(
     () => ASSET_LIBRARY.filter(a => a.category === activeCategory),
     [activeCategory]
+  )
+
+  const visibleCandidates = useMemo(
+    () => (searchTerm ? searchResults : categoryAssets).filter(a => a.path),
+    [searchTerm, searchResults, categoryAssets]
+  )
+
+  useEffect(() => {
+    if (!isOpen || visibleCandidates.length === 0) return
+    let active = true
+    ;(async () => {
+      const unresolved = visibleCandidates.filter(asset => asset.path && !missingAssetPaths.has(asset.path) && !isKnownMissingSvg(asset.path))
+      if (unresolved.length === 0) return
+      const checks = await Promise.all(
+        unresolved.map(async asset => ({
+          path: asset.path,
+          ok: await validateSvgPath(asset.path),
+        }))
+      )
+      if (!active) return
+      const failed = checks.filter(check => !check.ok).map(check => check.path)
+      if (failed.length > 0) {
+        setMissingAssetPaths(prev => {
+          const next = new Set(prev)
+          failed.forEach(path => next.add(path))
+          return next
+        })
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [isOpen, visibleCandidates, missingAssetPaths])
+
+  const filteredSearchResults = useMemo(
+    () => searchResults.filter(asset => !asset.path || !missingAssetPaths.has(asset.path)),
+    [searchResults, missingAssetPaths]
+  )
+
+  const filteredCategoryAssets = useMemo(
+    () => categoryAssets.filter(asset => !asset.path || !missingAssetPaths.has(asset.path)),
+    [categoryAssets, missingAssetPaths]
   )
 
   const renderAsset = (asset: AssetDef) => (
@@ -88,6 +131,15 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
           stroke="currentColor"
           strokeWidth={0.6}
           category={asset.category}
+          onLoadError={() => {
+            if (!asset.path) return
+            setMissingAssetPaths(prev => {
+              if (prev.has(asset.path)) return prev
+              const next = new Set(prev)
+              next.add(asset.path)
+              return next
+            })
+          }}
         />
       </div>
       <span className="text-[0.6rem] text-center font-medium leading-[1.1] truncate w-full px-1 opacity-70 group-hover:opacity-100 transition-opacity">
@@ -134,7 +186,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
               exit={{ opacity: 0 }}
               className="grid grid-cols-5 gap-3 overflow-y-auto h-full pr-1"
             >
-              {searchResults.map(renderAsset)}
+              {filteredSearchResults.map(renderAsset)}
             </motion.div>
           ) : (
             <motion.div
@@ -165,7 +217,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
                 layout
                 className="grid grid-cols-5 gap-3 overflow-y-auto flex-1 min-h-0 pr-1"
               >
-                {categoryAssets.map(renderAsset)}
+                {filteredCategoryAssets.map(renderAsset)}
               </motion.div>
             </motion.div>
           )}

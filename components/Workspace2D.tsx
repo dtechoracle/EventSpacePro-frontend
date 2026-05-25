@@ -130,6 +130,91 @@ const isPointInPolygon = (x: number, y: number, points: { x: number; y: number }
   return inside;
 };
 
+const segmentsIntersect = (
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  dx: number,
+  dy: number
+) => {
+  const orientation = (
+    px: number,
+    py: number,
+    qx: number,
+    qy: number,
+    rx: number,
+    ry: number
+  ) => {
+    const value = (qy - py) * (rx - qx) - (qx - px) * (ry - qy);
+    if (Math.abs(value) < 0.000001) return 0;
+    return value > 0 ? 1 : 2;
+  };
+
+  const onSegment = (
+    px: number,
+    py: number,
+    qx: number,
+    qy: number,
+    rx: number,
+    ry: number
+  ) =>
+    qx <= Math.max(px, rx) + 0.000001 &&
+    qx >= Math.min(px, rx) - 0.000001 &&
+    qy <= Math.max(py, ry) + 0.000001 &&
+    qy >= Math.min(py, ry) - 0.000001;
+
+  const o1 = orientation(ax, ay, bx, by, cx, cy);
+  const o2 = orientation(ax, ay, bx, by, dx, dy);
+  const o3 = orientation(cx, cy, dx, dy, ax, ay);
+  const o4 = orientation(cx, cy, dx, dy, bx, by);
+
+  if (o1 !== o2 && o3 !== o4) return true;
+  if (o1 === 0 && onSegment(ax, ay, cx, cy, bx, by)) return true;
+  if (o2 === 0 && onSegment(ax, ay, dx, dy, bx, by)) return true;
+  if (o3 === 0 && onSegment(cx, cy, ax, ay, dx, dy)) return true;
+  if (o4 === 0 && onSegment(cx, cy, bx, by, dx, dy)) return true;
+  return false;
+};
+
+const wallIntersectsRect = (
+  wall: Wall,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number
+) => {
+  const nodeMap = new Map(wall.nodes.map((node) => [node.id, node]));
+  const rectEdges: [number, number, number, number][] = [
+    [minX, minY, maxX, minY],
+    [maxX, minY, maxX, maxY],
+    [maxX, maxY, minX, maxY],
+    [minX, maxY, minX, minY],
+  ];
+
+  for (const edge of wall.edges) {
+    const nodeA = nodeMap.get(edge.nodeA);
+    const nodeB = nodeMap.get(edge.nodeB);
+    if (!nodeA || !nodeB) continue;
+
+    const nodeAInRect = nodeA.x >= minX && nodeA.x <= maxX && nodeA.y >= minY && nodeA.y <= maxY;
+    const nodeBInRect = nodeB.x >= minX && nodeB.x <= maxX && nodeB.y >= minY && nodeB.y <= maxY;
+    if (nodeAInRect || nodeBInRect) {
+      return true;
+    }
+
+    for (const [x1, y1, x2, y2] of rectEdges) {
+      if (segmentsIntersect(nodeA.x, nodeA.y, nodeB.x, nodeB.y, x1, y1, x2, y2)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
 const isPointInsideWall = (wall: Wall, worldX: number, worldY: number) => {
   const nodeMap = new Map(wall.nodes.map((node) => [node.id, node]));
 
@@ -141,10 +226,6 @@ const isPointInsideWall = (wall: Wall, worldX: number, worldY: number) => {
     if (distanceToSegment(worldX, worldY, nodeA.x, nodeA.y, nodeB.x, nodeB.y) <= ((edge.thickness || 150) / 2) + 20) {
       return true;
     }
-  }
-
-  if (wall.nodes.length >= 3 && isPointInPolygon(worldX, worldY, wall.nodes)) {
-    return true;
   }
 
   return false;
@@ -2325,12 +2406,9 @@ export default function Workspace2D({
         }
       });
 
-      // Select walls with any node within rectangle
+      // Select walls only when the drag rectangle actually catches the wall outline.
       walls.forEach(wall => {
-        const hasNodeInRect = wall.nodes.some(node =>
-          node.x >= minX && node.x <= maxX && node.y >= minY && node.y <= maxY
-        );
-        if (hasNodeInRect) {
+        if (wallIntersectsRect(wall, minX, minY, maxX, maxY)) {
           selectedItems.push(wall.id);
         }
       });
@@ -3247,6 +3325,7 @@ export default function Workspace2D({
             y: contextMenu?.worldY || 0,
             content: '',
             author: user ? (`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || 'User') : 'User',
+            userId: user?._id,
             timestamp: Date.now(),
             resolved: false,
           });

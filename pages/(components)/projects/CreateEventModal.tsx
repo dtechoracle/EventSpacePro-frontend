@@ -199,9 +199,13 @@ export default function CreateEventModal({
       // Send collaborator invitation if email is provided
       if (collabEmail && collabEmail.includes("@")) {
         try {
-          await apiRequest(`/projects/${selectedProjectId}/invites`, "POST", {
-            email: collabEmail,
-            role: collabPermission
+          await apiRequest(`/projects/${selectedProjectId}/users`, "POST", {
+            users: [
+              {
+                email: collabEmail,
+                role: collabPermission
+              }
+            ]
           }, true);
           toast.success(`Invitation sent to ${collabEmail}`);
         } catch (e) {

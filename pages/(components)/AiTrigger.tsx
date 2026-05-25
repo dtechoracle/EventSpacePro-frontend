@@ -13,6 +13,7 @@ import PlanPreview from "./dashboard/PlanPreview";
 import { ASSET_LIBRARY, compareAssetsForDisplay } from "@/lib/assets";
 import { texturePatterns } from "@/utils/texturePatterns";
 import { DEFAULT_ASSET_STROKE_WIDTH } from "@/utils/assetRenderMode";
+import { isKnownMissingSvg, validateSvgPath } from "@/components/tools/InlineSvg";
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -169,8 +170,45 @@ export default function AiTrigger() {
       choices: ["I want to create a new layout", "Help me arrange my furniture", "Show me the basics"]
     }
   ]);
+  const [missingOptionPaths, setMissingOptionPaths] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const messagesRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const optionPaths = Array.from(
+      new Set(
+        messages.flatMap((msg: any) =>
+          Array.isArray(msg?.assetSelection?.options)
+            ? msg.assetSelection.options.map((option: any) => option?.path).filter(Boolean)
+            : []
+        )
+      )
+    ) as string[];
+    if (optionPaths.length === 0) return;
+    let active = true;
+    (async () => {
+      const unresolved = optionPaths.filter(path => !missingOptionPaths.has(path) && !isKnownMissingSvg(path));
+      if (unresolved.length === 0) return;
+      const checks = await Promise.all(
+        unresolved.map(async (path) => ({
+          path,
+          ok: await validateSvgPath(path),
+        }))
+      );
+      if (!active) return;
+      const failed = checks.filter(check => !check.ok).map(check => check.path);
+      if (failed.length > 0) {
+        setMissingOptionPaths(prev => {
+          const next = new Set(prev);
+          failed.forEach(path => next.add(path));
+          return next;
+        });
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [messages, missingOptionPaths]);
 
   // Workspace (Workspace2D) state - declare these first
   const workspaceAssets = useProjectStore((s: any) => s.assets);
@@ -409,6 +447,11 @@ export default function AiTrigger() {
   // ═══════════════════════════════════════════════════════════════════════════
   const buildFallbackAssetSelectionFromFollowUp = (followUpText: string) => {
     const lower = (followUpText || '').toLowerCase();
+    const asksForSummary =
+      lower.includes('in plain language, tell me what you want for this event layout') ||
+      lower.includes('describe what you want for this event layout') ||
+      lower.includes('describe the event layout you want');
+    if (asksForSummary) return undefined;
     const asksForGuestCount =
       lower.includes('how many guests') ||
       lower.includes('number of guests') ||
@@ -465,6 +508,19 @@ export default function AiTrigger() {
       lower.includes('round tables') ||
       lower.includes('rectangular tables');
     const asksForChairs = lower.includes('chair') || lower.includes('chairs') || lower.includes('seating');
+    const explicitlyAsksForChairChoice =
+      lower.includes('what chair would you like') ||
+      lower.includes('which chair would you like') ||
+      lower.includes('what chair should i pair') ||
+      lower.includes('which chair should i pair') ||
+      lower.includes('what chair should i use') ||
+      lower.includes('which chair should i use') ||
+      lower.includes('would you like to add any specific chairs around') ||
+      lower.includes('please select the chair type') ||
+      lower.includes('what stool would you like') ||
+      lower.includes('which stool would you like') ||
+      lower.includes('select seating for the smaller area') ||
+      lower.includes('select seating for the guest area');
 
     if (marqueeContext && (lower.includes('what would you like to add') || asksForTables || asksForChairs)) {
       return {
@@ -474,11 +530,30 @@ export default function AiTrigger() {
       };
     }
 
+    if (explicitlyAsksForChairChoice) {
+      return {
+        category: 'chair',
+        message: 'Select seating',
+        options: buildAssetSelectionOptions((asset) => {
+          if (asset.category !== 'Furniture') return false;
+          const label = asset.label.toLowerCase();
+          return (
+            label.includes('chair') ||
+            label.includes('stool')
+          ) && !label.includes('sofa') && !label.includes('table');
+        }),
+      };
+    }
+
     if (asksForTables && asksForChairs) {
       return {
         category: 'furniture',
         message: 'Select furniture',
-        options: buildAssetSelectionOptions((asset) => asset.category === 'Furniture'),
+        options: buildAssetSelectionOptions((asset) => {
+          if (asset.category !== 'Furniture') return false;
+          const label = asset.label.toLowerCase();
+          return !label.includes('sofa');
+        }),
       };
     }
 
@@ -508,10 +583,8 @@ export default function AiTrigger() {
           const label = asset.label.toLowerCase();
           return (
             label.includes('chair') ||
-            label.includes('stool') ||
-            label.includes('sofa') ||
-            label.includes('seater')
-          );
+            label.includes('stool')
+          ) && !label.includes('sofa') && !label.includes('table');
         }),
       };
     }
@@ -843,11 +916,23 @@ export default function AiTrigger() {
     let usableMaxX = wallMaxX - WALL_MARGIN;
     let usableMinY = wallMinY + WALL_MARGIN;
     let usableMaxY = wallMaxY - WALL_MARGIN;
+    const layoutZone = (plan.tableArrangement as any)?.zone || ((Array.isArray(plan.seatingLayout) && plan.seatingLayout[0]) ? (plan.seatingLayout[0] as any).zone : null);
+    if (layoutZone) {
+      const zoneMinX = wallMinX + Number(layoutZone.xMm || 0);
+      const zoneMinY = wallMinY + Number(layoutZone.yMm || 0);
+      const zoneMaxX = zoneMinX + Number(layoutZone.widthMm || roomW);
+      const zoneMaxY = zoneMinY + Number(layoutZone.heightMm || roomH);
+      usableMinX = Math.max(usableMinX, zoneMinX + WALL_MARGIN * 0.5);
+      usableMaxX = Math.min(usableMaxX, zoneMaxX - WALL_MARGIN * 0.5);
+      usableMinY = Math.max(usableMinY, zoneMinY + WALL_MARGIN * 0.5);
+      usableMaxY = Math.min(usableMaxY, zoneMaxY - WALL_MARGIN * 0.5);
+    }
 
     // ─── 3. Place Fixed Elements (Stage, etc.) First ─────────────────────────
     const STAGE_GAP = 1500; // clearance between stage and nearest table
 
     const assetList: any[] = planAssetList;
+    const shapeList: any[] = Array.isArray(plan.shapes) ? plan.shapes : [];
     const chairsAroundList: any[] = Array.isArray(plan.chairsAround) ? plan.chairsAround : [];
     const normalizeAiAssetStrokeWidth = (value: any) => {
       const numeric = Number(value);
@@ -860,9 +945,14 @@ export default function AiTrigger() {
     const stageItems = assetList.filter((a: any) =>
       (a.assetType || a.assetName || '').toLowerCase().includes('stage')
     );
+    const stageShapeItems = shapeList.filter((s: any) =>
+      String(s.id || '').toLowerCase().includes('ai-stage-base') ||
+      String(s.role || '').toLowerCase() === 'stage'
+    );
     const nonStageItems = assetList.filter((a: any) =>
       !(a.assetType || a.assetName || '').toLowerCase().includes('stage')
     );
+    const nonStageShapes = shapeList.filter((s: any) => !stageShapeItems.includes(s));
 
     stageItems.forEach((a: any, idx: number) => {
       let sw = Number(a.widthMm || 6000);
@@ -938,6 +1028,44 @@ export default function AiTrigger() {
         type: 'text', zIndex: 200
       });
     });
+    stageShapeItems.forEach((s: any, idx: number) => {
+      const sw = Number(s.widthMm ?? s.width ?? 3000);
+      const sh = Number(s.heightMm ?? s.height ?? 2000);
+      const sx = typeof s.xMm === 'number' ? wallMinX + s.xMm : typeof s.x === 'number' ? wallMinX + s.x : roomCX;
+      const sy = typeof s.yMm === 'number' ? wallMinY + s.yMm : typeof s.y === 'number' ? wallMinY + s.y : roomCY;
+
+      generatedShapes.push({
+        ...s,
+        ...getResolvedFill(s),
+        id: s.id || `stage-shape-${idx}`,
+        type: s.type || 'rectangle',
+        x: sx,
+        y: sy,
+        width: sw,
+        height: sh,
+        stroke: s.stroke || s.strokeColor || '#475569',
+        strokeColor: s.stroke || s.strokeColor || '#475569',
+        strokeWidth: Number(s.strokeWidth ?? 2),
+        rotation: Number(s.rotation ?? 0),
+        zIndex: 2,
+      });
+
+      const left = sx - sw / 2 - STAGE_GAP;
+      const right = sx + sw / 2 + STAGE_GAP;
+      const top = sy - sh / 2 - STAGE_GAP;
+      const bottom = sy + sh / 2 + STAGE_GAP;
+      const distances = [
+        { edge: 'top', value: Math.abs(top - usableMinY) },
+        { edge: 'bottom', value: Math.abs(usableMaxY - bottom) },
+        { edge: 'left', value: Math.abs(left - usableMinX) },
+        { edge: 'right', value: Math.abs(usableMaxX - right) },
+      ].sort((a, b) => a.value - b.value);
+      const nearest = distances[0]?.edge;
+      if (nearest === 'top') usableMinY = Math.max(usableMinY, bottom);
+      else if (nearest === 'bottom') usableMaxY = Math.min(usableMaxY, top);
+      else if (nearest === 'left') usableMinX = Math.max(usableMinX, right);
+      else if (nearest === 'right') usableMaxX = Math.min(usableMaxX, left);
+    });
 
     // ─── 4. Collect Table Specs ───────────────────────────────────────────────
     interface TableSpec {
@@ -951,12 +1079,105 @@ export default function AiTrigger() {
       tableType: string;
       isRound: boolean;
       hasBuiltInSeating: boolean;
+      rotationDegrees?: number;
+      chairFacingSide?: string;
+      chairWorldSide?: string;
     }
 
     const tableSpecs: TableSpec[] = [];
     const CHAIR_SIZE = 450;
-    const CHAIR_GAP = 180; // gap from table edge to chair edge
+    const CHAIR_GAP = 600; // required AI spacing between seating elements
     let fallbackTableNumber = 1;
+    const rotateLocalOffset = (dx: number, dy: number, rotationDeg: number) => {
+      const rad = (rotationDeg * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      return {
+        x: dx * cos - dy * sin,
+        y: dx * sin + dy * cos,
+      };
+    };
+    const buildFrontFacingChairOffsets = (
+      facingSide: string,
+      chairCount: number,
+      width: number,
+      height: number,
+      frontX: number,
+      frontY: number
+    ) => {
+      if (chairCount <= 0) return [] as Array<{ x: number; y: number; rotation: number }>;
+      const count = Math.max(1, chairCount);
+      if (facingSide === 'left' || facingSide === 'right') {
+        const spread = height * 0.6;
+        return Array.from({ length: count }, (_, idx) => {
+          const t = count === 1 ? 0 : (idx / (count - 1)) - 0.5;
+          return {
+            x: frontX,
+            y: t * spread,
+            rotation: facingSide === 'left' ? 270 : 90,
+          };
+        });
+      }
+      const spread = width * 0.6;
+      return Array.from({ length: count }, (_, idx) => {
+        const t = count === 1 ? 0 : (idx / (count - 1)) - 0.5;
+        return {
+          x: t * spread,
+          y: frontY,
+          rotation: facingSide === 'top' ? 180 : 0,
+        };
+      });
+    };
+    const buildWorldSideChairOffsets = (
+      worldSide: string,
+      chairCount: number,
+      displayWidth: number,
+      displayHeight: number,
+      gap: number,
+      chairSize: number
+    ) => {
+      if (chairCount <= 0) return [] as Array<{ x: number; y: number; rotation: number }>;
+      const count = Math.max(1, chairCount);
+      if (worldSide === 'left' || worldSide === 'right') {
+        const spread = displayHeight * 0.6;
+        const x = worldSide === 'left'
+          ? -displayWidth / 2 - gap - chairSize / 2
+          : displayWidth / 2 + gap + chairSize / 2;
+        return Array.from({ length: count }, (_, idx) => {
+          const t = count === 1 ? 0 : (idx / (count - 1)) - 0.5;
+          return {
+            x,
+            y: t * spread,
+            rotation: worldSide === 'left' ? 270 : 90,
+          };
+        });
+      }
+      const spread = displayWidth * 0.6;
+      const y = worldSide === 'top'
+        ? -displayHeight / 2 - gap - chairSize / 2
+        : displayHeight / 2 + gap + chairSize / 2;
+      return Array.from({ length: count }, (_, idx) => {
+        const t = count === 1 ? 0 : (idx / (count - 1)) - 0.5;
+        return {
+          x: t * spread,
+          y,
+          rotation: worldSide === 'top' ? 180 : 0,
+        };
+      });
+    };
+    const buildFrontArcChairAngles = (facingSide: string, chairCount: number) => {
+      const count = Math.max(1, chairCount);
+      const spread = count === 1 ? 0 : Math.min(Math.PI * 0.9, Math.PI * (0.22 * count));
+      const centerAngle =
+        facingSide === 'left' ? Math.PI :
+        facingSide === 'right' ? 0 :
+        facingSide === 'top' ? -Math.PI / 2 :
+        Math.PI / 2;
+      return Array.from({ length: count }, (_, idx) => {
+        const offset = count === 1 ? 0 : (-spread / 2) + (idx * spread) / (count - 1);
+        return centerAngle + offset;
+      });
+    };
 
     const assetHasBuiltInSeating = (assetId: string, assetLabel?: string) => {
       const label = `${assetLabel || ''} ${assetId}`.toLowerCase();
@@ -1046,7 +1267,7 @@ export default function AiTrigger() {
         (rawType.includes('table') || hasBuiltInSeating);
 
       if (typeof a.xMm === 'number' && typeof a.yMm === 'number') {
-        if (shouldUseArrangement) {
+        if (shouldUseArrangement && repeatCount > 1) {
           for (let repeatIndex = 0; repeatIndex < repeatCount; repeatIndex++) {
             tableSpecs.push({
               name: getRepeatedTableName(a, repeatIndex),
@@ -1066,6 +1287,8 @@ export default function AiTrigger() {
               tableType: resolved.id,
               isRound,
               hasBuiltInSeating,
+              rotationDegrees: Number(a.rotation || plan.tableArrangement?.rotationDegrees || 0),
+              chairFacingSide: String(a.chairFacingSide || plan.tableArrangement?.chairFacingSide || ''),
             });
           }
           return;
@@ -1106,6 +1329,7 @@ export default function AiTrigger() {
           safeY = Math.max(wallMinY + h / 2 + margin, Math.min(wallMaxY - h / 2 - margin, safeY));
         }
 
+        const explicitRotation = isDoorWindow ? inferWallAttachedRotation() : Number(a.rotation || 0);
         generatedAssets.push({
           ...a, // Keep extra props
           ...fillProps, // Override with resolved fill
@@ -1115,12 +1339,158 @@ export default function AiTrigger() {
           y: safeY,
           width: w,
           height: h,
-          rotation: inferWallAttachedRotation(),
+          rotation: explicitRotation,
           strokeWidth: normalizeAiAssetStrokeWidth(a.strokeWidth),
           tableName: a.tableName || a.name || a.label, // NEW: Table Numbering
           scale: 1,
           zIndex: rawType.includes('rug') || rawType.includes('carpet') ? 2 : 5
         });
+
+        if (rawType.includes('table') && !hasBuiltInSeating) {
+          const explicitChairCount = Math.max(0, Number(a.chairCount || a.chairs || a.guestCount || 0));
+          const chairFacingSide = String(a.chairFacingSide || '');
+          const chairWorldSide = String((a as any).chairWorldSide || '');
+          if (explicitChairCount > 0) {
+            const looseChairType = resolveAsset(a.chairAsset || 'normal-chair').id;
+            const looseChairW = resolveAsset(a.chairAsset || 'normal-chair').width || CHAIR_SIZE;
+            const looseChairH = resolveAsset(a.chairAsset || 'normal-chair').height || CHAIR_SIZE;
+            const effChairSize = Math.min(looseChairW, looseChairH) || CHAIR_SIZE;
+            if (isRound) {
+              const radius = w / 2 + CHAIR_GAP + effChairSize / 2;
+              const useFrontArc = chairFacingSide && explicitChairCount <= 4;
+              const angles = useFrontArc
+                ? buildFrontArcChairAngles(chairFacingSide, explicitChairCount)
+                : Array.from({ length: explicitChairCount }, (_, ci) => (ci / explicitChairCount) * Math.PI * 2 - Math.PI / 2);
+              for (let ci = 0; ci < explicitChairCount; ci++) {
+                const angle = angles[ci] + ((explicitRotation * Math.PI) / 180);
+                generatedAssets.push({
+                  id: `ai-explicit-roundchair-${idx}-${ci}`,
+                  type: looseChairType,
+                  x: safeX + Math.cos(angle) * radius,
+                  y: safeY + Math.sin(angle) * radius,
+                  rotation: (angle * 180 / Math.PI) + 90,
+                  width: looseChairW,
+                  height: looseChairH,
+                  fillColor: 'transparent',
+                  strokeWidth: AI_DEFAULT_STROKE_WIDTH,
+                  scale: 1,
+                  zIndex: 15
+                });
+              }
+            } else {
+              const displayWidth = Math.abs(explicitRotation % 180) === 90 ? h : w;
+              const displayHeight = Math.abs(explicitRotation % 180) === 90 ? w : h;
+              const perimeter = 2 * (w + h);
+              const topCount = Math.max(1, Math.round(explicitChairCount * w / perimeter));
+              const botCount = Math.max(1, Math.round(explicitChairCount * w / perimeter));
+              const leftCount = Math.max(0, Math.round(explicitChairCount * h / perimeter));
+              const rightCount = Math.max(0, explicitChairCount - topCount - botCount - leftCount);
+              const topChairY = -h / 2 - CHAIR_GAP - effChairSize / 2;
+              const botChairY = h / 2 + CHAIR_GAP + effChairSize / 2;
+              const leftChairX = -w / 2 - CHAIR_GAP - effChairSize / 2;
+              const rightChairX = w / 2 + CHAIR_GAP + effChairSize / 2;
+
+              if (explicitChairCount <= 4 && chairWorldSide) {
+                const worldOffsets = buildWorldSideChairOffsets(
+                  chairWorldSide,
+                  explicitChairCount,
+                  displayWidth,
+                  displayHeight,
+                  CHAIR_GAP,
+                  effChairSize
+                );
+                worldOffsets.forEach((pt, ci) => {
+                  generatedAssets.push({
+                    id: `ai-explicit-chair-world-${idx}-${ci}`,
+                    type: looseChairType,
+                    x: safeX + pt.x,
+                    y: safeY + pt.y,
+                    rotation: pt.rotation,
+                    width: looseChairW,
+                    height: looseChairH,
+                    fillColor: 'transparent',
+                    strokeWidth: AI_DEFAULT_STROKE_WIDTH,
+                    scale: 1,
+                    zIndex: 15
+                  });
+                });
+                return;
+              }
+
+              if (explicitChairCount <= 4 && chairFacingSide) {
+                const frontOffsets = buildFrontFacingChairOffsets(
+                  chairFacingSide,
+                  explicitChairCount,
+                  w,
+                  h,
+                  chairFacingSide === 'left' ? leftChairX : chairFacingSide === 'right' ? rightChairX : 0,
+                  chairFacingSide === 'top' ? topChairY : chairFacingSide === 'bottom' ? botChairY : 0
+                );
+                frontOffsets.forEach((pt, ci) => {
+                  const offset = rotateLocalOffset(pt.x, pt.y, explicitRotation);
+                  generatedAssets.push({
+                    id: `ai-explicit-chair-front-${idx}-${ci}`,
+                    type: looseChairType,
+                    x: safeX + offset.x,
+                    y: safeY + offset.y,
+                    rotation: pt.rotation + explicitRotation,
+                    width: looseChairW,
+                    height: looseChairH,
+                    fillColor: 'transparent',
+                    strokeWidth: AI_DEFAULT_STROKE_WIDTH,
+                    scale: 1,
+                    zIndex: 15
+                  });
+                });
+                return;
+              }
+
+              const addRow = (count: number, localY: number, rot: number) => {
+                for (let ci = 0; ci < count; ci++) {
+                  const localX = -w / 2 + (w / (count + 1)) * (ci + 1);
+                  const offset = rotateLocalOffset(localX, localY, explicitRotation);
+                  generatedAssets.push({
+                    id: `ai-explicit-chair-r-${idx}-${ci}-${rot}`,
+                    type: looseChairType,
+                    x: safeX + offset.x,
+                    y: safeY + offset.y,
+                    rotation: rot + explicitRotation,
+                    width: looseChairW,
+                    height: looseChairH,
+                    fillColor: 'transparent',
+                    strokeWidth: AI_DEFAULT_STROKE_WIDTH,
+                    scale: 1,
+                    zIndex: 15
+                  });
+                }
+              };
+              const addCol = (count: number, localX: number, rot: number) => {
+                for (let ci = 0; ci < count; ci++) {
+                  const localY = -h / 2 + (h / (count + 1)) * (ci + 1);
+                  const offset = rotateLocalOffset(localX, localY, explicitRotation);
+                  generatedAssets.push({
+                    id: `ai-explicit-chair-c-${idx}-${ci}-${rot}`,
+                    type: looseChairType,
+                    x: safeX + offset.x,
+                    y: safeY + offset.y,
+                    rotation: rot + explicitRotation,
+                    width: looseChairW,
+                    height: looseChairH,
+                    fillColor: 'transparent',
+                    strokeWidth: AI_DEFAULT_STROKE_WIDTH,
+                    scale: 1,
+                    zIndex: 15
+                  });
+                }
+              };
+
+              addRow(topCount, topChairY, 180);
+              addRow(botCount, botChairY, 0);
+              if (leftCount > 0) addCol(leftCount, leftChairX, 90);
+              if (rightCount > 0) addCol(rightCount, rightChairX, 270);
+            }
+          }
+        }
 
         return; // Skip adding to grid engine
       }
@@ -1254,6 +1624,9 @@ export default function AiTrigger() {
         tableType: resolved.id,
         isRound,
         hasBuiltInSeating,
+        rotationDegrees: Number(spec.rotation || plan.tableArrangement?.rotationDegrees || 0),
+        chairFacingSide: String(spec.chairFacingSide || plan.tableArrangement?.chairFacingSide || ''),
+        chairWorldSide: String((spec as any).chairWorldSide || ''),
       });
     });
 
@@ -1265,6 +1638,8 @@ export default function AiTrigger() {
       const usableW = Math.max(1, usableMaxX - usableMinX);
       const usableH = Math.max(1, usableMaxY - usableMinY);
       const arrangementType = String(plan.tableArrangement?.type || 'grid').toLowerCase();
+      const layoutScaleMode = String((plan as any).layoutPreferences?.scaleMode || '').toLowerCase();
+      const fitLayoutToSpace = layoutScaleMode === 'fit-space';
       const arrangementDirection =
         plan.tableArrangement?.direction ||
         (usableW >= usableH ? 'horizontal' : 'vertical');
@@ -1443,11 +1818,18 @@ export default function AiTrigger() {
       const gridH0 = Math.max(1, maxY0 - minY0);
 
       // ── Auto-scale: shrink everything proportionally so it always fits
-      const scaleX = gridW0 > usableW ? usableW / gridW0 : 1;
-      const scaleY = gridH0 > usableH ? usableH / gridH0 : 1;
-      const scaleFactor = Math.min(scaleX, scaleY) * 0.95; // 5% safety margin
+      const shrinkScaleX = gridW0 > usableW ? usableW / gridW0 : 1;
+      const shrinkScaleY = gridH0 > usableH ? usableH / gridH0 : 1;
+      let scaleFactor = Math.min(shrinkScaleX, shrinkScaleY) * 0.95; // 5% safety margin
 
-      if (scaleFactor < 1) {
+      if (fitLayoutToSpace && gridW0 < usableW && gridH0 < usableH) {
+        const expandScaleX = usableW / gridW0;
+        const expandScaleY = usableH / gridH0;
+        scaleFactor = Math.min(Math.min(expandScaleX, expandScaleY), 1.28) * 0.92;
+        if (scaleFactor > 1.02) {
+          layoutWarning = `ℹ️ Layout expanded to ${Math.round(scaleFactor * 100)}% to use more of the available room.`;
+        }
+      } else if (scaleFactor < 1) {
         if (scaleFactor < 0.7) {
           layoutWarning = `⚠️ The room is quite small for ${N} tables. Layout scaled to ${Math.round(scaleFactor * 100)}% to fit.`;
         } else {
@@ -1484,6 +1866,7 @@ export default function AiTrigger() {
         // Scale this table's individual dimensions
         const tw = Math.round(spec.tableW * scaleFactor);
         const th = Math.round(spec.tableH * scaleFactor);
+        const tableRotation = Number(spec.rotationDegrees || plan.tableArrangement?.rotationDegrees || 0);
 
         const tableCX = gridOriginX + (slot.x - layoutCenterX0) * scaleFactor;
         const tableCY = gridOriginY + (slot.y - layoutCenterY0) * scaleFactor;
@@ -1497,6 +1880,7 @@ export default function AiTrigger() {
           type: spec.tableType,
           x: tableCX, y: tableCY,
           width: renderW, height: renderH,
+          rotation: tableRotation,
           strokeWidth: AI_DEFAULT_STROKE_WIDTH,
           strokeColor: '#1a1a1a',
           fillColor: 'transparent', // No fill by default per user request
@@ -1510,6 +1894,8 @@ export default function AiTrigger() {
           const looseChairType = spec.chairType || 'normal-chair';
           const looseChairW = spec.chairW || effChairSize;
           const looseChairH = spec.chairH || effChairSize;
+          const chairFacingSide = String(spec.chairFacingSide || '');
+          const chairWorldSide = String((spec as any).chairWorldSide || '');
           const topChairY = tableCY - th / 2 - effChairGap - effChairSize / 2;
           const botChairY = tableCY + th / 2 + effChairGap + effChairSize / 2;
           const leftChairX = tableCX - tw / 2 - effChairGap - effChairSize / 2;
@@ -1517,8 +1903,12 @@ export default function AiTrigger() {
 
           if (spec.isRound) {
             const radius = tw / 2 + effChairGap + effChairSize / 2;
+            const useFrontArc = chairFacingSide && cCount <= 4;
+            const angles = useFrontArc
+              ? buildFrontArcChairAngles(chairFacingSide, cCount)
+              : Array.from({ length: cCount }, (_, ci) => (ci / cCount) * Math.PI * 2 - Math.PI / 2);
             for (let ci = 0; ci < cCount; ci++) {
-              const angle = (ci / cCount) * Math.PI * 2 - Math.PI / 2;
+              const angle = angles[ci] + ((tableRotation * Math.PI) / 180);
               generatedAssets.push({
                 id: `chair-${i}-${ci}`, type: looseChairType,
                 x: tableCX + Math.cos(angle) * radius,
@@ -1530,6 +1920,61 @@ export default function AiTrigger() {
               });
             }
           } else {
+            const displayWidth = Math.abs(tableRotation % 180) === 90 ? th : tw;
+            const displayHeight = Math.abs(tableRotation % 180) === 90 ? tw : th;
+            if (cCount <= 4 && chairWorldSide) {
+              const worldOffsets = buildWorldSideChairOffsets(
+                chairWorldSide,
+                cCount,
+                displayWidth,
+                displayHeight,
+                effChairGap,
+                effChairSize
+              );
+              worldOffsets.forEach((pt, ci) => {
+                generatedAssets.push({
+                  id: `chair-${i}-world-${ci}`,
+                  type: looseChairType,
+                  x: tableCX + pt.x,
+                  y: tableCY + pt.y,
+                  rotation: pt.rotation,
+                  width: looseChairW,
+                  height: looseChairH,
+                  strokeWidth: AI_DEFAULT_STROKE_WIDTH,
+                  scale: 1,
+                  zIndex: 15,
+                  fillColor: 'transparent'
+                });
+              });
+              return;
+            }
+            if (cCount <= 4 && chairFacingSide) {
+              const localOffsets = buildFrontFacingChairOffsets(
+                chairFacingSide,
+                cCount,
+                tw,
+                th,
+                chairFacingSide === 'left' ? -tw / 2 - effChairGap - effChairSize / 2 : chairFacingSide === 'right' ? tw / 2 + effChairGap + effChairSize / 2 : 0,
+                chairFacingSide === 'top' ? -th / 2 - effChairGap - effChairSize / 2 : chairFacingSide === 'bottom' ? th / 2 + effChairGap + effChairSize / 2 : 0
+              );
+              localOffsets.forEach((pt, ci) => {
+                const offset = rotateLocalOffset(pt.x, pt.y, tableRotation);
+                generatedAssets.push({
+                  id: `chair-${i}-front-${ci}`,
+                  type: looseChairType,
+                  x: tableCX + offset.x,
+                  y: tableCY + offset.y,
+                  rotation: pt.rotation + tableRotation,
+                  width: looseChairW,
+                  height: looseChairH,
+                  strokeWidth: AI_DEFAULT_STROKE_WIDTH,
+                  scale: 1,
+                  zIndex: 15,
+                  fillColor: 'transparent'
+                });
+              });
+              return;
+            }
             const perimeter = 2 * (tw + th);
             const topCount = Math.max(1, Math.round(cCount * tw / perimeter));
             const botCount = Math.max(1, Math.round(cCount * tw / perimeter));
@@ -1538,10 +1983,11 @@ export default function AiTrigger() {
 
             const addRow = (count: number, y: number, rot: number) => {
               for (let ci = 0; ci < count; ci++) {
-                const x = tableCX - tw / 2 + (tw / (count + 1)) * (ci + 1);
+                const localX = -tw / 2 + (tw / (count + 1)) * (ci + 1);
+                const offset = rotateLocalOffset(localX, y - tableCY, tableRotation);
                 generatedAssets.push({
                   id: `chair-${i}-r-${ci}-${rot}`, type: looseChairType,
-                  x, y, rotation: rot,
+                  x: tableCX + offset.x, y: tableCY + offset.y, rotation: rot + tableRotation,
                   width: looseChairW, height: looseChairH,
                   strokeWidth: AI_DEFAULT_STROKE_WIDTH, scale: 1, zIndex: 15,
                   fillColor: 'transparent'
@@ -1550,10 +1996,11 @@ export default function AiTrigger() {
             };
             const addCol = (count: number, x: number, rot: number) => {
               for (let ci = 0; ci < count; ci++) {
-                const y = tableCY - th / 2 + (th / (count + 1)) * (ci + 1);
+                const localY = -th / 2 + (th / (count + 1)) * (ci + 1);
+                const offset = rotateLocalOffset(x - tableCX, localY, tableRotation);
                 generatedAssets.push({
                   id: `chair-${i}-c-${ci}-${rot}`, type: looseChairType,
-                  x, y, rotation: rot,
+                  x: tableCX + offset.x, y: tableCY + offset.y, rotation: rot + tableRotation,
                   width: looseChairW, height: looseChairH,
                   strokeWidth: AI_DEFAULT_STROKE_WIDTH, scale: 1, zIndex: 15,
                   fillColor: 'transparent'
@@ -1571,8 +2018,8 @@ export default function AiTrigger() {
     }
 
     // ─── 5.5 Primitive Shapes ────────────────────────────────────────────────
-    if (Array.isArray(plan.shapes)) {
-      plan.shapes.forEach((s: any, idx: number) => {
+    if (nonStageShapes.length > 0) {
+      nonStageShapes.forEach((s: any, idx: number) => {
         let sx = roomCX;
         let sy = roomCY;
         if (typeof s.xMm === 'number') sx = wallMinX + s.xMm;
@@ -1647,19 +2094,60 @@ export default function AiTrigger() {
             const count = Number(layout.count || 20);
             const orientation = layout.orientation || 'horizontal';
             const type = layout.type || 'theater';
+            const zone = (layout as any).zone;
+            const layoutRotation = Number((layout as any).rotationDegrees || 0);
+            const layoutScaleMode = String((layout as any).scaleMode || (plan as any).layoutPreferences?.scaleMode || '').toLowerCase();
+            const fitLayoutToSpace = layoutScaleMode === 'fit-space';
             
-            // Spacing defaults
-            const rowSpacing = layout.rowSpacingMm || (type === 'classroom' ? 1500 : 1000);
-            const colSpacing = layout.colSpacingMm || (aw + 200);
-            
-            const cols = layout.columns || (orientation === 'horizontal' ? Math.ceil(Math.sqrt(count * 1.5)) : Math.ceil(Math.sqrt(count / 1.5)));
+            const zoneWidth = zone ? Number(zone.widthMm || roomW) : roomW;
+            const zoneHeight = zone ? Number(zone.heightMm || roomH) : roomH;
+            const provisionalBaseRowSpacing = layout.rowSpacingMm || (ah + 600);
+            const provisionalBaseColSpacing = layout.colSpacingMm || (aw + 600);
+            const inferredColsFromZone = Math.max(1, Math.floor(zoneWidth / Math.max(provisionalBaseColSpacing, 1)));
+            const cols = layout.columns || Math.max(1, Math.min(inferredColsFromZone, orientation === 'horizontal' ? Math.ceil(Math.sqrt(count * 1.5)) : Math.ceil(Math.sqrt(count / 1.5))));
             const rowsCount = Math.ceil(count / cols);
-            
-            const layoutWidth = (cols - 1) * colSpacing;
-            const layoutHeight = (rowsCount - 1) * rowSpacing;
-            
-            const startX = wallMinX + (layout.centerX || (roomW / 2)) - (layoutWidth / 2);
-            const startY = wallMinY + (layout.centerY || (roomH / 2)) - (layoutHeight / 2);
+
+            const naturalLayoutWidth = aw + Math.max(0, cols - 1) * provisionalBaseColSpacing;
+            const naturalLayoutHeight = ah + Math.max(0, rowsCount - 1) * provisionalBaseRowSpacing;
+            const assetScale =
+              zone && fitLayoutToSpace
+                ? Math.max(
+                    1,
+                    Math.min(
+                      Math.min((zoneWidth * 0.76) / Math.max(naturalLayoutWidth, 1), (zoneHeight * 0.62) / Math.max(naturalLayoutHeight, 1)),
+                      1.8
+                    )
+                  )
+                : 1;
+            const effAw = aw * assetScale;
+            const effAh = ah * assetScale;
+            const scaledGap = 600 * (fitLayoutToSpace ? Math.min(assetScale, 1.5) : 1);
+            const baseRowSpacing = layout.rowSpacingMm || (effAh + scaledGap);
+            const baseColSpacing = layout.colSpacingMm || (effAw + scaledGap);
+
+            let colSpacing = baseColSpacing;
+            let rowSpacing = baseRowSpacing;
+            if (!layout.colSpacingMm && !layout.rowSpacingMm && zone) {
+              const targetWidth = Math.max(baseColSpacing * Math.max(1, cols - 1), zoneWidth * (fitLayoutToSpace ? 0.86 : 0.65));
+              const targetHeight = Math.max(baseRowSpacing * Math.max(1, rowsCount - 1), zoneHeight * (fitLayoutToSpace ? 0.64 : 0.4));
+              if (cols > 1) {
+                colSpacing = Math.max(baseColSpacing, Math.min((zoneWidth - effAw) / (cols - 1), targetWidth / (cols - 1)));
+              }
+              if (rowsCount > 1) {
+                rowSpacing = Math.max(baseRowSpacing, Math.min((zoneHeight - effAh) / (rowsCount - 1), targetHeight / (rowsCount - 1)));
+              }
+            }
+
+            const layoutWidth = effAw + Math.max(0, cols - 1) * colSpacing;
+            const layoutHeight = effAh + Math.max(0, rowsCount - 1) * rowSpacing;
+            const zoneOriginX = zone ? wallMinX + Number(zone.xMm || 0) : wallMinX;
+            const zoneOriginY = zone ? wallMinY + Number(zone.yMm || 0) : wallMinY;
+            const startX = typeof layout.centerX === 'number'
+              ? wallMinX + layout.centerX - (layoutWidth / 2) + effAw / 2
+              : zoneOriginX + Math.max(0, (zoneWidth - layoutWidth) / 2) + effAw / 2;
+            const startY = typeof layout.centerY === 'number'
+              ? wallMinY + layout.centerY - (layoutHeight / 2) + effAh / 2
+              : zoneOriginY + Math.max(0, (zoneHeight - layoutHeight) / 2) + effAh / 2;
             
             for (let i = 0; i < count; i++) {
                 const col = i % cols;
@@ -1677,8 +2165,8 @@ export default function AiTrigger() {
                     y: y,
                     width: aw,
                     height: ah,
-                    rotation: orientation === 'horizontal' ? 0 : 90,
-                    scale: 1,
+                    rotation: layoutRotation || (orientation === 'horizontal' ? 0 : 90),
+                    scale: assetScale,
                     zIndex: 10
                 });
                 
@@ -2534,6 +3022,14 @@ export default function AiTrigger() {
     const heightMm = toMm(match[3], match[4] || match[2]);
     if (!widthMm || !heightMm) return undefined;
 
+    const latestAssistantText = [...messages]
+      .reverse()
+      .find((m: any) => m.role === 'assistant')?.content?.toLowerCase() || '';
+    const summaryStepActive =
+      latestAssistantText.includes('in plain language, tell me what you want for this event layout') ||
+      latestAssistantText.includes('describe what you want for this event layout') ||
+      latestAssistantText.includes('describe the event layout you want');
+
     const guestMatch = text.match(/(?:about\s+)?(\d+)\s*guest/i);
     const guestCount = guestMatch ? Number(guestMatch[1]) : null;
     const seaterMatch = text.match(/(\d+)\s*seater/i);
@@ -2631,7 +3127,7 @@ export default function AiTrigger() {
       ];
     }
 
-    if (inferredAsset && count > 0) {
+    if (!summaryStepActive && inferredAsset && count > 0) {
       previewPlan.assets = [
         {
           assetName: inferredAsset.label || inferredAsset.id,
@@ -2643,7 +3139,7 @@ export default function AiTrigger() {
       previewPlan.tableArrangement = { type: arrangementType };
     }
 
-    if (/\byes stage\b|\badd a stage\b|\bwith stage\b/.test(lower)) {
+    if (!summaryStepActive && /\byes stage\b|\badd a stage\b|\bwith stage\b/.test(lower)) {
       previewPlan.assets = [
         ...(previewPlan.assets || []),
         {
@@ -2656,6 +3152,40 @@ export default function AiTrigger() {
     }
 
     return processPlan(previewPlan, canvas);
+  };
+
+  const applyPreviewPlan = (previewPlan: any) => {
+    if (!previewPlan) return;
+    const walls = Array.isArray(previewPlan.walls) ? previewPlan.walls : [];
+    const assets = Array.isArray(previewPlan.assets) ? previewPlan.assets : [];
+    const shapes = Array.isArray(previewPlan.shapes) ? previewPlan.shapes : [];
+    const textAnnotations = Array.isArray(previewPlan.textAnnotations) ? previewPlan.textAnnotations : [];
+    if (walls.length === 0 && assets.length === 0 && shapes.length === 0 && textAnnotations.length === 0) return;
+
+    setPlacementMode({
+      active: true,
+      data: {
+        walls,
+        assets,
+        shapes,
+        textAnnotations,
+        width: previewPlan.width,
+        height: previewPlan.height
+      }
+    });
+
+    const parts: string[] = [];
+    if (assets.length > 0) parts.push(`${assets.length} items`);
+    if (walls.length > 0) parts.push(`${walls.length} walls`);
+    if (shapes.length > 0) parts.push(`${shapes.length} shapes`);
+    if (textAnnotations.length > 0) parts.push(`${textAnnotations.length} notes`);
+
+    setMessages((m: any) => [
+      ...m,
+      { role: 'assistant', content: `✅ Draft preview ready. Click anywhere on the workspace to place the ${parts.join(', ')}.` }
+    ]);
+    setIsOpen(false);
+    setInputValue("");
   };
 
     const handleSubmit = async (overridePrompt?: string) => {
@@ -2821,7 +3351,10 @@ export default function AiTrigger() {
       } else if (data.error) {
         setMessages((m: any) => [...m, { role: 'assistant', content: `Error: ${data.error}` }]);
       } else {
-        setMessages((m: any) => [...m, { role: 'assistant', content: 'I did not understand that request. Could you rephrase it?' }]);
+        setMessages((m: any) => [...m, {
+          role: 'assistant',
+          content: 'I’m still with you. Tell me the next thing you want in the layout, and I’ll keep building from there.'
+        }]);
       }
     } catch (e) {
       console.error(e);
@@ -3141,19 +3674,31 @@ export default function AiTrigger() {
                               (!Array.isArray(m.previewPlanData?.textAnnotations) || m.previewPlanData.textAnnotations.length === 0);
                             return (
                           <div
-                            className="w-full mt-2 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 relative group"
-                            style={
-                              wallOnlyPreview
-                                ? {
-                                    aspectRatio: `${Math.max(1, m.previewPlanData.width || 600)} / ${Math.max(1, m.previewPlanData.height || 300)}`,
-                                    minHeight: 240,
-                                  }
-                                : {
-                                    aspectRatio: `${Math.max(1, m.previewPlanData.width || 600)} / ${Math.max(1, m.previewPlanData.height || 300)}`,
-                                    minHeight: 180
-                                  }
-                            }
+                            className="w-full mt-2 rounded-xl border border-slate-200 overflow-hidden bg-slate-50 relative group shadow-sm"
                           >
+                            <div className="p-2 bg-white border-b border-slate-100 flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Draft Preview</span>
+                              <button
+                                onClick={() => applyPreviewPlan(m.previewPlanData)}
+                                className="bg-[var(--accent)] text-white px-3 py-1 rounded-md text-[10px] font-bold hover:brightness-110 transition-all shadow-sm"
+                              >
+                                Apply to Canvas
+                              </button>
+                            </div>
+                            <div
+                              className="relative"
+                              style={
+                                wallOnlyPreview
+                                  ? {
+                                      aspectRatio: `${Math.max(1, m.previewPlanData.width || 600)} / ${Math.max(1, m.previewPlanData.height || 300)}`,
+                                      minHeight: 240,
+                                    }
+                                  : {
+                                      aspectRatio: `${Math.max(1, m.previewPlanData.width || 600)} / ${Math.max(1, m.previewPlanData.height || 300)}`,
+                                      minHeight: 180
+                                    }
+                              }
+                            >
                             <PlanPreview
                               assets={m.previewPlanData.assets}
                               walls={m.previewPlanData.walls}
@@ -3164,8 +3709,6 @@ export default function AiTrigger() {
                               className="w-full h-full"
                               stretchToContainer={false}
                             />
-                            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <span className="bg-white/90 px-3 py-1.5 rounded-full text-xs font-medium shadow-sm border">Draft Preview</span>
                             </div>
                           </div>
                             );
@@ -3174,14 +3717,16 @@ export default function AiTrigger() {
 
                         {/* Asset Selection Grid */}
                         {m.assetSelection && (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full max-w-2xl mt-1">
-                            {m.assetSelection.options.map((option: { id: string; name: string; category: string; path: string; width?: number; height?: number }) => (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-3xl mt-1">
+                            {m.assetSelection.options
+                              .filter((option: { path: string }) => !option.path || !missingOptionPaths.has(option.path))
+                              .map((option: { id: string; name: string; category: string; path: string; width?: number; height?: number }) => (
                               <button
                                 key={option.id}
                                 onClick={() => {
                                   handleSubmit(`I want to use the ${option.name}`);
                                 }}
-                                className="flex flex-col items-center p-2 rounded-md border border-gray-200 bg-white hover:border-[var(--accent)] hover:bg-blue-50 transition-all text-left"
+                                className="flex flex-col items-center p-1.5 rounded-md border border-gray-200 bg-white hover:border-[var(--accent)] hover:bg-blue-50 transition-all text-left"
                               >
                                   <div
                                     className={`w-full rounded mb-2 overflow-hidden flex items-center justify-center border border-gray-100 shadow-sm transition-colors relative ${
@@ -3191,7 +3736,7 @@ export default function AiTrigger() {
                                     }`}
                                     style={{
                                       aspectRatio: `${Math.max(1, option.width || 1200)} / ${Math.max(1, option.height || 900)}`,
-                                      minHeight: 72
+                                      minHeight: 58
                                     }}
                                   >
                                     {option.category === 'Marquee' ? (
@@ -3208,7 +3753,7 @@ export default function AiTrigger() {
                                         y: Math.max(1, option.height || 900) / 2,
                                         width: option.width || 1200,
                                         height: option.height || 900,
-                                        strokeWidth: AI_DEFAULT_STROKE_WIDTH,
+                                        strokeWidth: Math.max(0.9, AI_DEFAULT_STROKE_WIDTH * 1.5),
                                         strokeColor: '#1a1a1a',
                                         fillColor: 'transparent',
                                         scale: 1,
@@ -3220,7 +3765,7 @@ export default function AiTrigger() {
                                     />
                                   )}
                                 </div>
-                                <span className="text-[10px] font-bold text-slate-700 line-clamp-1 w-full">{option.name}</span>
+                                <span className="text-[9px] font-bold text-slate-700 line-clamp-1 w-full">{option.name}</span>
                                 <span className="text-[8px] text-slate-400 uppercase tracking-widest w-full font-bold">{option.category}</span>
                               </button>
                             ))}

@@ -15,6 +15,7 @@ import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
 import { useEditorStore } from "@/store/editorStore";
 import { useProjectStore } from "@/store/projectStore";
+import { useUserStore } from "@/store/userStore";
 import {
   useSceneStore,
   EventData as BaseEventData,
@@ -28,6 +29,7 @@ import { calculateWorkspaceBounds } from "@/utils/workspaceBounds";
 
 // Extended EventData type with canvasData
 type EventData = BaseEventData & {
+  comments?: any[];
   canvasData?: {
     walls: any[];
     shapes: any[];
@@ -37,7 +39,37 @@ type EventData = BaseEventData & {
     labelArrows?: any[];
     layers?: any[];
     canvas?: any;
+    comments?: any[];
   };
+};
+
+const elementAssetDefinitionById = new Map(ASSET_LIBRARY.map((asset) => [asset.id, asset]));
+
+const isPointInClosedPolygon = (x: number, y: number, points: { x: number; y: number }[]) => {
+  let inside = false;
+
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i].x;
+    const yi = points[i].y;
+    const xj = points[j].x;
+    const yj = points[j].y;
+    const intersects =
+      yi > y !== yj > y &&
+      x < ((xj - xi) * (y - yi)) / ((yj - yi) || 0.0000001) + xi;
+    if (intersects) inside = !inside;
+  }
+
+  return inside;
+};
+
+const getAssetCountBucket = (label: string) => {
+  const normalized = label.toLowerCase();
+
+  if (normalized.includes("chair")) return "chairs";
+  if (normalized.includes("stool")) return "stools";
+  if (normalized.includes("table")) return "tables";
+  if (normalized.includes("sofa")) return "sofas";
+  return "other assets";
 };
 
 // Lightweight pane listing all elements on the workspace (walls, shapes, assets)
@@ -187,6 +219,31 @@ function ElementsPane() {
     }),
     ];
   }, [assets, dimensions, groups, labelArrows, shapes, textAnnotations, walls]);
+
+  const assetSummary = React.useMemo(() => {
+    const enclosureWalls = walls.filter((wall) => wall.nodes && wall.nodes.length >= 3);
+    const counts = new Map<string, number>();
+
+    assets.forEach((asset) => {
+      const assetDef = elementAssetDefinitionById.get(asset.type);
+      if (!assetDef) return;
+      if (assetDef.category === "Space_Elements" || assetDef.category === "Marquee") return;
+
+      const isInsideWall =
+        enclosureWalls.length === 0 ||
+        enclosureWalls.some((wall) => isPointInClosedPolygon(asset.x, asset.y, wall.nodes));
+
+      if (!isInsideWall) return;
+
+      const bucket = getAssetCountBucket(asset.name || assetDef.label || assetDef.name || "Asset");
+      counts.set(bucket, (counts.get(bucket) || 0) + 1);
+    });
+
+    const order = ["chairs", "stools", "tables", "sofas", "other assets"];
+    return order
+      .filter((key) => counts.has(key))
+      .map((key) => ({ label: key, count: counts.get(key) || 0 }));
+  }, [assets, walls]);
 
   const handleSelect = (item: { id: string; x: number; y: number; childIds?: string[] }, e?: React.MouseEvent) => {
     const idsToSelect = item.childIds && item.childIds.length > 0 ? item.childIds : [item.id];
@@ -642,6 +699,27 @@ function ElementsPane() {
           );
         })}
       </div>
+      <div className="border-t border-gray-100 bg-gray-50 px-3 py-2">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500">
+          Totals Inside Walls
+        </div>
+        {assetSummary.length > 0 ? (
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {assetSummary.map((entry) => (
+              <div
+                key={entry.label}
+                className="rounded-full border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-700"
+              >
+                {entry.count} {entry.label}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-1 text-[10px] text-gray-400">
+            No counted furniture assets inside the walls yet
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -665,6 +743,38 @@ const normalizeLegacyWallStroke = (...values: Array<string | undefined | null>) 
   const stroke = values.find((value) => value && value !== 'none');
   return stroke?.toUpperCase() === '#1E40AF' ? '#1f2937' : (stroke || '#1f2937');
 };
+
+const normalizeEventComments = (rawComments: any[] = []) =>
+  rawComments
+    .filter(Boolean)
+    .map((comment: any) => {
+      const currentUser = useUserStore.getState().user;
+      const currentUserName =
+        currentUser
+          ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || currentUser.email || currentUser._id
+          : null;
+      const author =
+        comment.author ||
+        (comment.userId && currentUser && comment.userId === currentUser._id ? currentUserName : null) ||
+        comment.userId ||
+        'Unknown';
+      return {
+        id: String(comment.id || comment._id || crypto.randomUUID()),
+        x: Number(comment.x || 0),
+        y: Number(comment.y || 0),
+        content: String(comment.content ?? comment.text ?? ''),
+        author: String(author),
+        timestamp: comment.timestamp
+          ? Number(comment.timestamp)
+          : comment.createdAt
+            ? new Date(comment.createdAt).getTime()
+            : Date.now(),
+        resolved: Boolean(comment.resolved),
+        color: comment.color,
+        userId: comment.userId,
+        createdAt: comment.createdAt,
+      };
+    });
 
 const LOCAL_DRAFT_VERSION = 1;
 
@@ -1047,6 +1157,7 @@ export default function Editor() {
       if (shouldLoad && !justSavedRef.current) {
         console.log(`[Editor] Loading NEW event from DATABASE: ${eventId} (previous: ${currentId})`);
         setCurrentEventData(eventData);
+        const normalizedComments = normalizeEventComments(eventData.comments || eventData.canvasData?.comments || []);
 
         // Load event data into stores for Workspace2D
         const projectStore = useProjectStore.getState();
@@ -1122,6 +1233,10 @@ export default function Editor() {
             labelArrows.forEach((arrow: any) => {
               projectStore.addLabelArrow(arrow, true);
             });
+            useProjectStore.setState((state) => ({
+              ...state,
+              comments: normalizedComments,
+            }));
             projectStore.markAsSaved();
 
             // DEFAULT OUTDOOR LAYOUT if empty
@@ -1462,6 +1577,11 @@ export default function Editor() {
             shapes: projectStore.shapes.length,
             assets: projectStore.assets.length,
           });
+          useProjectStore.setState((state) => ({
+            ...state,
+            comments: normalizedComments,
+          }));
+          projectStore.markAsSaved();
           projectStore.markAsSaved();
         }
       } else {
@@ -1754,13 +1874,18 @@ export default function Editor() {
       }
 
       const parsed = JSON.parse(raw) as LocalWorkspaceDraft;
+      const backendUpdatedAt = currentEventData?.updatedAt ? new Date(currentEventData.updatedAt).getTime() : 0;
       if (
         !parsed ||
         parsed.version !== LOCAL_DRAFT_VERSION ||
         parsed.eventId !== id ||
         parsed.slug !== slug ||
-        !parsed.data
+        !parsed.data ||
+        (backendUpdatedAt && parsed.savedAt <= backendUpdatedAt)
       ) {
+        if (backendUpdatedAt && parsed?.savedAt <= backendUpdatedAt) {
+          clearLocalWorkspaceDraft();
+        }
         restoredLocalDraftRef.current = draftKey;
         return;
       }
@@ -1795,7 +1920,7 @@ export default function Editor() {
       console.warn("[Editor] Failed to restore local workspace draft", error);
       restoredLocalDraftRef.current = draftKey;
     }
-  }, [currentEventData, id, slug]);
+  }, [currentEventData, id, slug, clearLocalWorkspaceDraft]);
 
   // Fast local draft checkpoint for crash / shutdown recovery
   useEffect(() => {
