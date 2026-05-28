@@ -1366,41 +1366,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         };
       }
 
-      if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && assistantAskedForLayoutSummary) {
-        if (!effectiveGuestCount) {
-          return {
-            followUp: briefMentionsMultipleZones || briefMentionsDirectionalZones
-              ? 'I understand the overall layout idea. Roughly how many guests should I plan for in total?'
-              : 'Thanks, that helps. Roughly how many guests should I plan for in total?',
-            preview: buildRoomShellPreview(),
-          };
-        }
-
-        if (guestZoneFromBrief?.onlyChairs && !selectedChairForFlow) {
-          return {
-            followUp: `For the ${guestZoneFromBrief.side || 'main'} side guest area, what chair or stool would you like me to use for the ${guestZoneFromBrief.count || effectiveGuestCount} seats?`,
-            assetSelection: {
-              category: 'chair',
-              message: 'Select seating for the guest area',
-              options: chairAssets,
-            },
-            preview: buildRoomShellPreview(),
-          };
-        }
-
-        if (!selectedTableForFlow) {
-          return {
-            followUp: briefMentionsMultipleZones
-              ? `I understand you want more than one zone in this layout. What table or seating setup should I use first for the ${guestZoneFromBrief?.side || 'main'} side guest area for ${guestZoneFromBrief?.count || effectiveGuestCount} guests?`
-              : `For ${effectiveGuestCount} guests, what table or seating setup would you like to use first?`,
-            assetSelection: {
-              category: 'table',
-              message: 'Select a table or seating setup',
-              options: guestSetupAssets,
-            },
-            preview: buildRoomShellPreview(),
-          };
-        }
+      if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && hasLayoutBrief) {
+        return (
+          buildStructuredFlowResponse() || {
+            preview: buildStructuredZonePreview(),
+            followUp: 'I’m with you. What would you like to set up next inside this layout?',
+          }
+        );
       }
 
       if (assistantAskedForGuestCount && !effectiveGuestCount) {
@@ -1724,7 +1696,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const buildStructuredZonePreview = () => {
+    function buildStructuredZonePreview() {
       if (guestZoneFromBrief?.onlyChairs && selectedChairForFlow) {
         return buildChairOnlyZonePreview(
           selectedChairForFlow.name,
@@ -1754,10 +1726,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         preview.textAnnotations = [...(preview.textAnnotations || []), ...stageBundle.textAnnotations];
       }
       return preview;
-    };
+    }
 
-    if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && hasLayoutBrief) {
-      const structuredPreview = buildStructuredZonePreview();
+    function buildStructuredFlowResponse(previewOverride?: any) {
+      if (!(activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && hasLayoutBrief)) {
+        return null;
+      }
+
+      const structuredPreview = previewOverride || buildStructuredZonePreview();
       const mainZoneIsChairOnly = Boolean(guestZoneFromBrief?.onlyChairs);
       const mainZoneNeedsSetup = !mainZoneIsChairOnly && !selectedTableForFlow;
       const mainZoneNeedsChairChoice =
@@ -1805,16 +1781,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         !guestZoneFromBrief?.count &&
         !secondaryTableZoneFromBrief?.zoneCount
       ) {
-        return res.status(200).json({
+        return {
           followUp: briefMentionsMultipleZones || briefMentionsDirectionalZones
             ? 'I understand the overall layout idea. Roughly how many guests should I plan for in total?'
             : 'Thanks, that helps. Roughly how many guests should I plan for in total?',
           preview: buildRoomShellPreview(),
-        });
+        };
       }
 
       if (mainZoneNeedsSetup) {
-        return res.status(200).json({
+        return {
           followUp: briefMentionsMultipleZones
             ? `I understand you want multiple zones in the layout. What table or seating setup should I use first for the ${guestZoneFromBrief?.side || 'main'} side guest area for ${guestZoneFromBrief?.count || effectiveGuestCount} guests?`
             : `For ${guestZoneFromBrief?.count || effectiveGuestCount} guests, what table or seating setup would you like to use?`,
@@ -1824,14 +1800,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             options: guestSetupAssets,
           },
           preview: structuredPreview,
-        });
+        };
       }
 
       if (mainZoneNeedsChairChoice) {
         const followUp = mainZoneIsChairOnly
           ? `For the ${guestZoneFromBrief?.side || 'main'} side guest area, what chair or stool would you like me to use for the ${guestZoneFromBrief?.count || effectiveGuestCount} seats?`
           : `What chair would you like to pair with the ${selectedTableForFlow!.name}?`;
-        return res.status(200).json({
+        return {
           followUp,
           assetSelection: {
             category: 'chair',
@@ -1839,29 +1815,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             options: chairAssets,
           },
           preview: structuredPreview,
-        });
+        };
       }
 
       if (mainZoneNeedsChairCount) {
-        return res.status(200).json({
+        return {
           followUp: `How many chairs should I place around each ${selectedTableForFlow!.name}? I can suggest ${getSuggestedChairCountForTable(selectedTableForFlow!.name)} unless you want a different number.`,
           preview: structuredPreview,
-        });
+        };
       }
 
       if (mainZoneNeedsArrangement) {
         const arrangementSubject = mainZoneIsChairOnly
           ? `${guestZoneFromBrief?.count || effectiveGuestCount} ${selectedChairForFlow!.name} seats`
           : `${Math.max(1, Math.ceil((guestZoneFromBrief?.count || effectiveGuestCount || 1) / Math.max(1, getSeatCountForFlowTable(selectedTableForFlow!.name) || 1)))} table${Math.max(1, Math.ceil((guestZoneFromBrief?.count || effectiveGuestCount || 1) / Math.max(1, getSeatCountForFlowTable(selectedTableForFlow!.name) || 1))) > 1 ? 's' : ''} using ${selectedTableForFlow!.name}`;
-        return res.status(200).json({
+        return {
           followUp: `How would you like those ${arrangementSubject} arranged on the ${guestZoneFromBrief?.side || 'main'} side?`,
           choices: arrangementChoices,
           preview: structuredPreview,
-        });
+        };
       }
 
       if (secondaryZoneNeedsTableSelection) {
-        return res.status(200).json({
+        return {
           followUp: `You also mentioned the ${secondaryZoneLabelForPrompt}. What table should I use there?`,
           assetSelection: {
             category: 'table',
@@ -1869,11 +1845,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             options: tableAssets,
           },
           preview: structuredPreview,
-        });
+        };
       }
 
       if (secondaryZoneNeedsChairType) {
-        return res.status(200).json({
+        return {
           followUp: `What chair would you like to pair with the ${selectedSecondaryZoneTableForFlow!.name} on the ${secondaryTableZoneFromBrief?.side || 'secondary'} side?${getSecondaryZoneSeatingGuidance()}`,
           assetSelection: {
             category: 'chair',
@@ -1881,14 +1857,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             options: chairAssets,
           },
           preview: structuredPreview,
-        });
+        };
       }
 
       if (secondaryZoneNeedsChairCount) {
-        return res.status(200).json({
+        return {
           followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
           preview: structuredPreview,
-        });
+        };
       }
 
       if (
@@ -1899,56 +1875,56 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         !mainZoneNeedsArrangement &&
         secondaryZoneResolved
       ) {
-        return res.status(200).json({
+        return {
           followUp: 'Would you like me to scale the layout to use more of the available wall space, or keep it at default size?',
           choices: ['Fit to space', 'Keep default size'],
           preview: structuredPreview,
-        });
+        };
       }
 
       if (!stageResolved) {
         if (!stageDecisionKnown) {
-          return res.status(200).json({
+          return {
             followUp: selectedStagePlacement
               ? `Would you like to add a stage at the ${selectedStagePlacement === 'top' ? 'top' : selectedStagePlacement} of the layout?`
               : 'Would you like to add a stage to your layout?',
             choices: ['Yes, add a stage', 'No stage'],
             preview: structuredPreview,
-          });
+          };
         }
 
         if (!selectedStageForFlow) {
-          return res.status(200).json({
+          return {
             followUp: 'What size would you like for the stage? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
             preview: structuredPreview,
-          });
+          };
         }
 
-        return res.status(200).json({
+        return {
           followUp: 'Where should I place the stage in relation to the arrangement?',
           choices: getStagePositionChoices(),
           preview: structuredPreview,
-        });
+        };
       }
 
       if (assistantAskedForExtras && noExtrasReply) {
-        return res.status(200).json({
+        return {
           plan: structuredPreview,
-        });
+        };
       }
 
       if (!extrasDecisionKnown) {
-        return res.status(200).json({
+        return {
           followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
           preview: structuredPreview,
-        });
+        };
       }
 
       if (!assistantAskedForExtras && !extrasResolved && !hasAnyPhrase(normalizedIntentText, ['dance floor', 'entrance door', 'doors', 'vip', 'buffet', 'bar', 'presentation'])) {
-        return res.status(200).json({
+        return {
           followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
           preview: structuredPreview,
-        });
+        };
       }
 
       if (
@@ -1959,129 +1935,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         secondaryZoneResolved &&
         stageResolved
       ) {
-        return res.status(200).json({
+        return {
           plan: structuredPreview,
-        });
+        };
       }
+
+      return null;
     }
 
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      assistantAskedForLayoutSummary &&
-      hasLayoutBrief &&
-      !selectedMentionedAsset &&
-      !effectiveGuestCount
-    ) {
-      return res.status(200).json({
-        followUp: briefMentionsMultipleZones || briefMentionsDirectionalZones
-          ? 'I understand the overall layout idea. Roughly how many guests should I plan for in total?'
-          : 'Thanks, that helps. Roughly how many guests should I plan for in total?',
-        preview: buildRoomShellPreview(),
-      });
-    }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      effectiveGuestCount &&
-      guestZoneFromBrief?.onlyChairs &&
-      selectedChairForFlow &&
-      arrangementAlreadyKnown &&
-      secondaryZoneNeedsTableSelection &&
-      !selectedMentionedAsset
-    ) {
-      return res.status(200).json({
-        followUp: `You also mentioned the ${secondaryZoneLabelForPrompt}. What table should I use there?`,
-        assetSelection: {
-          category: 'table',
-          message: 'Select a table for the smaller area',
-          options: tableAssets,
-        },
-        preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
-      });
-    }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      effectiveGuestCount &&
-      guestZoneFromBrief?.onlyChairs &&
-      selectedChairForFlow &&
-      arrangementAlreadyKnown &&
-      secondaryZoneNeedsChairSelection &&
-      !selectedMentionedAsset
-    ) {
-      return res.status(200).json({
-        followUp: `What chair should I pair with the ${secondaryZoneLabelForPrompt}?`,
-        assetSelection: {
-          category: 'chair',
-          message: 'Select seating for the smaller area',
-          options: chairAssets,
-        },
-        preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
-      });
-    }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      effectiveGuestCount &&
-      guestZoneFromBrief?.onlyChairs &&
-      selectedChairForFlow &&
-      arrangementAlreadyKnown &&
-      secondaryZoneNeedsChairCount &&
-      !selectedMentionedAsset
-    ) {
-      return res.status(200).json({
-        followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
-        preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
-      });
-    }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      effectiveGuestCount &&
-      guestZoneFromBrief?.onlyChairs &&
-      !selectedMentionedAsset &&
-      !selectedChairForFlow
-    ) {
-      return res.status(200).json({
-        followUp: `For the ${guestZoneFromBrief.side || 'main'} side guest area, what chair or stool would you like me to use for the ${guestZoneFromBrief.count || effectiveGuestCount} seats?`,
-        assetSelection: {
-          category: 'chair',
-          message: 'Select seating for the guest area',
-          options: chairAssets,
-        },
-        preview: buildRoomShellPreview(),
-      });
-    }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      effectiveGuestCount &&
-      !tableChoiceKnown &&
-      !selectedMentionedAsset
-    ) {
-      return res.status(200).json({
-        followUp: briefMentionsMultipleZones
-          ? `I understand you want multiple zones in the layout. What table or seating setup should I use first for the ${guestZoneFromBrief?.side || 'main'} side guest area for ${guestZoneFromBrief?.count || effectiveGuestCount} guests?`
-          : `For ${effectiveGuestCount} guests, what table or seating setup would you like to use?`,
-        assetSelection: {
-          category: 'table',
-          message: 'Select a table or seating setup',
-          options: guestSetupAssets,
-        },
-        preview: buildRoomShellPreview(),
-      });
+    if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && hasLayoutBrief) {
+      const structuredResponse = buildStructuredFlowResponse();
+      if (structuredResponse) {
+        return res.status(200).json(structuredResponse);
+      }
     }
 
     if (normalizedCommand === 'marquee') {
@@ -2107,166 +1973,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       );
 
     if (
-      selectedMentionedAsset &&
-      selectedMentionedAsset.category === 'Furniture' &&
-      !selectedMentionedAsset.name.toLowerCase().includes('table') &&
-      (selectedMentionedAsset.name.toLowerCase().includes('chair') || selectedMentionedAsset.name.toLowerCase().includes('stool')) &&
-      assistantAskedForSecondaryZoneChair &&
-      structuredSpaceConversation
-    ) {
-      if (guestZoneFromBrief?.onlyChairs && selectedChairForFlow && arrangementAlreadyKnown) {
-        if (secondaryZoneNeedsChairCount) {
-          return res.status(200).json({
-            followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
-            preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
-          });
-        }
-        if (stageStillRequested && !selectedStageForFlow) {
-          return res.status(200).json({
-            followUp: 'You mentioned a stage. What size would you like it to be? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
-            preview: buildChairOnlyZonePreview(selectedChairForFlow.name),
-          });
-        }
-        if (!stageDecisionKnown) {
-          return res.status(200).json({
-            followUp: 'Would you like to add a stage to your layout?',
-            choices: ['Yes, add a stage', 'No stage'],
-            preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
-          });
-        }
-        return res.status(200).json({
-          followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
-          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
-        });
-      }
-      return res.status(200).json({
-        followUp: secondaryZoneNeedsChairCount
-          ? `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`
-          : `Great choice. I’ll use ${selectedMentionedAsset.name} for the ${secondaryZoneLabelForPrompt}.`,
-        preview: buildCustomTablePreview(
-          selectedTableForFlow?.name || selectedTableFromHistory?.name || selectedMentionedAsset.name,
-          selectedStageForFlow,
-          selectedStagePlacement,
-          getSeatCountForFlowTable(selectedTableForFlow?.name || selectedTableFromHistory?.name || selectedMentionedAsset.name),
-          getChairAssetNameForFlow()
-        ),
-      });
-    }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      guestZoneFromBrief?.onlyChairs &&
-      selectedSecondaryZoneTableForFlow &&
-      !selectedChairForFlow
-    ) {
-      const preview: any = buildRoomShellPreview();
-      const secondaryZoneAsset = buildSecondaryZoneAsset();
-      if (secondaryZoneAsset) {
-        preview.assets = [secondaryZoneAsset];
-      }
-      return res.status(200).json({
-        followUp: `I’ll use ${selectedSecondaryZoneTableForFlow.name} for the ${secondaryZoneLabelForPrompt}. For the ${guestZoneFromBrief.side || 'main'} side guest area, what chair or stool would you like me to use for the ${guestZoneFromBrief.count || effectiveGuestCount || 1} seats?`,
-        assetSelection: {
-          category: 'chair',
-          message: 'Select seating for the guest area',
-          options: chairAssets,
-        },
-        preview,
-      });
-    }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      guestZoneFromBrief?.onlyChairs &&
-      selectedChairForFlow &&
-      arrangementAlreadyKnown &&
-      selectedSecondaryZoneTableForFlow &&
-      selectedMentionedAsset &&
-      selectedMentionedAsset.name === selectedSecondaryZoneTableForFlow.name
-    ) {
-      if (secondaryZoneNeedsChairSelection) {
-        return res.status(200).json({
-          followUp: `What chair should I pair with the ${secondaryZoneLabelForPrompt}?`,
-          assetSelection: {
-            category: 'chair',
-            message: 'Select seating for the smaller area',
-            options: chairAssets,
-          },
-          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
-        });
-      }
-      if (secondaryZoneNeedsChairCount) {
-        return res.status(200).json({
-          followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
-          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
-        });
-      }
-      if (noStageReply) {
-        return res.status(200).json({
-          followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
-          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
-        });
-      }
-      if (stageStillRequested && !selectedStageForFlow) {
-        return res.status(200).json({
-          followUp: 'You mentioned a stage. What size would you like it to be? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
-          preview: buildChairOnlyZonePreview(selectedChairForFlow.name),
-        });
-      }
-      if (!stageDecisionKnown) {
-        return res.status(200).json({
-          followUp: 'Would you like to add a stage to your layout?',
-          choices: ['Yes, add a stage', 'No stage'],
-          preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
-        });
-      }
-      return res.status(200).json({
-        followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
-        preview: buildChairOnlyZonePreview(selectedChairForFlow.name, selectedStageForFlow, selectedStagePlacement),
-      });
-    }
-
-    if (
-      selectedMentionedAsset &&
-      selectedMentionedAsset.category === 'Furniture' &&
-      !selectedMentionedAsset.name.toLowerCase().includes('table') &&
-      (selectedMentionedAsset.name.toLowerCase().includes('chair') || selectedMentionedAsset.name.toLowerCase().includes('stool')) &&
-      guestZoneFromBrief?.onlyChairs &&
-      !assistantAskedForSecondaryZoneChair &&
-      structuredSpaceConversation
-    ) {
-      return res.status(200).json({
-        followUp: `Great choice. How would you like those ${guestZoneFromBrief.count || effectiveGuestCount || 1} ${selectedMentionedAsset.name} seats arranged on the ${guestZoneFromBrief.side || 'main'} side?`,
-        choices: arrangementChoices,
-        preview: buildChairOnlyZonePreview(selectedMentionedAsset.name, selectedStageForFlow, selectedStagePlacement),
-      });
-    }
-
-    if (
-      selectedMentionedAsset &&
-      selectedMentionedAsset.category === 'Furniture' &&
-      !selectedMentionedAsset.name.toLowerCase().includes('table') &&
-      (selectedMentionedAsset.name.toLowerCase().includes('chair') || selectedMentionedAsset.name.toLowerCase().includes('stool')) &&
-      assistantAskedForTableChoice &&
-      structuredSpaceConversation
-    ) {
-      return res.status(200).json({
-        followUp: `I can use ${selectedMentionedAsset.name} as seating, but I still need the main table or seating setup for the ${guestZoneFromBrief?.side || 'main'} guest area. What table would you like me to pair it with?`,
-        assetSelection: {
-          category: 'table',
-          message: 'Select a table or seating setup',
-          options: guestSetupAssets,
-        },
-        preview: buildRoomShellPreview(),
-      });
-    }
-
-    if (
       tableAssetSelected &&
+      !structuredSpaceConversation &&
       (assistantAskedForTableChoice || activeSpaceWidthMm || activeSpaceHeightMm) &&
       !(
         guestZoneFromBrief?.onlyChairs &&
@@ -2441,241 +2149,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
     }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      effectiveGuestCount &&
-      tableChoiceKnown &&
-      arrangementReply
-    ) {
-      if (secondaryZoneNeedsTableSelection) {
-        return res.status(200).json({
-          followUp: `You also mentioned the ${secondaryZoneLabelForPrompt}. What table should I use there?`,
-          assetSelection: {
-            category: 'table',
-            message: 'Select a table for the smaller area',
-            options: tableAssets,
-          },
-          preview: {
-            ...buildCustomTablePreview(
-              selectedTableFromHistory!.name,
-              undefined,
-              undefined,
-              getSeatCountForFlowTable(selectedTableFromHistory!.name),
-              getChairAssetNameForFlow()
-            ),
-          },
-        });
-      }
-      if (secondaryZoneNeedsChairSelection) {
-        return res.status(200).json({
-          followUp: `What chair should I pair with the ${secondaryZoneLabelForPrompt}?`,
-          assetSelection: {
-            category: 'chair',
-            message: 'Select seating for the smaller area',
-            options: chairAssets,
-          },
-          preview: {
-            ...buildCustomTablePreview(
-              selectedTableFromHistory!.name,
-              undefined,
-              undefined,
-              getSeatCountForFlowTable(selectedTableFromHistory!.name),
-              getChairAssetNameForFlow()
-            ),
-          },
-        });
-      }
-      if (secondaryZoneNeedsChairCount) {
-        return res.status(200).json({
-          followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
-          preview: {
-            ...buildCustomTablePreview(
-              selectedTableFromHistory!.name,
-              undefined,
-              undefined,
-              getSeatCountForFlowTable(selectedTableFromHistory!.name),
-              getChairAssetNameForFlow()
-            ),
-          },
-        });
-      }
-      if (stageStillRequested && !selectedStageForFlow) {
-        return res.status(200).json({
-          followUp: 'You mentioned a stage. What size would you like it to be? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
-          preview: {
-            ...buildCustomTablePreview(
-              selectedTableFromHistory!.name,
-              undefined,
-              undefined,
-              getSeatCountForFlowTable(selectedTableFromHistory!.name),
-              getChairAssetNameForFlow()
-            ),
-          },
-        });
-      }
-      if (!stageDecisionKnown) {
-        return res.status(200).json({
-          followUp: 'Would you like to add a stage to your layout?',
-          choices: ['Yes, add a stage', 'No stage'],
-          preview: {
-            ...buildCustomTablePreview(
-              selectedTableFromHistory!.name,
-              undefined,
-              undefined,
-              getSeatCountForFlowTable(selectedTableFromHistory!.name),
-              getChairAssetNameForFlow()
-            ),
-          },
-        });
-      }
-      return res.status(200).json({
-        followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
-        preview: {
-          ...buildCustomTablePreview(
-            selectedTableFromHistory!.name,
-            selectedStageForFlow,
-            selectedStagePlacement,
-            getSeatCountForFlowTable(selectedTableFromHistory!.name),
-            getChairAssetNameForFlow()
-          ),
-        },
-      });
-    }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      effectiveGuestCount &&
-      tableChoiceKnown &&
-      arrangementAlreadyKnown &&
-      assistantAskedForStage &&
-      yesStageReply
-    ) {
-      return res.status(200).json({
-        followUp: 'What size would you like for the stage? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
-        preview: buildCustomTablePreview(
-          selectedTableFromHistory!.name,
-          undefined,
-          undefined,
-          getSeatCountForFlowTable(selectedTableFromHistory!.name),
-          getChairAssetNameForFlow()
-        ),
-      });
-    }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      effectiveGuestCount &&
-      tableChoiceKnown &&
-      arrangementAlreadyKnown &&
-      assistantAskedForStageSize &&
-      stageChoiceFromCurrentInput
-    ) {
-      return res.status(200).json({
-        followUp: 'Where should I place the stage in relation to the arrangement?',
-        choices: getStagePositionChoices(),
-        preview: buildCustomTablePreview(
-          selectedTableFromHistory!.name,
-          stageChoiceFromCurrentInput,
-          undefined,
-          getSeatCountForFlowTable(selectedTableFromHistory!.name),
-          getChairAssetNameForFlow()
-        ),
-      });
-    }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      effectiveGuestCount &&
-      tableChoiceKnown &&
-      arrangementAlreadyKnown &&
-      assistantAskedForStagePlacement &&
-      selectedStageForFlow
-    ) {
-      return res.status(200).json({
-        followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
-        preview: buildCustomTablePreview(
-          selectedTableFromHistory!.name,
-          selectedStageForFlow,
-          selectedStagePlacement,
-          getSeatCountForFlowTable(selectedTableFromHistory!.name),
-          getChairAssetNameForFlow()
-        ),
-      });
-    }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      effectiveGuestCount &&
-      tableChoiceKnown &&
-      arrangementAlreadyKnown &&
-      assistantAskedForStage &&
-      noStageReply
-    ) {
-      return res.status(200).json({
-        followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
-        preview: buildCustomTablePreview(
-          selectedTableFromHistory!.name,
-          undefined,
-          undefined,
-          getSeatCountForFlowTable(selectedTableFromHistory!.name),
-          getChairAssetNameForFlow()
-        ),
-      });
-    }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      effectiveGuestCount &&
-      tableChoiceKnown &&
-      arrangementAlreadyKnown &&
-      assistantAskedForExtras &&
-      noExtrasReply
-    ) {
-      return res.status(200).json({
-        plan: buildCustomTablePreview(
-          selectedTableFromHistory!.name,
-          selectedStageForFlow,
-          selectedStagePlacement,
-          getSeatCountForFlowTable(selectedTableFromHistory!.name),
-          getChairAssetNameForFlow()
-        ),
-      });
-    }
-
-    if (
-      activeSpaceWidthMm &&
-      activeSpaceHeightMm &&
-      structuredSpaceConversation &&
-      effectiveGuestCount &&
-      tableChoiceKnown &&
-      arrangementAlreadyKnown &&
-      assistantAskedForGeneration &&
-      proceedReply
-    ) {
-      return res.status(200).json({
-        plan: buildCustomTablePreview(
-          selectedTableFromHistory!.name,
-          selectedStageForFlow,
-          selectedStagePlacement,
-          getSeatCountForFlowTable(selectedTableFromHistory!.name),
-          getChairAssetNameForFlow()
-        ),
-      });
-    }
-
 
     if (!OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
 
@@ -3320,7 +2793,7 @@ ${obstaclesContext}`;
       return res.status(200).json({ message: parsed.message });
     }
 
-      if (parsed.followUp && !parsed.assetSelection) {
+      if (parsed.followUp && !parsed.assetSelection && !structuredSpaceConversation) {
         const followUpLower = String(parsed.followUp).toLowerCase();
         const combinedUserText = `${history.filter((m) => m.role === 'user').map((m) => m.content).join('\n')}\n${userContent}`.toLowerCase();
         const marqueeConversation =
