@@ -11,25 +11,152 @@ import { getRasterAssetPath } from '@/utils/assetRasterPath';
 const svgCache: Record<string, string> = {};
 const pendingSvgCache: Record<string, Promise<string>> = {};
 const processedSvgCache: Record<string, string> = {};
+const svgMetricsCache: Record<string, SvgMetrics> = {};
+
+type SvgMetrics = {
+    artboardWidth: number | null;
+    artboardHeight: number | null;
+    contentX: number | null;
+    contentY: number | null;
+    contentWidth: number | null;
+    contentHeight: number | null;
+    shouldCropToContent: boolean;
+};
 
 // Helper to extract dimensions from SVG string
-function getSvgSize(svgText: string) {
+function getSvgMetrics(svgText: string): SvgMetrics {
     const widthMatch = svgText.match(/width=["']([\d.]+)[a-z%]*["']/i);
     const heightMatch = svgText.match(/height=["']([\d.]+)[a-z%]*["']/i);
     const viewBoxMatch = svgText.match(/viewBox=["']([\d\s.-]+)["']/);
 
     let width = widthMatch ? parseFloat(widthMatch[1]) : null;
     let height = heightMatch ? parseFloat(heightMatch[1]) : null;
+    let viewBoxX = 0;
+    let viewBoxY = 0;
 
-    if ((!width || !height) && viewBoxMatch) {
+    if (viewBoxMatch) {
         const parts = viewBoxMatch[1].split(/\s+/).map(parseFloat);
         if (parts.length === 4) {
+            viewBoxX = parts[0];
+            viewBoxY = parts[1];
             width = width || parts[2];
             height = height || parts[3];
         }
     }
 
-    return { width, height };
+    const result: SvgMetrics = {
+        artboardWidth: width,
+        artboardHeight: height,
+        contentX: null,
+        contentY: null,
+        contentWidth: null,
+        contentHeight: null,
+        shouldCropToContent: false,
+    };
+
+    if (typeof document === 'undefined') {
+        return result;
+    }
+
+    const tempHost = document.createElement('div');
+    tempHost.style.position = 'absolute';
+    tempHost.style.left = '-100000px';
+    tempHost.style.top = '-100000px';
+    tempHost.style.width = '0';
+    tempHost.style.height = '0';
+    tempHost.style.opacity = '0';
+    tempHost.style.pointerEvents = 'none';
+    tempHost.style.overflow = 'hidden';
+    tempHost.innerHTML = svgText;
+
+    document.body.appendChild(tempHost);
+
+    try {
+        const tempSvg = tempHost.querySelector('svg') as SVGSVGElement | null;
+        if (!tempSvg) {
+            return result;
+        }
+
+        let bbox: DOMRect | null = null;
+
+        try {
+            const rootBox = tempSvg.getBBox();
+            if (rootBox.width > 0 && rootBox.height > 0) {
+                bbox = rootBox;
+            }
+        } catch {
+            bbox = null;
+        }
+
+        if (!bbox) {
+            let minX = Number.POSITIVE_INFINITY;
+            let minY = Number.POSITIVE_INFINITY;
+            let maxX = Number.NEGATIVE_INFINITY;
+            let maxY = Number.NEGATIVE_INFINITY;
+
+            const graphics = Array.from(tempSvg.querySelectorAll('*')).filter((node): node is SVGGraphicsElement => {
+                if (!(node instanceof SVGGraphicsElement)) return false;
+                if (node.closest('defs, clipPath, mask, pattern, marker, symbol, title, desc, style, script')) return false;
+                return true;
+            });
+
+            graphics.forEach(node => {
+                try {
+                    const box = node.getBBox();
+                    if (box.width <= 0 && box.height <= 0) return;
+
+                    minX = Math.min(minX, box.x);
+                    minY = Math.min(minY, box.y);
+                    maxX = Math.max(maxX, box.x + box.width);
+                    maxY = Math.max(maxY, box.y + box.height);
+                } catch {
+                    // Ignore nodes that cannot report bounds
+                }
+            });
+
+            if (Number.isFinite(minX) && Number.isFinite(minY) && Number.isFinite(maxX) && Number.isFinite(maxY)) {
+                bbox = {
+                    x: minX,
+                    y: minY,
+                    width: maxX - minX,
+                    height: maxY - minY,
+                } as DOMRect;
+            }
+        }
+
+        if (!bbox || bbox.width <= 0 || bbox.height <= 0) {
+            return result;
+        }
+
+        const contentX = bbox.x;
+        const contentY = bbox.y;
+        const contentWidth = bbox.width;
+        const contentHeight = bbox.height;
+
+        const widthRatio = width ? contentWidth / width : null;
+        const heightRatio = height ? contentHeight / height : null;
+        const xOffset = width ? Math.abs(contentX - viewBoxX) / width : 0;
+        const yOffset = height ? Math.abs(contentY - viewBoxY) / height : 0;
+        const shouldCropToContent =
+            !width ||
+            !height ||
+            xOffset > 0.01 ||
+            yOffset > 0.01 ||
+            (widthRatio !== null && widthRatio < 0.95) ||
+            (heightRatio !== null && heightRatio < 0.95);
+
+        return {
+            artboardWidth: width,
+            artboardHeight: height,
+            contentX,
+            contentY,
+            contentWidth,
+            contentHeight,
+            shouldCropToContent,
+        };
+    } finally {
+        tempHost.remove();
+    }
 }
 
 interface AssetRendererProps {
@@ -69,7 +196,10 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const defaultStrokeWidth = isPreview ? 0.4 : DEFAULT_ASSET_STROKE_WIDTH;
     const disableFastImageForAsset =
         !!definition?.path &&
-        definition.path.toLowerCase().includes('10 seater round table 02.svg');
+        (
+            definition.path.toLowerCase().includes('10 seater round table 02.svg') ||
+            definition.path.toLowerCase().includes('6 seater l shaped sofa.svg')
+        );
     const prefersLiveSvgAtDefaultStroke =
         !isPreview &&
         ((asset.strokeWidth !== undefined && Math.abs(asset.strokeWidth - DEFAULT_ASSET_STROKE_WIDTH) <= 0.001) ||
@@ -109,14 +239,23 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         }
 
         const handleSvgText = (text: string) => {
+            const metrics = getSvgMetrics(text);
+            svgMetricsCache[definition.path] = metrics;
             setRawSvgContent(text);
 
-            // Extract dimensions from the SVG itself
-            const { width: svgWidth, height: svgHeight } = getSvgSize(text);
+            const svgWidth = metrics.shouldCropToContent ? metrics.contentWidth : metrics.artboardWidth;
+            const svgHeight = metrics.shouldCropToContent ? metrics.contentHeight : metrics.artboardHeight;
 
             if (svgWidth && svgHeight) {
                 const currentW = asset.width;
                 const currentH = asset.height;
+                const currentMatchesArtboard =
+                    !!currentW &&
+                    !!currentH &&
+                    !!metrics.artboardWidth &&
+                    !!metrics.artboardHeight &&
+                    Math.abs(currentW - metrics.artboardWidth) / metrics.artboardWidth < 0.05 &&
+                    Math.abs(currentH - metrics.artboardHeight) / metrics.artboardHeight < 0.05;
                 const hasLegacyTwentySeaterSize =
                     asset.type === '20-seater-doughtnut-table' &&
                     currentW !== undefined &&
@@ -125,7 +264,11 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                         (Math.abs(currentW - 23978) < 1 && Math.abs(currentH - 33854) < 1) ||
                         (Math.abs(currentW - 4600) < 1 && Math.abs(currentH - 4600) < 1)
                     );
-                const needsUpdate = !currentW || !currentH || hasLegacyTwentySeaterSize;
+                const needsUpdate =
+                    !currentW ||
+                    !currentH ||
+                    hasLegacyTwentySeaterSize ||
+                    (metrics.shouldCropToContent && currentMatchesArtboard);
 
                 if (needsUpdate) {
                     setTimeout(() => {
@@ -165,7 +308,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         if (canUseFastImage) return null;
         if (!rawSvgContent || typeof window === 'undefined' || !definition?.path) return null;
 
-        const cacheKey = `${definition.path}_workspace_v40_lshaped_sofa_corner_fill_fix`;
+        const cacheKey = `${definition.path}_workspace_v42_content_bounds_normalized`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
@@ -173,6 +316,66 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             const doc = parser.parseFromString(rawSvgContent, "image/svg+xml");
             const svg = doc.querySelector("svg");
             if (!svg) return rawSvgContent;
+            const metrics = svgMetricsCache[definition.path] || getSvgMetrics(rawSvgContent);
+            svgMetricsCache[definition.path] = metrics;
+
+            const isSixSeaterLShapedSofa = definition.path.toLowerCase().includes('6 seater l shaped sofa.svg');
+            if (isSixSeaterLShapedSofa) {
+                const svgNs = "http://www.w3.org/2000/svg";
+                const outlineSource = Array.from(doc.querySelectorAll("path")).find(path => {
+                    const fill = (path.getAttribute("fill") || "").trim().toLowerCase();
+                    return fill === "#402e2e";
+                });
+
+                if (outlineSource) {
+                    const normalizedDoc = document.implementation.createDocument(svgNs, "svg", null);
+                    const normalizedSvg = normalizedDoc.documentElement;
+                    normalizedSvg.setAttribute("xmlns", svgNs);
+                    normalizedSvg.setAttribute("version", "1.1");
+                    normalizedSvg.setAttribute("width", "3506.0661mm");
+                    normalizedSvg.setAttribute("height", "2746.0339mm");
+                    normalizedSvg.setAttribute("viewBox", "165 100 1165 915");
+
+                    const defs = normalizedDoc.createElementNS(svgNs, "defs");
+                    const outlinePath = normalizedDoc.createElementNS(svgNs, "path");
+                    outlinePath.setAttribute("id", "sofa-shape");
+                    outlinePath.setAttribute("d", outlineSource.getAttribute("d") || "");
+
+                    const transform = outlineSource.getAttribute("transform");
+                    if (transform) outlinePath.setAttribute("transform", transform);
+
+                    outlinePath.setAttribute("fill-rule", "evenodd");
+                    outlinePath.setAttribute("clip-rule", "evenodd");
+                    defs.appendChild(outlinePath);
+
+                    const autoFillGroup = normalizedDoc.createElementNS(svgNs, "g");
+                    autoFillGroup.setAttribute("id", "auto-fill");
+                    autoFillGroup.setAttribute("class", "auto-fill");
+                    autoFillGroup.setAttribute("data-auto-fill", "true");
+
+                    const fillUse = normalizedDoc.createElementNS(svgNs, "use");
+                    fillUse.setAttribute("href", "#sofa-shape");
+                    fillUse.setAttribute("fill", "inherit");
+                    fillUse.setAttribute("stroke", "none");
+                    autoFillGroup.appendChild(fillUse);
+
+                    const strokeUse = normalizedDoc.createElementNS(svgNs, "use");
+                    strokeUse.setAttribute("href", "#sofa-shape");
+                    strokeUse.setAttribute("fill", "none");
+                    strokeUse.setAttribute("stroke", "inherit");
+                    strokeUse.setAttribute("stroke-width", "inherit");
+                    strokeUse.setAttribute("stroke-linejoin", "round");
+                    strokeUse.setAttribute("stroke-linecap", "round");
+
+                    normalizedSvg.appendChild(defs);
+                    normalizedSvg.appendChild(autoFillGroup);
+                    normalizedSvg.appendChild(strokeUse);
+
+                    const result = new XMLSerializer().serializeToString(normalizedDoc);
+                    processedSvgCache[cacheKey] = result;
+                    return result;
+                }
+            }
 
             // IMPORTANT:
             // Some QCAD SVGs put fill="none" on a parent <g>.
@@ -314,6 +517,9 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             svg.removeAttribute("stroke-width");
             svg.removeAttribute("width");
             svg.removeAttribute("height");
+            if (metrics.shouldCropToContent && metrics.contentX !== null && metrics.contentY !== null && metrics.contentWidth && metrics.contentHeight) {
+                svg.setAttribute("viewBox", `${metrics.contentX} ${metrics.contentY} ${metrics.contentWidth} ${metrics.contentHeight}`);
+            }
 
             const result = new XMLSerializer().serializeToString(doc);
             processedSvgCache[cacheKey] = result;

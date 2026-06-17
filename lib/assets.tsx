@@ -420,7 +420,7 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
   {
     "id": "6-seater-l-shaped-sofa",
     "label": "6 Seater L Shaped Sofa",
-    "path": "/assets/modal/Furniture/6 Seater L Shaped Sofa.svg",
+    "path": "/assets/modal/Furniture/6 Seater L Shaped Sofa.svg?v=4",
     "category": "Furniture",
     "width": 3506,
     "height": 2746,

@@ -4,6 +4,148 @@ import { DEFAULT_ASSET_STROKE_WIDTH } from "@/utils/assetRenderMode";
 const svgCache: Record<string, string> = {};
 const processedSvgCache: Record<string, string> = {};
 const failedSvgCache: Record<string, true> = {};
+const svgMetricsCache: Record<string, SvgMetrics> = {};
+
+type SvgMetrics = {
+    artboardWidth: number | null;
+    artboardHeight: number | null;
+    contentX: number | null;
+    contentY: number | null;
+    contentWidth: number | null;
+    contentHeight: number | null;
+    shouldCropToContent: boolean;
+};
+
+const getSvgMetrics = (svgText: string): SvgMetrics => {
+    const widthMatch = svgText.match(/width=["']([\d.]+)[a-z%]*["']/i);
+    const heightMatch = svgText.match(/height=["']([\d.]+)[a-z%]*["']/i);
+    const viewBoxMatch = svgText.match(/viewBox=["']([\d\s.,-]+)["']/i);
+
+    let width = widthMatch ? parseFloat(widthMatch[1]) : null;
+    let height = heightMatch ? parseFloat(heightMatch[1]) : null;
+    let viewBoxX = 0;
+    let viewBoxY = 0;
+
+    if (viewBoxMatch) {
+        const parts = viewBoxMatch[1].trim().split(/[\s,]+/).map(parseFloat);
+        if (parts.length === 4 && parts.every(Number.isFinite)) {
+            viewBoxX = parts[0];
+            viewBoxY = parts[1];
+            width = width || parts[2];
+            height = height || parts[3];
+        }
+    }
+
+    const result: SvgMetrics = {
+        artboardWidth: width,
+        artboardHeight: height,
+        contentX: null,
+        contentY: null,
+        contentWidth: null,
+        contentHeight: null,
+        shouldCropToContent: false,
+    };
+
+    if (typeof document === "undefined") {
+        return result;
+    }
+
+    const tempHost = document.createElement("div");
+    tempHost.style.position = "absolute";
+    tempHost.style.left = "-100000px";
+    tempHost.style.top = "-100000px";
+    tempHost.style.width = "0";
+    tempHost.style.height = "0";
+    tempHost.style.opacity = "0";
+    tempHost.style.pointerEvents = "none";
+    tempHost.style.overflow = "hidden";
+    tempHost.innerHTML = svgText;
+    document.body.appendChild(tempHost);
+
+    try {
+        const tempSvg = tempHost.querySelector("svg") as SVGSVGElement | null;
+        if (!tempSvg) {
+            return result;
+        }
+
+        let bbox: DOMRect | null = null;
+
+        try {
+            const rootBox = tempSvg.getBBox();
+            if (rootBox.width > 0 && rootBox.height > 0) {
+                bbox = rootBox;
+            }
+        } catch {
+            bbox = null;
+        }
+
+        if (!bbox) {
+            let minX = Number.POSITIVE_INFINITY;
+            let minY = Number.POSITIVE_INFINITY;
+            let maxX = Number.NEGATIVE_INFINITY;
+            let maxY = Number.NEGATIVE_INFINITY;
+
+            const graphics = Array.from(tempSvg.querySelectorAll("*")).filter((node): node is SVGGraphicsElement => {
+                if (!(node instanceof SVGGraphicsElement)) return false;
+                if (node.closest("defs, clipPath, mask, pattern, marker, symbol, title, desc, style, script")) return false;
+                return true;
+            });
+
+            graphics.forEach(node => {
+                try {
+                    const box = node.getBBox();
+                    if (box.width <= 0 && box.height <= 0) return;
+                    minX = Math.min(minX, box.x);
+                    minY = Math.min(minY, box.y);
+                    maxX = Math.max(maxX, box.x + box.width);
+                    maxY = Math.max(maxY, box.y + box.height);
+                } catch {
+                    // Ignore nodes that cannot report bounds
+                }
+            });
+
+            if (Number.isFinite(minX) && Number.isFinite(minY) && Number.isFinite(maxX) && Number.isFinite(maxY)) {
+                bbox = {
+                    x: minX,
+                    y: minY,
+                    width: maxX - minX,
+                    height: maxY - minY,
+                } as DOMRect;
+            }
+        }
+
+        if (!bbox || bbox.width <= 0 || bbox.height <= 0) {
+            return result;
+        }
+
+        const contentX = bbox.x;
+        const contentY = bbox.y;
+        const contentWidth = bbox.width;
+        const contentHeight = bbox.height;
+        const widthRatio = width ? contentWidth / width : null;
+        const heightRatio = height ? contentHeight / height : null;
+        const xOffset = width ? Math.abs(contentX - viewBoxX) / width : 0;
+        const yOffset = height ? Math.abs(contentY - viewBoxY) / height : 0;
+
+        return {
+            artboardWidth: width,
+            artboardHeight: height,
+            contentX,
+            contentY,
+            contentWidth,
+            contentHeight,
+            shouldCropToContent:
+                !width ||
+                !height ||
+                xOffset > 0.01 ||
+                yOffset > 0.01 ||
+                (widthRatio !== null && widthRatio < 0.95) ||
+                (heightRatio !== null && heightRatio < 0.95),
+        };
+    } finally {
+        tempHost.remove();
+    }
+};
 
 export const isKnownMissingSvg = (src: string) => Boolean(failedSvgCache[src]);
 export const validateSvgPath = async (src: string) => {
@@ -78,7 +220,7 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
     const baseSvg = useMemo(() => {
         if (!rawSvg || typeof window === "undefined") return "";
         
-        const cacheKey = `${src}_${category || 'none'}_v2_group_autofill`;
+        const cacheKey = `${src}_${category || 'none'}_v3_viewbox_normalized`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
@@ -86,6 +228,8 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
             const doc = parser.parseFromString(rawSvg, "image/svg+xml");
             const svg = doc.querySelector("svg");
             if (!svg) return rawSvg;
+            const metrics = svgMetricsCache[src] || getSvgMetrics(rawSvg);
+            svgMetricsCache[src] = metrics;
 
             doc.querySelectorAll("svg, g").forEach(container => {
                 container.removeAttribute("fill");
@@ -214,6 +358,11 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
             svg.removeAttribute("stroke-width");
             svg.removeAttribute("width");
             svg.removeAttribute("height");
+            if (metrics.shouldCropToContent && metrics.contentX !== null && metrics.contentY !== null && metrics.contentWidth && metrics.contentHeight) {
+                svg.setAttribute("viewBox", `${metrics.contentX} ${metrics.contentY} ${metrics.contentWidth} ${metrics.contentHeight}`);
+            } else if (!svg.getAttribute("viewBox") && metrics.artboardWidth && metrics.artboardHeight) {
+                svg.setAttribute("viewBox", `0 0 ${metrics.artboardWidth} ${metrics.artboardHeight}`);
+            }
 
             const result = new XMLSerializer().serializeToString(doc);
             processedSvgCache[cacheKey] = result;

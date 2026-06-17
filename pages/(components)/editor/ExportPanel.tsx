@@ -16,8 +16,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
 import { canRenderAssetOnCanvas } from "@/utils/assetRenderMode";
+import { downloadDxf } from "@/lib/dxfExport";
 
-type ExportFormat = "pdf" | "png" | "jpg" | "jpeg";
+type ExportFormat = "pdf" | "png" | "jpg" | "jpeg" | "dxf";
 
 const svgCache: Record<string, string> = {};
 const typeIconCache: Record<string, HTMLImageElement> = {};
@@ -328,6 +329,7 @@ export default function ExportPanel() {
   const zoom = useEditorStore((s) => s.zoom);
   const panX = useEditorStore((s) => s.panX);
   const panY = useEditorStore((s) => s.panY);
+  const unitSystem = useSceneStore((s) => s.unitSystem) || 'metric-mm';
   const [exportOptions, setExportOptions] = useState<ExportOption[]>([
     { id: "1", paperSize: "A4", format: "pdf", exportSelection: false, isProfessional: true },
   ]);
@@ -1139,6 +1141,12 @@ const renderAssetToCanvas = (
       const assetsToExport = option.exportSelection ? allItems.filter(i => selectedIds.includes(i.id)) : allItems;
       if (assetsToExport.length === 0) throw new Error("Nothing to export.");
 
+      if (option.format === 'dxf') {
+        downloadDxf(assetsToExport as any[], unitSystem, projectName || "layout");
+        toast.success("DXF export finished!");
+        return;
+      }
+
       // 1. Calculate Bounding Box of content in mm (Include ALL types to prevent clipping)
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       const OFFSET = 200; // Architectural dimension offset from dimensionUtils
@@ -1365,6 +1373,7 @@ const renderAssetToCanvas = (
               <option value="pdf">PDF</option>
               <option value="png">PNG</option>
               <option value="jpg">JPG</option>
+              <option value="dxf">DXF</option>
             </select>
             <button
               type="button"
@@ -1400,7 +1409,8 @@ const renderAssetToCanvas = (
 
           <button
             onClick={() => {
-              if (primaryOption.isProfessional) { setCurrentOption(primaryOption); setShowProfessionalModal(true); }
+              if (primaryOption.format === 'dxf') { handleExport(primaryOption); }
+              else if (primaryOption.isProfessional) { setCurrentOption(primaryOption); setShowProfessionalModal(true); }
               else handleExport(primaryOption);
             }}
             disabled={isExporting}
@@ -1432,6 +1442,7 @@ const renderAssetToCanvas = (
                   <option value="pdf">PDF</option>
                   <option value="png">PNG</option>
                   <option value="jpg">JPG</option>
+                  <option value="dxf">DXF</option>
                 </select>
               </div>
             </div>

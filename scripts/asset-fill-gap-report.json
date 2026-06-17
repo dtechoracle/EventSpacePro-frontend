@@ -1,15 +1,15 @@
 {
-  "generatedAt": "2026-04-27T10:16:25.106Z",
+  "generatedAt": "2026-06-10T20:59:03.175Z",
   "mode": "dry-run",
   "dir": "public\\assets\\modal\\Furniture",
   "match": "",
   "summary": {
-    "scannedFiles": 65,
-    "repairedFiles": 57,
+    "scannedFiles": 61,
+    "repairedFiles": 54,
     "writtenFiles": 0,
-    "fillTargetsInserted": 237,
-    "strokeCopiesInserted": 74,
-    "likelyOpenGapShapes": 1176,
+    "fillTargetsInserted": 244,
+    "strokeCopiesInserted": 71,
+    "likelyOpenGapShapes": 1153,
     "ambiguousClosedShapes": 130
   },
   "files": [
@@ -35,9 +35,9 @@
     },
     {
       "file": "public\\assets\\modal\\Furniture\\10 seater round table 02.svg",
-      "autoFillTargets": 0,
-      "insertedFillTargets": 1,
-      "insertedStrokeCopies": 0,
+      "autoFillTargets": 21,
+      "insertedFillTargets": 0,
+      "insertedStrokeCopies": 2,
       "ambiguousClosedShapes": 0,
       "likelyOpenGapShapes": 104,
       "manualGeometryRequired": false,
@@ -174,27 +174,7 @@
       "repaired": true
     },
     {
-      "file": "public\\assets\\modal\\Furniture\\2 Seater Sofa 01.svg",
-      "autoFillTargets": 2,
-      "insertedFillTargets": 2,
-      "insertedStrokeCopies": 0,
-      "ambiguousClosedShapes": 0,
-      "likelyOpenGapShapes": 2,
-      "manualGeometryRequired": false,
-      "repaired": true
-    },
-    {
       "file": "public\\assets\\modal\\Furniture\\2 Seater Sofa 02.svg",
-      "autoFillTargets": 2,
-      "insertedFillTargets": 2,
-      "insertedStrokeCopies": 0,
-      "ambiguousClosedShapes": 0,
-      "likelyOpenGapShapes": 2,
-      "manualGeometryRequired": false,
-      "repaired": true
-    },
-    {
-      "file": "public\\assets\\modal\\Furniture\\2 Seater Sofa 03.svg",
       "autoFillTargets": 2,
       "insertedFillTargets": 2,
       "insertedStrokeCopies": 0,
@@ -234,30 +214,10 @@
       "repaired": true
     },
     {
-      "file": "public\\assets\\modal\\Furniture\\3 Seater Sofa 01.svg",
-      "autoFillTargets": 1,
-      "insertedFillTargets": 2,
-      "insertedStrokeCopies": 1,
-      "ambiguousClosedShapes": 0,
-      "likelyOpenGapShapes": 7,
-      "manualGeometryRequired": false,
-      "repaired": true
-    },
-    {
       "file": "public\\assets\\modal\\Furniture\\3 Seater Sofa 02.svg",
       "autoFillTargets": 2,
       "insertedFillTargets": 2,
       "insertedStrokeCopies": 2,
-      "ambiguousClosedShapes": 0,
-      "likelyOpenGapShapes": 4,
-      "manualGeometryRequired": false,
-      "repaired": true
-    },
-    {
-      "file": "public\\assets\\modal\\Furniture\\3 Seater Sofa 03.svg",
-      "autoFillTargets": 1,
-      "insertedFillTargets": 2,
-      "insertedStrokeCopies": 1,
       "ambiguousClosedShapes": 0,
       "likelyOpenGapShapes": 4,
       "manualGeometryRequired": false,
@@ -306,7 +266,7 @@
     {
       "file": "public\\assets\\modal\\Furniture\\5 Seater Curve Sofa.svg",
       "autoFillTargets": 0,
-      "insertedFillTargets": 1,
+      "insertedFillTargets": 2,
       "insertedStrokeCopies": 0,
       "ambiguousClosedShapes": 0,
       "likelyOpenGapShapes": 4,
@@ -335,9 +295,9 @@
     },
     {
       "file": "public\\assets\\modal\\Furniture\\6 Seater L Shaped Sofa.svg",
-      "autoFillTargets": 1,
-      "insertedFillTargets": 0,
-      "insertedStrokeCopies": 1,
+      "autoFillTargets": 0,
+      "insertedFillTargets": 4,
+      "insertedStrokeCopies": 0,
       "ambiguousClosedShapes": 0,
       "likelyOpenGapShapes": 13,
       "manualGeometryRequired": false,
@@ -476,7 +436,7 @@
     {
       "file": "public\\assets\\modal\\Furniture\\Cocktail Stool 1.svg",
       "autoFillTargets": 0,
-      "insertedFillTargets": 1,
+      "insertedFillTargets": 3,
       "insertedStrokeCopies": 0,
       "ambiguousClosedShapes": 0,
       "likelyOpenGapShapes": 0,
@@ -484,9 +444,9 @@
       "repaired": true
     },
     {
-      "file": "public\\assets\\modal\\Furniture\\Cocktail Stool 2.svg",
+      "file": "public\\assets\\modal\\Furniture\\Cocktail stool 2.svg",
       "autoFillTargets": 0,
-      "insertedFillTargets": 2,
+      "insertedFillTargets": 3,
       "insertedStrokeCopies": 0,
       "ambiguousClosedShapes": 0,
       "likelyOpenGapShapes": 4,
@@ -496,12 +456,12 @@
     {
       "file": "public\\assets\\modal\\Furniture\\Event Chair 1.svg",
       "autoFillTargets": 0,
-      "insertedFillTargets": 0,
+      "insertedFillTargets": 4,
       "insertedStrokeCopies": 0,
       "ambiguousClosedShapes": 0,
       "likelyOpenGapShapes": 12,
-      "manualGeometryRequired": true,
-      "repaired": false
+      "manualGeometryRequired": false,
+      "repaired": true
     },
     {
       "file": "public\\assets\\modal\\Furniture\\Event Chair 1_recover.svg",
@@ -525,9 +485,9 @@
     },
     {
       "file": "public\\assets\\modal\\Furniture\\Event Chair 3.svg",
-      "autoFillTargets": 2,
-      "insertedFillTargets": 0,
-      "insertedStrokeCopies": 2,
+      "autoFillTargets": 0,
+      "insertedFillTargets": 4,
+      "insertedStrokeCopies": 0,
       "ambiguousClosedShapes": 0,
       "likelyOpenGapShapes": 8,
       "manualGeometryRequired": false,
@@ -539,7 +499,7 @@
       "insertedFillTargets": 1,
       "insertedStrokeCopies": 0,
       "ambiguousClosedShapes": 0,
-      "likelyOpenGapShapes": 8,
+      "likelyOpenGapShapes": 0,
       "manualGeometryRequired": false,
       "repaired": true
     },

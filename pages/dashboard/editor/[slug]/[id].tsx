@@ -85,6 +85,13 @@ function ElementsPane() {
   const setSelectedIds = useEditorStore(s => s.setSelectedIds);
   const setPan = useEditorStore(s => s.setPan);
   const [expandedAssets, setExpandedAssets] = React.useState<Record<string, boolean>>({});
+  const [expandedAssetGroups, setExpandedAssetGroups] = React.useState<Record<string, boolean>>({
+    chairs: true,
+    tables: true,
+    stools: false,
+    sofas: false,
+    "other assets": false,
+  });
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renamingText, setRenamingText] = React.useState("");
 
@@ -245,6 +252,47 @@ function ElementsPane() {
       .map((key) => ({ label: key, count: counts.get(key) || 0 }));
   }, [assets, walls]);
 
+  const groupedElementItems = React.useMemo(() => {
+    const assetBuckets: Record<string, typeof items> = {
+      chairs: [],
+      tables: [],
+      stools: [],
+      sofas: [],
+      "other assets": [],
+    };
+    const nonAssetItems: typeof items = [];
+
+    items.forEach((item) => {
+      if (item.type !== "Asset" || !item.asset) {
+        nonAssetItems.push(item);
+        return;
+      }
+
+      const assetDef = elementAssetDefinitionById.get(item.asset.type);
+      const bucket = getAssetCountBucket(
+        item.asset.name ||
+        assetDef?.label ||
+        assetDef?.name ||
+        item.label ||
+        "Asset"
+      );
+
+      if (!assetBuckets[bucket]) assetBuckets[bucket] = [];
+      assetBuckets[bucket].push(item);
+    });
+
+    return { nonAssetItems, assetBuckets };
+  }, [items]);
+
+  const assetGroupOrder = ["chairs", "tables", "stools", "sofas", "other assets"];
+  const assetGroupLabels: Record<string, string> = {
+    chairs: "Chairs",
+    tables: "Tables",
+    stools: "Stools",
+    sofas: "Sofas",
+    "other assets": "Other Assets",
+  };
+
   const handleSelect = (item: { id: string; x: number; y: number; childIds?: string[] }, e?: React.MouseEvent) => {
     const idsToSelect = item.childIds && item.childIds.length > 0 ? item.childIds : [item.id];
 
@@ -297,7 +345,7 @@ function ElementsPane() {
           e.stopPropagation();
         }}
       >
-        {items.map((item) => {
+        {groupedElementItems.nonAssetItems.map((item) => {
           // Get asset definition for icon/path
           const assetDef = item.type === "Asset" && item.asset
             ? ASSET_LIBRARY.find(a => a.id === item.asset.type)
@@ -693,6 +741,225 @@ function ElementsPane() {
                       </div>
                     </button>
                   ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {assetGroupOrder.map((groupKey) => {
+          const groupItems = groupedElementItems.assetBuckets[groupKey] || [];
+          if (groupItems.length === 0) return null;
+
+          const isExpanded = expandedAssetGroups[groupKey] ?? false;
+
+          return (
+            <div key={groupKey} className="border-b border-gray-100">
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedAssetGroups((prev) => ({
+                    ...prev,
+                    [groupKey]: !isExpanded,
+                  }))
+                }
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500 hover:bg-gray-50 transition-colors"
+              >
+                <span>{assetGroupLabels[groupKey] || groupKey}</span>
+                <span className="flex items-center gap-2">
+                  <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold tracking-normal text-gray-600">
+                    {groupItems.length}
+                  </span>
+                  <span className="text-xs text-gray-400">{isExpanded ? "▾" : "▸"}</span>
+                </span>
+              </button>
+
+              {isExpanded && (
+                <div>
+                  {groupItems.map((item) => {
+                    const assetDef = item.type === "Asset" && item.asset
+                      ? ASSET_LIBRARY.find(a => a.id === item.asset.type)
+                      : null;
+
+                    const isAsset = item.type === "Asset";
+                    const childShapes = (item as any).childShapes as any[] | undefined;
+                    const hasChildren = isAsset && childShapes && childShapes.length > 0;
+                    const isExpanded = isAsset && expandedAssets[item.id];
+
+                    const itemChildIds = (item as any).childIds as string[] | undefined;
+                    const isSelected = itemChildIds
+                      ? itemChildIds.length > 0 && itemChildIds.every(cid => selectedIds.includes(cid))
+                      : selectedIds.includes(item.id);
+
+                    return (
+                      <div key={item.id} className={isSelected ? "bg-blue-50" : ""}>
+                        <button
+                          onClick={(e) =>
+                            isAsset && hasChildren
+                              ? setExpandedAssets(prev => ({ ...prev, [item.id]: !prev[item.id] }))
+                              : handleSelect({
+                                id: item.id,
+                                x: item.x,
+                                y: item.y,
+                                childIds: (item as any).childIds || (hasChildren ? childShapes.map(s => s.id) : undefined),
+                              }, e)
+                          }
+                          className={`w-full flex items-center gap-1 px-1.5 py-1.5 pl-3 text-[11px] hover:bg-blue-100 border-t border-gray-100 transition-colors ${isSelected ? "text-blue-700 bg-blue-50 font-medium" : "text-gray-700 hover:bg-gray-100"}`}
+                        >
+                          <div className="w-7 h-7 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
+                            {item.type === "Asset" && item.asset && (
+                              assetDef?.path ? (
+                                <div className="w-full h-full p-1">
+                                  <InlineSvg
+                                    src={assetDef.path}
+                                    fill={item.asset.fillColor || (item.asset as any).fill || "none"}
+                                    stroke={item.asset.strokeColor || (item.asset as any).stroke || "currentColor"}
+                                    strokeWidth={0.6}
+                                    category={assetDef.category}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="text-[8px] text-gray-400 text-center px-1">
+                                  {item.asset.type}
+                                </div>
+                              )
+                            )}
+                          </div>
+
+                          <div
+                            className="flex-1 min-w-0"
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              setRenamingId(item.id);
+                              setRenamingText(item.label);
+                            }}
+                          >
+                            {renamingId === item.id ? (
+                              <input
+                                autoFocus
+                                className="w-full text-[11px] px-1 py-0.5 border border-blue-400 rounded outline-none"
+                                value={renamingText}
+                                onChange={(e) => setRenamingText(e.target.value)}
+                                onBlur={() => handleRename(item.id, renamingText, item.type)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleRename(item.id, renamingText, item.type);
+                                  if (e.key === 'Escape') setRenamingId(null);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            ) : (
+                              <>
+                                <div className="truncate text-gray-700 leading-tight">{item.label}</div>
+                                <div className="text-[0.6rem] text-gray-400 mt-0.5">
+                                  {isAsset && hasChildren ? "Asset (exploded)" : item.type}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </button>
+
+                        {isAsset && hasChildren && isExpanded && (
+                          <div className="ml-6 border-l border-gray-200">
+                            {childShapes!.map((s) => (
+                              <button
+                                key={s.id}
+                                onClick={(e) => handleSelect({ id: s.id, x: s.x, y: s.y }, e)}
+                                className="w-full flex items-center gap-1 px-1.5 py-1 text-[10px] hover:bg-gray-50 border-b border-gray-100"
+                              >
+                                <div className="w-5 h-5 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
+                                  <svg width={18} height={18} viewBox="0 0 24 24">
+                                    {s.type === "rectangle" && (
+                                      <rect
+                                        x={!s.fillType || s.fillType === 'solid' ? 4 : 2}
+                                        y={!s.fillType || s.fillType === 'solid' ? 7 : 5}
+                                        width={!s.fillType || s.fillType === 'solid' ? 16 : 20}
+                                        height={!s.fillType || s.fillType === 'solid' ? 10 : 14}
+                                        fill={(() => {
+                                          if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
+                                            if (s.fillTexture) {
+                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                                            }
+                                          }
+                                          return s.fill || "transparent";
+                                        })()}
+                                        stroke={s.stroke || "#9CA3AF"}
+                                        strokeWidth={1}
+                                        rx={1.5}
+                                        ry={1.5}
+                                      />
+                                    )}
+                                    {s.type === "ellipse" && (
+                                      <ellipse
+                                        cx={12}
+                                        cy={12}
+                                        rx={!s.fillType || s.fillType === 'solid' ? 8 : 10}
+                                        ry={!s.fillType || s.fillType === 'solid' ? 9 : 11}
+                                        fill={(() => {
+                                          if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
+                                            if (s.fillTexture) {
+                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                                            }
+                                          }
+                                          return s.fill || "transparent";
+                                        })()}
+                                        stroke={s.stroke || "#9CA3AF"}
+                                        strokeWidth={1}
+                                      />
+                                    )}
+                                    {s.type === "line" && (
+                                      <line
+                                        x1={4}
+                                        y1={12}
+                                        x2={20}
+                                        y2={12}
+                                        stroke={s.stroke || "#9CA3AF"}
+                                        strokeWidth={0.6}
+                                        strokeLinecap="round"
+                                      />
+                                    )}
+                                    {s.type === "polygon" && (
+                                      <polygon
+                                        points={(() => {
+                                          const sides =
+                                            s.polygonSides ||
+                                            (s.points ? s.points.length : 4);
+                                          const cnt = Math.max(3, Math.min(12, sides || 4));
+                                          const cx = 12;
+                                          const cy = 12;
+                                          const r = !s.fillType || s.fillType === 'solid' ? 8 : 10;
+                                          const pts: string[] = [];
+                                          for (let i = 0; i < cnt; i++) {
+                                            const angle = ((Math.PI * 2) / cnt) * i - Math.PI / 2;
+                                            const x = cx + r * Math.cos(angle);
+                                            const y = cy + r * Math.sin(angle);
+                                            pts.push(`${x},${y}`);
+                                          }
+                                          return pts.join(" ");
+                                        })()}
+                                        fill={(() => {
+                                          if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
+                                            if (s.fillTexture) {
+                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                                            }
+                                          }
+                                          return s.fill || "transparent";
+                                        })()}
+                                        stroke={s.stroke || "#9CA3AF"}
+                                        strokeWidth={1}
+                                        strokeLinejoin="round"
+                                      />
+                                    )}
+                                  </svg>
+                                </div>
+                                <div className="flex-1 text-left truncate">
+                                  <div className="truncate">{s.type}</div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
