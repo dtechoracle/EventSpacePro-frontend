@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import formidable from "formidable";
 import fs from "fs";
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
 
 export const config = {
     api: {
@@ -18,10 +18,10 @@ export default async function handler(
         return res.status(405).json({ error: "Method not allowed" });
     }
 
-    if (!OPENAI_API_KEY) {
+    if (!DEEPSEEK_API_KEY) {
         return res
             .status(500)
-            .json({ error: "OPENAI_API_KEY not configured on server" });
+            .json({ error: "DEEPSEEK_API_KEY not configured on server" });
     }
 
     try {
@@ -75,15 +75,15 @@ Guidelines:
 - If you can't identify specific furniture, use generic shapes (rectangle/circle)
 - Be conservative with estimates rather than overly precise`;
 
-        // Call GPT-4 Vision API
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        // Call DeepSeek API
+        const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${OPENAI_API_KEY}`,
+                Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
             },
             body: JSON.stringify({
-                model: "gpt-4o",
+                model: "deepseek-chat",
                 messages: [
                     {
                         role: "system",
@@ -114,9 +114,9 @@ Guidelines:
         const aiData = await response.json();
 
         if (!response.ok) {
-            console.error("OpenAI API Error:", aiData);
+            console.error("DeepSeek API Error:", aiData);
             return res.status(response.status).json({
-                error: `OpenAI Error: ${aiData?.error?.message || response.statusText}`,
+                error: `DeepSeek Error: ${aiData?.error?.message || response.statusText}`,
             });
         }
 

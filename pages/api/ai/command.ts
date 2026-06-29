@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
 
 export default async function handler(
   req: NextApiRequest,
@@ -63,10 +63,10 @@ export default async function handler(
       };
     };
 
-    if (!OPENAI_API_KEY) {
+    if (!DEEPSEEK_API_KEY) {
       return res
         .status(500)
-        .json({ error: "OPENAI_API_KEY not configured on server" });
+        .json({ error: "DEEPSEEK_API_KEY not configured on server" });
     }
 
     const canvasW = canvas?.width ?? 10000;
@@ -264,14 +264,14 @@ To find the right child from groupContext.childAssets:
       groupContext,
     };
 
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    const r = await fetch("https://api.deepseek.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: "deepseek-chat",
         messages: [
           { role: "system", content: system },
           { role: "user", content: JSON.stringify(userPayload) },
@@ -284,9 +284,9 @@ To find the right child from groupContext.childAssets:
     const json = await r.json();
 
     if (!r.ok) {
-      console.error("OpenAI API Error:", json);
+      console.error("DeepSeek API Error:", json);
       return res.status(r.status).json({
-        error: `OpenAI Error: ${json?.error?.message || r.statusText}`
+        error: `DeepSeek Error: ${json?.error?.message || r.statusText}`
       });
     }
 

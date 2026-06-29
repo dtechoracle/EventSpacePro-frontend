@@ -2264,7 +2264,9 @@ export default function Workspace2D({
       // Batch add shapes
       newShapes.forEach((s: any) => {
         const newId = generateId();
-        placedIds.push(newId);
+        if (s.type !== 'line' && !String(s.id || '').toLowerCase().includes('stage')) {
+          placedIds.push(newId);
+        }
         addShape({ ...s, id: newId, x: s.x + dx, y: s.y + dy });
       });
 

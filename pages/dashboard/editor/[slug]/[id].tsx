@@ -26,6 +26,7 @@ import WorkspacePreview from "@/components/WorkspacePreview";
 import { ASSET_LIBRARY } from "@/lib/assets";
 import toast from "react-hot-toast";
 import { calculateWorkspaceBounds } from "@/utils/workspaceBounds";
+import { useAutoSave } from "@/hooks/useAutoSave";
 
 // Extended EventData type with canvasData
 type EventData = BaseEventData & {
@@ -86,6 +87,8 @@ function ElementsPane() {
   const setPan = useEditorStore(s => s.setPan);
   const [expandedAssets, setExpandedAssets] = React.useState<Record<string, boolean>>({});
   const [expandedAssetGroups, setExpandedAssetGroups] = React.useState<Record<string, boolean>>({
+    walls: true,
+    shapes: true,
     chairs: true,
     tables: true,
     stools: false,
@@ -261,8 +264,18 @@ function ElementsPane() {
       "other assets": [],
     };
     const nonAssetItems: typeof items = [];
+    const wallItems: typeof items = [];
+    const shapeItems: typeof items = [];
 
     items.forEach((item) => {
+      if (item.type === "Wall") {
+        wallItems.push(item);
+        return;
+      }
+      if (item.type === "Shape") {
+        shapeItems.push(item);
+        return;
+      }
       if (item.type !== "Asset" || !item.asset) {
         nonAssetItems.push(item);
         return;
@@ -281,7 +294,7 @@ function ElementsPane() {
       assetBuckets[bucket].push(item);
     });
 
-    return { nonAssetItems, assetBuckets };
+    return { nonAssetItems, assetBuckets, wallItems, shapeItems };
   }, [items]);
 
   const assetGroupOrder = ["chairs", "tables", "stools", "sofas", "other assets"];
@@ -319,6 +332,54 @@ function ElementsPane() {
       const targetPanY = availableHeight / 2 - item.y * zoom;
       setPan(targetPanX, targetPanY);
     }
+  };
+
+  const renderItemGroup = (
+    groupLabel: string,
+    groupKey: string,
+    groupItems: typeof items,
+    expanded: Record<string, boolean>,
+    setExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  ) => {
+    if (groupItems.length === 0) return null;
+    const isExpanded = expanded[groupKey] ?? true;
+    return (
+      <div key={groupKey} className="border-b border-gray-100">
+        <button
+          type="button"
+          onClick={() => setExpanded(prev => ({ ...prev, [groupKey]: !isExpanded }))}
+          className="flex w-full items-center justify-between px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500 hover:bg-gray-50 transition-colors"
+        >
+          <span>{groupLabel}</span>
+          <span className="flex items-center gap-2">
+            <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold tracking-normal text-gray-600">{groupItems.length}</span>
+            <span className="text-xs text-gray-400">{isExpanded ? "▾" : "▸"}</span>
+          </span>
+        </button>
+        {isExpanded && (
+          <div>
+            {groupItems.map((item) => {
+              const itemChildIds = (item as any).childIds as string[] | undefined;
+              const isSelected = itemChildIds
+                ? itemChildIds.length > 0 && itemChildIds.every(cid => selectedIds.includes(cid))
+                : selectedIds.includes(item.id);
+              return (
+                <button
+                  key={item.id}
+                  onClick={(e) => handleSelect({ id: item.id, x: item.x, y: item.y }, e)}
+                  className={`w-full flex items-center gap-1.5 px-3 py-1.5 text-[11px] hover:bg-gray-50 border-b border-gray-100 transition-colors ${isSelected ? "text-blue-700 bg-blue-50 font-medium" : "text-gray-700"}`}
+                >
+                  <div className="flex-1 text-left truncate">
+                    <div className="truncate">{item.label}</div>
+                    <div className="text-[0.6rem] text-gray-400">{item.type}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
   };
 
   if (items.length === 0) {
@@ -746,6 +807,8 @@ function ElementsPane() {
             </div>
           );
         })}
+        {renderItemGroup('Walls', 'walls', groupedElementItems.wallItems, expandedAssetGroups, setExpandedAssetGroups)}
+        {renderItemGroup('Shapes', 'shapes', groupedElementItems.shapeItems, expandedAssetGroups, setExpandedAssetGroups)}
         {assetGroupOrder.map((groupKey) => {
           const groupItems = groupedElementItems.assetBuckets[groupKey] || [];
           if (groupItems.length === 0) return null;
@@ -1126,6 +1189,9 @@ export default function Editor() {
   // Old scene store methods (for compatibility)
   const hasUnsavedChanges = useSceneStore((s) => s.hasUnsavedChanges);
   const projectHasUnsavedChanges = useProjectStore((s) => s.hasUnsavedChanges);
+
+  // Auto-save backup with 30s interval + online/offline queuing
+  const autoSave = useAutoSave({ interval: 30000, enabled: true });
   const sceneHistoryIndex = useSceneStore((s) => s.historyIndex);
   const projectHistoryIndex = useProjectStore((s: any) => s.historyIndex);
   const syncToEventData = useSceneStore((s) => s.syncToEventData);
