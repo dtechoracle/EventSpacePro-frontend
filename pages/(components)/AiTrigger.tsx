@@ -941,10 +941,7 @@ export default function AiTrigger() {
       return numeric;
     };
 
-    // Identify stages from assets
-    const stageItems = assetList.filter((a: any) =>
-      (a.assetType || a.assetName || '').toLowerCase().includes('stage')
-    );
+    // Stages are shapes (rectangles with module grid lines), not assets
     const stageShapeItems = shapeList.filter((s: any) =>
       String(s.id || '').toLowerCase().includes('ai-stage-base') ||
       String(s.role || '').toLowerCase() === 'stage'
@@ -954,80 +951,6 @@ export default function AiTrigger() {
     );
     const nonStageShapes = shapeList.filter((s: any) => !stageShapeItems.includes(s));
 
-    stageItems.forEach((a: any, idx: number) => {
-      let sw = Number(a.widthMm || 6000);
-      let sh = Number(a.heightMm || 3000);
-      if (sw < 100) sw *= 1000;
-      if (sh < 100) sh *= 1000;
-
-      // ── Cap stage size: max 40% of room dimension so tables always have space
-      const maxStageW = roomW * 0.4;
-      const maxStageH = roomH * 0.7;
-      if (sw > maxStageW) sw = maxStageW;
-      if (sh > maxStageH) sh = maxStageH;
-
-      const wallHint = (a.wall || a.position || '').toLowerCase();
-      let sx = roomCX, sy = roomCY;
-
-      if (typeof a.xMm === 'number' && typeof a.yMm === 'number') {
-        let rawX = wallMinX + a.xMm;
-        let rawY = wallMinY + a.yMm;
-        sx = Math.max(wallMinX + sw / 2 + 100, Math.min(wallMaxX - sw / 2 - 100, rawX));
-        sy = Math.max(wallMinY + sh / 2 + 100, Math.min(wallMaxY - sh / 2 - 100, rawY));
-      } else if (wallHint.includes('left')) {
-        sx = wallMinX + WALL_MARGIN + sw / 2;
-        sy = roomCY;
-        usableMinX = sx + sw / 2 + STAGE_GAP;
-      } else if (wallHint.includes('right')) {
-        sx = wallMaxX - WALL_MARGIN - sw / 2;
-        sy = roomCY;
-        usableMaxX = sx - sw / 2 - STAGE_GAP;
-      } else if (wallHint.includes('top')) {
-        sx = roomCX;
-        sy = wallMinY + WALL_MARGIN + sh / 2;
-        usableMinY = sy + sh / 2 + STAGE_GAP;
-      } else if (wallHint.includes('bottom')) {
-        sx = roomCX;
-        sy = wallMaxY - WALL_MARGIN - sh / 2;
-        usableMaxY = sy - sh / 2 - STAGE_GAP;
-      } else if (wallHint.includes('center') || wallHint.includes('middle')) {
-        sx = roomCX;
-        sy = roomCY;
-      } else if (standaloneMarqueePlan) {
-        sx = roomCX;
-        sy = wallMinY + WALL_MARGIN + sh / 2;
-        usableMinY = sy + sh / 2 + STAGE_GAP;
-      } else {
-        // Default: right wall (only if no coordinates AND no clear hint provided)
-        sx = wallMaxX - WALL_MARGIN - sw / 2;
-        sy = roomCY;
-        usableMaxX = sx - sw / 2 - STAGE_GAP;
-      }
-
-      // Resolve correct fill color/texture logic moved to the top
-      const fillProps = getResolvedFill(a);
-
-      generatedAssets.push({
-        ...a, // Keep extra props
-        ...fillProps, // Override with resolved fill
-        id: `stage-${idx}`,
-        type: resolveType(a.assetType || a.assetName || 'stage'),
-        x: sx, y: sy,
-        width: a.widthMm || sw,
-        height: a.heightMm || sh,
-        strokeWidth: normalizeAiAssetStrokeWidth(a.strokeWidth),
-        strokeColor: a.strokeColor || '#1a1a1a',
-        scale: 1, zIndex: 3
-      });
-
-      const stageName = a.tableName || a.name || a.label || 'Stage';
-      generatedTextAnnotations.push({
-        id: `label-stage-${idx}`, text: stageName,
-        x: sx, y: sy, fontSize: 700,
-        color: '#111111', backgroundColor: '#ffffff',
-        type: 'text', zIndex: 200
-      });
-    });
     stageShapeItems.forEach((s: any, idx: number) => {
       const sw = Number(s.widthMm ?? s.width ?? 3000);
       const sh = Number(s.heightMm ?? s.height ?? 2000);

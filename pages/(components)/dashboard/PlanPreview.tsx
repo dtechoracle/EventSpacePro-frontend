@@ -436,7 +436,7 @@ export default function PlanPreview({
       );
     }
 
-    if (asset.type === 'rect' || asset.type === 'square' || asset.type?.includes('rectangular') || (asset as any).fillType === 'texture') {
+    if (asset.type === 'rect' || asset.type === 'rectangle' || asset.type === 'square' || asset.type?.includes('rectangular') || (asset as any).fillType === 'texture') {
       return (
         <rect
           key={asset.id}
@@ -455,14 +455,15 @@ export default function PlanPreview({
 
     // Line
     if (asset.type === 'line') {
-      // Simple line
+      const lineLen = Math.max(w, h);
       return (
         <line
           key={asset.id}
-          x1={asset.x - w / 2} y1={asset.y}
-          x2={asset.x + w / 2} y2={asset.y}
-          stroke={asset.strokeColor || '#000000'}
-          strokeWidth={(asset.strokeWidth || 2) * (asset.scale || 1)}
+          x1={asset.x - lineLen / 2} y1={asset.y}
+          x2={asset.x + lineLen / 2} y2={asset.y}
+          stroke={asset.strokeColor || (asset as any).stroke || '#94a3b8'}
+          strokeWidth={(asset.strokeWidth || 1) * (asset.scale || 1)}
+          opacity={(asset as any).opacity ?? 1}
           transform={asset.rotation ? `rotate(${asset.rotation} ${asset.x} ${asset.y})` : undefined}
         />
       );

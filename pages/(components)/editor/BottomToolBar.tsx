@@ -64,7 +64,6 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     const [openIndex, setOpenIndex] = useState<number | null>(null);
     const [showWallTypeSubmenu, setShowWallTypeSubmenu] = useState(false);
     const [activeTool, setActiveTool] = useState<string | null>(null);
-
     // NEW STORE
     const { setActiveTool: setEditorTool, activeTool: editorActiveTool, archWaveMode, toggleArchWaveMode } = useEditorStore();
 
