@@ -2042,8 +2042,29 @@ export default function Workspace2D({
             } else if (item._renderType === 'asset') {
               const asset = item;
               if (!asset.isExploded) {
-                const halfW = (asset.width * asset.scale) / 2, halfH = (asset.height * asset.scale) / 2;
-                if (worldX >= asset.x - halfW && worldX <= asset.x + halfW && worldY >= asset.y - halfH && worldY <= asset.y + halfH) isHit = true;
+                const assetDef = assetDefinitionById.get(asset.type);
+                if (assetDef?.category === 'Marquee') {
+                  const halfW = (asset.width * asset.scale) / 2;
+                  const halfH = (asset.height * asset.scale) / 2;
+                  const rad = ((asset.rotation || 0) * Math.PI) / 180;
+                  const cos = Math.cos(rad), sin = Math.sin(rad);
+                  const lx = (worldX - asset.x) * cos + (worldY - asset.y) * sin;
+                  const ly = -(worldX - asset.x) * sin + (worldY - asset.y) * cos;
+                  const edgeDistances = [
+                    Math.abs(ly - (-halfH)),
+                    Math.abs(ly - halfH),
+                    Math.abs(lx - (-halfW)),
+                    Math.abs(lx - halfW)
+                  ];
+                  const minEdgeDist = Math.min(...edgeDistances);
+                  const wallThickness = asset.wallThickness || asset.metadata?.wallThickness || 150;
+                  if (minEdgeDist <= (wallThickness / 2) + 100) {
+                    isHit = true;
+                  }
+                } else {
+                  const halfW = (asset.width * asset.scale) / 2, halfH = (asset.height * asset.scale) / 2;
+                  if (worldX >= asset.x - halfW && worldX <= asset.x + halfW && worldY >= asset.y - halfH && worldY <= asset.y + halfH) isHit = true;
+                }
               }
             } else if (item._renderType === 'wall') {
               const wall = item;
@@ -2872,6 +2893,7 @@ export default function Workspace2D({
 
         if (newSelectedIds.length > 0) {
           setSelectedIds(newSelectedIds);
+          selectMultipleAssets(newSelectedIds);
           toast.success(`Duplicated ${selectedIds.length} item(s)`);
         }
       }

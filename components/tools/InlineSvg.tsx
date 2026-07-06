@@ -254,9 +254,12 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
             if (!doc.getElementById(styleId)) {
                 const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
                 styleEl.setAttribute("id", styleId);
-                styleEl.textContent = `* { vector-effect: non-scaling-stroke !important; } .fill-none-el { fill: none !important; stroke: inherit !important; stroke-width: inherit !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } .auto-fill-el { fill: inherit !important; stroke: none !important; }`;
+                const isLayoutAsset = category === "Layout";
+                const vectorEffectRule = isLayoutAsset ? "" : "svg path, svg circle, svg rect, svg line, svg polyline, svg ellipse { vector-effect: non-scaling-stroke !important; }";
+                styleEl.textContent = `${vectorEffectRule} svg .fill-none-el { fill: none !important; stroke: inherit !important; stroke-width: inherit !important; } svg .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } svg .auto-fill-el { fill: inherit !important; stroke: none !important; }`;
                 svg.prepend(styleEl);
             }
+
 
             const children = Array.from(doc.querySelectorAll('path, circle, rect, line, polyline, ellipse'));
             const circles = Array.from(doc.querySelectorAll('circle'));

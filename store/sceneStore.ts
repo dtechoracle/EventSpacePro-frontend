@@ -62,6 +62,8 @@ export type AssetInstance = {
   // UI State properties
   showDimensions?: boolean; // toggle dimension display for walls/shapes
   dimensionType?: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
+  tableColor?: string;
+  chairColor?: string;
 };
 
 export type CanvasData = {

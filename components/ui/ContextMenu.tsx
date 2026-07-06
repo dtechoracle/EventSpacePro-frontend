@@ -42,12 +42,16 @@ export default function ContextMenu({ x, y, onClose, actions }: ContextMenuProps
             let newY = y;
 
             if (x + rect.width > window.innerWidth) {
-                newX = x - rect.width;
+                newX = window.innerWidth - rect.width - 8;
             }
+            if (newX < 8) newX = 8;
+
             if (y + rect.height > window.innerHeight) {
-                newY = y - rect.height;
+                newY = window.innerHeight - rect.height - 8;
             }
+            if (newY < 8) newY = 8;
             setAdjustedPos({ x: newX, y: newY });
+
         }
     }, [x, y]);
 

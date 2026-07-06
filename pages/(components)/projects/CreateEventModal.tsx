@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import { useSceneStore } from "@/store/sceneStore";
+import { useEditorStore } from "@/store/editorStore";
+import { useProjectStore } from "@/store/projectStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import toast from "react-hot-toast";
 import { MARQUEES } from "@/lib/marquees";
+import { PRELOADED_VENUES, PreloadedVenueDef } from "@/lib/preloadedVenues";
 import InlineSvg from "@/components/tools/InlineSvg";
 import { FaUserPlus, FaChevronDown, FaPlus } from "react-icons/fa";
 
@@ -25,7 +28,7 @@ export default function CreateEventModal({
   initialTemplateData?: any,
   preSelectedMode?: 'manual' | 'ai'
 }) {
-  const [step, setStep] = useState<'initial' | 'venue-selection' | 'outdoor-selection' | 'outdoor-dimensions' | 'marquee-selection' | 'event-details' | 'upload-image'>('initial');
+  const [step, setStep] = useState<'initial' | 'venue-selection' | 'outdoor-selection' | 'outdoor-dimensions' | 'marquee-selection' | 'preloaded-selection' | 'event-details' | 'upload-image'>('initial');
 
   useEffect(() => {
     if (initialTemplateData) {
@@ -40,11 +43,26 @@ export default function CreateEventModal({
   const [outdoorDepth, setOutdoorDepth] = useState(20);
   const [eventName, setEventName] = useState("");
   const [selectedMarquee, setSelectedMarquee] = useState<any>(null);
+  const [selectedPreloadedVenue, setSelectedPreloadedVenue] = useState<PreloadedVenueDef | null>(null);
   const [venueImage, setVenueImage] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [collabEmail, setCollabEmail] = useState("");
   const [collabPermission, setCollabPermission] = useState("editor");
+  const { assets } = useProjectStore();
   const router = useRouter();
+  
+  const preloadedVenueId = router.query.preloadedVenue as string | undefined;
+  // Pan to the preloaded venue asset if present in the workspace
+  useEffect(() => {
+    if (!preloadedVenueId) return;
+    const asset = assets.find((a) => a.type === preloadedVenueId);
+    if (!asset) return;
+    const { setPan, zoom } = useEditorStore.getState();
+    if (typeof window === 'undefined') return;
+    const targetX = window.innerWidth / 2 - asset.x * zoom;
+    const targetY = window.innerHeight / 2 - asset.y * zoom;
+    setPan(targetX, targetY);
+  }, [preloadedVenueId, assets]);
   const setCanvas = useSceneStore((s) => s.setCanvas);
   const lastCanvasDataRef = useRef<any>(null);
   const lastCanvasesRef = useRef<any>(null);
@@ -181,6 +199,35 @@ export default function CreateEventModal({
           ],
           canvas: { width, height, color: '#ffffff' }
         };
+      } else if (venueType === 'preloaded' && selectedPreloadedVenue) {
+
+        width = selectedPreloadedVenue.width + 4000;
+        height = selectedPreloadedVenue.height + 4000;
+        canvases[0].width = width;
+        canvases[0].height = height;
+
+        canvasData = {
+          walls: [],
+          shapes: [],
+          assets: [
+            {
+              id: `venue-${Date.now()}`,
+              name: selectedPreloadedVenue.name,
+              type: selectedPreloadedVenue.id,
+              x: width / 2,
+              y: height / 2,
+              width: selectedPreloadedVenue.width,
+              height: selectedPreloadedVenue.height,
+              scale: 1,
+              rotation: 0,
+              zIndex: 1,
+              fillColor: "none",
+              strokeColor: "#000000",
+              strokeWidth: 2
+            }
+          ],
+          canvas: { width, height, color: '#ffffff' }
+        };
       }
 
       lastCanvasDataRef.current = canvasData;
@@ -214,8 +261,8 @@ export default function CreateEventModal({
         }
       }
 
-      // Handle Template or Marquee Data Injection
-      if (initialTemplateData || (venueType === 'marquee' && selectedMarquee)) {
+      // Handle Template, Marquee, or Preloaded Venue Data Injection
+      if (initialTemplateData || (venueType === 'marquee' && selectedMarquee) || (venueType === 'preloaded' && selectedPreloadedVenue)) {
         try {
           const dataToApply = initialTemplateData || lastCanvasDataRef.current;
           await apiRequest(`/projects/${selectedProjectId}/events/${eventId}`, "PUT", {
@@ -223,7 +270,7 @@ export default function CreateEventModal({
             canvases: lastCanvasesRef.current // Ensure canvas dimensions are sync'd
           }, true);
         } catch (e) {
-          console.error("Failed to apply marquee/template data", e);
+          console.error("Failed to apply marquee/template/venue data", e);
           toast.error("Created event but failed to apply initial layout");
         }
       }
@@ -235,7 +282,8 @@ export default function CreateEventModal({
           query: { 
             aiMode: 'true',
             marqueeId: venueType === 'marquee' ? selectedMarquee?.id : undefined,
-            focus: 'true'
+            focus: 'true',
+            ...(venueType === 'preloaded' && selectedPreloadedVenue ? { preloadedVenue: selectedPreloadedVenue.id } : {}),
           }
         });
         toast.success("Event created! AI assistant is ready.");
@@ -271,7 +319,12 @@ export default function CreateEventModal({
         } catch (error) {
           console.error('Venue analysis failed:', error);
           toast.error('Failed to analyze venue image. Opening blank editor.');
-          router.push(`/dashboard/editor/${selectedProjectId}/${eventId}`);
+          router.push({
+          pathname: `/dashboard/editor/${selectedProjectId}/${eventId}`,
+          query: {
+            ...(venueType === 'preloaded' && selectedPreloadedVenue ? { preloadedVenue: selectedPreloadedVenue.id } : {}),
+          },
+        });
         } finally {
           setIsAnalyzing(false);
         }
@@ -288,7 +341,10 @@ export default function CreateEventModal({
 
         router.push({
           pathname: `/dashboard/editor/${selectedProjectId}/${eventId}`,
-          query
+          query: {
+            ...query,
+            ...(venueType === 'preloaded' && selectedPreloadedVenue ? { preloadedVenue: selectedPreloadedVenue.id } : {}),
+          },
         });
       }
 
@@ -469,7 +525,7 @@ export default function CreateEventModal({
                   <button
                     onClick={() => {
                       setVenueType('preloaded');
-                      setStep('event-details');
+                      setStep('preloaded-selection');
                     }}
                     className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-200 hover:border-[var(--accent)] hover:bg-[#0000000A] transition-all"
                   >
@@ -480,7 +536,7 @@ export default function CreateEventModal({
                     </div>
                     <div className="text-center">
                       <h3 className="font-semibold text-base">Preloaded Venue</h3>
-                      <p className="text-xs text-gray-500 mt-1">Upload image/PDF</p>
+                      <p className="text-xs text-gray-500 mt-1">Use existing real-life venues</p>
                     </div>
                   </button>
                 </div>
@@ -684,6 +740,61 @@ export default function CreateEventModal({
               </motion.div>
             )}
 
+            {/* Step 2.8: Preloaded Venue Selection */}
+            {step === 'preloaded-selection' && (
+              <motion.div
+                key="preloaded-selection"
+                initial={{ opacity: 0, x: 40 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -40 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-col gap-6 w-full max-h-[70vh]"
+              >
+                <div>
+                  <button
+                    onClick={() => setStep('venue-selection')}
+                    className="text-sm text-gray-500 hover:text-gray-700 mb-2"
+                  >
+                    ← Back
+                  </button>
+                  <h2 className="text-[2rem] font-semibold text-[#272235]">
+                    Select Preloaded Venue
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Choose a real-life venue layout to start with
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 overflow-y-auto pr-2 custom-scrollbar">
+                  {PRELOADED_VENUES.map((venue) => (
+                    <button
+                      key={venue.id}
+                      onClick={() => {
+                        setSelectedPreloadedVenue(venue);
+                        setStep('event-details');
+                      }}
+                      className={`flex flex-col items-center gap-3 p-4 rounded-2xl border-2 transition-all hover:bg-[#00000005] group ${
+                        selectedPreloadedVenue?.id === venue.id ? 'border-[var(--accent)] bg-[#0000000A]' : 'border-gray-100'
+                      }`}
+                    >
+                      <div className="w-full aspect-video bg-white rounded-xl border border-gray-100 overflow-hidden flex items-center justify-center p-3 group-hover:shadow-sm transition-all relative">
+                        <img 
+                          src={venue.path} 
+                          alt={venue.name}
+                          className="w-full h-full object-contain pointer-events-none"
+                          loading="lazy"
+                        />
+                      </div>
+                      <div className="text-center">
+                        <h3 className="font-semibold text-sm truncate w-full">{venue.name}</h3>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{venue.width/1000}m x {venue.height/1000}m</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
             {/* Step 3: Event Details */}
             {step === 'event-details' && (
               <motion.div
@@ -700,6 +811,7 @@ export default function CreateEventModal({
                         if (creationType === 'ai') setStep('initial');
                         else if (venueType === 'outdoor') setStep('outdoor-dimensions');
                         else if (venueType === 'marquee') setStep('marquee-selection');
+                        else if (venueType === 'preloaded') setStep('preloaded-selection');
                         else setStep('venue-selection');
                     }}
                     className="text-sm text-gray-500 hover:text-gray-700 mb-2"
@@ -775,14 +887,8 @@ export default function CreateEventModal({
                 </div>
 
                 <button
-                  onClick={() => {
-                    if (venueType === 'preloaded' && creationType === 'manual') {
-                      setStep('upload-image');
-                    } else {
-                      handleCreateEvent();
-                    }
-                  }}
-                  disabled={!eventName || !selectedProjectId || mutation.isPending || (venueType === 'outdoor' && (!outdoorWidth || !outdoorDepth))}
+                  onClick={handleCreateEvent}
+                  disabled={!eventName || !selectedProjectId || mutation.isPending || (venueType === 'outdoor' && (!outdoorWidth || !outdoorDepth)) || (venueType === 'preloaded' && !selectedPreloadedVenue)}
                   className="w-full h-14 rounded-2xl text-white text-base font-bold bg-[#3b82f6] hover:bg-blue-600 disabled:bg-gray-100 disabled:text-gray-400 disabled:opacity-100 transition-all flex items-center justify-center gap-2"
                 >
                   {mutation.isPending ? (
@@ -795,7 +901,7 @@ export default function CreateEventModal({
                   ) : (
                     <FaPlus size={18} />
                   )}
-                  <span>{mutation.isPending ? 'Creating...' : venueType === 'preloaded' && creationType === 'manual' ? 'Next' : 'Create Event'}</span>
+                  <span>{mutation.isPending ? 'Creating...' : 'Create Event'}</span>
                 </button>
               </motion.div>
             )}

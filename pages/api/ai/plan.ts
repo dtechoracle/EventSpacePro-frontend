@@ -935,10 +935,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const stageChoiceFromHistoryFallback = (() => {
       for (const userMsg of userHistory) {
         const text = userMsg.content || '';
-        if (/\bstage\b/i.test(text)) {
-          const choice = resolveStageChoiceFromText(text);
-          if (choice) return choice;
-        }
+        const choice = resolveStageChoiceFromText(text);
+        if (choice) return choice;
       }
       return null;
     })();
@@ -1265,43 +1263,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
       ];
 
-      const cols = Math.max(1, Math.round(stageWidth / STAGE_MODULE_MM));
-      const rows = Math.max(1, Math.round(stageHeight / STAGE_MODULE_MM));
-      const left = stageX - stageWidth / 2;
-      const top = stageY - stageHeight / 2;
-
-      for (let c = 1; c < cols; c++) {
-        const x = left + c * STAGE_MODULE_MM;
-        shapes.push({
-          id: `ai-stage-grid-v-${c}`,
-          type: 'line',
-          xMm: x,
-          yMm: stageY,
-          widthMm: stageHeight,
-          heightMm: 1,
-          stroke: '#94a3b8',
-          strokeColor: '#94a3b8',
-          strokeWidth: 1,
-          opacity: 0.45,
-          rotation: 90,
-        });
-      }
-      for (let r = 1; r < rows; r++) {
-        const y = top + r * STAGE_MODULE_MM;
-        shapes.push({
-          id: `ai-stage-grid-h-${r}`,
-          type: 'line',
-          xMm: stageX,
-          yMm: y,
-          widthMm: stageWidth,
-          heightMm: 1,
-          stroke: '#94a3b8',
-          strokeColor: '#94a3b8',
-          strokeWidth: 1,
-          opacity: 0.45,
-        });
-      }
-
       const textAnnotations = [
         {
           id: 'ai-stage-label',
@@ -1310,6 +1271,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           yMm: stageY,
           fontSize: 320,
           color: '#334155',
+        },
+        {
+          id: 'ai-stage-grid-text',
+          text: '500mm × 500mm per module',
+          xMm: stageX,
+          yMm: stageY + stageHeight / 2 - 400,
+          fontSize: 180,
+          color: '#94a3b8',
+          opacity: 0.5,
         },
       ];
 
@@ -1885,6 +1855,69 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       const structuredPreview = previewOverride || buildStructuredZonePreview();
+
+      // ── Orientation takes STRICT priority ──────────────────────────────────
+      // This must come before any mainZoneNeeds* / secondaryZoneNeeds* checks,
+      // otherwise those unresolved checks fire first and the user never gets the
+      // rotated plan when they click Portrait or Landscape.
+      if (assistantAskedForOrientation && orientationValue === 'portrait') {
+        const oldW = activeSpaceWidthMm!;
+        const oldH = activeSpaceHeightMm!;
+        const portraitPreview = JSON.parse(JSON.stringify(structuredPreview));
+        const rotatePos = (v: any) => {
+          if (!v) return v;
+          const ox = typeof v.xMm === 'number' ? v.xMm : typeof v.centerX === 'number' ? v.centerX : undefined;
+          const oy = typeof v.yMm === 'number' ? v.yMm : typeof v.centerY === 'number' ? v.centerY : undefined;
+          if (ox != null && oy != null) {
+            const nx = oldH - oy;
+            const ny = ox;
+            if (typeof v.xMm === 'number') v.xMm = nx;
+            if (typeof v.yMm === 'number') v.yMm = ny;
+            if (typeof v.centerX === 'number') v.centerX = nx;
+            if (typeof v.centerY === 'number') v.centerY = ny;
+          }
+          const ow = typeof v.widthMm === 'number' ? v.widthMm : 0;
+          const oh = typeof v.heightMm === 'number' ? v.heightMm : 0;
+          if (ow && oh && v.type !== 'line') { v.widthMm = oh; v.heightMm = ow; }
+          if (typeof v.rotation === 'number') v.rotation = (v.rotation + 90) % 360;
+          return v;
+        };
+        if (Array.isArray(portraitPreview.walls)) {
+          portraitPreview.walls = portraitPreview.walls.map((w: any) => {
+            const nw = { ...w, widthMm: oldH, heightMm: oldW };
+            if (typeof nw.rotation === 'number') nw.rotation = (nw.rotation + 90) % 360;
+            return nw;
+          });
+        }
+        if (Array.isArray(portraitPreview.assets)) portraitPreview.assets = portraitPreview.assets.map(rotatePos);
+        if (Array.isArray(portraitPreview.shapes)) portraitPreview.shapes = portraitPreview.shapes.map(rotatePos);
+        if (portraitPreview.tableArrangement) {
+          rotatePos(portraitPreview.tableArrangement);
+          const z = portraitPreview.tableArrangement.zone;
+          if (z && typeof z.xMm === 'number' && typeof z.yMm === 'number') {
+            const nzx = oldH - z.yMm - z.heightMm;
+            const nzy = z.xMm;
+            const nzw = z.heightMm;
+            const nzh = z.widthMm;
+            z.xMm = nzx; z.yMm = nzy;
+            z.widthMm = nzw; z.heightMm = nzh;
+          }
+        }
+        if (Array.isArray(portraitPreview.seatingLayout)) portraitPreview.seatingLayout = portraitPreview.seatingLayout.map(rotatePos);
+        if (Array.isArray(portraitPreview.chairsAround)) {
+          portraitPreview.chairsAround = portraitPreview.chairsAround.map((g: any) => {
+            const ox = g.centerX, oy = g.centerY;
+            const nx = oldH - oy;
+            const ny = ox;
+            return { ...g, centerX: nx, centerY: ny, rotation: ((g.rotation || 0) + 90) % 360 };
+          });
+        }
+        return { plan: portraitPreview };
+      }
+      if (assistantAskedForOrientation && orientationValue === 'landscape') {
+        return { plan: structuredPreview };
+      }
+      // ─────────────────────────────────────────────────────────────────────────
       const mainZoneIsChairOnly = Boolean(guestZoneFromBrief?.onlyChairs);
       const mainZoneNeedsSetup = !mainZoneIsChairOnly && !selectedTableForFlow;
       const mainZoneNeedsChairChoice =
@@ -2050,6 +2083,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         };
       }
 
+      // (Orientation early-return moved to top of function for true priority)
+
       if (!stageResolved) {
         if (!stageDecisionKnown) {
           return {
@@ -2098,52 +2133,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (allMainResolved) {
-        const aspectRatio = (activeSpaceWidthMm || 1) / (activeSpaceHeightMm || 1);
-        if (Math.abs(aspectRatio - 1) > 0.15) {
-          // Auto-apply portrait: rotate the entire plan 90° CW
-          const oldW = activeSpaceWidthMm!;
-          const oldH = activeSpaceHeightMm!;
-          const portraitPreview = JSON.parse(JSON.stringify(structuredPreview));
-          const rotatePos = (v: any) => {
-            if (!v) return v;
-            const ox = typeof v.xMm === 'number' ? v.xMm : typeof v.centerX === 'number' ? v.centerX : undefined;
-            const oy = typeof v.yMm === 'number' ? v.yMm : typeof v.centerY === 'number' ? v.centerY : undefined;
-            if (ox != null && oy != null) {
-              const nx = oldH - oy;
-              const ny = ox;
-              if (typeof v.xMm === 'number') v.xMm = nx;
-              if (typeof v.yMm === 'number') v.yMm = ny;
-              if (typeof v.centerX === 'number') v.centerX = nx;
-              if (typeof v.centerY === 'number') v.centerY = ny;
-            }
-            if (v.type !== 'line') {
-              const ow = typeof v.widthMm === 'number' ? v.widthMm : 0;
-              const oh = typeof v.heightMm === 'number' ? v.heightMm : 0;
-              if (ow && oh) { v.widthMm = oh; v.heightMm = ow; }
-            }
-            if (typeof v.rotation === 'number') v.rotation = (v.rotation + 90) % 360;
-            return v;
-          };
-          if (Array.isArray(portraitPreview.walls)) {
-            portraitPreview.walls = portraitPreview.walls.map((w: any) => {
-              const nw = { ...w, widthMm: oldH, heightMm: oldW };
-              if (typeof nw.rotation === 'number') nw.rotation = (nw.rotation + 90) % 360;
-              return nw;
-            });
+        if (!orientationKnown) {
+          const aspectRatio = (activeSpaceWidthMm || 1) / (activeSpaceHeightMm || 1);
+          if (Math.abs(aspectRatio - 1) > 0.15) {
+            return {
+              followUp: 'Would you like the layout in landscape or portrait orientation?',
+              choices: ['Landscape', 'Portrait'],
+              preview: structuredPreview,
+            };
           }
-          if (Array.isArray(portraitPreview.assets)) portraitPreview.assets = portraitPreview.assets.map(rotatePos);
-          if (Array.isArray(portraitPreview.shapes)) portraitPreview.shapes = portraitPreview.shapes.map(rotatePos);
-          if (portraitPreview.tableArrangement) rotatePos(portraitPreview.tableArrangement);
-          if (Array.isArray(portraitPreview.seatingLayout)) portraitPreview.seatingLayout = portraitPreview.seatingLayout.map(rotatePos);
-          if (Array.isArray(portraitPreview.chairsAround)) {
-            portraitPreview.chairsAround = portraitPreview.chairsAround.map((g: any) => {
-              const ox = g.centerX, oy = g.centerY;
-              const nx = oldH - oy;
-              const ny = ox;
-              return { ...g, centerX: nx, centerY: ny, rotation: ((g.rotation || 0) + 90) % 360 };
-            });
-          }
-          return { plan: portraitPreview };
         }
         return { plan: structuredPreview };
       }
@@ -3095,10 +3093,10 @@ ${obstaclesContext}`;
       parsed.assetSelection.options = options.slice(0, 50);
     }
 
-    // Auto-portrait: rotate the entire plan 90° CW for non-square rooms
+    // Orientation handling for AI-generated plans (non-recovery path)
     if (parsed.plan && activeSpaceWidthMm && activeSpaceHeightMm) {
-      const aspectRatio = activeSpaceWidthMm / activeSpaceHeightMm;
-      if (Math.abs(aspectRatio - 1) > 0.15) {
+      if (parsed.plan.orientation === 'portrait' || orientationValue === 'portrait') {
+        // Rotate entire plan 90° CW
         const oldW = activeSpaceWidthMm;
         const oldH = activeSpaceHeightMm;
         const rotatePos = (v: any) => {
@@ -3113,11 +3111,9 @@ ${obstaclesContext}`;
             if (typeof v.centerX === 'number') v.centerX = nx;
             if (typeof v.centerY === 'number') v.centerY = ny;
           }
-          if (v.type !== 'line') {
-            const ow = typeof v.widthMm === 'number' ? v.widthMm : 0;
-            const oh = typeof v.heightMm === 'number' ? v.heightMm : 0;
-            if (ow && oh) { v.widthMm = oh; v.heightMm = ow; }
-          }
+          const ow = typeof v.widthMm === 'number' ? v.widthMm : 0;
+          const oh = typeof v.heightMm === 'number' ? v.heightMm : 0;
+          if (ow && oh && v.type !== 'line') { v.widthMm = oh; v.heightMm = ow; }
           if (typeof v.rotation === 'number') v.rotation = (v.rotation + 90) % 360;
           return v;
         };
@@ -3140,6 +3136,10 @@ ${obstaclesContext}`;
             return { ...g, centerX: nx, centerY: ny, rotation: ((g.rotation || 0) + 90) % 360 };
           });
         }
+        delete parsed.plan.orientation;
+      } else {
+        // Landscape or no orientation flag — keep as-is
+        delete parsed.plan.orientation;
       }
     }
 

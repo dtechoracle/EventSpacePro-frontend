@@ -1179,23 +1179,59 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
                 {/* Rotation (Unified Shape/Asset) */}
                 {(itemType === 'shape' || itemType === 'asset') && (
-                  <div className="flex justify-between items-center mb-4 pt-2 border-t border-gray-100">
-                    <span className="text-gray-500">Rotation</span>
-                    <div className="flex items-center">
-                      <input
-                        type="number"
-                        value={roundForDisplay((selectedItem as any).rotation || 0)}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          if (itemType === 'shape') updateShape(selectedItem.id, { rotation: val });
+                  <div className="mb-4 pt-2 border-t border-gray-100">
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="text-gray-500">Rotation</span>
+                      <div className="flex items-center">
+                        <input
+                          type="number"
+                          value={roundForDisplay((selectedItem as any).rotation || 0)}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            if (itemType === 'shape') updateShape(selectedItem.id, { rotation: val });
+                            if (itemType === 'asset') {
+                              updateAsset(selectedItem.id, { rotation: val });
+                              updateSceneAsset(selectedItem.id, { rotation: val });
+                            }
+                          }}
+                          className="sidebar-input w-16 text-center"
+                        />
+                        <span className="ml-1 text-gray-400">°</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentRot = (selectedItem as any).rotation || 0;
+                          const nextRot = (currentRot + 180) % 360;
+                          if (itemType === 'shape') updateShape(selectedItem.id, { rotation: nextRot });
                           if (itemType === 'asset') {
-                            updateAsset(selectedItem.id, { rotation: val });
-                            updateSceneAsset(selectedItem.id, { rotation: val });
+                            updateAsset(selectedItem.id, { rotation: nextRot });
+                            updateSceneAsset(selectedItem.id, { rotation: nextRot });
                           }
                         }}
-                        className="sidebar-input w-16 text-center"
-                      />
-                      <span className="ml-1 text-gray-400">°</span>
+                        className="flex-1 py-1 px-2 text-xs border border-gray-200 rounded hover:bg-gray-50 text-gray-600 transition-colors flex items-center justify-center gap-1"
+                        title="Flip Horizontally (Rotates 180°)"
+                      >
+                        ↔ Flip Horizontal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentRot = (selectedItem as any).rotation || 0;
+                          const nextRot = (currentRot + 180) % 360;
+                          if (itemType === 'shape') updateShape(selectedItem.id, { rotation: nextRot });
+                          if (itemType === 'asset') {
+                            updateAsset(selectedItem.id, { rotation: nextRot });
+                            updateSceneAsset(selectedItem.id, { rotation: nextRot });
+                          }
+                        }}
+                        className="flex-1 py-1 px-2 text-xs border border-gray-200 rounded hover:bg-gray-50 text-gray-600 transition-colors flex items-center justify-center gap-1"
+                        title="Flip Vertically (Rotates 180°)"
+                      >
+                        ↕ Flip Vertical
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1769,44 +1805,133 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     )}
 
                     {/* Color Fill (Shape or Asset) */}
-                    {((!((selectedItem as any).fillType) || (selectedItem as any).fillType === 'solid' || (selectedItem as any).fillType === 'color') || itemType === 'asset') && (
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-gray-500">Fill Color</span>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={(itemType === 'asset' ? (selectedItem as any).fillColor : (selectedItem as any).fill) || '#ffffff'}
-                            onChange={(e) => {
-                              // Ensure fillType is set to solid if undefined
-                              const changes: any = { fill: e.target.value };
-                              if (!(selectedItem as any).fillType) changes.fillType = 'solid';
+                    {((!((selectedItem as any).fillType) || (selectedItem as any).fillType === 'solid' || (selectedItem as any).fillType === 'color') && (() => {
+                      const isMultiSeater = itemType === 'asset' && (selectedItem as any).type && /seater|sofa/i.test((selectedItem as any).type);
+                      if (isMultiSeater) {
+                        return (
+                          <>
+                            {/* Table / Sofa Color */}
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-gray-500 text-xs">Table/Sofa Color</span>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={(selectedItem as any).tableColor || (selectedItem as any).fillColor || '#ffffff'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateAsset(selectedItem.id, { tableColor: val });
+                                    updateSceneAsset(selectedItem.id, { tableColor: val });
+                                  }}
+                                  className="sidebar-input w-20 text-xs"
+                                />
+                                <input
+                                  type="color"
+                                  value={(selectedItem as any).tableColor || (selectedItem as any).fillColor || '#ffffff'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateAsset(selectedItem.id, { tableColor: val });
+                                    updateSceneAsset(selectedItem.id, { tableColor: val });
+                                  }}
+                                  className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                                />
+                              </div>
+                            </div>
 
-                              if (itemType === 'shape') updateShape(selectedItem.id, changes);
-                              if (itemType === 'asset') {
-                                updateAsset(selectedItem.id, { fillColor: e.target.value });
-                                updateSceneAsset(selectedItem.id, { fillColor: e.target.value });
-                              }
-                            }}
-                            className="sidebar-input w-20 text-xs"
-                          />
-                          <input
-                            type="color"
-                            value={(itemType === 'asset' ? (selectedItem as any).fillColor : (selectedItem as any).fill) || '#ffffff'}
-                            onChange={(e) => {
-                              const changes: any = { fill: e.target.value };
-                              if (!(selectedItem as any).fillType) changes.fillType = 'solid';
+                            {/* Chair Color */}
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-gray-500 text-xs">Chair Color</span>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={(selectedItem as any).chairColor || (selectedItem as any).fillColor || '#ffffff'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateAsset(selectedItem.id, { chairColor: val });
+                                    updateSceneAsset(selectedItem.id, { chairColor: val });
+                                  }}
+                                  className="sidebar-input w-20 text-xs"
+                                />
+                                <input
+                                  type="color"
+                                  value={(selectedItem as any).chairColor || (selectedItem as any).fillColor || '#ffffff'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateAsset(selectedItem.id, { chairColor: val });
+                                    updateSceneAsset(selectedItem.id, { chairColor: val });
+                                  }}
+                                  className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                                />
+                              </div>
+                            </div>
 
-                              if (itemType === 'shape') updateShape(selectedItem.id, changes);
-                              if (itemType === 'asset') {
-                                updateAsset(selectedItem.id, { fillColor: e.target.value });
-                                updateSceneAsset(selectedItem.id, { fillColor: e.target.value });
-                              }
-                            }}
-                            className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
-                          />
+                            {/* Standard Fill Color */}
+                            <div className="flex justify-between items-center mb-2 border-t border-dashed border-gray-100 pt-2">
+                              <span className="text-gray-400 text-[10px]">Reset Both Colors</span>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={(selectedItem as any).fillColor || '#ffffff'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateAsset(selectedItem.id, { fillColor: val, tableColor: undefined, chairColor: undefined });
+                                    updateSceneAsset(selectedItem.id, { fillColor: val, tableColor: undefined, chairColor: undefined });
+                                  }}
+                                  className="sidebar-input w-20 text-xs"
+                                />
+                                <input
+                                  type="color"
+                                  value={(selectedItem as any).fillColor || '#ffffff'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateAsset(selectedItem.id, { fillColor: val, tableColor: undefined, chairColor: undefined });
+                                    updateSceneAsset(selectedItem.id, { fillColor: val, tableColor: undefined, chairColor: undefined });
+                                  }}
+                                  className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                                />
+                              </div>
+                            </div>
+                          </>
+                        );
+                      }
+
+                      return (
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-gray-500">Fill Color</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={(itemType === 'asset' ? (selectedItem as any).fillColor : (selectedItem as any).fill) || '#ffffff'}
+                              onChange={(e) => {
+                                const changes: any = { fill: e.target.value };
+                                if (!(selectedItem as any).fillType) changes.fillType = 'solid';
+
+                                if (itemType === 'shape') updateShape(selectedItem.id, changes);
+                                if (itemType === 'asset') {
+                                  updateAsset(selectedItem.id, { fillColor: e.target.value });
+                                  updateSceneAsset(selectedItem.id, { fillColor: e.target.value });
+                                }
+                              }}
+                              className="sidebar-input w-20 text-xs"
+                            />
+                            <input
+                              type="color"
+                              value={(itemType === 'asset' ? (selectedItem as any).fillColor : (selectedItem as any).fill) || '#ffffff'}
+                              onChange={(e) => {
+                                const changes: any = { fill: e.target.value };
+                                if (!(selectedItem as any).fillType) changes.fillType = 'solid';
+
+                                if (itemType === 'shape') updateShape(selectedItem.id, changes);
+                                if (itemType === 'asset') {
+                                  updateAsset(selectedItem.id, { fillColor: e.target.value });
+                                  updateSceneAsset(selectedItem.id, { fillColor: e.target.value });
+                                }
+                              }}
+                              className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                            />
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })())}
 
                     {/* Gradient Fill */}
                     {(selectedItem as any).fillType === 'gradient' && (

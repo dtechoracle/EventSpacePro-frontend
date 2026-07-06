@@ -159,6 +159,124 @@ function getSvgMetrics(svgText: string): SvgMetrics {
     }
 }
 
+function getPathPoints(d: string): {x: number, y: number}[] {
+    const points: {x: number, y: number}[] = [];
+    const commands = d.match(/[a-df-z][^a-df-z]*/ig);
+    if (!commands) return points;
+
+    let cx = 0, cy = 0;
+
+    commands.forEach(cmdStr => {
+        const cmd = cmdStr[0];
+        const args = (cmdStr.slice(1).match(/-?[\d.]+/g) || []).map(Number);
+        
+        if (cmd.toUpperCase() === 'M' || cmd.toUpperCase() === 'L') {
+            for (let i = 0; i < args.length; i += 2) {
+                if (args[i] !== undefined && args[i+1] !== undefined) {
+                    cx = args[i];
+                    cy = args[i+1];
+                    points.push({ x: cx, y: cy });
+                }
+            }
+        } else if (cmd.toUpperCase() === 'A') {
+            for (let i = 0; i < args.length; i += 7) {
+                const x = args[i+5];
+                const y = args[i+6];
+                if (x !== undefined && y !== undefined) {
+                    cx = x;
+                    cy = y;
+                    points.push({ x: cx, y: cy });
+                }
+            }
+        } else if (cmd.toUpperCase() === 'C') {
+            for (let i = 0; i < args.length; i += 6) {
+                const x = args[i+4];
+                const y = args[i+5];
+                if (x !== undefined && y !== undefined) {
+                    cx = x;
+                    cy = y;
+                    points.push({ x: cx, y: cy });
+                }
+            }
+        } else if (cmd.toUpperCase() === 'S' || cmd.toUpperCase() === 'Q') {
+            for (let i = 0; i < args.length; i += 4) {
+                const x = args[i+2];
+                const y = args[i+3];
+                if (x !== undefined && y !== undefined) {
+                    cx = x;
+                    cy = y;
+                    points.push({ x: cx, y: cy });
+                }
+            }
+        } else if (cmd.toUpperCase() === 'H') {
+            for (let i = 0; i < args.length; i++) {
+                cx = args[i];
+                points.push({ x: cx, y: cy });
+            }
+        } else if (cmd.toUpperCase() === 'V') {
+            for (let i = 0; i < args.length; i++) {
+                cy = args[i];
+                points.push({ x: cx, y: cy });
+            }
+        }
+    });
+    return points;
+}
+
+function getElementMetrics(el: Element) {
+    const tag = el.tagName.toLowerCase();
+    
+    if (tag === 'circle') {
+        const cx = parseFloat(el.getAttribute('cx') || '0');
+        const cy = parseFloat(el.getAttribute('cy') || '0');
+        const r = parseFloat(el.getAttribute('r') || '0');
+        return { cx, cy, width: r * 2, height: r * 2 };
+    } else if (tag === 'ellipse') {
+        const cx = parseFloat(el.getAttribute('cx') || '0');
+        const cy = parseFloat(el.getAttribute('cy') || '0');
+        const rx = parseFloat(el.getAttribute('rx') || '0');
+        const ry = parseFloat(el.getAttribute('ry') || '0');
+        return { cx, cy, width: rx * 2, height: ry * 2 };
+    } else if (tag === 'rect') {
+        const x = parseFloat(el.getAttribute('x') || '0');
+        const y = parseFloat(el.getAttribute('y') || '0');
+        const w = parseFloat(el.getAttribute('width') || '0');
+        const h = parseFloat(el.getAttribute('height') || '0');
+        return { cx: x + w / 2, cy: y + h / 2, width: w, height: h };
+    } else if (tag === 'path') {
+        const d = el.getAttribute('d') || '';
+        const points = getPathPoints(d);
+        if (points.length > 0) {
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            points.forEach(p => {
+                minX = Math.min(minX, p.x);
+                maxX = Math.max(maxX, p.x);
+                minY = Math.min(minY, p.y);
+                maxY = Math.max(maxY, p.y);
+            });
+            return {
+                cx: (minX + maxX) / 2,
+                cy: (minY + maxY) / 2,
+                width: maxX - minX,
+                height: maxY - minY
+            };
+        }
+    }
+    return null;
+}
+
+function getGDepth(el: Element): number {
+    let depth = 0;
+    let parent = el.parentElement;
+    while (parent) {
+        if (parent.tagName.toLowerCase() === 'g') {
+            depth++;
+        }
+        parent = parent.parentElement;
+    }
+    return depth;
+}
+
 interface AssetRendererProps {
     asset: Asset;
     isSelected?: boolean;
@@ -204,11 +322,13 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         !isPreview &&
         ((asset.strokeWidth !== undefined && Math.abs(asset.strokeWidth - DEFAULT_ASSET_STROKE_WIDTH) <= 0.001) ||
             asset.strokeWidth === undefined);
+    const hasCustomSubColors = Boolean((asset as any).tableColor || (asset as any).chairColor);
     const canUseFastImage =
         !!assetPath &&
         !asset.isExploded &&
         !disableFastImageForAsset &&
         !prefersLiveSvgAtDefaultStroke &&
+        !hasCustomSubColors &&
         canRenderAssetAsImage(asset, isPreview);
     const fastImageHref = canUseFastImage && rasterAssetPath && !rasterImageFailed ? rasterAssetPath : assetPath;
 
@@ -319,6 +439,24 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             const metrics = svgMetricsCache[definition.path] || getSvgMetrics(rawSvgContent);
             svgMetricsCache[definition.path] = metrics;
 
+            const artboardWidth = metrics.artboardWidth || 1000;
+            const artboardHeight = metrics.artboardHeight || 1000;
+
+            const viewBoxMatch = rawSvgContent.match(/viewBox=["']([\d\s.-]+)["']/);
+            let viewBoxX = 0;
+            let viewBoxY = 0;
+            if (viewBoxMatch) {
+                const parts = viewBoxMatch[1].trim().split(/\s+/).map(parseFloat);
+                if (parts.length === 4) {
+                    viewBoxX = parts[0];
+                    viewBoxY = parts[1];
+                }
+            }
+            const artboardCenterX = viewBoxX + artboardWidth / 2;
+            const artboardCenterY = viewBoxY + artboardHeight / 2;
+
+            const isMultiSeater = definition.path.toLowerCase().includes('seater') || definition.path.toLowerCase().includes('sofa') || definition.path.toLowerCase().includes('doughtnut');
+
             const isSixSeaterLShapedSofa = definition.path.toLowerCase().includes('6 seater l shaped sofa.svg');
             if (isSixSeaterLShapedSofa) {
                 const svgNs = "http://www.w3.org/2000/svg";
@@ -405,13 +543,35 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             if (!doc.getElementById(styleId)) {
                 const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
                 styleEl.setAttribute("id", styleId);
-                styleEl.textContent = `* { vector-effect: non-scaling-stroke !important; } .fill-none-el { fill: none !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } .auto-fill-el { fill: inherit !important; stroke: none !important; } .stroke-top-layer { pointer-events: none; }`;
+                const isLayoutAsset = definition?.category === "Layout";
+                const vectorEffectRule = isLayoutAsset ? "" : "svg path, svg circle, svg rect, svg line, svg polyline, svg ellipse { vector-effect: non-scaling-stroke !important; }";
+                styleEl.textContent = `${vectorEffectRule} svg .fill-none-el { fill: none !important; } svg .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } svg .auto-fill-el { fill: inherit !important; stroke: none !important; } svg .stroke-top-layer { pointer-events: none; } svg .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } svg .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } svg .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } svg .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
                 svg.prepend(styleEl);
             }
+
+
+
+
 
             const children = Array.from(doc.querySelectorAll('path, circle, rect, line, polyline, ellipse'));
             const circles = Array.from(doc.querySelectorAll('circle'));
             const innerCircles = new Set();
+
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            children.forEach(el => {
+                const m = getElementMetrics(el);
+                if (m) {
+                    minX = Math.min(minX, m.cx - m.width / 2);
+                    maxX = Math.max(maxX, m.cx + m.width / 2);
+                    minY = Math.min(minY, m.cy - m.height / 2);
+                    maxY = Math.max(maxY, m.cy + m.height / 2);
+                }
+            });
+
+            const contentWidth = isFinite(maxX - minX) ? (maxX - minX) : 1000;
+            const contentHeight = isFinite(maxY - minY) ? (maxY - minY) : 1000;
+            const contentCenterX = isFinite(minX) ? (minX + contentWidth / 2) : 500;
+            const contentCenterY = isFinite(minY) ? (minY + contentHeight / 2) : 500;
 
             if (circles.length > 1) {
                 const sorted = [...circles].sort((a, b) => parseFloat(a.getAttribute("r") || "0") - parseFloat(b.getAttribute("r") || "0"));
@@ -490,6 +650,20 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
 
                 if (shouldBeNone && !hasFillRule && !isAutoFill) {
                     el.classList.add("fill-none-el");
+                } else if (isMultiSeater) {
+                    const elMetrics = getElementMetrics(el);
+                    let isTable = false;
+                    if (elMetrics) {
+                        const distToCenter = Math.hypot(elMetrics.cx - contentCenterX, elMetrics.cy - contentCenterY);
+                        const isCentral = distToCenter < contentWidth * 0.15;
+                        const isVeryLarge = elMetrics.width > contentWidth * 0.4 || elMetrics.height > contentHeight * 0.4;
+                        isTable = (isCentral || isVeryLarge) && getGDepth(el) < 3;
+                    }
+                    if (isTable) {
+                        el.classList.add(isAutoFill ? "table-auto-fill-el" : "table-fill-el");
+                    } else {
+                        el.classList.add(isAutoFill ? "chair-auto-fill-el" : "chair-fill-el");
+                    }
                 } else if (isAutoFill) {
                     el.classList.add("auto-fill-el");
                 } else {
@@ -575,7 +749,12 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     return (
         <g
             transform={transform}
-            style={{ cursor: 'pointer', ...(isCanvasBacked && canUseFastImage ? { display: 'none' } : {}) }}
+            style={{ 
+                cursor: 'pointer', 
+                ...(isCanvasBacked && canUseFastImage ? { display: 'none' } : {}),
+                '--table-color': (asset as any).tableColor || currentFill,
+                '--chair-color': (asset as any).chairColor || currentFill
+            } as any}
             onMouseEnter={() => definition && onMouseEnter?.(definition.label)}
             onMouseLeave={() => onMouseLeave?.()}
             data-id={asset.id}
@@ -630,8 +809,9 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                         height={asset.height || 100}
                         fill="transparent"
                         stroke="none"
-                        pointerEvents="all"
+                        pointerEvents={definition?.category === 'Marquee' ? 'none' : 'all'}
                     />
+
 
                     {!definition && (
                         <g>

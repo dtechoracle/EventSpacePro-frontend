@@ -18,6 +18,7 @@ export type AssetDef = {
 export const ASSET_CATEGORIES: AssetCategory[] = ["Furniture", "Layout", "Sitting_Styles", "Space_Elements", "Marquee"];
 
 import { MARQUEES } from './marquees';
+import { PRELOADED_VENUES } from './preloadedVenues';
 
 const CATEGORY_SORT_ORDER: Record<AssetCategory, number> = {
   Furniture: 0,
@@ -118,8 +119,19 @@ const MARQUEE_ASSETS: AssetDef[] = MARQUEES.map(m => ({
     name: m.name
 }));
 
+const PRELOADED_VENUE_ASSETS: AssetDef[] = PRELOADED_VENUES.map(v => ({
+    id: v.id,
+    label: v.name,
+    path: v.path,
+    category: "Layout",
+    width: v.width,
+    height: v.height,
+    name: v.name
+}));
+
 const RAW_ASSET_LIBRARY: AssetDef[] = [
     ...MARQUEE_ASSETS,
+    ...PRELOADED_VENUE_ASSETS,
   {
     "id": "10-seater-rectangular-table",
     "label": "10 seater rectangular table",

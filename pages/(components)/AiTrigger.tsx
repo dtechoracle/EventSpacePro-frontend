@@ -845,6 +845,10 @@ export default function AiTrigger() {
       roomH = marqueeH;
     }
 
+    // Note: portrait orientation is fully handled by the backend (wall widthMm/heightMm are
+    // already swapped and asset coordinates are already rotated 90° CW before the response
+    // is sent). No additional dimension swap is needed here.
+
     const roomCX = canvasCenter.x;
     const roomCY = canvasCenter.y;
     const wallMinX = roomCX - roomW / 2;
@@ -1740,24 +1744,13 @@ export default function AiTrigger() {
       const gridW0 = Math.max(1, maxX0 - minX0);
       const gridH0 = Math.max(1, maxY0 - minY0);
 
-      // ── Auto-scale: shrink everything proportionally so it always fits
+      // ── Auto-scale: check if the layout fits, but keep scaleFactor = 1.0 per client request
       const shrinkScaleX = gridW0 > usableW ? usableW / gridW0 : 1;
       const shrinkScaleY = gridH0 > usableH ? usableH / gridH0 : 1;
-      let scaleFactor = Math.min(shrinkScaleX, shrinkScaleY) * 0.95; // 5% safety margin
+      let scaleFactor = 1.0;
 
-      if (fitLayoutToSpace && gridW0 < usableW && gridH0 < usableH) {
-        const expandScaleX = usableW / gridW0;
-        const expandScaleY = usableH / gridH0;
-        scaleFactor = Math.min(Math.min(expandScaleX, expandScaleY), 1.28) * 0.92;
-        if (scaleFactor > 1.02) {
-          layoutWarning = `ℹ️ Layout expanded to ${Math.round(scaleFactor * 100)}% to use more of the available room.`;
-        }
-      } else if (scaleFactor < 1) {
-        if (scaleFactor < 0.7) {
-          layoutWarning = `⚠️ The room is quite small for ${N} tables. Layout scaled to ${Math.round(scaleFactor * 100)}% to fit.`;
-        } else {
-          layoutWarning = `ℹ️ Layout scaled to ${Math.round(scaleFactor * 100)}% to fit within the room.`;
-        }
+      if (shrinkScaleX < 1 || shrinkScaleY < 1) {
+        layoutWarning = `⚠️ The room is too small for ${N} tables at their default sizes. Overlap or layout overflow will occur.`;
       }
 
       // Effective (scaled) sizes
@@ -2032,16 +2025,10 @@ export default function AiTrigger() {
 
             const naturalLayoutWidth = aw + Math.max(0, cols - 1) * provisionalBaseColSpacing;
             const naturalLayoutHeight = ah + Math.max(0, rowsCount - 1) * provisionalBaseRowSpacing;
-            const assetScale =
-              zone && fitLayoutToSpace
-                ? Math.max(
-                    1,
-                    Math.min(
-                      Math.min((zoneWidth * 0.76) / Math.max(naturalLayoutWidth, 1), (zoneHeight * 0.62) / Math.max(naturalLayoutHeight, 1)),
-                      1.8
-                    )
-                  )
-                : 1;
+            const assetScale = 1.0;
+            if ((naturalLayoutWidth > zoneWidth || naturalLayoutHeight > zoneHeight) && !layoutWarning) {
+              layoutWarning = `⚠️ The seating area is too small for ${count} chairs at their default sizes. Layout overflow will occur.`;
+            }
             const effAw = aw * assetScale;
             const effAh = ah * assetScale;
             const scaledGap = 600 * (fitLayoutToSpace ? Math.min(assetScale, 1.5) : 1);

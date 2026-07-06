@@ -751,7 +751,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                                 }}
                                 whileTap={{ scale: 0.95 }}
                                 whileHover={{ scale: 1.03 }}
-                                className={`w-8 h-8 border-2 flex items-center justify-center rounded-md ${(tool.options.some((opt) => opt.id === "draw-line") &&
+                                className={`w-8 h-8 border-2 flex items-center justify-center rounded-md focus:outline-none outline-none ${(tool.options.some((opt) => opt.id === "draw-line") &&
                                     isPenMode) ||
                                     (tool.options.some((opt) => opt.id === "draw-wall") &&
                                         (isWallMode || wallDrawingMode)) ||

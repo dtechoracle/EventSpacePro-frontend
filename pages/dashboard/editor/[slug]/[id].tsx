@@ -27,6 +27,11 @@ import { ASSET_LIBRARY } from "@/lib/assets";
 import toast from "react-hot-toast";
 import { calculateWorkspaceBounds } from "@/utils/workspaceBounds";
 import { useAutoSave } from "@/hooks/useAutoSave";
+import { PRELOADED_VENUES } from "@/lib/preloadedVenues";
+
+const PRELOADED_VENUE_IDS = new Set(PRELOADED_VENUES.map(v => v.id));
+const PRELOADED_VENUE_MAP = new Map(PRELOADED_VENUES.map(v => [v.id, v]));
+
 
 // Extended EventData type with canvasData
 type EventData = BaseEventData & {
@@ -87,6 +92,7 @@ function ElementsPane() {
   const setPan = useEditorStore(s => s.setPan);
   const [expandedAssets, setExpandedAssets] = React.useState<Record<string, boolean>>({});
   const [expandedAssetGroups, setExpandedAssetGroups] = React.useState<Record<string, boolean>>({
+    venue: true,
     walls: true,
     shapes: true,
     chairs: true,
@@ -95,6 +101,7 @@ function ElementsPane() {
     sofas: false,
     "other assets": false,
   });
+
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renamingText, setRenamingText] = React.useState("");
 
@@ -256,6 +263,7 @@ function ElementsPane() {
   }, [assets, walls]);
 
   const groupedElementItems = React.useMemo(() => {
+    const venueItems: typeof items = [];
     const assetBuckets: Record<string, typeof items> = {
       chairs: [],
       tables: [],
@@ -281,6 +289,12 @@ function ElementsPane() {
         return;
       }
 
+      // Preloaded venue assets get their own group
+      if (PRELOADED_VENUE_IDS.has(item.asset.type)) {
+        venueItems.push(item);
+        return;
+      }
+
       const assetDef = elementAssetDefinitionById.get(item.asset.type);
       const bucket = getAssetCountBucket(
         item.asset.name ||
@@ -294,8 +308,9 @@ function ElementsPane() {
       assetBuckets[bucket].push(item);
     });
 
-    return { nonAssetItems, assetBuckets, wallItems, shapeItems };
+    return { nonAssetItems, assetBuckets, wallItems, shapeItems, venueItems };
   }, [items]);
+
 
   const assetGroupOrder = ["chairs", "tables", "stools", "sofas", "other assets"];
   const assetGroupLabels: Record<string, string> = {
@@ -807,8 +822,62 @@ function ElementsPane() {
             </div>
           );
         })}
+        {/* Venue section — shown first when a preloaded venue is on the canvas */}
+        {groupedElementItems.venueItems.length > 0 && (() => {
+          const isExpanded = expandedAssetGroups['venue'] ?? true;
+          return (
+            <div className="border-b border-gray-100">
+              <button
+                type="button"
+                onClick={() => setExpandedAssetGroups(prev => ({ ...prev, venue: !isExpanded }))}
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-indigo-600 hover:bg-indigo-50 transition-colors"
+              >
+                <span className="flex items-center gap-1.5">🏛️ Venue</span>
+                <span className="flex items-center gap-2">
+                  <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] font-semibold tracking-normal text-indigo-600">{groupedElementItems.venueItems.length}</span>
+                  <span className="text-xs text-gray-400">{isExpanded ? '▾' : '▸'}</span>
+                </span>
+              </button>
+              {isExpanded && groupedElementItems.venueItems.map((item) => {
+                const assetDef = item.type === 'Asset' && item.asset
+                  ? ASSET_LIBRARY.find(a => a.id === item.asset!.type)
+                  : null;
+                const isSelected = selectedIds.includes(item.id);
+                return (
+                  <button
+                    key={item.id}
+                    onClick={(e) => handleSelect({ id: item.id, x: item.x, y: item.y }, e)}
+                    className={`w-full flex items-center gap-1.5 px-2 py-2 text-[11px] border-b border-gray-100 transition-colors ${
+                      isSelected ? 'text-indigo-700 bg-indigo-50 font-medium' : 'text-gray-700 hover:bg-indigo-50'
+                    }`}
+                  >
+                    {/* SVG thumbnail */}
+                    <div className="w-10 h-10 rounded border border-indigo-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center p-0.5">
+                      {assetDef?.path ? (
+                        <InlineSvg
+                          src={assetDef.path}
+                          fill="none"
+                          stroke="#4f46e5"
+                          strokeWidth={0.5}
+                          category={assetDef.category}
+                        />
+                      ) : (
+                        <span className="text-[8px] text-indigo-400">SVG</span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="truncate font-medium text-indigo-700">{item.label}</div>
+                      <div className="text-[0.6rem] text-indigo-400 mt-0.5">Venue</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
         {renderItemGroup('Walls', 'walls', groupedElementItems.wallItems, expandedAssetGroups, setExpandedAssetGroups)}
         {renderItemGroup('Shapes', 'shapes', groupedElementItems.shapeItems, expandedAssetGroups, setExpandedAssetGroups)}
+
         {assetGroupOrder.map((groupKey) => {
           const groupItems = groupedElementItems.assetBuckets[groupKey] || [];
           if (groupItems.length === 0) return null;
@@ -1432,6 +1501,73 @@ export default function Editor() {
         });
         
         toast.success(`Loaded marquee: ${marqueeDef?.label || marqueeId}`);
+      }
+    }
+  }, [isRouterReady, router.query, currentEventData]);
+
+
+
+
+  // Handle preloadedVenue query param - force-inject the venue asset if missing
+  useEffect(() => {
+    if (isRouterReady && router.query.preloadedVenue && currentEventData) {
+      const routeId = router.query.id as string;
+      const currentId = currentEventData._id || (currentEventData as any).id;
+
+      if (currentId !== routeId) return;
+
+      const venueId = Array.isArray(router.query.preloadedVenue)
+        ? router.query.preloadedVenue[0]
+        : router.query.preloadedVenue;
+      if (!venueId) return;
+
+      const venueDef = PRELOADED_VENUE_MAP.get(venueId);
+      if (!venueDef) {
+        console.warn(`[Editor] Unknown preloaded venue: ${venueId}`);
+        return;
+      }
+
+      const projectStore = useProjectStore.getState();
+
+      // Check if venue already exists in workspace
+      const existingVenue = projectStore.assets.find(a => a.type === venueId);
+
+      if (!existingVenue) {
+        console.log(`[Editor] Venue missing from workspace! Force-loading: ${venueId}`);
+
+        const canvas = currentEventData.canvasData?.canvas || currentEventData.canvases?.[0];
+        const canvasW = canvas?.width || (venueDef.width + 4000);
+        const canvasH = canvas?.height || (venueDef.height + 4000);
+
+        const assetId = `venue-${Date.now()}`;
+        projectStore.addAsset({
+          id: assetId,
+          name: venueDef.name,
+          type: venueId,
+          x: canvasW / 2,
+          y: canvasH / 2,
+          width: venueDef.width,
+          height: venueDef.height,
+          rotation: 0,
+          scale: 1,
+          zIndex: 0,
+        });
+
+        console.log(`[Editor] ✅ Force-loaded venue: ${venueDef.name}`);
+
+        // Auto-pan/zoom to show the venue
+        setTimeout(() => {
+          if (typeof window === 'undefined') return;
+          const viewportW = window.innerWidth - 300;
+          const viewportH = window.innerHeight - 150;
+          const zoomX = viewportW / venueDef.width;
+          const zoomY = viewportH / venueDef.height;
+          const finalZoom = Math.max(0.002, Math.min(zoomX, zoomY) * 0.85);
+          useEditorStore.getState().setZoom(finalZoom);
+          const panX = viewportW / 2 + 150 - (canvasW / 2) * finalZoom;
+          const panY = viewportH / 2 + 75 - (canvasH / 2) * finalZoom;
+          useEditorStore.getState().setPan(panX, panY);
+        }, 300);
       }
     }
   }, [isRouterReady, router.query, currentEventData]);

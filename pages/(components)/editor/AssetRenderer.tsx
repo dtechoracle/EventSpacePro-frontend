@@ -741,6 +741,7 @@ export const AssetRenderer = React.memo(({
             strokeWidth={currentStrokeWidth}
             category={def.category}
           />
+
         </div>
 
         {/* Table Name / Numbering Label */}

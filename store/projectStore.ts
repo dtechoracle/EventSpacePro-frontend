@@ -177,7 +177,10 @@ export type Asset = {
     tableNumberingFontStyle?: string;
     tableNumberingTextDecoration?: string;
     tableNumberingColor?: string;
+    tableColor?: string;
+    chairColor?: string;
 };
+
 
 export type Wall = {
     id: string;

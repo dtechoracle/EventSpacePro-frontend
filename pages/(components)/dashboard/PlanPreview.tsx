@@ -405,6 +405,7 @@ export default function PlanPreview({
               strokeWidth={previewStrokeWidth}
               category={def.category}
             />
+
           </foreignObject>
         </g>
       );
