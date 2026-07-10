@@ -3,7 +3,8 @@ export type AssetCategory =
   | "Layout"
   | "Sitting_Styles"
   | "Space_Elements"
-  | "Marquee";
+  | "Marquee"
+  | "Venue";
 
 export type AssetDef = {
   name: string
@@ -15,7 +16,7 @@ export type AssetDef = {
   height?: number
 }
 
-export const ASSET_CATEGORIES: AssetCategory[] = ["Furniture", "Layout", "Sitting_Styles", "Space_Elements", "Marquee"];
+export const ASSET_CATEGORIES: AssetCategory[] = ["Furniture", "Layout", "Sitting_Styles", "Space_Elements", "Marquee", "Venue"];
 
 import { MARQUEES } from './marquees';
 import { PRELOADED_VENUES } from './preloadedVenues';
@@ -26,6 +27,7 @@ const CATEGORY_SORT_ORDER: Record<AssetCategory, number> = {
   Sitting_Styles: 2,
   Space_Elements: 3,
   Marquee: 4,
+  Venue: 5,
 };
 
 const getAssetArea = (asset: AssetDef) => (asset.width || 0) * (asset.height || 0);
@@ -123,7 +125,7 @@ const PRELOADED_VENUE_ASSETS: AssetDef[] = PRELOADED_VENUES.map(v => ({
     id: v.id,
     label: v.name,
     path: v.path,
-    category: "Layout",
+    category: "Venue",
     width: v.width,
     height: v.height,
     name: v.name

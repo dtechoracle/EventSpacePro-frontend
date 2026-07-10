@@ -649,6 +649,8 @@ export default function Workspace2D({
   const toggleSnapToObjects = useEditorStore(s => s.toggleSnapToObjects);
   const placementMode = useEditorStore(s => s.placementMode);
   const setPlacementMode = useEditorStore(s => s.setPlacementMode);
+  const pendingImportShape = useEditorStore(s => s.pendingImportShape);
+  const setPendingImportShape = useEditorStore(s => s.setPendingImportShape);
   const mouseWorldPos = useEditorStore(s => s.mouseWorldPos);
   const setMouseWorldPos = useEditorStore(s => s.setMouseWorldPos);
   const screenToWorld = useEditorStore(s => s.screenToWorld);
@@ -799,6 +801,26 @@ export default function Workspace2D({
           if (n.y > maxY) maxY = n.y;
         }
         return !(maxX < worldLeft || minX > worldRight || maxY < worldTop || minY > worldBottom);
+      }
+
+      // Label Arrow and Dimension culling (checks start/end points)
+      if ((item._renderType === 'labelArrow' || item._renderType === 'dimension') && item.startPoint && item.endPoint) {
+        const minX = Math.min(item.startPoint.x, item.endPoint.x);
+        const maxX = Math.max(item.startPoint.x, item.endPoint.x);
+        const minY = Math.min(item.startPoint.y, item.endPoint.y);
+        const maxY = Math.max(item.startPoint.y, item.endPoint.y);
+        const pad = 200; // Padding for labels/styling
+        return !(maxX + pad < worldLeft || minX - pad > worldRight || maxY + pad < worldTop || minY - pad > worldBottom);
+      }
+
+      // Text Annotation culling
+      if (item._renderType === 'textAnnotation') {
+        const x = item.x ?? 0;
+        const y = item.y ?? 0;
+        const w = item.width ?? 600;
+        const h = item.height ?? 200;
+        const halfSize = Math.max(w, h);
+        return !(x + halfSize < worldLeft || x - halfSize > worldRight || y + halfSize < worldTop || y - halfSize > worldBottom);
       }
 
       // Standard assets and shapes (centered items)
@@ -952,9 +974,26 @@ export default function Workspace2D({
       // Update store position for other tools to access
       // Throttle mouse position updates to avoid excessive store-triggering re-renders
       const now = Date.now();
-      if ((placementMode.active || MOUSE_WORLD_POS_TOOLS.has(activeTool)) && !isDraggingItem && (!(window as any)._lastMouseUpdate || now - (window as any)._lastMouseUpdate > 16)) {
+      if (!isDraggingItem && (!(window as any)._lastMouseUpdate || now - (window as any)._lastMouseUpdate > 16)) {
         setMouseWorldPos({ x: worldX, y: worldY });
         (window as any)._lastMouseUpdate = now;
+      }
+
+      // Handle control point dragging
+      if (draggedPoint) {
+        const shape = shapes.find(s => s.id === draggedPoint.shapeId);
+        if (shape && shape.points) {
+          const dx = worldX - shape.x;
+          const dy = worldY - shape.y;
+          const rad = -shape.rotation * (Math.PI / 180);
+          const localX = dx * Math.cos(rad) - dy * Math.sin(rad);
+          const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
+
+          const newPoints = [...shape.points];
+          newPoints[draggedPoint.pointIndex] = { x: localX, y: localY };
+          updateShape(shape.id, { points: newPoints });
+        }
+        return;
       }
 
       // Handle panning first
@@ -1511,7 +1550,7 @@ export default function Workspace2D({
         }
       }
     },
-    [activeTool, panX, panY, zoom, isPanning, dragStart, panBy, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, walls, textAnnotations, labelArrows, dimensions, batchUpdateShapes, batchUpdateAssets, batchUpdateWalls, scheduleDragPreview, snapToGridFn, selectionRect, updateCursor, setHoveredId, draggedPoint, screenToWorld, setMouseWorldPos, canvasOffset, snapToObjectsEnabled, snapToGridEnabled, gridSize, updateTextAnnotation, updateLabelArrow, updateDimension, setSnapGuides, visibleRenderables, verticesMap, findTopAssetAtPoint, assetSpatialIndex, placementMode.active]
+    [activeTool, panX, panY, zoom, isPanning, dragStart, panBy, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, walls, textAnnotations, labelArrows, dimensions, batchUpdateShapes, batchUpdateAssets, batchUpdateWalls, scheduleDragPreview, snapToGridFn, selectionRect, updateCursor, setHoveredId, draggedPoint, screenToWorld, setMouseWorldPos, canvasOffset, snapToObjectsEnabled, snapToGridEnabled, gridSize, updateTextAnnotation, updateLabelArrow, updateDimension, setSnapGuides, visibleRenderables, verticesMap, findTopAssetAtPoint, assetSpatialIndex, placementMode.active, updateShape]
   );
 
   const handleDoubleClick = useCallback(
@@ -1679,7 +1718,7 @@ export default function Workspace2D({
         // Check for control point hit on selected shapes
         for (const id of selectedIds) {
           const shape = shapes.find(s => s.id === id);
-          if (shape && (shape.type === 'polygon' || shape.type === 'line') && shape.points) {
+          if (shape && (shape.type === 'polygon' || shape.type === 'line' || shape.type === 'arc') && shape.points) {
             // Transform mouse to local shape coordinates
             // Assuming rotation is 0 for simplicity or small enough. 
             // For exactness we should rotate mouse point.
@@ -1846,7 +1885,7 @@ export default function Workspace2D({
         if (activeTool === 'select' || activeTool === 'trim-to-blend') {
           let itemSelected = false;
 
-          const handleItemSelection = (ids: string[], isShift: boolean) => {
+          const handleItemSelection = (ids: string[], isShift: boolean, clickPoint?: { x: number; y: number }) => {
             const expandedIds = resolveIdsWithGroups(ids);
 
             if ((activeTool as string) === 'trim-to-blend') {
@@ -1892,7 +1931,7 @@ export default function Workspace2D({
 
                   try {
                     const projectStore = useProjectStore.getState();
-                    const blendedShape = trimToBlendShapes(shapesToBlend);
+                    const blendedShape = trimToBlendShapes(shapesToBlend, clickPoint);
                     if (blendedShape) {
                       // Save history once for the entire atomic operation
                       projectStore.saveToHistory();
@@ -2121,7 +2160,7 @@ export default function Workspace2D({
                     setDragPreview(preview);
                   }
                 } else {
-                  handleItemSelection([item.id], e.shiftKey);
+                  handleItemSelection([item.id], e.shiftKey, { x: worldX, y: worldY });
                   // Allow immediate drag on first click if not shifting
                   if (!e.shiftKey) {
                     setIsDraggingItem(true);
@@ -2137,7 +2176,7 @@ export default function Workspace2D({
                   }
                 }
               } else {
-                handleItemSelection([item.id], e.shiftKey);
+                handleItemSelection([item.id], e.shiftKey, { x: worldX, y: worldY });
               }
               itemSelected = true;
               return;
@@ -2176,6 +2215,20 @@ export default function Workspace2D({
   );
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    // Handle Pending Import Shape (attach-to-cursor placement)
+    if (pendingImportShape && e.button === 0) {
+      const { x: worldX, y: worldY } = screenToWorld(e.clientX, e.clientY);
+      const placedShape = {
+        ...pendingImportShape,
+        x: worldX,
+        y: worldY,
+      };
+      addShape(placedShape);
+      setSelectedIds([placedShape.id]);
+      setPendingImportShape(null);
+      return;
+    }
+
     // Handle Placement Mode
     if (placementMode.active && placementMode.data && e.button === 0) {
       const { walls: newWalls, assets: newAssets, shapes: newShapes } = placementMode.data;
@@ -2422,12 +2475,13 @@ export default function Workspace2D({
         }
       });
 
-      // Select assets through the spatial index instead of scanning every asset.
-      assetSpatialIndex.query({ left: minX, top: minY, right: maxX, bottom: maxY }).forEach(({ item: asset }) => {
-        if (asset.x >= minX && asset.x <= maxX && asset.y >= minY && asset.y <= maxY) {
+      // Select assets within rectangle
+      assets.forEach(asset => {
+        if (!asset.isExploded && asset.x >= minX && asset.x <= maxX && asset.y >= minY && asset.y <= maxY) {
           selectedItems.push(asset.id);
         }
       });
+
 
       // Select walls only when the drag rectangle actually catches the wall outline.
       walls.forEach(wall => {
@@ -2490,7 +2544,7 @@ export default function Workspace2D({
     setDraggedItemStart(null);
     setDraggedPoint(null);
     setSnapGuides([]); // Clear snap guides
-  }, [setPanning, setDragging, selectionRect, shapes, assetSpatialIndex, walls, textAnnotations, labelArrows, dimensions, batchUpdateItems, clearDragPreview, setSelectedIds, selectMultipleAssets, setSnapGuides, draggedPoint, clearSelection, setPan, zoom, placementMode, addWall, addAsset, addShape, setPlacementMode, resolveIdsWithGroups, updateTyping]);
+  }, [setPanning, setDragging, selectionRect, shapes, assetSpatialIndex, walls, textAnnotations, labelArrows, dimensions, batchUpdateItems, clearDragPreview, setSelectedIds, selectMultipleAssets, setSnapGuides, draggedPoint, clearSelection, setPan, zoom, placementMode, addWall, addAsset, addShape, setPlacementMode, resolveIdsWithGroups, updateTyping, pendingImportShape, setPendingImportShape]);
 
   const handleAssetDrop = useCallback(
     async (e: React.DragEvent<HTMLDivElement>) => {
@@ -2727,6 +2781,7 @@ export default function Workspace2D({
         clearSelection();
         setActiveTool('select');
         setPlacementMode({ active: false, data: null });
+        setPendingImportShape(null);
         setSelectedEdgeId(null);
         return;
       }
@@ -2766,7 +2821,8 @@ export default function Workspace2D({
       // Paste (Ctrl+V)
       else if (ctrlKey && e.key === 'v') {
         e.preventDefault();
-        const newIds = pasteSelection();
+        const cursorPos = useEditorStore.getState().mouseWorldPos;
+        const newIds = pasteSelection(cursorPos ? { x: cursorPos.x, y: cursorPos.y } : undefined);
         if (newIds.length > 0) {
           setSelectedIds(newIds);
           toast.success(`Pasted ${newIds.length} item(s)`, { duration: 1500 });
@@ -2924,7 +2980,7 @@ export default function Workspace2D({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [zoomIn, zoomOut, clearSelection, selectedIds, activeTool, setActiveTool, setPlacementMode, setSelectedEdgeId, undo, redo, copySelection, pasteSelection, setSelectedIds, walls, shapes, assets, dimensions, textAnnotations, labelArrows, groups, batchUpdateItems, saveToHistory, getNextZIndex, addShape, addAsset, addWall, removeItemsBatch]);
+  }, [zoomIn, zoomOut, clearSelection, selectedIds, activeTool, setActiveTool, setPlacementMode, setPendingImportShape, setSelectedEdgeId, undo, redo, copySelection, pasteSelection, setSelectedIds, walls, shapes, assets, dimensions, textAnnotations, labelArrows, groups, batchUpdateItems, saveToHistory, getNextZIndex, addShape, addAsset, addWall, removeItemsBatch]);
 
 
 
@@ -3286,6 +3342,25 @@ export default function Workspace2D({
           if (newIds.length > 0) {
             setSelectedIds(newIds);
           }
+        },
+      },
+      { separator: true },
+      {
+        label: "Undo",
+        shortcut: "Ctrl+Z",
+        disabled: useProjectStore.getState().history.past.length === 0,
+        action: () => {
+          undo();
+          closeContextMenu();
+        },
+      },
+      {
+        label: "Redo",
+        shortcut: "Ctrl+Shift+Z",
+        disabled: useProjectStore.getState().history.future.length === 0,
+        action: () => {
+          redo();
+          closeContextMenu();
         },
       },
       { separator: true },
@@ -3926,6 +4001,25 @@ export default function Workspace2D({
           </button>
         </div>
       )}
+      {/* Pending Import Shape HUD */}
+      {pendingImportShape && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-2 rounded-lg bg-slate-900/90 text-white shadow-xl border border-white/20">
+          <div className="flex flex-col">
+            <span className="text-sm font-bold">Place Imported File</span>
+            <span className="text-[10px] text-slate-300">Move your mouse to position, then click to place. Press Esc to cancel.</span>
+          </div>
+          <div className="h-8 w-px bg-white/20"></div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setPendingImportShape(null);
+            }}
+            className="px-3 py-1.5 rounded-md bg-red-500/20 hover:bg-red-500/40 text-red-200 text-xs font-semibold transition-colors border border-red-500/30"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       <svg
         width={viewportSize.width}
@@ -3959,6 +4053,31 @@ export default function Workspace2D({
           {/* AI Plan Placement Preview */}
           {placementMode.active && placementMode.data && (
             <PlacementRenderer />
+          )}
+
+          {/* Pending Import Shape Preview (follows cursor) */}
+          {pendingImportShape && (
+            <g transform={`translate(${mouseWorldPos.x}, ${mouseWorldPos.y})`} opacity={0.7} style={{ pointerEvents: 'none' }}>
+              <image
+                href={pendingImportShape.fillImage}
+                x={-pendingImportShape.width / 2}
+                y={-pendingImportShape.height / 2}
+                width={pendingImportShape.width}
+                height={pendingImportShape.height}
+                preserveAspectRatio="none"
+              />
+              <rect
+                x={-pendingImportShape.width / 2}
+                y={-pendingImportShape.height / 2}
+                width={pendingImportShape.width}
+                height={pendingImportShape.height}
+                fill="none"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                strokeDasharray="8 4"
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
           )}
 
           {/* Snap Mode Source Highlight - Removed as redundant with SnapMarkers/AnchorHighlights */}

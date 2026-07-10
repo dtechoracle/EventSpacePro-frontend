@@ -53,6 +53,8 @@ export type AssetInstance = {
   isGroup?: boolean; // indicates if this asset is a group
   groupAssets?: AssetInstance[]; // assets contained within this group
   groupExpanded?: boolean; // whether the group is expanded in the UI
+  flipX?: boolean;
+  flipY?: boolean;
 
   // Table properties
   tableName?: string; // for manual/auto table numbering

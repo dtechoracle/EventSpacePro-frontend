@@ -142,13 +142,13 @@ function ElementsPane() {
     // Filter out items that belong to a group
     ...walls.filter(w => !w.groupId).map((w) => {
       if (!w.nodes || w.nodes.length === 0) {
-        return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: 0, y: 0 };
+        return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: 0, y: 0, wall: w };
       }
       const xs = w.nodes.map((n) => n.x);
       const ys = w.nodes.map((n) => n.y);
       const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
       const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
-      return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: centerX, y: centerY };
+      return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: centerX, y: centerY, wall: w };
     }),
     ...independentShapes.filter(s => !s.groupId).map((s) => ({
       id: s.id,
@@ -349,6 +349,386 @@ function ElementsPane() {
     }
   };
 
+  const renderMiniPreview = (item: any) => {
+    const assetDef = item.type === "Asset" && item.asset
+      ? ASSET_LIBRARY.find(a => a.id === item.asset.type)
+      : null;
+
+    return (
+      <div className="w-7 h-7 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
+        {item.type === "Asset" && item.asset && (
+          assetDef?.path ? (
+            <div className="w-full h-full p-1">
+              <InlineSvg
+                src={assetDef.path}
+                fill={item.asset.fillColor || (item.asset as any).fill || "none"}
+                stroke={item.asset.strokeColor || (item.asset as any).stroke || "currentColor"}
+                strokeWidth={0.6}
+                category={assetDef.category}
+              />
+            </div>
+          ) : (
+            <div className="text-[8px] text-gray-400 text-center px-1">
+              {item.asset.type}
+            </div>
+          )
+        )}
+        {item.type === "Shape" && item.shape && (
+          <svg width={24} height={24} viewBox="0 0 24 24">
+            {item.shape.type === "rectangle" && (
+              <rect
+                x={!item.shape.fillType || item.shape.fillType === 'solid' ? 4 : 2}
+                y={!item.shape.fillType || item.shape.fillType === 'solid' ? 7 : 5}
+                width={!item.shape.fillType || item.shape.fillType === 'solid' ? 16 : 20}
+                height={!item.shape.fillType || item.shape.fillType === 'solid' ? 10 : 14}
+                fill={(() => {
+                  if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
+                    if (item.shape.fillTexture) {
+                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 4}-thick-${item.shape.fillTextureThickness || 1})`;
+                    }
+                  }
+                  return item.shape.fill || "transparent";
+                })()}
+                stroke={item.shape.stroke || "#9CA3AF"}
+                strokeWidth={0.6}
+                rx={2}
+                ry={2}
+              />
+            )}
+            {item.shape.type === "ellipse" && (
+              <ellipse
+                cx={12}
+                cy={12}
+                rx={!item.shape.fillType || item.shape.fillType === 'solid' ? 8 : 10}
+                ry={!item.shape.fillType || item.shape.fillType === 'solid' ? 9 : 11}
+                fill={(() => {
+                  if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
+                    if (item.shape.fillTexture) {
+                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 4}-thick-${item.shape.fillTextureThickness || 1})`;
+                    }
+                  }
+                  return item.shape.fill || "transparent";
+                })()}
+                stroke={item.shape.stroke || "#9CA3AF"}
+                strokeWidth={0.6}
+              />
+            )}
+            {item.shape.type === "line" && (
+              <line
+                x1={4}
+                y1={12}
+                x2={20}
+                y2={12}
+                stroke={item.shape.stroke || "#9CA3AF"}
+                strokeWidth={1.5}
+                strokeLinecap="round"
+              />
+            )}
+            {item.shape.type === "polygon" && (
+              <polygon
+                points={(() => {
+                  const sides =
+                    item.shape.polygonSides ||
+                    (item.shape.points ? item.shape.points.length : 4);
+                  const s = Math.max(3, Math.min(12, sides || 4));
+                  const cx = 12;
+                  const cy = 12;
+                  const r = !item.shape.fillType || item.shape.fillType === 'solid' ? 8 : 10;
+                  const pts: string[] = [];
+                  for (let i = 0; i < s; i++) {
+                    const angle = ((Math.PI * 2) / s) * i - Math.PI / 2;
+                    const x = cx + r * Math.cos(angle);
+                    const y = cy + r * Math.sin(angle);
+                    pts.push(`${x},${y}`);
+                  }
+                  return pts.join(" ");
+                })()}
+                fill={(() => {
+                  if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
+                    if (item.shape.fillTexture) {
+                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 4}-thick-${item.shape.fillTextureThickness || 1})`;
+                    }
+                  }
+                  return item.shape.fill || "transparent";
+                })()}
+                stroke={item.shape.stroke || "#9CA3AF"}
+                strokeWidth={0.6}
+                strokeLinejoin="round"
+              />
+            )}
+          </svg>
+        )}
+        {item.type === "Group" && (
+          <svg width={24} height={24} viewBox="0 0 24 24">
+            <path d="M3 7h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" fill="none" stroke="#2563eb" strokeWidth={1.5} />
+            <path d="M7 4h10a1 1 0 0 1 1 1v2H6V5a1 1 0 0 1 1-1z" fill="none" stroke="#2563eb" strokeWidth={1.5} />
+          </svg>
+        )}
+        {item.type === "Wall" && (
+          <svg width={24} height={24} viewBox="0 0 24 24">
+            <rect
+              x={4}
+              y={8}
+              width={16}
+              height={8}
+              fill={(() => {
+                const w = (item as any).wall || item.wall;
+                if (!w) return "#cbd5e1";
+                if ((w.fillType === 'texture' || w.fillType === 'hatch' || w.fillType === 'hash') && w.fillTexture) {
+                  return `url(#${w.fillTexture}-scale-${w.fillTextureScale || 1}-thick-${w.fillTextureThickness || 1})`;
+                }
+                return w.fill || "#cbd5e1";
+              })()}
+              stroke={(item as any).wall?.stroke || item.wall?.stroke || "#94a3b8"}
+              strokeWidth={0.6}
+              rx={1}
+            />
+            <line x1={4} y1={12} x2={20} y2={12} stroke="currentColor" strokeWidth={0.5} strokeOpacity={0.3} />
+          </svg>
+        )}
+        {item.type === "Text" && (
+          <svg width={24} height={24} viewBox="0 0 24 24">
+            <text
+              x={12}
+              y={14}
+              textAnchor="middle"
+              fontSize={12}
+              fill="#111827"
+              fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+            >
+              T
+            </text>
+          </svg>
+        )}
+        {item.type === "Dimension" && (
+          <svg width={24} height={24} viewBox="0 0 24 24">
+            <line
+              x1={4}
+              y1={12}
+              x2={20}
+              y2={12}
+              stroke={item.dimension?.color || "#111827"}
+              strokeWidth={1}
+              strokeLinecap="round"
+            />
+            <polyline
+              points="6,10 4,12 6,14"
+              fill="none"
+              stroke={item.dimension?.color || "#111827"}
+              strokeWidth={0.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <polyline
+              points="18,10 20,12 18,14"
+              fill="none"
+              stroke={item.dimension?.color || "#111827"}
+              strokeWidth={0.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+        {item.type === "Label" && (
+          <svg width={24} height={24} viewBox="0 0 24 24">
+            <line
+              x1={6}
+              y1={16}
+              x2={18}
+              y2={16}
+              stroke={item.labelArrow?.color || "#111827"}
+              strokeWidth={0.6}
+              strokeLinecap="round"
+            />
+            <polyline
+              points="16,14 18,16 16,18"
+              fill="none"
+              stroke={item.labelArrow?.color || "#111827"}
+              strokeWidth={0.6}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <rect
+              x={5}
+              y={5}
+              width={14}
+              height={7}
+              rx={2}
+              ry={2}
+              fill="#F3F4F6"
+              stroke={item.labelArrow?.color || "#9CA3AF"}
+              strokeWidth={0.8}
+            />
+          </svg>
+        )}
+      </div>
+    );
+  };
+
+  const renderItemRow = (item: any, plClass = "px-3") => {
+    const isAsset = item.type === "Asset";
+    const childShapes = (item as any).childShapes as any[] | undefined;
+    const hasChildren = isAsset && childShapes && childShapes.length > 0;
+    const isExpanded = isAsset && expandedAssets[item.id];
+
+    const itemChildIds = (item as any).childIds as string[] | undefined;
+    const isSelected = itemChildIds
+      ? itemChildIds.length > 0 && itemChildIds.every(cid => selectedIds.includes(cid))
+      : selectedIds.includes(item.id);
+
+    return (
+      <div key={item.id} className={isSelected ? "bg-blue-50" : ""}>
+        <button
+          onClick={(e) =>
+            isAsset && hasChildren
+              ? setExpandedAssets(prev => ({ ...prev, [item.id]: !prev[item.id] }))
+              : handleSelect({
+                id: item.id,
+                x: item.x,
+                y: item.y,
+                childIds: (item as any).childIds || (hasChildren ? childShapes.map(s => s.id) : undefined),
+              }, e)
+          }
+          className={`w-full flex items-center gap-1.5 ${plClass} py-1.5 text-[11px] hover:bg-blue-100 border-b border-gray-100 transition-colors ${isSelected ? "text-blue-700 bg-blue-50 font-medium" : "text-gray-700 hover:bg-gray-100"}`}
+        >
+          {renderMiniPreview(item)}
+
+          <div 
+            className="flex-1 min-w-0 text-left" 
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              setRenamingId(item.id);
+              setRenamingText(item.label);
+            }}
+          >
+            {renamingId === item.id ? (
+              <input
+                autoFocus
+                className="w-full text-[11px] px-1 py-0.5 border border-blue-400 rounded outline-none bg-white"
+                value={renamingText}
+                onChange={(e) => setRenamingText(e.target.value)}
+                onBlur={() => handleRename(item.id, renamingText, item.type)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleRename(item.id, renamingText, item.type);
+                  if (e.key === 'Escape') setRenamingId(null);
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <>
+                <div className="truncate text-gray-700 leading-tight font-medium">{item.label}</div>
+                <div className="text-[0.6rem] text-gray-400 mt-0.5">
+                  {isAsset && hasChildren ? "Asset (exploded)" : item.type}
+                </div>
+              </>
+            )}
+          </div>
+        </button>
+
+        {isAsset && hasChildren && isExpanded && (
+          <div className="ml-6 border-l border-gray-200">
+            {childShapes!.map((s) => (
+              <button
+                key={s.id}
+                onClick={(e) => handleSelect({ id: s.id, x: s.x, y: s.y }, e)}
+                className="w-full flex items-center gap-1 px-1.5 py-1 text-[10px] hover:bg-gray-50 border-b border-gray-100"
+              >
+                <div className="w-5 h-5 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
+                  <svg width={18} height={18} viewBox="0 0 24 24">
+                    {s.type === "rectangle" && (
+                      <rect
+                        x={!s.fillType || s.fillType === 'solid' ? 4 : 2}
+                        y={!s.fillType || s.fillType === 'solid' ? 7 : 5}
+                        width={!s.fillType || s.fillType === 'solid' ? 16 : 20}
+                        height={!s.fillType || s.fillType === 'solid' ? 10 : 14}
+                        fill={(() => {
+                          if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
+                            if (s.fillTexture) {
+                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                            }
+                          }
+                          return s.fill || "transparent";
+                        })()}
+                        stroke={s.stroke || "#9CA3AF"}
+                        strokeWidth={1}
+                        rx={1.5}
+                        ry={1.5}
+                      />
+                    )}
+                    {s.type === "ellipse" && (
+                      <ellipse
+                        cx={12}
+                        cy={12}
+                        rx={!s.fillType || s.fillType === 'solid' ? 8 : 10}
+                        ry={!s.fillType || s.fillType === 'solid' ? 9 : 11}
+                        fill={(() => {
+                          if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
+                            if (s.fillTexture) {
+                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                            }
+                          }
+                          return s.fill || "transparent";
+                        })()}
+                        stroke={s.stroke || "#9CA3AF"}
+                        strokeWidth={1}
+                      />
+                    )}
+                    {s.type === "line" && (
+                      <line
+                        x1={4}
+                        y1={12}
+                        x2={20}
+                        y2={12}
+                        stroke={s.stroke || "#9CA3AF"}
+                        strokeWidth={0.6}
+                        strokeLinecap="round"
+                      />
+                    )}
+                    {s.type === "polygon" && (
+                      <polygon
+                        points={(() => {
+                          const sides =
+                            s.polygonSides ||
+                            (s.points ? s.points.length : 4);
+                          const cnt = Math.max(3, Math.min(12, sides || 4));
+                          const cx = 12;
+                          const cy = 12;
+                          const r = !s.fillType || s.fillType === 'solid' ? 8 : 10;
+                          const pts: string[] = [];
+                          for (let i = 0; i < cnt; i++) {
+                            const angle = ((Math.PI * 2) / cnt) * i - Math.PI / 2;
+                            const x = cx + r * Math.cos(angle);
+                            const y = cy + r * Math.sin(angle);
+                            pts.push(`${x},${y}`);
+                          }
+                          return pts.join(" ");
+                        })()}
+                        fill={(() => {
+                          if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
+                            if (s.fillTexture) {
+                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                            }
+                          }
+                          return s.fill || "transparent";
+                        })()}
+                        stroke={s.stroke || "#9CA3AF"}
+                        strokeWidth={1}
+                        strokeLinejoin="round"
+                      />
+                    )}
+                  </svg>
+                </div>
+                <div className="flex-1 text-left truncate ml-1">
+                  <div className="truncate text-gray-500">{s.type}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderItemGroup = (
     groupLabel: string,
     groupKey: string,
@@ -373,24 +753,7 @@ function ElementsPane() {
         </button>
         {isExpanded && (
           <div>
-            {groupItems.map((item) => {
-              const itemChildIds = (item as any).childIds as string[] | undefined;
-              const isSelected = itemChildIds
-                ? itemChildIds.length > 0 && itemChildIds.every(cid => selectedIds.includes(cid))
-                : selectedIds.includes(item.id);
-              return (
-                <button
-                  key={item.id}
-                  onClick={(e) => handleSelect({ id: item.id, x: item.x, y: item.y }, e)}
-                  className={`w-full flex items-center gap-1.5 px-3 py-1.5 text-[11px] hover:bg-gray-50 border-b border-gray-100 transition-colors ${isSelected ? "text-blue-700 bg-blue-50 font-medium" : "text-gray-700"}`}
-                >
-                  <div className="flex-1 text-left truncate">
-                    <div className="truncate">{item.label}</div>
-                    <div className="text-[0.6rem] text-gray-400">{item.type}</div>
-                  </div>
-                </button>
-              );
-            })}
+            {groupItems.map((item) => renderItemRow(item, "pl-5"))}
           </div>
         )}
       </div>
@@ -421,407 +784,7 @@ function ElementsPane() {
           e.stopPropagation();
         }}
       >
-        {groupedElementItems.nonAssetItems.map((item) => {
-          // Get asset definition for icon/path
-          const assetDef = item.type === "Asset" && item.asset
-            ? ASSET_LIBRARY.find(a => a.id === item.asset.type)
-            : null;
-
-          const isAsset = item.type === "Asset";
-          const childShapes = (item as any).childShapes as any[] | undefined;
-          const hasChildren = isAsset && childShapes && childShapes.length > 0;
-          const isExpanded = isAsset && expandedAssets[item.id];
-
-          const itemChildIds = (item as any).childIds as string[] | undefined;
-          const isSelected = itemChildIds
-            ? itemChildIds.length > 0 && itemChildIds.every(cid => selectedIds.includes(cid))
-            : selectedIds.includes(item.id);
-
-          return (
-            <div key={item.id} className={isSelected ? "bg-blue-50" : ""}>
-              <button
-                onClick={(e) =>
-                  isAsset && hasChildren
-                    ? setExpandedAssets(prev => ({ ...prev, [item.id]: !prev[item.id] }))
-                    : handleSelect({
-                      id: item.id,
-                      x: item.x,
-                      y: item.y,
-                      childIds: (item as any).childIds || (hasChildren ? childShapes.map(s => s.id) : undefined),
-                    }, e)
-                }
-                className={`w-full flex items-center gap-1 px-1.5 py-1.5 text-[11px] hover:bg-blue-100 border-b border-gray-100 transition-colors ${isSelected ? "text-blue-700 bg-blue-50 font-medium" : "text-gray-700 hover:bg-gray-100"}`}
-              >
-                {/* Mini preview */}
-                <div className="w-7 h-7 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
-                  {item.type === "Asset" && item.asset && (
-                    assetDef?.path ? (
-                      <div className="w-full h-full p-1">
-
-                        <InlineSvg
-                          src={assetDef.path}
-                          fill={item.asset.fillColor || (item.asset as any).fill || "none"}
-                          stroke={item.asset.strokeColor || (item.asset as any).stroke || "currentColor"}
-                          strokeWidth={0.6}
-                          category={assetDef.category}
-                        />
-                      </div>
-                    ) : (
-                      <div className="text-[8px] text-gray-400 text-center px-1">
-                        {item.asset.type}
-                      </div>
-                    )
-                  )}
-                  {item.type === "Shape" && item.shape && (
-                    <svg width={24} height={24} viewBox="0 0 24 24">
-                      {item.shape.type === "rectangle" && (
-                        <rect
-                          x={!item.shape.fillType || item.shape.fillType === 'solid' ? 4 : 2}
-                          y={!item.shape.fillType || item.shape.fillType === 'solid' ? 7 : 5}
-                          width={!item.shape.fillType || item.shape.fillType === 'solid' ? 16 : 20}
-                          height={!item.shape.fillType || item.shape.fillType === 'solid' ? 10 : 14}
-                          fill={(() => {
-                            if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
-                              if (item.shape.fillTexture) {
-                                return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 4}-thick-${item.shape.fillTextureThickness || 1})`;
-                              }
-                            }
-                            return item.shape.fill || "transparent";
-                          })()}
-                          stroke={item.shape.stroke || "#9CA3AF"}
-                          strokeWidth={0.6}
-                          rx={2}
-                          ry={2}
-                        />
-                      )}
-                      {item.shape.type === "ellipse" && (
-                        <ellipse
-                          cx={12}
-                          cy={12}
-                          rx={!item.shape.fillType || item.shape.fillType === 'solid' ? 8 : 10}
-                          ry={!item.shape.fillType || item.shape.fillType === 'solid' ? 9 : 11}
-                          fill={(() => {
-                            if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
-                              if (item.shape.fillTexture) {
-                                return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 4}-thick-${item.shape.fillTextureThickness || 1})`;
-                              }
-                            }
-                            return item.shape.fill || "transparent";
-                          })()}
-                          stroke={item.shape.stroke || "#9CA3AF"}
-                          strokeWidth={0.6}
-                        />
-                      )}
-                      {item.shape.type === "line" && (
-                        <line
-                          x1={4}
-                          y1={12}
-                          x2={20}
-                          y2={12}
-                          stroke={item.shape.stroke || "#9CA3AF"}
-                          strokeWidth={1.5}
-                          strokeLinecap="round"
-                        />
-                      )}
-                      {item.shape.type === "polygon" && (
-                        <polygon
-                          points={(() => {
-                            const sides =
-                              item.shape.polygonSides ||
-                              (item.shape.points ? item.shape.points.length : 4);
-                            const s = Math.max(3, Math.min(12, sides || 4));
-                            const cx = 12;
-                            const cy = 12;
-                            const r = !item.shape.fillType || item.shape.fillType === 'solid' ? 8 : 10;
-                            const pts: string[] = [];
-                            for (let i = 0; i < s; i++) {
-                              const angle = ((Math.PI * 2) / s) * i - Math.PI / 2;
-                              const x = cx + r * Math.cos(angle);
-                              const y = cy + r * Math.sin(angle);
-                              pts.push(`${x},${y}`);
-                            }
-                            return pts.join(" ");
-                          })()}
-                          fill={(() => {
-                            if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
-                              if (item.shape.fillTexture) {
-                                return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 4}-thick-${item.shape.fillTextureThickness || 1})`;
-                              }
-                            }
-                            return item.shape.fill || "transparent";
-                          })()}
-                          stroke={item.shape.stroke || "#9CA3AF"}
-                          strokeWidth={0.6}
-                          strokeLinejoin="round"
-                        />
-                      )}
-                    </svg>
-                  )}
-                  {item.type === "Group" && (
-                    <svg width={24} height={24} viewBox="0 0 24 24">
-                      <path d="M3 7h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" fill="none" stroke="#2563eb" strokeWidth={1.5} />
-                      <path d="M7 4h10a1 1 0 0 1 1 1v2H6V5a1 1 0 0 1 1-1z" fill="none" stroke="#2563eb" strokeWidth={1.5} />
-                    </svg>
-                  )}
-                  {item.type === "Wall" && (
-                    <svg width={24} height={24} viewBox="0 0 24 24">
-                      <rect
-                        x={4}
-                        y={8}
-                        width={16}
-                        height={8}
-                        fill={(() => {
-                          const w = (item as any).wall;
-                          if (!w) return "#cbd5e1";
-                          if ((w.fillType === 'texture' || w.fillType === 'hatch' || w.fillType === 'hash') && w.fillTexture) {
-                            return `url(#${w.fillTexture}-scale-${w.fillTextureScale || 1}-thick-${w.fillTextureThickness || 1})`;
-                          }
-                          return w.fill || "#cbd5e1";
-                        })()}
-                        stroke={(item as any).wall?.stroke || "#94a3b8"}
-                        strokeWidth={0.6}
-                        rx={1}
-                      />
-                      <line x1={4} y1={12} x2={20} y2={12} stroke="currentColor" strokeWidth={0.5} strokeOpacity={0.3} />
-                    </svg>
-                  )}
-                  {item.type === "Text" && item.text && (
-                    <svg width={24} height={24} viewBox="0 0 24 24">
-                      <text
-                        x={12}
-                        y={14}
-                        textAnchor="middle"
-                        fontSize={12}
-                        fill="#111827"
-                        fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-                      >
-                        T
-                      </text>
-                    </svg>
-                  )}
-                  {item.type === "Dimension" && item.dimension && (
-                    <svg width={24} height={24} viewBox="0 0 24 24">
-                      <line
-                        x1={4}
-                        y1={12}
-                        x2={20}
-                        y2={12}
-                        stroke={item.dimension.color || "#111827"}
-                        strokeWidth={1}
-                        strokeLinecap="round"
-                      />
-                      <polyline
-                        points="6,10 4,12 6,14"
-                        fill="none"
-                        stroke={item.dimension.color || "#111827"}
-                        strokeWidth={0.8}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <polyline
-                        points="18,10 20,12 18,14"
-                        fill="none"
-                        stroke={item.dimension.color || "#111827"}
-                        strokeWidth={0.8}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <text
-                        x={12}
-                        y={10}
-                        textAnchor="middle"
-                        fontSize={6}
-                        fill={item.dimension.color || "#111827"}
-                        fontFamily="system-ui"
-                      >
-                        dim
-                      </text>
-                    </svg>
-                  )}
-                  {item.type === "Label" && item.labelArrow && (
-                    <svg width={24} height={24} viewBox="0 0 24 24">
-                      {/* arrow line */}
-                      <line
-                        x1={6}
-                        y1={16}
-                        x2={18}
-                        y2={16}
-                        stroke={item.labelArrow.color || "#111827"}
-                        strokeWidth={0.6}
-                        strokeLinecap="round"
-                      />
-                      {/* arrow head */}
-                      <polyline
-                        points="16,14 18,16 16,18"
-                        fill="none"
-                        stroke={item.labelArrow.color || "#111827"}
-                        strokeWidth={0.6}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      {/* label text bubble */}
-                      <rect
-                        x={5}
-                        y={5}
-                        width={14}
-                        height={7}
-                        rx={2}
-                        ry={2}
-                        fill="#F3F4F6"
-                        stroke={item.labelArrow.color || "#9CA3AF"}
-                        strokeWidth={0.8}
-                      />
-                      <text
-                        x={12}
-                        y={10}
-                        textAnchor="middle"
-                        fontSize={6}
-                        fill={item.labelArrow.color || "#111827"}
-                        fontFamily="system-ui"
-                      >
-                        Aa
-                      </text>
-                    </svg>
-                  )}
-                </div>
-
-                {/* Label and type */}
-                <div 
-                  className="flex-1 min-w-0" 
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    setRenamingId(item.id);
-                    setRenamingText(item.label);
-                  }}
-                >
-                  {renamingId === item.id ? (
-                    <input
-                      autoFocus
-                      className="w-full text-[11px] px-1 py-0.5 border border-blue-400 rounded outline-none"
-                      value={renamingText}
-                      onChange={(e) => setRenamingText(e.target.value)}
-                      onBlur={() => handleRename(item.id, renamingText, item.type)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleRename(item.id, renamingText, item.type);
-                        if (e.key === 'Escape') setRenamingId(null);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  ) : (
-                    <>
-                      <div className="truncate text-gray-700 leading-tight">{item.label}</div>
-                      <div className="text-[0.6rem] text-gray-400 mt-0.5">
-                        {isAsset && hasChildren ? "Asset (exploded)" : item.type}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </button>
-
-              {/* Child shapes for exploded assets */}
-              {isAsset && hasChildren && isExpanded && (
-                <div className="ml-6 border-l border-gray-200">
-                  {childShapes!.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={(e) => handleSelect({ id: s.id, x: s.x, y: s.y }, e)}
-                      className="w-full flex items-center gap-1 px-1.5 py-1 text-[10px] hover:bg-gray-50 border-b border-gray-100"
-                    >
-                      <div className="w-5 h-5 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
-                        <svg width={18} height={18} viewBox="0 0 24 24">
-                          {s.type === "rectangle" && (
-                            <rect
-                              x={!s.fillType || s.fillType === 'solid' ? 4 : 2}
-                              y={!s.fillType || s.fillType === 'solid' ? 7 : 5}
-                              width={!s.fillType || s.fillType === 'solid' ? 16 : 20}
-                              height={!s.fillType || s.fillType === 'solid' ? 10 : 14}
-                              fill={(() => {
-                                if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
-                                  if (s.fillTexture) {
-                                    return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
-                                  }
-                                }
-                                return s.fill || "transparent";
-                              })()}
-                              stroke={s.stroke || "#9CA3AF"}
-                              strokeWidth={1}
-                              rx={1.5}
-                              ry={1.5}
-                            />
-                          )}
-                          {s.type === "ellipse" && (
-                            <ellipse
-                              cx={12}
-                              cy={12}
-                              rx={!s.fillType || s.fillType === 'solid' ? 8 : 10}
-                              ry={!s.fillType || s.fillType === 'solid' ? 9 : 11}
-                              fill={(() => {
-                                if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
-                                  if (s.fillTexture) {
-                                    return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
-                                  }
-                                }
-                                return s.fill || "transparent";
-                              })()}
-                              stroke={s.stroke || "#9CA3AF"}
-                              strokeWidth={1}
-                            />
-                          )}
-                          {s.type === "line" && (
-                            <line
-                              x1={4}
-                              y1={12}
-                              x2={20}
-                              y2={12}
-                              stroke={s.stroke || "#9CA3AF"}
-                              strokeWidth={0.6}
-                              strokeLinecap="round"
-                            />
-                          )}
-                          {s.type === "polygon" && (
-                            <polygon
-                              points={(() => {
-                                const sides =
-                                  s.polygonSides ||
-                                  (s.points ? s.points.length : 4);
-                                const cnt = Math.max(3, Math.min(12, sides || 4));
-                                const cx = 12;
-                                const cy = 12;
-                                const r = !s.fillType || s.fillType === 'solid' ? 8 : 10;
-                                const pts: string[] = [];
-                                for (let i = 0; i < cnt; i++) {
-                                  const angle = ((Math.PI * 2) / cnt) * i - Math.PI / 2;
-                                  const x = cx + r * Math.cos(angle);
-                                  const y = cy + r * Math.sin(angle);
-                                  pts.push(`${x},${y}`);
-                                }
-                                return pts.join(" ");
-                              })()}
-                              fill={(() => {
-                                if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
-                                  if (s.fillTexture) {
-                                    return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
-                                  }
-                                }
-                                return s.fill || "transparent";
-                              })()}
-                              stroke={s.stroke || "#9CA3AF"}
-                              strokeWidth={1}
-                              strokeLinejoin="round"
-                            />
-                          )}
-                        </svg>
-                      </div>
-                      <div className="flex-1 text-left truncate">
-                        <div className="truncate">{s.type}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {groupedElementItems.nonAssetItems.map((item) => renderItemRow(item, "px-3"))}
         {/* Venue section — shown first when a preloaded venue is on the canvas */}
         {groupedElementItems.venueItems.length > 0 && (() => {
           const isExpanded = expandedAssetGroups['venue'] ?? true;
@@ -1527,6 +1490,13 @@ export default function Editor() {
         return;
       }
 
+      // If user has explicitly deleted this venue from this event, don't force load it again on refresh
+      const storageKey = `preloaded-venue-loaded-${currentId}-${venueId}`;
+      if (typeof window !== 'undefined' && window.localStorage.getItem(storageKey) === 'deleted') {
+        console.log(`[Editor] Venue was explicitly deleted by the user. Skipping auto-preload.`);
+        return;
+      }
+
       const projectStore = useProjectStore.getState();
 
       // Check if venue already exists in workspace
@@ -1553,6 +1523,10 @@ export default function Editor() {
           zIndex: 0,
         });
 
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(storageKey, 'loaded');
+        }
+
         console.log(`[Editor] ✅ Force-loaded venue: ${venueDef.name}`);
 
         // Auto-pan/zoom to show the venue
@@ -1571,6 +1545,7 @@ export default function Editor() {
       }
     }
   }, [isRouterReady, router.query, currentEventData]);
+
 
 
   // Reset currentEventData when route changes to ensure new event loads
@@ -1788,6 +1763,22 @@ export default function Editor() {
                   startPoint: asset.startPoint,
                   endPoint: asset.endPoint,
                   label: asset.label || '',
+                  zIndex: asset.zIndex || 0,
+                }, true);
+                loadedCount++;
+              }
+              return;
+            }
+
+            if ((asset.itemType === 'text-annotation' || asset.type === 'text-annotation' || asset.itemType === 'textAnnotation' || asset.type === 'textAnnotation') && asset.text !== undefined) {
+              const existingAnnotation = projectStore.textAnnotations.find(t => t.id === asset.id);
+              if (!existingAnnotation) {
+                projectStore.addTextAnnotation({
+                  ...asset,
+                  id: asset.id,
+                  x: asset.x || 0,
+                  y: asset.y || 0,
+                  text: asset.text || '',
                   zIndex: asset.zIndex || 0,
                 }, true);
                 loadedCount++;

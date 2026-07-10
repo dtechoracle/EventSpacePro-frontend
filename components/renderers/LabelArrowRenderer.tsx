@@ -29,8 +29,8 @@ export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererPr
     const strokeWidth = arrow.strokeWidth || 3;
     const headType = markerLabel(arrow.arrowHeadType || 'filled-triangle');
     const tailType = markerLabel(arrow.arrowTailType || 'none');
-    const headSize = Math.max(14, strokeWidth * 5) * (arrow.arrowHeadSize || 1) / safeZoom;
-    const tailSize = Math.max(14, strokeWidth * 5) * (arrow.arrowTailSize || 1) / safeZoom;
+    const headSize = Math.max(14, strokeWidth * 5) * (arrow.arrowHeadSize || 1);
+    const tailSize = Math.max(14, strokeWidth * 5) * (arrow.arrowTailSize || 1);
 
     const renderMarker = (
         type: MarkerType,
@@ -150,14 +150,16 @@ export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererPr
     let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
     if (textAngle > 90 || textAngle < -90) textAngle += 180;
 
-    const fontSize = arrow.fontSize || 16;
+    const fontSize = arrow.fontSize || 120;
     const fontFamily = arrow.fontFamily || 'Inter, sans-serif';
     const fontWeight = arrow.fontWeight || '700';
     const fontStyle = arrow.fontStyle || 'normal';
     const textDecoration = arrow.textDecoration || 'none';
     const label = arrow.label || '';
-    const rectWidth = Math.max(34, label.length * fontSize * 0.62 + 16);
-    const rectHeight = fontSize * 1.65;
+    const rectPadH = fontSize * 0.5;
+    const rectPadV = fontSize * 0.35;
+    const rectWidth = Math.max(fontSize * 2, label.length * fontSize * 0.62 + rectPadH * 2);
+    const rectHeight = fontSize + rectPadV * 2;
 
     return (
         <g data-id={arrow.id}>
@@ -175,14 +177,14 @@ export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererPr
             {renderMarker(headType, arrow.endPoint, { x: ux, y: uy }, headSize, 'head')}
             {renderMarker(tailType, arrow.startPoint, { x: -ux, y: -uy }, tailSize, 'tail')}
 
-            <g transform={`translate(${labelX}, ${labelY}) scale(${1 / safeZoom}) rotate(${textAngle})`}>
+            <g transform={`translate(${labelX}, ${labelY}) rotate(${textAngle})`}>
                 <rect
                     x={-rectWidth / 2}
                     y={-rectHeight / 2}
                     width={rectWidth}
                     height={rectHeight}
                     fill={arrow.backgroundColor || '#ffffff'}
-                    rx="5"
+                    rx={fontSize * 0.12}
                     opacity="0.96"
                     stroke="rgba(15, 23, 42, 0.08)"
                     style={{ filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.12))' }}

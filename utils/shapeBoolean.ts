@@ -82,7 +82,7 @@ const shapeToPaperPath = (shape: Shape): paper.Path | paper.CompoundPath | null 
     return path;
 };
 
-export const trimToBlendShapes = (shapes: Shape[]): Shape | null => {
+export const trimToBlendShapes = (shapes: Shape[], clickPoint?: { x: number; y: number }): Shape | null => {
     if (shapes.length < 2) return null;
     initPaper();
 
@@ -105,11 +105,22 @@ export const trimToBlendShapes = (shapes: Shape[]): Shape | null => {
 
         if (paths.length < 2) return null;
 
-        // Sequence through all selected shapes to perform an intersection (Cut)
-        let resultPath: paper.PathItem = paths[0];
-        for (let i = 1; i < paths.length; i++) {
-            const next = resultPath.intersect(paths[i]);
-            resultPath = next;
+        const cutterPath = paths[0];
+        const targetPath = paths[1];
+
+        let isInsideCutter = false;
+        if (clickPoint) {
+            const paperPoint = new paper.Point(clickPoint.x, clickPoint.y);
+            isInsideCutter = cutterPath.contains(paperPoint);
+        }
+
+        // If user clicked inside cutter, subtract the cutter from target (removes overlap).
+        // If outside, intersect (removes non-overlap).
+        let resultPath: paper.PathItem;
+        if (isInsideCutter) {
+            resultPath = targetPath.subtract(cutterPath);
+        } else {
+            resultPath = targetPath.intersect(cutterPath);
         }
 
         const bounds = resultPath.bounds;

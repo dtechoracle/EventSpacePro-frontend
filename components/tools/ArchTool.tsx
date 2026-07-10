@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useEditorStore } from '@/store/editorStore';
 import { useSceneStore } from '@/store/sceneStore';
 import { useProjectStore, Shape } from '@/store/projectStore';
-import ShapeRenderer from '../renderers/ShapeRenderer';
 import { findSnapPointInShapes } from '@/utils/snapToDrawing';
 import { ASSET_LIBRARY } from '@/lib/assets';
 
@@ -194,7 +193,6 @@ export default function ArchTool({ isActive }: ArchToolProps) {
             } else {
                 commitArc(seg);
                 resetDrawing();
-                // Removed auto-select tool switch to allow drawing multiple arcs in a row
             }
         }
     }, [isActive, step, startPoint, endPoint, waveMode, screenToWorld, snap, commitArc, resetDrawing]);
@@ -205,7 +203,7 @@ export default function ArchTool({ isActive }: ArchToolProps) {
         commitWave();
     }, [isActive, commitWave]);
 
-    // Escape = cancel
+    // Escape = cancel, Enter = commit
     useEffect(() => {
         if (!isActive) return;
         const onKey = (e: KeyboardEvent) => {
@@ -213,11 +211,13 @@ export default function ArchTool({ isActive }: ArchToolProps) {
                 setSegments([]);
                 segmentsRef.current = [];
                 resetDrawing();
+            } else if (e.key === 'Enter') {
+                commitWave();
             }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [isActive, resetDrawing]);
+    }, [isActive, resetDrawing, commitWave]);
 
     useEffect(() => {
         if (!isActive) {
@@ -273,9 +273,6 @@ export default function ArchTool({ isActive }: ArchToolProps) {
                     />
                 </>
             )}
-
-            {/* ─── Wave mode toggle hint ──────────────────────────────────────── */}
-            {/* (rendered by toolbar, not here) */}
 
             {/* ─── Already-committed wave segments preview ─────────────────────── */}
             {segments.map((seg, i) => (
@@ -424,7 +421,7 @@ export default function ArchTool({ isActive }: ArchToolProps) {
                         className="select-none pointer-events-none"
                     >
                         {waveMode
-                            ? 'Click to add segment • Dbl-click to finish'
+                            ? 'Click to add segment • Dbl-click or Enter to finish'
                             : 'Click start/end/bulge • Hold Shift to chain arcs'
                         }
                     </text>
@@ -439,7 +436,7 @@ export function ArchWaveModeToggle({ waveMode, onToggle }: { waveMode: boolean; 
     return (
         <button
             onClick={onToggle}
-            title={waveMode ? 'Wave mode ON — dbl-click to finish' : 'Enable wave/multi-arc mode'}
+            title={waveMode ? 'Wave mode ON — dbl-click or Enter to finish' : 'Enable wave/multi-arc mode'}
             style={{
                 padding: '4px 8px',
                 fontSize: 11,

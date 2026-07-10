@@ -712,7 +712,8 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             const scale = a.fillTextureScale || 4;
             const thickness = a.fillTextureThickness || 1;
             if (a.fillTexture) {
-                return `url(#${a.fillTexture}-scale-${scale}-thick-${thickness})`;
+                const rotation = a.hatchRotation || 0;
+                return `url(#${a.fillTexture}-scale-${scale}-thick-${thickness}-rot-${rotation})`;
             }
         }
         return fill;
@@ -743,8 +744,11 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
 
     if (asset.isExploded) return null;
     const rotation = asset.rotation || 0;
-    const scale = asset.scale !== undefined ? asset.scale : 1;
-    const transform = `translate(${asset.x}, ${asset.y}) rotate(${rotation}) scale(${scale})`;
+    const baseScale = asset.scale !== undefined ? asset.scale : 1;
+    const scaleX = (asset as any).flipX ? -baseScale : baseScale;
+    const scaleY = (asset as any).flipY ? -baseScale : baseScale;
+    const transform = `translate(${asset.x}, ${asset.y}) rotate(${rotation}) scale(${scaleX}, ${scaleY})`;
+
 
     return (
         <g

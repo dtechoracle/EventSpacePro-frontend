@@ -16,6 +16,161 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
     const history = useProjectStore(s => s.history);
     const { setRectangularSelectionMode, snapToGridEnabled, showGrid } = useSceneStore();
 
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    const compressImage = (dataUrl: string, maxWidth = 1200, maxHeight = 1200): Promise<string> => {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth || height > maxHeight) {
+                    const ratio = Math.min(maxWidth / width, maxHeight / height);
+                    width = width * ratio;
+                    height = height * ratio;
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.75));
+                } else {
+                    resolve(dataUrl);
+                }
+            };
+            img.onerror = () => {
+                resolve(dataUrl);
+            };
+            img.src = dataUrl;
+        });
+    };
+
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+
+        if (file.type.startsWith('image/')) {
+            reader.onload = (event) => {
+                const rawUrl = event.target?.result as string;
+                compressImage(rawUrl).then((dataUrl) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const maxSize = 1500;
+                        let w = img.width;
+                        let h = img.height;
+                        if (w > maxSize || h > maxSize) {
+                            const ratio = Math.min(maxSize / w, maxSize / h);
+                            w = w * ratio;
+                            h = h * ratio;
+                        }
+
+                        const newShape = {
+                            id: crypto.randomUUID(),
+                            type: 'image' as any,
+                            x: 0,
+                            y: 0,
+                            width: Math.max(100, w),
+                            height: Math.max(100, h),
+                            rotation: 0,
+                            fillImage: dataUrl,
+                            fillType: 'image' as any,
+                            stroke: '#000000',
+                            strokeWidth: 1,
+                            zIndex: useProjectStore.getState().getNextZIndex(),
+                        };
+
+                        useEditorStore.getState().setPendingImportShape(newShape);
+                        useEditorStore.getState().setActiveTool('select');
+                    };
+                    img.src = dataUrl;
+                });
+            };
+            reader.readAsDataURL(file);
+        } else if (file.type === 'application/pdf') {
+            reader.onload = async (event) => {
+                const arrayBuffer = event.target?.result as ArrayBuffer;
+
+                const loadPDFJS = () => {
+                    return new Promise<any>((resolve, reject) => {
+                        if ((window as any).pdfjsLib) {
+                            resolve((window as any).pdfjsLib);
+                            return;
+                        }
+                        const script = document.createElement('script');
+                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
+                        script.onload = () => {
+                            const pdfjsLib = (window as any).pdfjsLib;
+                            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+                            resolve(pdfjsLib);
+                        };
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    });
+                };
+
+                try {
+                    const pdfjsLib = await loadPDFJS();
+                    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                    const page = await pdf.getPage(1);
+                    
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    if (context) {
+                        canvas.width = viewport.width;
+                        canvas.height = viewport.height;
+                        await page.render({ canvasContext: context, viewport }).promise;
+                        
+                        const dataUrl = await compressImage(canvas.toDataURL('image/jpeg', 0.7), 1200, 1200);
+                        
+                        const maxSize = 1500;
+                        let w = canvas.width;
+                        let h = canvas.height;
+                        if (w > maxSize || h > maxSize) {
+                            const ratio = Math.min(maxSize / w, maxSize / h);
+                            w = w * ratio;
+                            h = h * ratio;
+                        }
+
+                        const newShape = {
+                            id: crypto.randomUUID(),
+                            type: 'image' as any,
+                            x: 0,
+                            y: 0,
+                            width: Math.max(100, w),
+                            height: Math.max(100, h),
+                            rotation: 0,
+                            fillImage: dataUrl,
+                            fillType: 'image' as any,
+                            stroke: '#000000',
+                            strokeWidth: 1,
+                            zIndex: useProjectStore.getState().getNextZIndex(),
+                        };
+
+                        useEditorStore.getState().setPendingImportShape(newShape);
+                        useEditorStore.getState().setActiveTool('select');
+                    }
+                } catch (err) {
+                    console.error("PDF import error:", err);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        e.target.value = '';
+    };
+
     const handleGridToggle = () => {
         useSceneStore.getState().toggleGrid();
     };
@@ -131,8 +286,22 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
                     </div>
                 </div>
 
-                {/* Right: History Controls */}
+                {/* Right: History Controls & Import */}
                 <div className="flex items-center gap-1">
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                    />
+                    <button
+                        onClick={handleImportClick}
+                        className="px-3 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md text-sm font-semibold flex items-center gap-1 mr-2 transition-all shadow-sm"
+                        title="Import Image or PDF file"
+                    >
+                        📥 Import
+                    </button>
                     <button
                         onClick={undo}
                         disabled={history.past.length === 0}

@@ -814,11 +814,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
           className="flex w-full items-center justify-between px-0 py-3 text-left"
           onClick={() => setShowModel((s) => !s)}
         >
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Modes</div>
-            <div className="mt-1 text-sm font-semibold text-slate-900">Workspace</div>
+          <div className="text-sm font-bold text-blue-600">
+            Workspace
           </div>
-          {showModel ? <FaChevronDown size={12} className="text-slate-400" /> : <FaChevronRight size={12} className="text-slate-400" />}
+          {showModel ? <FaChevronDown size={12} className="text-blue-600" /> : <FaChevronRight size={12} className="text-blue-600" />}
         </button>
         {showModel && (
           <div className="space-y-3 border-t border-slate-100 px-0 pb-4 pt-3 text-xs">
@@ -902,11 +901,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
           className="flex w-full items-center justify-between px-0 py-3 text-left"
           onClick={() => setShowCanvas((s) => !s)}
         >
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Layout</div>
-            <div className="mt-1 text-sm font-semibold text-slate-900">Canvas & Pages</div>
+          <div className="text-sm font-bold text-blue-600">
+            Pages and Canvas
           </div>
-          {showCanvas ? <FaChevronDown size={12} className="text-slate-400" /> : <FaChevronRight size={12} className="text-slate-400" />}
+          {showCanvas ? <FaChevronDown size={12} className="text-blue-600" /> : <FaChevronRight size={12} className="text-blue-600" />}
         </button>
         {showCanvas && (
           <div className="space-y-1 border-t border-slate-100 px-0 pb-4 pt-3 text-xs">
@@ -1005,27 +1003,25 @@ export default function PropertiesSidebar(): React.JSX.Element {
             {/* MULTI SELECTION PROPERTIES */}
             {isMultiSelection && (
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-500">
-                  {selectedIds.length} Items Selected
-                </div>
+                <div className="text-sm font-bold text-blue-600 mb-3">Properties</div>
 
                 {/* Bounding Box Info */}
                 {collectiveBounds && (
                   <div className="grid grid-cols-2 gap-2 mb-4">
                     <div className="flex flex-col">
-                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Width ({unitLabel})</span>
+                      <span className="text-xs text-gray-500 mb-1">Width ({unitLabel})</span>
                       <span className="sidebar-input w-full text-center bg-gray-50 text-gray-500 border-none font-medium">{roundForDisplay(collectiveBounds.width)}</span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Height ({unitLabel})</span>
+                      <span className="text-xs text-gray-500 mb-1">Height ({unitLabel})</span>
                       <span className="sidebar-input w-full text-center bg-gray-50 text-gray-500 border-none font-medium">{roundForDisplay(collectiveBounds.height)}</span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">X ({unitLabel})</span>
+                      <span className="text-xs text-gray-500 mb-1">Pos X ({unitLabel})</span>
                       <span className="sidebar-input w-full text-center bg-gray-50 text-gray-500 border-none font-medium">{roundForDisplay(collectiveBounds.x)}</span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Y ({unitLabel})</span>
+                      <span className="text-xs text-gray-500 mb-1">Pos Y ({unitLabel})</span>
                       <span className="sidebar-input w-full text-center bg-gray-50 text-gray-500 border-none font-medium">{roundForDisplay(collectiveBounds.y)}</span>
                     </div>
                   </div>
@@ -1091,17 +1087,12 @@ export default function PropertiesSidebar(): React.JSX.Element {
             {/* SELECTED ITEM PROPERTIES */}
             {selectedItem && (
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-500">
-                  {itemType} Properties
-                </div>
-
-
-
+                <div className="text-sm font-bold text-blue-600 mb-3">Properties</div>
                 {/* Position */}
                 {(itemType === 'shape' || itemType === 'asset') && (
                   <div className="grid grid-cols-2 gap-2 mb-2">
                     <div className="flex flex-col">
-                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Pos X ({unitLabel})</span>
+                      <span className="text-xs text-gray-500 mb-1">Pos X ({unitLabel})</span>
                       <input
                         type="number"
                         value={roundForDisplay((selectedItem as any).x)}
@@ -1118,7 +1109,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       />
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Pos Y ({unitLabel})</span>
+                      <span className="text-xs text-gray-500 mb-1">Pos Y ({unitLabel})</span>
                       <input
                         type="number"
                         value={roundForDisplay((selectedItem as any).y)}
@@ -1141,7 +1132,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 {(itemType === 'shape' || itemType === 'asset') && (
                   <div className="grid grid-cols-2 gap-2 mb-2">
                     <div className="flex flex-col">
-                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Width ({unitLabel})</span>
+                      <span className="text-xs text-gray-500 mb-1">Width ({unitLabel})</span>
                       <input
                         type="number"
                         value={roundForDisplay((selectedItem as any).width)}
@@ -1158,7 +1149,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       />
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Height ({unitLabel})</span>
+                      <span className="text-xs text-gray-500 mb-1">Height ({unitLabel})</span>
                       <input
                         type="number"
                         value={roundForDisplay((selectedItem as any).height)}
@@ -1181,7 +1172,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 {(itemType === 'shape' || itemType === 'asset') && (
                   <div className="mb-4 pt-2 border-t border-gray-100">
                     <div className="flex justify-between items-center mb-3">
-                      <span className="text-gray-500">Rotation</span>
+                      <span className="text-xs text-gray-500">Rotation</span>
                       <div className="flex items-center">
                         <input
                           type="number"
@@ -1199,591 +1190,44 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         <span className="ml-1 text-gray-400">°</span>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const currentRot = (selectedItem as any).rotation || 0;
-                          const nextRot = (currentRot + 180) % 360;
-                          if (itemType === 'shape') updateShape(selectedItem.id, { rotation: nextRot });
-                          if (itemType === 'asset') {
-                            updateAsset(selectedItem.id, { rotation: nextRot });
-                            updateSceneAsset(selectedItem.id, { rotation: nextRot });
-                          }
-                        }}
-                        className="flex-1 py-1 px-2 text-xs border border-gray-200 rounded hover:bg-gray-50 text-gray-600 transition-colors flex items-center justify-center gap-1"
-                        title="Flip Horizontally (Rotates 180°)"
-                      >
-                        ↔ Flip Horizontal
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const currentRot = (selectedItem as any).rotation || 0;
-                          const nextRot = (currentRot + 180) % 360;
-                          if (itemType === 'shape') updateShape(selectedItem.id, { rotation: nextRot });
-                          if (itemType === 'asset') {
-                            updateAsset(selectedItem.id, { rotation: nextRot });
-                            updateSceneAsset(selectedItem.id, { rotation: nextRot });
-                          }
-                        }}
-                        className="flex-1 py-1 px-2 text-xs border border-gray-200 rounded hover:bg-gray-50 text-gray-600 transition-colors flex items-center justify-center gap-1"
-                        title="Flip Vertically (Rotates 180°)"
-                      >
-                        ↕ Flip Vertical
-                      </button>
-                    </div>
-                  </div>
-                )}
 
-                {/* Auto Dimensions Settings */}
-                {(itemType === 'shape' || itemType === 'asset') && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-500">
-                      Dimensions Display
-                    </div>
-
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Show Dimensions</span>
-                      <button
-                        onClick={() => {
-                          const val = !((selectedItem as any).showDimensions);
-                          if (itemType === 'shape') updateShape(selectedItem.id, { showDimensions: val });
-                          if (itemType === 'asset') updateAsset(selectedItem.id, { showDimensions: val });
-                        }}
-                        className={`w-10 h-5 rounded-full flex items-center transition-colors px-1 ${(selectedItem as any).showDimensions ? 'bg-blue-600' : 'bg-gray-300'
-                          }`}
-                      >
-                        <div
-                          className={`w-3.5 h-3.5 bg-white rounded-full shadow-sm transform transition-transform ${(selectedItem as any).showDimensions ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                        />
-                      </button>
-                    </div>
-
-                    {(selectedItem as any).showDimensions && (
-                      <div className="space-y-2 mt-3">
-                        {/* Style / Type */}
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-500 text-xs">Line Style</span>
-                          <select
-                            value={(selectedItem as any).dimensionType || 'solid'}
-                            onChange={(e) => {
-                              const val = e.target.value as any;
-                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionType: val });
-                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionType: val });
-                            }}
-                            className="text-xs border rounded px-2 py-1 bg-white w-32"
-                          >
-                            <option value="solid">Solid</option>
-                            <option value="dashed">Dashed</option>
-                            <option value="dotted">Dotted</option>
-                          </select>
-                        </div>
-
-                        {/* Font Size */}
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-500 text-xs">Font Size</span>
-                          <input
-                            type="number"
-                            min="6"
-                            max="500000"
-                            value={(selectedItem as any).dimensionFontSize || 12}
-                            onChange={(e) => {
-                              const val = Number(e.target.value);
-                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionFontSize: val });
-                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionFontSize: val });
-                            }}
-                            className="sidebar-input w-16 text-center"
-                          />
-                        </div>
-
-                        <div className="pt-2 mt-2 border-t border-gray-100 space-y-2">
-                          <div className="text-[10px] uppercase font-bold text-gray-400">Dimension Text Style</div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-500 text-xs">Font</span>
-                            <select
-                              value={(selectedItem as any).dimensionFontFamily || 'Inter, sans-serif'}
-                              onChange={(e) => updateWall(selectedItem.id, { dimensionFontFamily: e.target.value })}
-                              className="text-xs border rounded px-2 py-1 bg-white w-32"
-                            >
-                              {textStyleFonts.map((font) => (
-                                <option key={font} value={font}>{getFontDisplayName(font)}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-500 text-xs">Style</span>
-                            <div className="flex gap-1 bg-white p-0.5 rounded border">
-                              <button
-                                onClick={() => updateWall(selectedItem.id, { dimensionFontWeight: (selectedItem as any).dimensionFontWeight === '700' ? '600' : '700' })}
-                                className={`p-1.5 rounded transition-colors ${(selectedItem as any).dimensionFontWeight === '700' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
-                              >
-                                <FaBold size={12} />
-                              </button>
-                              <button
-                                onClick={() => updateWall(selectedItem.id, { dimensionFontStyle: (selectedItem as any).dimensionFontStyle === 'italic' ? 'normal' : 'italic' })}
-                                className={`p-1.5 rounded transition-colors ${(selectedItem as any).dimensionFontStyle === 'italic' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
-                              >
-                                <FaItalic size={12} />
-                              </button>
-                              <button
-                                onClick={() => updateWall(selectedItem.id, { dimensionTextDecoration: (selectedItem as any).dimensionTextDecoration === 'underline' ? 'none' : 'underline' })}
-                                className={`p-1.5 rounded transition-colors ${(selectedItem as any).dimensionTextDecoration === 'underline' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
-                              >
-                                <FaUnderline size={12} />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Gap/Offset */}
-                        <div className="flex justify-between items-center mt-2">
-                          <span className="text-gray-500 text-xs">Dimension Gap</span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="500000"
-                            value={(selectedItem as any).dimensionOffset !== undefined ? (selectedItem as any).dimensionOffset : 200}
-                            onChange={(e) => {
-                              const val = Number(e.target.value);
-                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionOffset: val });
-                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionOffset: val });
-                            }}
-                            className="sidebar-input w-16 text-center"
-                          />
-                        </div>
-
-                        <div className="pt-2 mt-2 border-t border-gray-100 space-y-2">
-                          <div className="text-[10px] uppercase font-bold text-gray-400">Dimension Text Style</div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-500 text-xs">Font</span>
-                            <select
-                              value={(selectedItem as any).dimensionFontFamily || 'Inter, sans-serif'}
-                              onChange={(e) => {
-                                if (itemType === 'shape') updateShape(selectedItem.id, { dimensionFontFamily: e.target.value });
-                                if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionFontFamily: e.target.value });
-                              }}
-                              className="text-xs border rounded px-2 py-1 bg-white w-32"
-                            >
-                              {textStyleFonts.map((font) => (
-                                <option key={font} value={font}>{getFontDisplayName(font)}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-500 text-xs">Style</span>
-                            <div className="flex gap-1 bg-white p-0.5 rounded border">
-                              <button
-                                onClick={() => {
-                                  const next = (selectedItem as any).dimensionFontWeight === '700' ? '600' : '700';
-                                  if (itemType === 'shape') updateShape(selectedItem.id, { dimensionFontWeight: next });
-                                  if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionFontWeight: next });
-                                }}
-                                className={`p-1.5 rounded transition-colors ${(selectedItem as any).dimensionFontWeight === '700' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
-                              >
-                                <FaBold size={12} />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const next = (selectedItem as any).dimensionFontStyle === 'italic' ? 'normal' : 'italic';
-                                  if (itemType === 'shape') updateShape(selectedItem.id, { dimensionFontStyle: next });
-                                  if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionFontStyle: next });
-                                }}
-                                className={`p-1.5 rounded transition-colors ${(selectedItem as any).dimensionFontStyle === 'italic' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
-                              >
-                                <FaItalic size={12} />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const next = (selectedItem as any).dimensionTextDecoration === 'underline' ? 'none' : 'underline';
-                                  if (itemType === 'shape') updateShape(selectedItem.id, { dimensionTextDecoration: next });
-                                  if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionTextDecoration: next });
-                                }}
-                                className={`p-1.5 rounded transition-colors ${(selectedItem as any).dimensionTextDecoration === 'underline' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
-                              >
-                                <FaUnderline size={12} />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Line Weight */}
-                        <div className="flex justify-between items-center mt-2">
-                          <span className="text-gray-500 text-xs">Line Weight</span>
-                          <input
-                            type="number"
-                            min="0.2"
-                            step="0.1"
-                            value={(selectedItem as any).dimensionStrokeWidth || 1.5}
-                            onChange={(e) => {
-                              const val = Number(e.target.value);
-                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionStrokeWidth: Math.max(0.2, val) });
-                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionStrokeWidth: Math.max(0.2, val) });
-                            }}
-                            className="sidebar-input w-16 text-center"
-                          />
-                        </div>
-
-                        {/* Color */}
-                        <div className="flex justify-between items-center mt-2">
-                          <span className="text-gray-500 text-xs">Color</span>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={(selectedItem as any).dimensionColor || '#666666'}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                if (itemType === 'shape') updateShape(selectedItem.id, { dimensionColor: val });
-                                if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionColor: val });
-                              }}
-                              className="sidebar-input w-20 text-xs"
-                            />
-                            <input
-                              type="color"
-                              value={(selectedItem as any).dimensionColor || '#666666'}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                if (itemType === 'shape') updateShape(selectedItem.id, { dimensionColor: val });
-                                if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionColor: val });
-                              }}
-                              className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Text Position */}
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-gray-500 text-xs">Text Position</span>
-                          <select
-                            value={(selectedItem as any).dimensionTextPosition || 'inbetween'}
-                            onChange={(e) => {
-                              const val = e.target.value as any;
-                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionTextPosition: val });
-                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionTextPosition: val });
-                            }}
-                            className="text-xs border rounded px-2 py-1 bg-white"
-                          >
-                            <option value="inbetween">In-between</option>
-                            <option value="above">Above Line</option>
-                          </select>
-                        </div>
-
-                        {/* Label Position Side */}
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-500 text-xs">Label Side</span>
-                          <select
-                            value={(selectedItem as any).dimensionLabelPosition || 'top-right'}
-                            onChange={(e) => {
-                              const val = e.target.value as any;
-                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionLabelPosition: val });
-                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionLabelPosition: val });
-                            }}
-                            className="text-xs border rounded px-2 py-1 bg-white"
-                          >
-                            <option value="top-right">Top / Right</option>
-                            <option value="bottom-left">Bottom / Left</option>
-                          </select>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Dimensions (Wall specific) */}
-                {itemType === 'wall' && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-500">
-                      Dimensions Display
-                    </div>
-
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500">Show Dimensions</span>
-                      <button
-                        onClick={() => {
-                          const val = !((selectedItem as any).showDimensions);
-                          updateWall(selectedItem.id, { showDimensions: val });
-                        }}
-                        className={`w-10 h-5 rounded-full flex items-center transition-colors px-1 ${(selectedItem as any).showDimensions ? 'bg-blue-600' : 'bg-gray-300'
-                          }`}
-                      >
-                        <div
-                          className={`w-3.5 h-3.5 bg-white rounded-full shadow-sm transform transition-transform ${(selectedItem as any).showDimensions ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                        />
-                      </button>
-                    </div>
-
-                    {(selectedItem as any).showDimensions && (
-                      <div className="space-y-2 mt-3">
-                        {/* Style / Type */}
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-500 text-xs">Line Style</span>
-                          <select
-                            value={(selectedItem as any).dimensionType || 'solid'}
-                            onChange={(e) => updateWall(selectedItem.id, { dimensionType: e.target.value as any })}
-                            className="text-xs border rounded px-2 py-1 bg-white w-32"
-                          >
-                            <option value="solid">Solid</option>
-                            <option value="dashed">Dashed</option>
-                            <option value="dotted">Dotted</option>
-                          </select>
-                        </div>
-
-                        {/* Font Size */}
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-500 text-xs">Font Size</span>
-                          <input
-                            type="number"
-                            min="6"
-                            max="500000"
-                            value={(selectedItem as any).dimensionFontSize || 12}
-                            onChange={(e) => updateWall(selectedItem.id, { dimensionFontSize: Number(e.target.value) })}
-                            className="sidebar-input w-16 text-center"
-                          />
-                        </div>
-
-                        {/* Gap/Offset */}
-                        <div className="flex justify-between items-center mt-2">
-                          <span className="text-gray-500 text-xs">Dimension Gap</span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="500000"
-                            value={(selectedItem as any).dimensionOffset !== undefined ? (selectedItem as any).dimensionOffset : 200}
-                            onChange={(e) => updateWall(selectedItem.id, { dimensionOffset: Number(e.target.value) })}
-                            className="sidebar-input w-16 text-center"
-                          />
-                        </div>
-
-                        {/* Line Weight */}
-                        <div className="flex justify-between items-center mt-2">
-                          <span className="text-gray-500 text-xs">Line Weight</span>
-                          <input
-                            type="number"
-                            min="0.2"
-                            step="0.1"
-                            value={(selectedItem as any).dimensionStrokeWidth || 1.5}
-                            onChange={(e) => updateWall(selectedItem.id, { dimensionStrokeWidth: Math.max(0.2, Number(e.target.value)) })}
-                            className="sidebar-input w-16 text-center"
-                          />
-                        </div>
-
-                        {/* Color */}
-                        <div className="flex justify-between items-center mt-2">
-                          <span className="text-gray-500 text-xs">Color</span>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={(selectedItem as any).dimensionColor || '#666666'}
-                              onChange={(e) => updateWall(selectedItem.id, { dimensionColor: e.target.value })}
-                              className="sidebar-input w-20 text-xs"
-                            />
-                            <input
-                              type="color"
-                              value={(selectedItem as any).dimensionColor || '#666666'}
-                              onChange={(e) => updateWall(selectedItem.id, { dimensionColor: e.target.value })}
-                              className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Text Position */}
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-gray-500 text-xs">Text Position</span>
-                          <select
-                            value={(selectedItem as any).dimensionTextPosition || 'inbetween'}
-                            onChange={(e) => updateWall(selectedItem.id, { dimensionTextPosition: e.target.value as any })}
-                            className="text-xs border rounded px-2 py-1 bg-white"
-                          >
-                            <option value="inbetween">In-between</option>
-                            <option value="above">Above Line</option>
-                          </select>
-                        </div>
-
-                        {/* Label Position Side */}
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-500 text-xs">Label Side</span>
-                          <select
-                            value={(selectedItem as any).dimensionLabelPosition || 'top-right'}
-                            onChange={(e) => updateWall(selectedItem.id, { dimensionLabelPosition: e.target.value as any })}
-                            className="text-xs border rounded px-2 py-1 bg-white"
-                          >
-                            <option value="top-right">Top / Right</option>
-                            <option value="bottom-left">Bottom / Left</option>
-                          </select>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* ARROW PROPERTIES */}
-                {itemType === 'shape' && (selectedItem as any).type === 'arrow' && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-500">
-                      Arrow Style
-                    </div>
-
-                    {/* Head Type */}
-                    <div className="mb-2 relative">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-gray-500 text-xs">Head Type</span>
-                      </div>
-                      <button
-                        onClick={() => setIsArrowHeadDropdownOpen(!isArrowHeadDropdownOpen)}
-                        className="w-full p-1 text-xs border border-gray-300 rounded flex justify-between items-center bg-white"
-                      >
-                        <span>{((selectedItem as any).arrowHeadType || 'filled-triangle').replace('-', ' ')}</span>
-                        <FaChevronDown size={10} className="text-gray-400" />
-                      </button>
-
-                      {isArrowHeadDropdownOpen && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-10"
-                            onClick={() => setIsArrowHeadDropdownOpen(false)}
-                          />
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded shadow-lg z-20 p-2">
-                            <div className="grid grid-cols-4 gap-1">
-                              {[
-                                { id: 'none', label: 'None', path: 'M 2 10 L 22 10' },
-                                { id: 'filled-triangle', label: 'Triangle (Filled)', path: 'M 2 10 L 16 10 M 16 6 L 22 10 L 16 14 Z', fill: 'currentColor' },
-                                { id: 'triangle', label: 'Triangle (Outline)', path: 'M 2 10 L 16 10 M 16 6 L 22 10 L 16 14 Z', fill: 'none' },
-                                { id: 'circle', label: 'Circle', path: 'M 2 10 L 16 10 M 22 10 m -3 0 a 3 3 0 1 0 6 0 a 3 3 0 1 0 -6 0', fill: 'none' },
-                                { id: 'square', label: 'Square', path: 'M 2 10 L 16 10 M 16 7 L 22 7 L 22 13 L 16 13 Z', fill: 'none' },
-                                { id: 'diamond', label: 'Diamond', path: 'M 2 10 L 16 10 M 19 6 L 22 10 L 19 14 L 16 10 Z', fill: 'none' },
-                              ].map((type) => (
-                                <button
-                                  key={type.id}
-                                  onClick={() => {
-                                    updateShape(selectedItem.id, { arrowHeadType: type.id as any });
-                                    setIsArrowHeadDropdownOpen(false);
-                                  }}
-                                  className={`h-8 border rounded flex items-center justify-center hover:bg-gray-50 ${((selectedItem as any).arrowHeadType || 'filled-triangle') === type.id ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-200'
-                                    }`}
-                                  title={type.label}
-                                >
-                                  <svg width="24" height="20" viewBox="0 0 24 20" className="text-gray-700">
-                                    <path d={type.path} stroke="currentColor" strokeWidth="1.5" fill={type.fill || 'none'} />
-                                  </svg>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Head Size */}
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="text-gray-500 text-xs">Head Size</span>
-                      <input
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        value={(selectedItem as any).arrowHeadSize || 1}
-                        onChange={(e) => updateShape(selectedItem.id, { arrowHeadSize: Number(e.target.value) })}
-                        className="sidebar-input w-16 text-center"
-                      />
-                    </div>
-
-                    {/* Tail Type */}
-                    <div className="mb-2 relative">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-gray-500 text-xs">Tail Type</span>
-                      </div>
-                      <button
-                        onClick={() => setIsArrowTailDropdownOpen(!isArrowTailDropdownOpen)}
-                        className="w-full p-1 text-xs border border-gray-300 rounded flex justify-between items-center bg-white"
-                      >
-                        <span>{((selectedItem as any).arrowTailType || 'none').replace('-', ' ')}</span>
-                        <FaChevronDown size={10} className="text-gray-400" />
-                      </button>
-
-                      {isArrowTailDropdownOpen && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-10"
-                            onClick={() => setIsArrowTailDropdownOpen(false)}
-                          />
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded shadow-lg z-20 p-2">
-                            <div className="grid grid-cols-4 gap-1">
-                              {[
-                                { id: 'none', label: 'None', path: 'M 22 10 L 2 10' },
-                                { id: 'standard-nock', label: 'Standard Nock', path: 'M 22 10 L 6 10 M 6 6 L 2 10 L 6 14' },
-                                { id: 'circle', label: 'Circle', path: 'M 22 10 L 8 10 M 2 10 m 3 0 a 3 3 0 1 1 -6 0 a 3 3 0 1 1 6 0', fill: 'none' },
-                                { id: 'square', label: 'Square', path: 'M 22 10 L 8 10 M 2 7 L 8 7 L 8 13 L 2 13 Z', fill: 'none' },
-                                { id: 'diamond', label: 'Diamond', path: 'M 22 10 L 8 10 M 5 6 L 2 10 L 5 14 L 8 10 Z', fill: 'none' },
-                                { id: 'triangle', label: 'Triangle', path: 'M 22 10 L 8 10 M 8 6 L 2 10 L 8 14 Z', fill: 'none' },
-                                { id: 'filled-triangle', label: 'Filled Triangle', path: 'M 22 10 L 8 10 M 8 6 L 2 10 L 8 14 Z', fill: 'currentColor' },
-                              ].map((type) => (
-                                <button
-                                  key={type.id}
-                                  onClick={() => {
-                                    updateShape(selectedItem.id, { arrowTailType: type.id as any });
-                                    setIsArrowTailDropdownOpen(false);
-                                  }}
-                                  className={`h-8 border rounded flex items-center justify-center hover:bg-gray-50 ${((selectedItem as any).arrowTailType || 'none') === type.id ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-200'
-                                    }`}
-                                  title={type.label}
-                                >
-                                  <svg width="24" height="20" viewBox="0 0 24 20" className="text-gray-700">
-                                    <path d={type.path} stroke="currentColor" strokeWidth="1.5" fill={type.fill || 'none'} />
-                                  </svg>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Tail Size */}
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-500 text-xs">Tail Size</span>
-                      <input
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        value={(selectedItem as any).arrowTailSize || 1}
-                        onChange={(e) => updateShape(selectedItem.id, { arrowTailSize: Number(e.target.value) })}
-                        className="sidebar-input w-16 text-center"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Table Numbering (Manual Override) */}
-                {(itemType === 'shape' || itemType === 'asset') && 
-                  (((selectedItem as any).type || "").toLowerCase().includes('table') || 
-                    ((selectedItem as any).name || "").toLowerCase().includes('table')) && (
-                    <div className="mt-3 pt-3 border-t border-gray-100">
-                      <div className="text-xs font-semibold mb-2 text-gray-600 uppercase tracking-tight">Label Override</div>
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-gray-500 text-xs">Label / Number</span>
-                        <input
-                          type="text"
-                          value={(selectedItem as any).tableName || ""}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (itemType === 'shape') {
-                              updateShape(selectedItem.id, { tableName: val });
-                            } else {
-                              updateAsset(selectedItem.id, { tableName: val });
+                    {/* Redesigned Flip Controls */}
+                    <div className="flex justify-between items-center mb-3 py-2 border-t border-gray-100">
+                      <span className="text-xs text-gray-500">Flip</span>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          title="Horizontal"
+                          onClick={() => {
+                            const next = !(selectedItem as any).flipY;
+                            if (itemType === 'shape') updateShape(selectedItem.id, { flipY: next });
+                            if (itemType === 'asset') {
+                              updateAsset(selectedItem.id, { flipY: next });
+                              updateSceneAsset(selectedItem.id, { flipY: next });
                             }
                           }}
-                          className="sidebar-input w-24 text-right text-xs"
-                          placeholder="e.g. 1, A"
-                        />
+                          className={`px-3 py-1 text-xs border rounded transition-colors ${(selectedItem as any).flipY ? 'bg-blue-100 border-blue-200 text-blue-600 font-medium' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                        >H</button>
+                        <button
+                          type="button"
+                          title="Vertical"
+                          onClick={() => {
+                            const next = !(selectedItem as any).flipX;
+                            if (itemType === 'shape') updateShape(selectedItem.id, { flipX: next });
+                            if (itemType === 'asset') {
+                              updateAsset(selectedItem.id, { flipX: next });
+                              updateSceneAsset(selectedItem.id, { flipX: next });
+                            }
+                          }}
+                          className={`px-3 py-1 text-xs border rounded transition-colors ${(selectedItem as any).flipX ? 'bg-blue-100 border-blue-200 text-blue-600 font-medium' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                        >V</button>
                       </div>
                     </div>
-                  )}
 
-                {/* Appearance (Shape/Asset) */}
-                {(itemType === 'shape' || itemType === 'asset') && (
+                    {/* Relocated Appearance Section */}
+                    {/* Appearance (Shape/Asset) */}
+                
                   <div className="mt-3 pt-3 border-t border-gray-100">
-                    <div className="text-xs font-semibold mb-2 text-gray-600">Appearance</div>
 
                     {/* Fill Type Selector - Only for Shapes currently */}
                     {itemType === 'shape' && (
@@ -2314,12 +1758,313 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         step={0.5}
                       />
                     </div> */}
+                    <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
+                      <span className="text-xs text-gray-500">Show Dimensions</span>
+                      <button
+                        onClick={() => {
+                          const val = !((selectedItem as any).showDimensions);
+                          if (itemType === 'shape') updateShape(selectedItem.id, { showDimensions: val });
+                          if (itemType === 'asset') updateAsset(selectedItem.id, { showDimensions: val });
+                        }}
+                        className={`w-10 h-5 rounded-full flex items-center transition-colors px-1 ${(selectedItem as any).showDimensions ? 'bg-blue-600' : 'bg-gray-300'}`}
+                      >
+                        <div
+                          className={`w-3.5 h-3.5 bg-white rounded-full shadow-sm transform transition-transform ${(selectedItem as any).showDimensions ? 'translate-x-5' : 'translate-x-0'}`}
+                        />
+                      </button>
+                    </div>
 
+                    {(selectedItem as any).showDimensions && (
+                      <div className="space-y-2 mt-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Line Style</span>
+                          <select
+                            value={(selectedItem as any).dimensionType || 'solid'}
+                            onChange={(e) => {
+                              const val = e.target.value as any;
+                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionType: val });
+                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionType: val });
+                            }}
+                            className="text-xs border rounded px-2 py-1 bg-white w-32"
+                          >
+                            <option value="solid">Solid</option>
+                            <option value="dashed">Dashed</option>
+                            <option value="dotted">Dotted</option>
+                          </select>
+                        </div>
 
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Font Size</span>
+                          <input
+                            type="number"
+                            min="6"
+                            max="500000"
+                            value={(selectedItem as any).dimensionFontSize || 12}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionFontSize: val });
+                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionFontSize: val });
+                            }}
+                            className="sidebar-input w-16 text-center"
+                          />
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Dimension Gap</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="500000"
+                            value={(selectedItem as any).dimensionOffset !== undefined ? (selectedItem as any).dimensionOffset : 200}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionOffset: val });
+                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionOffset: val });
+                            }}
+                            className="sidebar-input w-16 text-center"
+                          />
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Line Weight</span>
+                          <input
+                            type="number"
+                            min="0.2"
+                            step="0.1"
+                            value={(selectedItem as any).dimensionStrokeWidth || 1.5}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionStrokeWidth: Math.max(0.2, val) });
+                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionStrokeWidth: Math.max(0.2, val) });
+                            }}
+                            className="sidebar-input w-16 text-center"
+                          />
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Color</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={(selectedItem as any).dimensionColor || '#666666'}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (itemType === 'shape') updateShape(selectedItem.id, { dimensionColor: val });
+                                if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionColor: val });
+                              }}
+                              className="sidebar-input w-20 text-xs"
+                            />
+                            <input
+                              type="color"
+                              value={(selectedItem as any).dimensionColor || '#666666'}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (itemType === 'shape') updateShape(selectedItem.id, { dimensionColor: val });
+                                if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionColor: val });
+                              }}
+                              className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Text Position</span>
+                          <select
+                            value={(selectedItem as any).dimensionTextPosition || 'inbetween'}
+                            onChange={(e) => {
+                              const val = e.target.value as any;
+                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionTextPosition: val });
+                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionTextPosition: val });
+                            }}
+                            className="text-xs border rounded px-2 py-1 bg-white w-32"
+                          >
+                            <option value="inbetween">In-between</option>
+                            <option value="above">Above Line</option>
+                          </select>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Label Side</span>
+                          <select
+                            value={(selectedItem as any).dimensionLabelPosition || 'top-right'}
+                            onChange={(e) => {
+                              const val = e.target.value as any;
+                              if (itemType === 'shape') updateShape(selectedItem.id, { dimensionLabelPosition: val });
+                              if (itemType === 'asset') updateAsset(selectedItem.id, { dimensionLabelPosition: val });
+                            }}
+                            className="text-xs border rounded px-2 py-1 bg-white w-32"
+                          >
+                            <option value="top-right">Top / Right</option>
+                            <option value="bottom-left">Bottom / Left</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   </div>
                 )}
 
+                                {/* ARROW PROPERTIES */}
+                {itemType === 'shape' && (selectedItem as any).type === 'arrow' && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-500">
+                      Arrow Style
+                    </div>
 
+                    {/* Head Type */}
+                    <div className="mb-2 relative">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-gray-500 text-xs">Head Type</span>
+                      </div>
+                      <button
+                        onClick={() => setIsArrowHeadDropdownOpen(!isArrowHeadDropdownOpen)}
+                        className="w-full p-1 text-xs border border-gray-300 rounded flex justify-between items-center bg-white"
+                      >
+                        <span>{((selectedItem as any).arrowHeadType || 'filled-triangle').replace('-', ' ')}</span>
+                        <FaChevronDown size={10} className="text-gray-400" />
+                      </button>
+
+                      {isArrowHeadDropdownOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setIsArrowHeadDropdownOpen(false)}
+                          />
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded shadow-lg z-20 p-2">
+                            <div className="grid grid-cols-4 gap-1">
+                              {[
+                                { id: 'none', label: 'None', path: 'M 2 10 L 22 10' },
+                                { id: 'filled-triangle', label: 'Triangle (Filled)', path: 'M 2 10 L 16 10 M 16 6 L 22 10 L 16 14 Z', fill: 'currentColor' },
+                                { id: 'triangle', label: 'Triangle (Outline)', path: 'M 2 10 L 16 10 M 16 6 L 22 10 L 16 14 Z', fill: 'none' },
+                                { id: 'circle', label: 'Circle', path: 'M 2 10 L 16 10 M 22 10 m -3 0 a 3 3 0 1 0 6 0 a 3 3 0 1 0 -6 0', fill: 'none' },
+                                { id: 'square', label: 'Square', path: 'M 2 10 L 16 10 M 16 7 L 22 7 L 22 13 L 16 13 Z', fill: 'none' },
+                                { id: 'diamond', label: 'Diamond', path: 'M 2 10 L 16 10 M 19 6 L 22 10 L 19 14 L 16 10 Z', fill: 'none' },
+                              ].map((type) => (
+                                <button
+                                  key={type.id}
+                                  onClick={() => {
+                                    updateShape(selectedItem.id, { arrowHeadType: type.id as any });
+                                    setIsArrowHeadDropdownOpen(false);
+                                  }}
+                                  className={`h-8 border rounded flex items-center justify-center hover:bg-gray-50 ${((selectedItem as any).arrowHeadType || 'filled-triangle') === type.id ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-200'
+                                    }`}
+                                  title={type.label}
+                                >
+                                  <svg width="24" height="20" viewBox="0 0 24 20" className="text-gray-700">
+                                    <path d={type.path} stroke="currentColor" strokeWidth="1.5" fill={type.fill || 'none'} />
+                                  </svg>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Head Size */}
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="text-gray-500 text-xs">Head Size</span>
+                      <input
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={(selectedItem as any).arrowHeadSize || 1}
+                        onChange={(e) => updateShape(selectedItem.id, { arrowHeadSize: Number(e.target.value) })}
+                        className="sidebar-input w-16 text-center"
+                      />
+                    </div>
+
+                    {/* Tail Type */}
+                    <div className="mb-2 relative">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-gray-500 text-xs">Tail Type</span>
+                      </div>
+                      <button
+                        onClick={() => setIsArrowTailDropdownOpen(!isArrowTailDropdownOpen)}
+                        className="w-full p-1 text-xs border border-gray-300 rounded flex justify-between items-center bg-white"
+                      >
+                        <span>{((selectedItem as any).arrowTailType || 'none').replace('-', ' ')}</span>
+                        <FaChevronDown size={10} className="text-gray-400" />
+                      </button>
+
+                      {isArrowTailDropdownOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setIsArrowTailDropdownOpen(false)}
+                          />
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded shadow-lg z-20 p-2">
+                            <div className="grid grid-cols-4 gap-1">
+                              {[
+                                { id: 'none', label: 'None', path: 'M 22 10 L 2 10' },
+                                { id: 'standard-nock', label: 'Standard Nock', path: 'M 22 10 L 6 10 M 6 6 L 2 10 L 6 14' },
+                                { id: 'circle', label: 'Circle', path: 'M 22 10 L 8 10 M 2 10 m 3 0 a 3 3 0 1 1 -6 0 a 3 3 0 1 1 6 0', fill: 'none' },
+                                { id: 'square', label: 'Square', path: 'M 22 10 L 8 10 M 2 7 L 8 7 L 8 13 L 2 13 Z', fill: 'none' },
+                                { id: 'diamond', label: 'Diamond', path: 'M 22 10 L 8 10 M 5 6 L 2 10 L 5 14 L 8 10 Z', fill: 'none' },
+                                { id: 'triangle', label: 'Triangle', path: 'M 22 10 L 8 10 M 8 6 L 2 10 L 8 14 Z', fill: 'none' },
+                                { id: 'filled-triangle', label: 'Filled Triangle', path: 'M 22 10 L 8 10 M 8 6 L 2 10 L 8 14 Z', fill: 'currentColor' },
+                              ].map((type) => (
+                                <button
+                                  key={type.id}
+                                  onClick={() => {
+                                    updateShape(selectedItem.id, { arrowTailType: type.id as any });
+                                    setIsArrowTailDropdownOpen(false);
+                                  }}
+                                  className={`h-8 border rounded flex items-center justify-center hover:bg-gray-50 ${((selectedItem as any).arrowTailType || 'none') === type.id ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-200'
+                                    }`}
+                                  title={type.label}
+                                >
+                                  <svg width="24" height="20" viewBox="0 0 24 20" className="text-gray-700">
+                                    <path d={type.path} stroke="currentColor" strokeWidth="1.5" fill={type.fill || 'none'} />
+                                  </svg>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Tail Size */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500 text-xs">Tail Size</span>
+                      <input
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={(selectedItem as any).arrowTailSize || 1}
+                        onChange={(e) => updateShape(selectedItem.id, { arrowTailSize: Number(e.target.value) })}
+                        className="sidebar-input w-16 text-center"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Table Numbering (Manual Override) */}
+                {(itemType === 'shape' || itemType === 'asset') && 
+                  (((selectedItem as any).type || "").toLowerCase().includes('table') || 
+                    ((selectedItem as any).name || "").toLowerCase().includes('table')) && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <div className="text-xs font-semibold mb-2 text-gray-600 uppercase tracking-tight">Label Override</div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-gray-500 text-xs">Label / Number</span>
+                        <input
+                          type="text"
+                          value={(selectedItem as any).tableName || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (itemType === 'shape') {
+                              updateShape(selectedItem.id, { tableName: val });
+                            } else {
+                              updateAsset(selectedItem.id, { tableName: val });
+                            }
+                          }}
+                          className="sidebar-input w-24 text-right text-xs"
+                          placeholder="e.g. 1, A"
+                        />
+                      </div>
+                    </div>
+                  )}
 
                 {/* Text Annotation Properties */}
                 {itemType === 'text-annotation' && selectedTextAnnotation && (
@@ -3377,6 +3122,115 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         </div>
                       </div>
                     </div>
+                    <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
+                      <span className="text-xs text-gray-500">Show Dimensions</span>
+                      <button
+                        onClick={() => {
+                          const val = !((selectedItem as any).showDimensions);
+                          updateWall(selectedItem.id, { showDimensions: val });
+                        }}
+                        className={`w-10 h-5 rounded-full flex items-center transition-colors px-1 ${(selectedItem as any).showDimensions ? 'bg-blue-600' : 'bg-gray-300'}`}
+                      >
+                        <div
+                          className={`w-3.5 h-3.5 bg-white rounded-full shadow-sm transform transition-transform ${(selectedItem as any).showDimensions ? 'translate-x-5' : 'translate-x-0'}`}
+                        />
+                      </button>
+                    </div>
+
+                    {(selectedItem as any).showDimensions && (
+                      <div className="space-y-2 mt-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Line Style</span>
+                          <select
+                            value={(selectedItem as any).dimensionType || 'solid'}
+                            onChange={(e) => updateWall(selectedItem.id, { dimensionType: e.target.value as any })}
+                            className="text-xs border rounded px-2 py-1 bg-white w-32"
+                          >
+                            <option value="solid">Solid</option>
+                            <option value="dashed">Dashed</option>
+                            <option value="dotted">Dotted</option>
+                          </select>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Font Size</span>
+                          <input
+                            type="number"
+                            min="6"
+                            max="500000"
+                            value={(selectedItem as any).dimensionFontSize || 12}
+                            onChange={(e) => updateWall(selectedItem.id, { dimensionFontSize: Number(e.target.value) })}
+                            className="sidebar-input w-16 text-center"
+                          />
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Dimension Gap</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="500000"
+                            value={(selectedItem as any).dimensionOffset !== undefined ? (selectedItem as any).dimensionOffset : 200}
+                            onChange={(e) => updateWall(selectedItem.id, { dimensionOffset: Number(e.target.value) })}
+                            className="sidebar-input w-16 text-center"
+                          />
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Line Weight</span>
+                          <input
+                            type="number"
+                            min="0.2"
+                            step="0.1"
+                            value={(selectedItem as any).dimensionStrokeWidth || 1.5}
+                            onChange={(e) => updateWall(selectedItem.id, { dimensionStrokeWidth: Math.max(0.2, Number(e.target.value)) })}
+                            className="sidebar-input w-16 text-center"
+                          />
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Color</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={(selectedItem as any).dimensionColor || '#666666'}
+                              onChange={(e) => updateWall(selectedItem.id, { dimensionColor: e.target.value })}
+                              className="sidebar-input w-20 text-xs"
+                            />
+                            <input
+                              type="color"
+                              value={(selectedItem as any).dimensionColor || '#666666'}
+                              onChange={(e) => updateWall(selectedItem.id, { dimensionColor: e.target.value })}
+                              className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Text Position</span>
+                          <select
+                            value={(selectedItem as any).dimensionTextPosition || 'inbetween'}
+                            onChange={(e) => updateWall(selectedItem.id, { dimensionTextPosition: e.target.value as any })}
+                            className="text-xs border rounded px-2 py-1 bg-white w-32"
+                          >
+                            <option value="inbetween">In-between</option>
+                            <option value="above">Above Line</option>
+                          </select>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500 text-xs">Label Side</span>
+                          <select
+                            value={(selectedItem as any).dimensionLabelPosition || 'top-right'}
+                            onChange={(e) => updateWall(selectedItem.id, { dimensionLabelPosition: e.target.value as any })}
+                            className="text-xs border rounded px-2 py-1 bg-white w-32"
+                          >
+                            <option value="top-right">Top / Right</option>
+                            <option value="bottom-left">Bottom / Left</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

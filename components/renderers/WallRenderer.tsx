@@ -389,7 +389,7 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
         || connectedWalls.find((entry) => hoveredId === entry.id)
         || wall;
     const wallFill = (styleSource.fillType === 'texture' || styleSource.fillType === 'hatch' || styleSource.fillType === 'hash') && styleSource.fillTexture
-        ? `url(#${styleSource.fillTexture}-scale-${styleSource.fillTextureScale || 1}-thick-${styleSource.fillTextureThickness || 1})`
+        ? `url(#${styleSource.fillTexture}-scale-${styleSource.fillTextureScale || 1}-thick-${styleSource.fillTextureThickness || 1}-rot-${styleSource.hatchRotation || 0})`
         : (styleSource.fill || '#ffffff');
     const groupStrokeColor = styleSource.stroke || '#1f2937';
     const groupStrokeWidth = styleSource.strokeWidth !== undefined ? styleSource.strokeWidth : 2;

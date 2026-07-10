@@ -677,8 +677,26 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                 strokeWidth={isTooLarge ? 1 : 2} 
                 strokeDasharray={overlayDash}
                 vectorEffect="non-scaling-stroke" 
-                onMouseDown={allowOverlayMove ? (e) => handleMouseDown(e, 'move') : undefined} 
-                style={{ cursor: allowOverlayMove ? 'move' : 'default', pointerEvents: allowOverlayMove ? 'auto' : 'none' }}
+                onMouseDown={allowOverlayMove ? (e) => {
+                    if (e.shiftKey) return; // Ignore on shift to allow selecting elements beneath
+                    handleMouseDown(e, 'move');
+                } : undefined} 
+                style={{ 
+                    cursor: allowOverlayMove ? 'move' : 'default', 
+                    pointerEvents: (allowOverlayMove) ? 'auto' : 'none' 
+                }}
+                className="select-overlay-polygon"
+                onPointerDown={(e) => {
+                    if (e.shiftKey) {
+                        // Pass pointer-events dynamically on shift click
+                        const target = e.currentTarget;
+                        target.style.pointerEvents = 'none';
+                        // Re-enable after click loop ends to keep draggable behavior intact
+                        setTimeout(() => {
+                            target.style.pointerEvents = 'auto';
+                        }, 50);
+                    }
+                }}
             />
             
             {['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w'].map(h => {

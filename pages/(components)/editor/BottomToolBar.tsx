@@ -569,49 +569,192 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 break;
 
             // Import Project
+            // Import Project / File
             case "import-project":
                 {
+                    const compressImage = (dataUrl: string, maxWidth = 1200, maxHeight = 1200): Promise<string> => {
+                        return new Promise((resolve) => {
+                            const img = new Image();
+                            img.onload = () => {
+                                let width = img.width;
+                                let height = img.height;
+
+                                if (width > maxWidth || height > maxHeight) {
+                                    const ratio = Math.min(maxWidth / width, maxHeight / height);
+                                    width = width * ratio;
+                                    height = height * ratio;
+                                }
+
+                                const canvas = document.createElement('canvas');
+                                canvas.width = width;
+                                canvas.height = height;
+
+                                const ctx = canvas.getContext('2d');
+                                if (ctx) {
+                                    ctx.drawImage(img, 0, 0, width, height);
+                                    resolve(canvas.toDataURL('image/jpeg', 0.75));
+                                } else {
+                                    resolve(dataUrl);
+                                }
+                            };
+                            img.onerror = () => {
+                                resolve(dataUrl);
+                            };
+                            img.src = dataUrl;
+                        });
+                    };
+
                     const input = document.createElement('input');
                     input.type = 'file';
-                    input.accept = '.json';
-                    input.onchange = (e) => {
+                    input.accept = '.json,image/*,application/pdf';
+                    input.onchange = async (e) => {
                         const file = (e.target as HTMLInputElement).files?.[0];
                         if (!file) return;
 
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                            try {
-                                const data = JSON.parse(event.target?.result as string);
-                                const { shapes, assets, walls } = useProjectStore.getState();
+                        if (file.name.endsWith('.json')) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                                try {
+                                    const data = JSON.parse(event.target?.result as string);
+                                    const { shapes, assets, walls } = useProjectStore.getState();
 
-                                // Import shapes
-                                if (data.shapes && Array.isArray(data.shapes)) {
-                                    data.shapes.forEach((shape: any) => {
-                                        useProjectStore.getState().addShape(shape);
-                                    });
+                                    // Import shapes
+                                    if (data.shapes && Array.isArray(data.shapes)) {
+                                        data.shapes.forEach((shape: any) => {
+                                            useProjectStore.getState().addShape(shape);
+                                        });
+                                    }
+
+                                    // Import assets
+                                    if (data.assets && Array.isArray(data.assets)) {
+                                        data.assets.forEach((asset: any) => {
+                                            useProjectStore.getState().addAsset(asset);
+                                        });
+                                    }
+
+                                    // Import walls
+                                    if (data.walls && Array.isArray(data.walls)) {
+                                        data.walls.forEach((wall: any) => {
+                                            useProjectStore.getState().addWall(wall);
+                                        });
+                                    }
+
+                                    toast.success('Project imported successfully!');
+                                } catch (error) {
+                                    toast.error('Failed to import project. Invalid file format.');
+                                    console.error('Import error:', error);
                                 }
+                            };
+                            reader.readAsText(file);
+                        } else if (file.type.startsWith('image/')) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                                const rawUrl = event.target?.result as string;
+                                compressImage(rawUrl).then((dataUrl) => {
+                                    const img = new Image();
+                                    img.onload = () => {
+                                        const maxSize = 1500;
+                                        let w = img.width;
+                                        let h = img.height;
+                                        if (w > maxSize || h > maxSize) {
+                                            const ratio = Math.min(maxSize / w, maxSize / h);
+                                            w = w * ratio;
+                                            h = h * ratio;
+                                        }
 
-                                // Import assets
-                                if (data.assets && Array.isArray(data.assets)) {
-                                    data.assets.forEach((asset: any) => {
-                                        useProjectStore.getState().addAsset(asset);
+                                        const newShape = {
+                                            id: crypto.randomUUID(),
+                                            type: 'image' as any,
+                                            x: 0,
+                                            y: 0,
+                                            width: Math.max(100, w),
+                                            height: Math.max(100, h),
+                                            rotation: 0,
+                                            fillImage: dataUrl,
+                                            fillType: 'image' as any,
+                                            stroke: '#000000',
+                                            strokeWidth: 1,
+                                            zIndex: useProjectStore.getState().getNextZIndex(),
+                                        };
+
+                                        useEditorStore.getState().setPendingImportShape(newShape);
+                                        useEditorStore.getState().setActiveTool('select');
+                                    };
+                                    img.src = dataUrl;
+                                });
+                            };
+                            reader.readAsDataURL(file);
+                        } else if (file.type === 'application/pdf') {
+                            const reader = new FileReader();
+                            reader.onload = async (event) => {
+                                const arrayBuffer = event.target?.result as ArrayBuffer;
+
+                                const loadPDFJS = () => {
+                                    return new Promise<any>((resolve, reject) => {
+                                        if ((window as any).pdfjsLib) {
+                                            resolve((window as any).pdfjsLib);
+                                            return;
+                                        }
+                                        const script = document.createElement('script');
+                                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
+                                        script.onload = () => {
+                                            const pdfjsLib = (window as any).pdfjsLib;
+                                            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+                                            resolve(pdfjsLib);
+                                        };
+                                        script.onerror = reject;
+                                        document.head.appendChild(script);
                                     });
-                                }
+                                };
 
-                                // Import walls
-                                if (data.walls && Array.isArray(data.walls)) {
-                                    data.walls.forEach((wall: any) => {
-                                        useProjectStore.getState().addWall(wall);
-                                    });
-                                }
+                                try {
+                                    const pdfjsLib = await loadPDFJS();
+                                    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                                    const page = await pdf.getPage(1);
+                                    
+                                    const viewport = page.getViewport({ scale: 1.5 });
+                                    const canvas = document.createElement('canvas');
+                                    const context = canvas.getContext('2d');
+                                    if (context) {
+                                        canvas.width = viewport.width;
+                                        canvas.height = viewport.height;
+                                        await page.render({ canvasContext: context, viewport }).promise;
+                                        
+                                        const dataUrl = await compressImage(canvas.toDataURL('image/jpeg', 0.7), 1200, 1200);
+                                        
+                                        const maxSize = 1500;
+                                        let w = canvas.width;
+                                        let h = canvas.height;
+                                        if (w > maxSize || h > maxSize) {
+                                            const ratio = Math.min(maxSize / w, maxSize / h);
+                                            w = w * ratio;
+                                            h = h * ratio;
+                                        }
 
-                                toast.success('Project imported successfully!');
-                            } catch (error) {
-                                toast.error('Failed to import project. Invalid file format.');
-                                console.error('Import error:', error);
-                            }
-                        };
-                        reader.readAsText(file);
+                                        const newShape = {
+                                            id: crypto.randomUUID(),
+                                            type: 'image' as any,
+                                            x: 0,
+                                            y: 0,
+                                            width: Math.max(100, w),
+                                            height: Math.max(100, h),
+                                            rotation: 0,
+                                            fillImage: dataUrl,
+                                            fillType: 'image' as any,
+                                            stroke: '#000000',
+                                            strokeWidth: 1,
+                                            zIndex: useProjectStore.getState().getNextZIndex(),
+                                        };
+
+                                        useEditorStore.getState().setPendingImportShape(newShape);
+                                        useEditorStore.getState().setActiveTool('select');
+                                    }
+                                } catch (err) {
+                                    console.error("PDF import error:", err);
+                                }
+                            };
+                            reader.readAsArrayBuffer(file);
+                        }
                     };
                     input.click();
                 }
@@ -646,10 +789,51 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
         };
     }, []);
 
+    // Sync local activeTool state with editorStore's activeTool changes
+    useEffect(() => {
+        if (editorActiveTool === 'select') {
+            setActiveTool('pointer-select');
+        } else if (editorActiveTool === 'pan') {
+            setActiveTool('pan');
+        } else if (editorActiveTool === 'rectangular-select') {
+            setActiveTool('rectangular-select');
+        } else if (editorActiveTool === 'shape-rectangle') {
+            setActiveTool('rectangle');
+        } else if (editorActiveTool === 'shape-ellipse') {
+            setActiveTool('circle');
+        } else if (editorActiveTool === 'shape-line') {
+            setActiveTool('line');
+        } else if (editorActiveTool === 'shape-arrow') {
+            setActiveTool('arrow-shape');
+        } else if (editorActiveTool === 'shape-polygon') {
+            setActiveTool('polygon');
+        } else if (editorActiveTool === 'freehand') {
+            setActiveTool('freehand');
+        } else if (editorActiveTool === 'arch') {
+            setActiveTool('arch');
+        } else if (editorActiveTool === 'wall') {
+            setActiveTool('draw-wall');
+        } else if (editorActiveTool === 'text-annotation') {
+            setActiveTool('text-annotation');
+        } else if (editorActiveTool === 'dimension') {
+            setActiveTool('dimensions');
+        } else if (editorActiveTool === 'label-arrow') {
+            setActiveTool('label-arrow');
+        } else if (editorActiveTool === 'trim') {
+            setActiveTool('trim');
+        } else if (editorActiveTool === 'trim-to-blend') {
+            setActiveTool('trim-to-blend');
+        } else if (!editorActiveTool) {
+            setActiveTool(null);
+        }
+    }, [editorActiveTool]);
+
+    const [isCollapsed, setIsCollapsed] = useState(false);
+
     return (
         <div
             ref={containerRef}
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] pointer-events-auto"
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] pointer-events-auto flex flex-col items-center gap-2"
         >
             {/* Wall Drawing Status */}
             {isWallMode && (
@@ -711,141 +895,156 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 </motion.div>
             )}
 
-            <motion.div
-                initial={{ y: 100, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ type: "spring", stiffness: 200, damping: 20 }}
-                className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-lg relative"
+            {/* Collapsible toggle button */}
+            <motion.button
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                whileTap={{ scale: 0.95 }}
+                className="bg-white/90 backdrop-blur border border-gray-200 shadow-md text-gray-500 text-[10px] px-2 py-0.5 rounded-full hover:bg-gray-50 transition-colors font-bold uppercase tracking-wider flex items-center gap-1"
+                title={isCollapsed ? "Expand Toolbar" : "Collapse Toolbar"}
             >
-                {tools.map((tool, index) => (
-                    <div
-                        key={index}
-                        className="flex items-center relative"
-                        // Keep dropdown open while hovering over button or menu
-                        onMouseLeave={() => setOpenIndex(null)}
+                <span>{isCollapsed ? "▲ Tools" : "▼ Collapse"}</span>
+            </motion.button>
+
+            <AnimatePresence>
+                {!isCollapsed && (
+                    <motion.div
+                        initial={{ y: 50, opacity: 0, scale: 0.95 }}
+                        animate={{ y: 0, opacity: 1, scale: 1 }}
+                        exit={{ y: 50, opacity: 0, scale: 0.95 }}
+                        transition={{ type: "spring", stiffness: 220, damping: 22 }}
+                        className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-lg relative border border-gray-100"
                     >
-                        {/* Main Button */}
-                        <div
-                            onMouseEnter={() => setOpenIndex(index)}
-                            className="flex items-center"
-                        >
-                            <motion.button
-                                onClick={() => {
-                                    const primary = tool.options[0];
-                                    if (primary) {
-                                        const isCurrentlyActive =
-                                            (primary.id === "draw-wall" && (isWallMode || wallDrawingMode)) ||
-                                            (primary.id === "draw-line" && isPenMode) ||
-                                            (primary.id === "rectangular-select" && activeTool === "rectangular-select") ||
-                                            (activeTool === primary.id);
-
-                                        if (isCurrentlyActive) {
-                                            deactivateAllTools();
-                                            setEditorTool("select");
-                                            setActiveTool("pointer-select");
-                                        } else {
-                                            handleOptionClick(primary);
-                                        }
-                                    }
-                                    setOpenIndex(null);
-                                }}
-                                whileTap={{ scale: 0.95 }}
-                                whileHover={{ scale: 1.03 }}
-                                className={`w-8 h-8 border-2 flex items-center justify-center rounded-md focus:outline-none outline-none ${(tool.options.some((opt) => opt.id === "draw-line") &&
-                                    isPenMode) ||
-                                    (tool.options.some((opt) => opt.id === "draw-wall") &&
-                                        (isWallMode || wallDrawingMode)) ||
-                                    (tool.options.some((opt) => opt.id === "rectangular-select") &&
-                                        activeTool === "rectangular-select") ||
-                                    (tool.options.some((opt) => ["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(opt.id) &&
-                                        activeTool === opt.id))
-                                    ? "border-blue-500 text-blue-500"
-                                    : "border-[var(--accent)] text-[var(--accent)]"
-                                    }`}
-                                aria-expanded={openIndex === index}
-                                aria-haspopup="menu"
+                        {tools.map((tool, index) => (
+                            <div
+                                key={index}
+                                className="flex items-center relative"
+                                // Keep dropdown open while hovering over button or menu
+                                onMouseLeave={() => setOpenIndex(null)}
                             >
-                                {tool.icon}
-                            </motion.button>
-                        </div>
-
-                        {/* Dropdown Menu */}
-                        <AnimatePresence>
-                            {openIndex === index && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                                    transition={{ duration: 0.15 }}
-                                    className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-white rounded-md shadow-lg border p-1.5 w-48 z-[10000]"
+                                {/* Main Button */}
+                                <div
                                     onMouseEnter={() => setOpenIndex(index)}
-                                    onMouseLeave={() => setOpenIndex(null)}
+                                    className="flex items-center"
                                 >
-                                    <div className="px-2 py-1.5 text-xs font-bold text-gray-900 border-b border-gray-100 mb-1">
-                                        {tool.label}
-                                    </div>
-                                    <ul className="space-y-0.5 text-xs text-gray-700">
-                                        {tool.options.map((option) => (
-                                            <li
-                                                key={option.id}
-                                                className={`px-2 py-1.5 rounded hover:bg-gray-100 cursor-pointer flex items-center justify-between ${(option.id === "draw-line" && isPenMode) ||
-                                                    (option.id === "draw-wall" &&
-                                                        (isWallMode || wallDrawingMode)) ||
-                                                    (option.id === "rectangular-select" &&
-                                                        activeTool === "rectangular-select") ||
-                                                    (["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(option.id) &&
-                                                        activeTool === option.id)
-                                                    ? "bg-blue-100 text-blue-800"
-                                                    : ""
-                                                    }`}
-                                                onClick={() => handleOptionClick(option)}
-                                            >
-                                                <div className="flex items-center gap-2">
-                                                    {option.icon && (
-                                                        <span className="text-gray-600">
-                                                            {option.icon}
-                                                        </span>
-                                                    )}
-                                                    <span>{option.label}</span>
-                                                    {option.id === "draw-wall" && (
-                                                        <svg
-                                                            className="w-3 h-3 text-gray-400"
-                                                            fill="none"
-                                                            stroke="currentColor"
-                                                            viewBox="0 0 24 24"
-                                                        >
-                                                            <path
-                                                                strokeLinecap="round"
-                                                                strokeLinejoin="round"
-                                                                strokeWidth={2}
-                                                                d="M9 5l7 7-7 7"
-                                                            />
-                                                        </svg>
-                                                    )}
-                                                </div>
-                                                {(option.id === "draw-line" && isPenMode) ||
-                                                    (option.id === "draw-wall" &&
-                                                        (isWallMode || wallDrawingMode)) ||
-                                                    (option.id === "rectangular-select" &&
-                                                        activeTool === "rectangular-select") ||
-                                                    (["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(option.id) &&
-                                                        activeTool === option.id) ? (
-                                                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                                ) : null}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                                    <motion.button
+                                        onClick={() => {
+                                            const primary = tool.options[0];
+                                            if (primary) {
+                                                const isCurrentlyActive =
+                                                    (primary.id === "draw-wall" && (isWallMode || wallDrawingMode)) ||
+                                                    (primary.id === "draw-line" && isPenMode) ||
+                                                    (primary.id === "rectangular-select" && activeTool === "rectangular-select") ||
+                                                    (activeTool === primary.id);
 
-                        {/* Divider */}
-                        {index !== tools.length - 1 && (
-                            <div className="w-px h-6 bg-gray-200 mx-2" />
-                        )}
-                    </div>
-                ))}
-            </motion.div>
+                                                if (isCurrentlyActive) {
+                                                    deactivateAllTools();
+                                                    setEditorTool("select");
+                                                    setActiveTool("pointer-select");
+                                                } else {
+                                                    handleOptionClick(primary);
+                                                }
+                                            }
+                                            setOpenIndex(null);
+                                        }}
+                                        whileTap={{ scale: 0.95 }}
+                                        whileHover={{ scale: 1.03 }}
+                                        className={`w-8 h-8 border-2 flex items-center justify-center rounded-md focus:outline-none outline-none ${(tool.options.some((opt) => opt.id === "draw-line") &&
+                                            isPenMode) ||
+                                            (tool.options.some((opt) => opt.id === "draw-wall") &&
+                                                (isWallMode || wallDrawingMode)) ||
+                                            (tool.options.some((opt) => opt.id === "rectangular-select") &&
+                                                activeTool === "rectangular-select") ||
+                                            (tool.options.some((opt) => ["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(opt.id) &&
+                                                activeTool === opt.id))
+                                            ? "border-blue-500 text-blue-500"
+                                            : "border-[var(--accent)] text-[var(--accent)]"
+                                            }`}
+                                        aria-expanded={openIndex === index}
+                                        aria-haspopup="menu"
+                                    >
+                                        {tool.icon}
+                                    </motion.button>
+                                </div>
+
+                                {/* Dropdown Menu */}
+                                <AnimatePresence>
+                                    {openIndex === index && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                                            transition={{ duration: 0.15 }}
+                                            className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-white rounded-md shadow-lg border p-1.5 w-48 z-[10000]"
+                                            onMouseEnter={() => setOpenIndex(index)}
+                                            onMouseLeave={() => setOpenIndex(null)}
+                                        >
+                                            <div className="px-2 py-1.5 text-xs font-bold text-gray-900 border-b border-gray-100 mb-1">
+                                                {tool.label}
+                                            </div>
+                                            <ul className="space-y-0.5 text-xs text-gray-700">
+                                                {tool.options.map((option) => (
+                                                    <li
+                                                        key={option.id}
+                                                        className={`px-2 py-1.5 rounded hover:bg-gray-100 cursor-pointer flex items-center justify-between ${(option.id === "draw-line" && isPenMode) ||
+                                                            (option.id === "draw-wall" &&
+                                                                (isWallMode || wallDrawingMode)) ||
+                                                            (option.id === "rectangular-select" &&
+                                                                activeTool === "rectangular-select") ||
+                                                            (["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(option.id) &&
+                                                                activeTool === option.id)
+                                                            ? "bg-blue-100 text-blue-800"
+                                                            : ""
+                                                            }`}
+                                                        onClick={() => handleOptionClick(option)}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            {option.icon && (
+                                                                <span className="text-gray-600">
+                                                                    {option.icon}
+                                                                </span>
+                                                            )}
+                                                            <span>{option.label}</span>
+                                                            {option.id === "draw-wall" && (
+                                                                <svg
+                                                                    className="w-3 h-3 text-gray-400"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    viewBox="0 0 24 24"
+                                                                >
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={2}
+                                                                        d="M9 5l7 7-7 7"
+                                                                    />
+                                                                </svg>
+                                                            )}
+                                                        </div>
+                                                        {(option.id === "draw-line" && isPenMode) ||
+                                                            (option.id === "draw-wall" &&
+                                                                (isWallMode || wallDrawingMode)) ||
+                                                            (option.id === "rectangular-select" &&
+                                                                activeTool === "rectangular-select") ||
+                                                            (["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(option.id) &&
+                                                                activeTool === option.id) ? (
+                                                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                                        ) : null}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
+                                {/* Divider */}
+                                {index !== tools.length - 1 && (
+                                    <div className="w-px h-6 bg-gray-200 mx-2" />
+                                )}
+                            </div>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Wall Type Submenu */}
             <AnimatePresence>

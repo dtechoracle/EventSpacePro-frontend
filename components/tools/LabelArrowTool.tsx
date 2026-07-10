@@ -21,6 +21,16 @@ export default function LabelArrowTool({ isActive }: LabelArrowToolProps) {
     const [isEnteringLabel, setIsEnteringLabel] = useState(false);
     const activatedAtRef = useRef(0);
 
+    // Refs to always access latest values inside callbacks (avoids stale closures)
+    const labelRef = useRef(label);
+    labelRef.current = label;
+    const startPointRef = useRef(startPoint);
+    startPointRef.current = startPoint;
+    const endPointRef = useRef(endPoint);
+    endPointRef.current = endPoint;
+    const isEnteringLabelRef = useRef(isEnteringLabel);
+    isEnteringLabelRef.current = isEnteringLabel;
+
     const isWorkspaceClick = (target: EventTarget | null) => {
         return target instanceof Element && Boolean(target.closest('[data-workspace-root="true"]'));
     };
@@ -35,13 +45,13 @@ export default function LabelArrowTool({ isActive }: LabelArrowToolProps) {
         if (!isActive) return;
         if (Date.now() - activatedAtRef.current < 180) return;
         if (!isWorkspaceClick(e.target)) return;
-        if (isEnteringLabel) return;
+        if (isEnteringLabelRef.current) return;
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
 
-        if (!startPoint) {
+        if (!startPointRef.current) {
             setStartPoint(worldPos);
-        } else if (!endPoint) {
+        } else if (!endPointRef.current) {
             setEndPoint(worldPos);
             setIsEnteringLabel(true);
             // Focus on input
@@ -52,27 +62,29 @@ export default function LabelArrowTool({ isActive }: LabelArrowToolProps) {
                 }
             }, 100);
         }
-    }, [isActive, isEnteringLabel, screenToWorld, startPoint, endPoint]);
+    }, [isActive, screenToWorld]);
 
-    const handleKeyDown = useCallback((e: KeyboardEvent) => {
-        if (!isActive || !isEnteringLabel) return;
-        
-        if (e.key === 'Enter' && label.trim()) {
-            finishArrow();
-        } else if (e.key === 'Escape') {
-            cancelArrow();
-        }
-    }, [isActive, isEnteringLabel, label]);
+    const resetState = useCallback(() => {
+        setStartPoint(null);
+        setEndPoint(null);
+        setCurrentMousePos(null);
+        setLabel('');
+        setIsEnteringLabel(false);
+    }, []);
 
     const finishArrow = useCallback(() => {
-        if (!startPoint || !endPoint || !label.trim()) return;
+        const currentLabel = labelRef.current;
+        const currentStart = startPointRef.current;
+        const currentEnd = endPointRef.current;
+
+        if (!currentStart || !currentEnd || !currentLabel.trim()) return;
 
         const newArrow: LabelArrow = {
             id: `label-arrow-${Date.now()}`,
-            startPoint,
-            endPoint,
-            label: label.trim(),
-            fontSize: 16,
+            startPoint: currentStart,
+            endPoint: currentEnd,
+            label: currentLabel.trim(),
+            fontSize: 120,
             fontFamily: 'Inter, sans-serif',
             color: '#000000',
             strokeWidth: 3,
@@ -87,20 +99,23 @@ export default function LabelArrowTool({ isActive }: LabelArrowToolProps) {
         setActiveTool('select');
 
         // Reset
-        setStartPoint(null);
-        setEndPoint(null);
-        setCurrentMousePos(null);
-        setLabel('');
-        setIsEnteringLabel(false);
-    }, [startPoint, endPoint, label, addLabelArrow, getNextZIndex, setSelectedIds, setActiveTool]);
+        resetState();
+    }, [addLabelArrow, getNextZIndex, setSelectedIds, setActiveTool, resetState]);
 
     const cancelArrow = useCallback(() => {
-        setStartPoint(null);
-        setEndPoint(null);
-        setCurrentMousePos(null);
-        setLabel('');
-        setIsEnteringLabel(false);
-    }, []);
+        resetState();
+    }, [resetState]);
+
+    const handleKeyDown = useCallback((e: KeyboardEvent) => {
+        if (!isActive || !isEnteringLabelRef.current) return;
+        
+        if (e.key === 'Enter' && labelRef.current.trim()) {
+            e.preventDefault();
+            finishArrow();
+        } else if (e.key === 'Escape') {
+            cancelArrow();
+        }
+    }, [isActive, finishArrow, cancelArrow]);
 
     useEffect(() => {
         if (isActive) {
@@ -137,7 +152,7 @@ export default function LabelArrowTool({ isActive }: LabelArrowToolProps) {
         startPoint,
         endPoint: previewEnd,
         label: label || 'Label',
-        fontSize: 16,
+        fontSize: 120,
         fontFamily: 'Inter, sans-serif',
         color: '#3b82f6',
         strokeWidth: 3,
@@ -163,7 +178,14 @@ export default function LabelArrowTool({ isActive }: LabelArrowToolProps) {
                         type="text"
                         value={label}
                         onChange={(e) => setLabel(e.target.value)}
-                        onBlur={finishArrow}
+                        onBlur={() => {
+                            // Use a small timeout so clicking Enter doesn't race with blur
+                            setTimeout(() => {
+                                if (labelRef.current.trim()) {
+                                    finishArrow();
+                                }
+                            }, 150);
+                        }}
                         className="border border-blue-500 rounded bg-white shadow"
                         style={{
                             outline: 'none',
@@ -179,4 +201,3 @@ export default function LabelArrowTool({ isActive }: LabelArrowToolProps) {
         </g>
     );
 }
-

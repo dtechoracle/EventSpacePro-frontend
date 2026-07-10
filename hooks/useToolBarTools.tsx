@@ -120,7 +120,7 @@ export function useToolbarTools(): Tool[] {
       label: "File",
       options: [
         { id: "export-project", label: "Export Project", icon: <FaFileExport size={14} /> },
-        { id: "import-project", label: "Import Project", icon: <FaUpload size={14} /> },
+        { id: "import-project", label: "Import File", icon: <FaUpload size={14} /> },
       ],
     },
   ];

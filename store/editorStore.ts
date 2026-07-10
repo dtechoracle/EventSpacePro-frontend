@@ -127,6 +127,10 @@ export type EditorState = {
     } | null;
   };
   setPlacementMode: (mode: { active: boolean; data: any | null }) => void;
+
+  // Pending Import Shape (follows cursor until clicked to place)
+  pendingImportShape: any | null;
+  setPendingImportShape: (shape: any | null) => void;
 };
 
 export const useEditorStore = create<EditorState>()(
@@ -289,6 +293,10 @@ export const useEditorStore = create<EditorState>()(
       // Placement Mode
       placementMode: { active: false, data: null },
       setPlacementMode: (mode) => set({ placementMode: mode }),
+
+      // Pending Import Shape
+      pendingImportShape: null,
+      setPendingImportShape: (shape) => set({ pendingImportShape: shape }),
 
     }),
     {

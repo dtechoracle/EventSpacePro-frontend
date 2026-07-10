@@ -12,8 +12,28 @@ interface ShapeRendererProps {
 }
 
 const ShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHighlightOnly = false }: ShapeRendererProps) => {
-    // Use selector for zoom to prevent re-renders on other editor store changes
-    const zoom = useEditorStore(s => s.zoom);
+    const isSelectedOrHovered = isSelected || isHovered;
+    const hasDashes = shape.lineType === 'dashed' || shape.lineType === 'dotted';
+    
+    const zoom = useEditorStore(s => {
+        if (isSelectedOrHovered || hasDashes) {
+            return s.zoom;
+        }
+        return 1;
+    });
+
+    return (
+        <InnerShapeRenderer 
+            shape={shape} 
+            isSelected={isSelected} 
+            isHovered={isHovered} 
+            isHighlightOnly={isHighlightOnly} 
+            zoom={zoom} 
+        />
+    );
+};
+
+const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHighlightOnly = false, zoom }: ShapeRendererProps & { zoom: number }) => {
     const activeTool = useEditorStore(s => s.activeTool);
     const globalTableFontSize = useProjectStore(s => s.globalTableNumberingFontSize);
     const globalTableFontFamily = useProjectStore(s => s.globalTableNumberingFontFamily);
@@ -25,10 +45,10 @@ const ShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHighlig
     // Default pure black stroke so new shapes/lines pop clearly
     const strokeColor = shape.stroke || '#000000';
     const fillColor = shape.fill || 'transparent';
-    // Ensure strokeWidth is always a valid number, defaulting to 1 if undefined/null
+    // Ensure strokeWidth is always a valid number, defaulting to 1 (or 3 for arrows) if undefined/null
     const strokeWidth = (shape.strokeWidth !== undefined && shape.strokeWidth !== null)
         ? shape.strokeWidth
-        : 1;
+        : (shape.type === 'arrow' ? 3 : 1);
 
     const highlightColor = '#3b82f6';
     const showHighlight = isHovered || isSelected;
@@ -52,7 +72,8 @@ const ShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHighlig
             const scale = shape.fillTextureScale || 4;
             const thickness = shape.fillTextureThickness || 1;
             if (shape.fillTexture) {
-                return `url(#${shape.fillTexture}-scale-${scale}-thick-${thickness})`;
+                const rotation = shape.hatchRotation || 0;
+            return `url(#${shape.fillTexture}-scale-${scale}-thick-${thickness}-rot-${rotation})`;
             }
             if (fillType === 'hatch' || fillType === 'hash') {
                 return `url(#${hatchId})`;
@@ -87,6 +108,37 @@ const ShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHighlig
             'data-id': shape.id,
             ...overrideProps
         };
+
+        if ((shape.type as string) === 'image') {
+            return (
+                <g data-id={shape.id}>
+                    <image
+                        href={shape.fillImage}
+                        x={-shape.width / 2}
+                        y={-shape.height / 2}
+                        width={shape.width}
+                        height={shape.height}
+                        preserveAspectRatio="none"
+                        opacity={isHighlight ? 0.8 : ((shape as any).opacity !== undefined ? (shape as any).opacity : 1)}
+                        style={{ pointerEvents: 'auto' } as React.CSSProperties}
+                        data-id={shape.id}
+                    />
+                    {showHighlight && (
+                        <rect
+                            x={-shape.width / 2}
+                            y={-shape.height / 2}
+                            width={shape.width}
+                            height={shape.height}
+                            fill="none"
+                            stroke={isHighlight ? highlightColor : '#3b82f6'}
+                            strokeWidth={isHighlight ? 3 : 1.5}
+                            strokeDasharray={isHighlight ? undefined : '5,5'}
+                            data-id={shape.id}
+                        />
+                    )}
+                </g>
+            );
+        }
 
         if (shape.type === 'rectangle') {
             return (
@@ -579,7 +631,10 @@ const ShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHighlig
         return null;
     };
 
-    const transform = `translate(${shape.x}, ${shape.y}) rotate(${shape.rotation})`;
+    const scaleX = (shape as any).flipX ? -1 : 1;
+    const scaleY = (shape as any).flipY ? -1 : 1;
+    const transform = `translate(${shape.x}, ${shape.y}) rotate(${shape.rotation}) scale(${scaleX}, ${scaleY})`;
+
 
     // Render gradient definitions
     const renderGradientDef = () => {
@@ -622,7 +677,14 @@ const ShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHighlig
         const strokeWidth = shape.hatchThickness || 1;
 
         return (
-            <pattern id={hatchId} patternUnits="userSpaceOnUse" width={spacing * 2} height={spacing * 2} data-id={shape.id}>
+            <pattern 
+                id={hatchId} 
+                patternUnits="userSpaceOnUse" 
+                width={spacing * 2} 
+                height={spacing * 2} 
+                patternTransform={`rotate(${(shape as any).hatchRotation || 0})`}
+                data-id={shape.id}
+            >
                 <rect width={spacing * 2} height={spacing * 2} fill="transparent" data-id={shape.id} />
                 {pattern === 'horizontal' && (
                     <line x1="0" y1={spacing} x2={spacing * 2} y2={spacing} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
@@ -631,16 +693,10 @@ const ShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHighlig
                     <line x1={spacing} y1="0" x2={spacing} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
                 )}
                 {pattern === 'diagonal-right' && (
-                    <>
-                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
-                        <line x1="0" y1={spacing * 2} x2={spacing * 2} y2="0" stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
-                    </>
+                    <line x1="0" y1={spacing * 2} x2={spacing * 2} y2="0" stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
                 )}
                 {pattern === 'diagonal-left' && (
-                    <>
-                        <line x1="0" y1={spacing * 2} x2={spacing * 2} y2="0" stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
-                        <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
-                    </>
+                    <line x1="0" y1="0" x2={spacing * 2} y2={spacing * 2} stroke={color} strokeWidth={strokeWidth} data-id={shape.id} />
                 )}
                 {pattern === 'cross' && (
                     <>

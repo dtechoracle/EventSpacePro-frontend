@@ -293,7 +293,8 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 fill: 'transparent',
                 // Black default stroke for single lines/arrows
                 stroke: '#000000',
-                strokeWidth: 1,
+                strokeWidth: shapeType === 'arrow' ? 3 : 1,
+                ...(shapeType === 'arrow' ? { arrowHeadType: 'filled-triangle' as any, arrowTailType: 'none' as any } : {}),
                 zIndex: getNextZIndex(),
             };
 
@@ -344,7 +345,8 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 fillType: 'solid',
                 // Black default stroke for multi‑segment lines/arrows
                 stroke: '#000000',
-                strokeWidth: 1,
+                strokeWidth: shapeType === 'arrow' ? 3 : 1,
+                ...(shapeType === 'arrow' ? { arrowHeadType: 'filled-triangle' as any, arrowTailType: 'none' as any } : {}),
                 points: relativePoints,
                 zIndex: getNextZIndex(),
             };

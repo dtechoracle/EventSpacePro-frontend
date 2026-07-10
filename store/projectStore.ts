@@ -48,6 +48,8 @@ export type Shape = {
     y: number;
     width: number;
     height: number;
+    flipX?: boolean;
+    flipY?: boolean;
     rotation: number;
     fill?: string;
     stroke?: string;
@@ -67,6 +69,7 @@ export type Shape = {
     hatchSpacing?: number; // Spacing between hatch lines in pixels
     hatchColor?: string; // Color of hatch pattern
     hatchThickness?: number; // Thickness of hatch lines (default 1)
+    hatchRotation?: number; // Rotation of hatch pattern in degrees
     fillImage?: string; // Base64 or URL for image fill
     fillImageScale?: number; // Scale factor for image fill
     fillTexture?: string; // ID of the texture pattern
@@ -128,6 +131,8 @@ export type Asset = {
     metadata?: Record<string, any>;
     isExploded?: boolean;
     childShapeIds?: string[];
+    flipX?: boolean;
+    flipY?: boolean;
 
     // Visual properties
     fillColor?: string;
@@ -136,6 +141,8 @@ export type Asset = {
     opacity?: number;
     fillType?: 'solid' | 'color' | 'gradient' | 'hatch' | 'image' | 'texture' | 'none' | 'hash';
     fillTexture?: string;
+    hatchPattern?: 'horizontal' | 'vertical' | 'diagonal-right' | 'diagonal-left' | 'cross' | 'diagonal-cross' | 'dots' | 'brick';
+    hatchRotation?: number;
 
     // Text properties
     text?: string;
@@ -193,6 +200,8 @@ export type Wall = {
     strokeWidth?: number; // New: Width for wall stroke
     fillType?: 'solid' | 'color' | 'texture' | 'hash' | 'hatch';
     fillTexture?: string;
+    hatchPattern?: 'horizontal' | 'vertical' | 'diagonal-right' | 'diagonal-left' | 'cross' | 'diagonal-cross' | 'dots' | 'brick';
+    hatchRotation?: number;
     fillTextureScale?: number;
     fillTextureThickness?: number;
     isClosed?: boolean; // For closed loops
@@ -473,7 +482,7 @@ export type ProjectState = {
     snapToAnchor: (selectedId: string, anchorType: string, targetObjectId?: string) => void;
 
     // Methods - Clipboard
-    clipboard: Array<{ type: 'shape' | 'wall' | 'asset'; data: any }>;
+    clipboard: Array<{ type: 'shape' | 'wall' | 'asset' | 'textAnnotation' | 'labelArrow' | 'dimension'; data: any }>;
     copySelection: (selectedIds: string[]) => void;
     cutSelection: (selectedIds: string[]) => void;
     pasteSelection: (cursorPos?: { x: number; y: number }) => string[]; // Returns new IDs for selection
@@ -1557,6 +1566,17 @@ export const useProjectStore = create<ProjectState>()(
                         });
                     });
 
+                    textAnnotations.forEach(annotation => {
+                        canvasAssets.push({
+                            ...annotation,
+                            type: 'text-annotation',
+                            itemType: 'text-annotation',
+                            x: annotation.x,
+                            y: annotation.y,
+                            zIndex: annotation.zIndex || 0,
+                        });
+                    });
+
                     // PUT /projects/{slug}/events/{eventId}
                     // Include all required fields: name, type, canvases, canvasData, canvasAssets
                     const payload = {
@@ -2217,8 +2237,8 @@ export const useProjectStore = create<ProjectState>()(
 
             // Clipboard methods
             copySelection: (selectedIds: string[]) => {
-                const { shapes, walls, assets } = get();
-                const clipboardData: Array<{ type: 'shape' | 'wall' | 'asset'; data: any }> = [];
+                const { shapes, walls, assets, textAnnotations, labelArrows, dimensions } = get();
+                const clipboardData: Array<{ type: 'shape' | 'wall' | 'asset' | 'textAnnotation' | 'labelArrow' | 'dimension'; data: any }> = [];
 
                 selectedIds.forEach(id => {
                     const shape = shapes.find(s => s.id === id);
@@ -2238,6 +2258,24 @@ export const useProjectStore = create<ProjectState>()(
                         clipboardData.push({ type: 'asset', data: { ...asset } });
                         return;
                     }
+
+                    const textAnn = textAnnotations.find(t => t.id === id);
+                    if (textAnn) {
+                        clipboardData.push({ type: 'textAnnotation', data: { ...textAnn } });
+                        return;
+                    }
+
+                    const labelArr = labelArrows.find(l => l.id === id);
+                    if (labelArr) {
+                        clipboardData.push({ type: 'labelArrow', data: JSON.parse(JSON.stringify(labelArr)) });
+                        return;
+                    }
+
+                    const dim = dimensions.find(d => d.id === id);
+                    if (dim) {
+                        clipboardData.push({ type: 'dimension', data: JSON.parse(JSON.stringify(dim)) });
+                        return;
+                    }
                 });
 
                 set({ clipboard: clipboardData });
@@ -2247,16 +2285,19 @@ export const useProjectStore = create<ProjectState>()(
                 get().copySelection(selectedIds);
                 get().saveToHistory();
 
-                const { shapes, walls, assets } = get();
+                const { shapes, walls, assets, textAnnotations, labelArrows, dimensions } = get();
                 const newShapes = shapes.filter(s => !selectedIds.includes(s.id));
                 const newWalls = walls.filter(w => !selectedIds.includes(w.id));
                 const newAssets = assets.filter(a => !selectedIds.includes(a.id));
+                const newTextAnnotations = textAnnotations.filter(t => !selectedIds.includes(t.id));
+                const newLabelArrows = labelArrows.filter(l => !selectedIds.includes(l.id));
+                const newDimensions = dimensions.filter(d => !selectedIds.includes(d.id));
 
-                set({ shapes: newShapes, walls: newWalls, assets: newAssets });
+                set({ shapes: newShapes, walls: newWalls, assets: newAssets, textAnnotations: newTextAnnotations, labelArrows: newLabelArrows, dimensions: newDimensions });
             },
 
             pasteSelection: (cursorPos?: { x: number; y: number }) => {
-                const { clipboard, shapes, walls, assets } = get();
+                const { clipboard, shapes, walls, assets, textAnnotations, labelArrows, dimensions } = get();
                 if (clipboard.length === 0) return [];
 
                 get().saveToHistory();
@@ -2265,19 +2306,36 @@ export const useProjectStore = create<ProjectState>()(
                 // Calculate center of clipboard items
                 let centerX = 0;
                 let centerY = 0;
+                let count = 0;
                 clipboard.forEach(item => {
                     if (item.type === 'shape' || item.type === 'asset') {
                         centerX += item.data.x;
                         centerY += item.data.y;
+                        count++;
                     } else if (item.type === 'wall' && item.data.nodes.length > 0) {
                         const avgX = item.data.nodes.reduce((sum: number, n: any) => sum + n.x, 0) / item.data.nodes.length;
                         const avgY = item.data.nodes.reduce((sum: number, n: any) => sum + n.y, 0) / item.data.nodes.length;
                         centerX += avgX;
                         centerY += avgY;
+                        count++;
+                    } else if (item.type === 'textAnnotation') {
+                        centerX += item.data.x;
+                        centerY += item.data.y;
+                        count++;
+                    } else if (item.type === 'labelArrow') {
+                        centerX += item.data.startPoint.x;
+                        centerY += item.data.startPoint.y;
+                        count++;
+                    } else if (item.type === 'dimension' && item.data.startPoint && item.data.endPoint) {
+                        centerX += (item.data.startPoint.x + item.data.endPoint.x) / 2;
+                        centerY += (item.data.startPoint.y + item.data.endPoint.y) / 2;
+                        count++;
                     }
                 });
-                centerX /= clipboard.length;
-                centerY /= clipboard.length;
+                if (count > 0) {
+                    centerX /= count;
+                    centerY /= count;
+                }
 
                 // If cursor position provided, paste at cursor; otherwise use zero offset (paste-in-place)
                 const offsetX = cursorPos ? cursorPos.x - centerX : 0;
@@ -2286,6 +2344,9 @@ export const useProjectStore = create<ProjectState>()(
                 const newShapes = [...shapes];
                 const newWalls = [...walls];
                 const newAssets = [...assets];
+                const newTextAnnotations = [...textAnnotations];
+                const newLabelArrows = [...labelArrows];
+                const newDimensions = [...dimensions];
 
                 const generateId = (): string => {
                     try {
@@ -2309,10 +2370,35 @@ export const useProjectStore = create<ProjectState>()(
                     } else if (item.type === 'asset') {
                         const newAsset = { ...item.data, id: newId, x: item.data.x + offsetX, y: item.data.y + offsetY };
                         newAssets.push(newAsset);
+                    } else if (item.type === 'textAnnotation') {
+                        const newText = { ...item.data, id: newId, x: item.data.x + offsetX, y: item.data.y + offsetY };
+                        newTextAnnotations.push(newText);
+                    } else if (item.type === 'labelArrow') {
+                        const newLabel = {
+                            ...item.data,
+                            id: newId,
+                            startPoint: { x: item.data.startPoint.x + offsetX, y: item.data.startPoint.y + offsetY },
+                            endPoint: { x: item.data.endPoint.x + offsetX, y: item.data.endPoint.y + offsetY },
+                        };
+                        newLabelArrows.push(newLabel);
+                    } else if (item.type === 'dimension') {
+                        const newDim = {
+                            ...item.data,
+                            id: newId,
+                            startPoint: {
+                                x: item.data.startPoint.x + offsetX,
+                                y: item.data.startPoint.y + offsetY
+                            },
+                            endPoint: {
+                                x: item.data.endPoint.x + offsetX,
+                                y: item.data.endPoint.y + offsetY
+                            }
+                        };
+                        newDimensions.push(newDim);
                     }
                 });
 
-                set({ shapes: newShapes, walls: newWalls, assets: newAssets });
+                set({ shapes: newShapes, walls: newWalls, assets: newAssets, textAnnotations: newTextAnnotations, labelArrows: newLabelArrows, dimensions: newDimensions });
                 return newIds;
             },
 
@@ -2459,6 +2545,22 @@ export const useProjectStore = create<ProjectState>()(
                         ? { ...wall, nodes, edges }
                         : wall;
                 };
+
+                // If a preloaded venue is explicitly deleted, register its deleted state in localStorage so refreshes don't restore it
+                if (typeof window !== 'undefined' && deletedAssets.length > 0) {
+                    // Try to resolve the current event ID from query parameters or window path URL
+                    const pathParts = window.location.pathname.split('/');
+                    const currentEventId = pathParts[pathParts.length - 1];
+                    if (currentEventId) {
+                        deletedAssets.forEach(asset => {
+                            const storageKey = `preloaded-venue-loaded-${currentEventId}-${asset.type}`;
+                            if (window.localStorage.getItem(storageKey) === 'loaded') {
+                                window.localStorage.setItem(storageKey, 'deleted');
+                                console.log(`[projectStore] Venue ${asset.type} marked as deleted in localStorage.`);
+                            }
+                        });
+                    }
+                }
 
                 set((state) => ({
                     walls: state.walls.filter((w) => !idsToDelete.has(w.id)).map(cleanupCollinearSplitNodes),

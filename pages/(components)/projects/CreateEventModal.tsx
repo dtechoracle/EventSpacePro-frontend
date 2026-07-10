@@ -12,7 +12,7 @@ import toast from "react-hot-toast";
 import { MARQUEES } from "@/lib/marquees";
 import { PRELOADED_VENUES, PreloadedVenueDef } from "@/lib/preloadedVenues";
 import InlineSvg from "@/components/tools/InlineSvg";
-import { FaUserPlus, FaChevronDown, FaPlus } from "react-icons/fa";
+import { FaUserPlus, FaChevronDown, FaPlus, FaMapMarkerAlt } from "react-icons/fa";
 
 interface ApiError {
   message: string;
@@ -44,6 +44,7 @@ export default function CreateEventModal({
   const [eventName, setEventName] = useState("");
   const [selectedMarquee, setSelectedMarquee] = useState<any>(null);
   const [selectedPreloadedVenue, setSelectedPreloadedVenue] = useState<PreloadedVenueDef | null>(null);
+  const [mapModalVenue, setMapModalVenue] = useState<PreloadedVenueDef | null>(null);
   const [venueImage, setVenueImage] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [collabEmail, setCollabEmail] = useState("");
@@ -371,8 +372,9 @@ export default function CreateEventModal({
   };
 
   return (
-    <AnimatePresence>
-      <motion.div
+    <>
+      <AnimatePresence>
+        <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -784,6 +786,17 @@ export default function CreateEventModal({
                           className="w-full h-full object-contain pointer-events-none"
                           loading="lazy"
                         />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMapModalVenue(venue);
+                          }}
+                          className="absolute bottom-2 right-2 z-10 w-8 h-8 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center shadow-md transition-all hover:scale-110 active:scale-95"
+                          title="View map and venue details"
+                        >
+                          <FaMapMarkerAlt size={14} />
+                        </button>
                       </div>
                       <div className="text-center">
                         <h3 className="font-semibold text-sm truncate w-full">{venue.name}</h3>
@@ -985,5 +998,128 @@ export default function CreateEventModal({
         </motion.div>
       </motion.div>
     </AnimatePresence>
+
+      {/* Preloaded Venue Details & Map Modal */}
+      <AnimatePresence>
+        {mapModalVenue && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-[10000]"
+            onClick={() => setMapModalVenue(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", stiffness: 220, damping: 22 }}
+              className="bg-white rounded-[2.25rem] shadow-2xl w-[52rem] max-h-[85vh] overflow-hidden flex flex-col md:flex-row relative text-gray-800"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setMapModalVenue(null)}
+                className="absolute top-4 right-4 z-20 w-8 h-8 bg-black/5 hover:bg-black/10 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-800 transition-colors outline-none font-bold"
+              >
+                ✕
+              </button>
+
+              {/* Left Side: Map Iframe (Google Maps Embed) */}
+              <div className="w-full md:w-[28rem] h-[20rem] md:h-auto min-h-[25rem] bg-gray-100 relative">
+                <iframe
+                  width="100%"
+                  height="100%"
+                  style={{ border: 0 }}
+                  loading="lazy"
+                  allowFullScreen
+                  referrerPolicy="no-referrer-when-downgrade"
+                  src={`https://maps.google.com/maps?q=${mapModalVenue.latitude},${mapModalVenue.longitude}&z=15&t=m&output=embed`}
+                />
+              </div>
+
+              {/* Right Side: Venue Details */}
+              <div className="flex-1 p-8 overflow-y-auto flex flex-col gap-5 max-h-[85vh] md:max-h-[35rem] text-left">
+                <div>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">
+                    Venue Details
+                  </span>
+                  <h3 className="text-2xl font-bold text-gray-900 mt-2">
+                    {mapModalVenue.name}
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                    <FaMapMarkerAlt className="text-blue-500 flex-shrink-0" size={12} />
+                    <span>{mapModalVenue.address}</span>
+                  </p>
+                </div>
+
+                <div className="border-t border-gray-100 pt-4">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                    Description
+                  </h4>
+                  <p className="text-sm text-gray-600 leading-relaxed mt-1">
+                    {mapModalVenue.description}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-4">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                      Capacity
+                    </h4>
+                    <p className="text-sm font-semibold text-gray-700 mt-1">
+                      {mapModalVenue.capacity}
+                    </p>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                      Dimensions
+                    </h4>
+                    <p className="text-sm font-semibold text-gray-700 mt-1">
+                      {Math.round(mapModalVenue.width / 1000)}m x {Math.round(mapModalVenue.height / 1000)}m
+                    </p>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-100 pt-4 pb-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
+                    Key Features
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {mapModalVenue.features.map((feature, idx) => (
+                      <span
+                        key={idx}
+                        className="text-xs bg-slate-50 border border-slate-100 text-slate-600 px-3 py-1 rounded-lg"
+                      >
+                        ✓ {feature}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-auto pt-4 flex gap-3">
+                  <button
+                    onClick={() => {
+                      setSelectedPreloadedVenue(mapModalVenue);
+                      setStep('event-details');
+                      setMapModalVenue(null);
+                    }}
+                    className="flex-1 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-md transition-colors"
+                  >
+                    Select Venue & Continue
+                  </button>
+                  <button
+                    onClick={() => setMapModalVenue(null)}
+                    className="px-5 h-12 border border-gray-200 hover:bg-gray-50 text-gray-600 rounded-xl text-sm font-semibold transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
