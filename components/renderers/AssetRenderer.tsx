@@ -537,7 +537,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 }
             });
 
-            const hasExplicitAutoFill = !!doc.querySelector('[id="auto-fill"], .auto-fill, [data-auto-fill="true"]');
+            let hasExplicitAutoFill = !!doc.querySelector('[id="auto-fill"], .auto-fill, [data-auto-fill="true"]');
 
             const styleId = "dynamic-asset-style";
             if (!doc.getElementById(styleId)) {
@@ -545,12 +545,41 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 styleEl.setAttribute("id", styleId);
                 const isLayoutAsset = definition?.category === "Layout";
                 const vectorEffectRule = isLayoutAsset ? "" : "svg path, svg circle, svg rect, svg line, svg polyline, svg ellipse { vector-effect: non-scaling-stroke !important; }";
-                styleEl.textContent = `${vectorEffectRule} svg .fill-none-el { fill: none !important; } svg .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } svg .auto-fill-el { fill: inherit !important; stroke: none !important; } svg .stroke-top-layer { pointer-events: none; } svg .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } svg .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } svg .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } svg .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
+                styleEl.textContent = `${vectorEffectRule} svg .fill-none-el { fill: none !important; stroke: inherit !important; stroke-width: inherit !important; } svg .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } svg .auto-fill-el { fill: inherit !important; stroke: none !important; } svg .stroke-top-layer { pointer-events: none; } svg .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } svg .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } svg .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } svg .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
                 svg.prepend(styleEl);
             }
 
-
-
+            // Auto-generate auto-fill rect for SVGs that have no fillable elements
+            // (e.g. QCAD wireframe exports with only open paths). Adds a fillable
+            // background rect so fill/stroke controls work without editing the SVG.
+            if (!hasExplicitAutoFill && definition?.path && (
+                definition.path.toLowerCase().includes('seater') ||
+                definition.path.toLowerCase().includes('sofa') ||
+                definition.path.toLowerCase().includes('doughtnut') ||
+                definition.path.toLowerCase().includes('chair') ||
+                definition.path.toLowerCase().includes('curve')
+            )) {
+                const vb = svg.getAttribute('viewBox');
+                if (vb) {
+                    const parts = vb.trim().split(/\s+/).map(parseFloat);
+                    if (parts.length === 4) {
+                        const [vbX, vbY, vbW, vbH] = parts;
+                        const autoFillRect = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
+                        autoFillRect.setAttribute("id", "auto-fill");
+                        autoFillRect.setAttribute("class", "auto-fill");
+                        autoFillRect.setAttribute("data-auto-fill", "true");
+                        autoFillRect.setAttribute("x", String(vbX));
+                        autoFillRect.setAttribute("y", String(vbY));
+                        autoFillRect.setAttribute("width", String(vbW));
+                        autoFillRect.setAttribute("height", String(vbH));
+                        const cornerR = Math.min(vbW, vbH) * 0.08;
+                        autoFillRect.setAttribute("rx", String(cornerR));
+                        autoFillRect.setAttribute("ry", String(cornerR));
+                        svg.insertBefore(autoFillRect, svg.firstChild);
+                        hasExplicitAutoFill = true;
+                    }
+                }
+            }
 
 
             const children = Array.from(doc.querySelectorAll('path, circle, rect, line, polyline, ellipse'));

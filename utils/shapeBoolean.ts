@@ -82,11 +82,10 @@ const shapeToPaperPath = (shape: Shape): paper.Path | paper.CompoundPath | null 
     return path;
 };
 
-export const trimToBlendShapes = (shapes: Shape[], clickPoint?: { x: number; y: number }): Shape | null => {
+export const blendShapes = (shapes: Shape[], mode: 'intersect' | 'subtract'): Shape | null => {
     if (shapes.length < 2) return null;
     initPaper();
 
-    // Create a temporary project for the slicing operation
     const project = new paper.Project(new paper.Size(10000, 10000));
     project.activate();
 
@@ -94,10 +93,8 @@ export const trimToBlendShapes = (shapes: Shape[], clickPoint?: { x: number; y: 
         const paths = shapes.map(s => {
             const p = shapeToPaperPath(s);
             if (p) {
-                // Ensure all transforms are applied directly to the geometry
                 p.applyMatrix = true;
                 p.closed = true;
-                // Standardize orientation for boolean consistency
                 if (p instanceof paper.Path) p.reorient(true, true);
             }
             return p;
@@ -108,28 +105,19 @@ export const trimToBlendShapes = (shapes: Shape[], clickPoint?: { x: number; y: 
         const cutterPath = paths[0];
         const targetPath = paths[1];
 
-        let isInsideCutter = false;
-        if (clickPoint) {
-            const paperPoint = new paper.Point(clickPoint.x, clickPoint.y);
-            isInsideCutter = cutterPath.contains(paperPoint);
-        }
-
-        // If user clicked inside cutter, subtract the cutter from target (removes overlap).
-        // If outside, intersect (removes non-overlap).
         let resultPath: paper.PathItem;
-        if (isInsideCutter) {
-            resultPath = targetPath.subtract(cutterPath);
-        } else {
+        if (mode === 'intersect') {
             resultPath = targetPath.intersect(cutterPath);
+        } else {
+            resultPath = targetPath.subtract(cutterPath);
         }
 
         const bounds = resultPath.bounds;
-        if (bounds.width < 0.1 || bounds.height < 0.1) return null; // No intersection
+        if (bounds.width < 0.1 || bounds.height < 0.1) return null;
 
         const centerX = bounds.center.x;
         const centerY = bounds.center.y;
 
-        // Re-center the geometry for relative path storage in our Shape state
         resultPath.position = new paper.Point(0, 0);
 
         const svgD = resultPath.pathData;
@@ -154,7 +142,26 @@ export const trimToBlendShapes = (shapes: Shape[], clickPoint?: { x: number; y: 
         console.error("[shapeBoolean] Blending error:", error);
         return null;
     } finally {
-        // Always destroy the temporary project
+        project.remove();
+    }
+};
+
+// Legacy wrapper — uses clickPoint to infer mode (kept for compat)
+export const trimToBlendShapes = (shapes: Shape[], clickPoint?: { x: number; y: number }): Shape | null => {
+    initPaper();
+    const project = new paper.Project(new paper.Size(10000, 10000));
+    project.activate();
+    try {
+        const paths = shapes.map(s => {
+            const p = shapeToPaperPath(s);
+            if (p) { p.applyMatrix = true; p.closed = true; if (p instanceof paper.Path) p.reorient(true, true); }
+            return p;
+        }).filter(p => p !== null) as paper.PathItem[];
+        if (paths.length < 2) return null;
+        let inside = false;
+        if (clickPoint) inside = paths[0].contains(new paper.Point(clickPoint.x, clickPoint.y));
+        return blendShapes(shapes, inside ? 'subtract' : 'intersect');
+    } finally {
         project.remove();
     }
 };

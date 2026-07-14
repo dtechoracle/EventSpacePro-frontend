@@ -210,7 +210,9 @@ export default function WorkspacePreview({
 
                         {/* Render shapes - match ShapeRenderer exactly */}
                         {shapes.map((shape) => {
-                            const transform = `translate(${shape.x}, ${shape.y}) rotate(${shape.rotation || 0})`;
+                            const scaleX = (shape as any).flipX ? -1 : 1;
+                            const scaleY = (shape as any).flipY ? -1 : 1;
+                            const transform = `translate(${shape.x}, ${shape.y}) rotate(${shape.rotation || 0}) scale(${scaleX}, ${scaleY})`;
                             const stroke = shape.stroke || (shape as any).strokeColor || '#1f2937';
                             const strokeWidth = shape.strokeWidth || 1;
 

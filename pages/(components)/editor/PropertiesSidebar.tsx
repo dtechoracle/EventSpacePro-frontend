@@ -215,15 +215,18 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
   // Multi-selection logic
   const isMultiSelection = selectedIds.length > 1;
-  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  // Resolve group ids to all child element ids so that properties/flip actions apply to grouped elements
+  const resolveIdsWithGroups = useProjectStore(s => s.resolveIdsWithGroups);
+  const resolvedSelectedIds = useMemo(() => resolveIdsWithGroups(selectedIds), [selectedIds, resolveIdsWithGroups]);
+  const selectedIdSet = useMemo(() => new Set(resolvedSelectedIds), [resolvedSelectedIds]);
 
   // Calculate collective bounding box for multi-selection or single item
   const getCollectiveBounds = () => {
-    if (selectedIds.length === 0) return null;
+    if (resolvedSelectedIds.length === 0) return null;
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
-    selectedIds.forEach(id => {
+    resolvedSelectedIds.forEach(id => {
       const shape = shapes.find(s => s.id === id);
       if (shape) {
         const halfW = shape.width / 2;
@@ -313,7 +316,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
     () => assets.filter(a => selectedIdSet.has(a.id)),
     [assets, selectedIdSet]
   );
-  const allSelectedAreShapes = isMultiSelection && selectedShapes.length === selectedIds.length;
+  const allSelectedAreShapes = isMultiSelection && selectedShapes.length === resolvedSelectedIds.length;
 
   const showGrid = useSceneStore((s) => s.showGrid);
   const toggleGrid = useSceneStore((s) => s.toggleGrid);
@@ -814,10 +817,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
           className="flex w-full items-center justify-between px-0 py-3 text-left"
           onClick={() => setShowModel((s) => !s)}
         >
-          <div className="text-sm font-bold text-blue-600">
+          <div className="text-sm font-bold text-[#0056A9]">
             Workspace
           </div>
-          {showModel ? <FaChevronDown size={12} className="text-blue-600" /> : <FaChevronRight size={12} className="text-blue-600" />}
+          {showModel ? <FaChevronDown size={12} className="text-[#0056A9]" /> : <FaChevronRight size={12} className="text-[#0056A9]" />}
         </button>
         {showModel && (
           <div className="space-y-3 border-t border-slate-100 px-0 pb-4 pt-3 text-xs">
@@ -901,10 +904,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
           className="flex w-full items-center justify-between px-0 py-3 text-left"
           onClick={() => setShowCanvas((s) => !s)}
         >
-          <div className="text-sm font-bold text-blue-600">
+          <div className="text-sm font-bold text-[#0056A9]">
             Pages and Canvas
           </div>
-          {showCanvas ? <FaChevronDown size={12} className="text-blue-600" /> : <FaChevronRight size={12} className="text-blue-600" />}
+          {showCanvas ? <FaChevronDown size={12} className="text-[#0056A9]" /> : <FaChevronRight size={12} className="text-[#0056A9]" />}
         </button>
         {showCanvas && (
           <div className="space-y-1 border-t border-slate-100 px-0 pb-4 pt-3 text-xs">
@@ -1001,9 +1004,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
 
             {/* MULTI SELECTION PROPERTIES */}
-            {isMultiSelection && (
+            {(isMultiSelection || (selectedIds.length === 1 && useProjectStore.getState().groups.some(g => g.id === selectedIds[0]))) && (
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="text-sm font-bold text-blue-600 mb-3">Properties</div>
+                <div className="text-sm font-bold text-[#0056A9] mb-3">Properties</div>
 
                 {/* Bounding Box Info */}
                 {collectiveBounds && (
@@ -1081,13 +1084,68 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     step={0.5}
                   />
                 </div>
+
+                {/* Flip Controls for Multi-Selection */}
+                <div className="flex justify-between items-center mb-2 mt-2 pt-2 border-t border-gray-100">
+                  <span className="text-xs text-gray-500">Flip</span>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      title="Vertical"
+                      onClick={() => {
+                        const sIds = selectedShapes.map(s => s.id);
+                        const aIds = selectedAssets.map(a => a.id);
+                        const allItems = [...selectedShapes, ...selectedAssets];
+                        if (allItems.length === 0) return;
+                        const cx = allItems.reduce((sum, item) => sum + item.x, 0) / allItems.length;
+                        const cy = allItems.reduce((sum, item) => sum + item.y, 0) / allItems.length;
+                        if (sIds.length > 0) sIds.forEach(id => {
+                          const s = useProjectStore.getState().shapes.find(sh => sh.id === id);
+                          if (s) updateShape(id, { flipY: !(s as any).flipY, y: cy - (s.y - cy) });
+                        });
+                        if (aIds.length > 0) aIds.forEach(id => {
+                          const a = useProjectStore.getState().assets.find(as => as.id === id);
+                          if (a) {
+                            updateAsset(id, { flipY: !(a as any).flipY, y: cy - (a.y - cy) });
+                            updateSceneAsset(id, { flipY: !(a as any).flipY, y: cy - (a.y - cy) });
+                          }
+                        });
+                      }}
+                      className={`px-3 py-1 text-xs border rounded transition-colors ${selectedShapes.some(s => (s as any).flipY) || selectedAssets.some(a => (a as any).flipY) ? 'bg-blue-100 border-blue-200 text-blue-600 font-medium' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                    >H</button>
+                    <button
+                      type="button"
+                      title="Horizontal"
+                      onClick={() => {
+                        const sIds = selectedShapes.map(s => s.id);
+                        const aIds = selectedAssets.map(a => a.id);
+                        const allItems = [...selectedShapes, ...selectedAssets];
+                        if (allItems.length === 0) return;
+                        const cx = allItems.reduce((sum, item) => sum + item.x, 0) / allItems.length;
+                        const cy = allItems.reduce((sum, item) => sum + item.y, 0) / allItems.length;
+                        if (sIds.length > 0) sIds.forEach(id => {
+                          const s = useProjectStore.getState().shapes.find(sh => sh.id === id);
+                          if (s) updateShape(id, { flipX: !(s as any).flipX, x: cx - (s.x - cx) });
+                        });
+                        if (aIds.length > 0) aIds.forEach(id => {
+                          const a = useProjectStore.getState().assets.find(as => as.id === id);
+                          if (a) {
+                            updateAsset(id, { flipX: !(a as any).flipX, x: cx - (a.x - cx) });
+                            updateSceneAsset(id, { flipX: !(a as any).flipX, x: cx - (a.x - cx) });
+                          }
+                        });
+                      }}
+                      className={`px-3 py-1 text-xs border rounded transition-colors ${selectedShapes.some(s => (s as any).flipX) || selectedAssets.some(a => (a as any).flipX) ? 'bg-blue-100 border-blue-200 text-blue-600 font-medium' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                    >V</button>
+                  </div>
+                </div>
               </div>
             )}
 
             {/* SELECTED ITEM PROPERTIES */}
-            {selectedItem && (
+            {selectedItem && !(selectedIds.length === 1 && useProjectStore.getState().groups.some(g => g.id === selectedIds[0])) && (
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="text-sm font-bold text-blue-600 mb-3">Properties</div>
+                <div className="text-sm font-bold text-[#0056A9] mb-3">Properties</div>
                 {/* Position */}
                 {(itemType === 'shape' || itemType === 'asset') && (
                   <div className="grid grid-cols-2 gap-2 mb-2">
@@ -1176,7 +1234,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <div className="flex items-center">
                         <input
                           type="number"
-                          value={roundForDisplay((selectedItem as any).rotation || 0)}
+                          value={Math.round(((selectedItem as any).rotation || 0) * 100) / 100}
                           onChange={(e) => {
                             const val = Number(e.target.value);
                             if (itemType === 'shape') updateShape(selectedItem.id, { rotation: val });
@@ -1197,7 +1255,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <div className="flex gap-1">
                         <button
                           type="button"
-                          title="Horizontal"
+                          title="Vertical"
                           onClick={() => {
                             const next = !(selectedItem as any).flipY;
                             if (itemType === 'shape') updateShape(selectedItem.id, { flipY: next });
@@ -1210,7 +1268,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         >H</button>
                         <button
                           type="button"
-                          title="Vertical"
+                          title="Horizontal"
                           onClick={() => {
                             const next = !(selectedItem as any).flipX;
                             if (itemType === 'shape') updateShape(selectedItem.id, { flipX: next });
@@ -3246,8 +3304,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
       {/* Workspace Numbering Section */}
       {tableNumberingItems.length > 0 && (
-        <div className="mx-4 mb-6">
-          <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-2">
+        <div className="mb-4 border-b border-slate-200 pb-2">
+          <div className="text-sm font-bold text-[#0056A9] mb-2">
             Table Numbering
           </div>
 
@@ -3319,12 +3377,12 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   <select
                     value={numberingDirection}
                     onChange={(e) => setNumberingDirection(e.target.value as any)}
-                    className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-48 focus:ring-1 focus:ring-blue-500 outline-none"
+                    className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-36 focus:ring-1 focus:ring-blue-500 outline-none"
                   >
-                    <option value="from-top-right-to-left">From Top (Right - Left)</option>
-                    <option value="from-bottom-right-to-left">From Bottom (Right - Left)</option>
-                    <option value="from-top-left-to-right">From Top (Left - Right)</option>
-                    <option value="from-bottom-left-to-right">From Bottom (Left - Right)</option>
+                    <option value="from-top-right-to-left">Top (R - L)</option>
+                    <option value="from-bottom-right-to-left">Bottom (R - L)</option>
+                    <option value="from-top-left-to-right">Top (L - R)</option>
+                    <option value="from-bottom-left-to-right">Bottom (L - R)</option>
                     <option value="radial">Radial</option>
                   </select>
                 </div>
@@ -3403,7 +3461,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
             </div>
 
             <div className="pt-3 mt-3 border-t border-slate-200/60 space-y-2">
-              <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+              <div className="text-sm font-bold text-[#0056A9]">
                 Table Numbering Text
               </div>
               <div className="flex items-center justify-between">

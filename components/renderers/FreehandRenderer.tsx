@@ -14,9 +14,11 @@ export default function FreehandRenderer({ shape, isSelected = false, isHovered 
     const pathData = `M ${shape.points[0].x} ${shape.points[0].y} ` +
         shape.points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ');
 
+    const scaleX = (shape as any).flipX ? -1 : 1;
+    const scaleY = (shape as any).flipY ? -1 : 1;
     return (
         <g
-            transform={`translate(${shape.x}, ${shape.y}) rotate(${shape.rotation})`}
+            transform={`translate(${shape.x}, ${shape.y}) rotate(${shape.rotation}) scale(${scaleX}, ${scaleY})`}
             style={{ pointerEvents: 'all' }}
             data-id={shape.id}
         >

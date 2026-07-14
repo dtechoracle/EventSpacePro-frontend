@@ -948,17 +948,11 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                                         }}
                                         whileTap={{ scale: 0.95 }}
                                         whileHover={{ scale: 1.03 }}
-                                        className={`w-8 h-8 border-2 flex items-center justify-center rounded-md focus:outline-none outline-none ${(tool.options.some((opt) => opt.id === "draw-line") &&
-                                            isPenMode) ||
-                                            (tool.options.some((opt) => opt.id === "draw-wall") &&
-                                                (isWallMode || wallDrawingMode)) ||
-                                            (tool.options.some((opt) => opt.id === "rectangular-select") &&
-                                                activeTool === "rectangular-select") ||
-                                            (tool.options.some((opt) => ["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(opt.id) &&
-                                                activeTool === opt.id))
-                                            ? "border-blue-500 text-blue-500"
-                                            : "border-[var(--accent)] text-[var(--accent)]"
-                                            }`}
+                                        className={`w-8 h-8 border-2 flex items-center justify-center rounded-md focus:outline-none outline-none ${tool.options.some(opt => {
+                                            if (opt.id === "draw-line") return isPenMode;
+                                            if (opt.id === "draw-wall") return isWallMode || wallDrawingMode;
+                                            return activeTool === opt.id;
+                                        }) ? "border-blue-500 text-blue-500" : "border-[var(--accent)] text-[var(--accent)]"}`}
                                         aria-expanded={openIndex === index}
                                         aria-haspopup="menu"
                                     >
@@ -986,12 +980,8 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                                                     <li
                                                         key={option.id}
                                                         className={`px-2 py-1.5 rounded hover:bg-gray-100 cursor-pointer flex items-center justify-between ${(option.id === "draw-line" && isPenMode) ||
-                                                            (option.id === "draw-wall" &&
-                                                                (isWallMode || wallDrawingMode)) ||
-                                                            (option.id === "rectangular-select" &&
-                                                                activeTool === "rectangular-select") ||
-                                                            (["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(option.id) &&
-                                                                activeTool === option.id)
+                                                            (option.id === "draw-wall" && (isWallMode || wallDrawingMode)) ||
+                                                            (!["draw-line", "draw-wall"].includes(option.id) && activeTool === option.id)
                                                             ? "bg-blue-100 text-blue-800"
                                                             : ""
                                                             }`}
@@ -1021,12 +1011,8 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                                                             )}
                                                         </div>
                                                         {(option.id === "draw-line" && isPenMode) ||
-                                                            (option.id === "draw-wall" &&
-                                                                (isWallMode || wallDrawingMode)) ||
-                                                            (option.id === "rectangular-select" &&
-                                                                activeTool === "rectangular-select") ||
-                                                            (["rectangle", "circle", "line", "arrow-shape", "freehand"].includes(option.id) &&
-                                                                activeTool === option.id) ? (
+                                                            (option.id === "draw-wall" && (isWallMode || wallDrawingMode)) ||
+                                                            (!["draw-line", "draw-wall"].includes(option.id) && activeTool === option.id) ? (
                                                             <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                                                         ) : null}
                                                     </li>

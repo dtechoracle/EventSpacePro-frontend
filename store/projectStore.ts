@@ -514,7 +514,7 @@ export type ProjectState = {
     // Methods - Groups
     addGroup: (group: Group, skipHistory?: boolean) => void;
     updateGroup: (id: string, updates: Partial<Group>) => void;
-    removeGroup: (id: string) => void;
+    removeGroup: (id: string, skipHistory?: boolean) => void;
 
     // Methods - Wall Junctions
     splitWallEdge: (wallId: string, edgeId: string, point: { x: number; y: number }, skipHistory?: boolean) => WallNode;

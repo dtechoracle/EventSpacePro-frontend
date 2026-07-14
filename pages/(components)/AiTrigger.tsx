@@ -251,12 +251,8 @@ export default function AiTrigger() {
     let idsFromContext: string[] | undefined;
     try {
       idsFromContext = (window as any).__ESP_AI_SELECTED_IDS__ as string[] | undefined;
-      // If no explicit AI context IDs, return empty (general mode)
-      if (!idsFromContext || idsFromContext.length === 0) {
-        return [];
-      }
     } catch {
-      return [];
+      idsFromContext = undefined;
     }
 
     // Priority: explicit AI context IDs -> editor selection (Workspace2D) -> scene selection
@@ -2445,9 +2441,31 @@ export default function AiTrigger() {
         resolved.forEach(({ asset, source }) => {
           console.log(`Applying action to ${source} asset:`, asset.id); // Debug log
           const applyToScene = () => {
-            // Use captured groupContext and prompt
             const ctx = capturedGroupContext;
             const userPrompt = capturedPrompt;
+
+            // Handle delete — remove the asset from scene
+            if (data.action.type === 'delete') {
+              const currentState = useSceneStore.getState();
+              const remaining = currentState.assets.filter((a: any) => a.id !== asset.id);
+              useSceneStore.setState({ assets: remaining, selectedAssetId: null, selectedAssetIds: [] });
+              setEditorSelectedIds([]);
+              return;
+            }
+
+            // Handle duplicate — clone the asset
+            if (data.action.type === 'duplicate') {
+              const count = data.action.count || 1;
+              for (let i = 0; i < count; i++) {
+                const clone = JSON.parse(JSON.stringify(asset));
+                clone.id = `clone-${Date.now()}-${Math.random().toString(36).substr(2,9)}`;
+                clone.x = (asset.x || 0) + (i + 1) * 100;
+                clone.y = (asset.y || 0) + (i + 1) * 100;
+                useSceneStore.getState().addAssetObject(clone);
+              }
+              return;
+            }
+
             if (data.action.type === 'resize') {
               const scaleFactor = data.action.scaleFactor ?? 1;
 
@@ -2505,7 +2523,6 @@ export default function AiTrigger() {
             } else if (data.action.type === 'update') {
               const rawUpdates = data.action.updates || {};
               const updates: any = { ...rawUpdates };
-              // Normalize color props
               if (rawUpdates.fillColor && !rawUpdates.fill) {
                 updates.fill = rawUpdates.fillColor;
               }
@@ -2515,6 +2532,9 @@ export default function AiTrigger() {
               if (rawUpdates.strokeColor && !rawUpdates.stroke) {
                 updates.stroke = rawUpdates.strokeColor;
               }
+              // Map flipX/flipY for scene assets (they use flipX/flipY directly)
+              if (rawUpdates.flipX !== undefined) updates.flipX = rawUpdates.flipX;
+              if (rawUpdates.flipY !== undefined) updates.flipY = rawUpdates.flipY;
               if (source === 'project-asset') {
                 updateWorkspaceAsset(asset.id, updates);
               } else if (source === 'project-shape') {
@@ -2758,6 +2778,85 @@ export default function AiTrigger() {
           };
 
           const applyToWorkspace = () => {
+            // Handle delete — remove from project store
+            if (data.action.type === 'delete') {
+              if (source === 'project-asset') {
+                deleteWorkspaceAsset(asset.id);
+              } else if (source === 'project-shape') {
+                const projectState = useProjectStore.getState();
+                projectState.removeShape(asset.id);
+              } else if (source === 'project-wall') {
+                deleteProjectWall(asset.id);
+              }
+              setEditorSelectedIds([]);
+              return;
+            }
+
+            // Handle duplicate — clone asset/shape
+            if (data.action.type === 'duplicate') {
+              const count = data.action.count || 1;
+              if (source === 'project-asset') {
+                const projectState = useProjectStore.getState();
+                for (let i = 0; i < count; i++) {
+                  const found = projectState.assets.find((a: any) => a.id === asset.id);
+                  if (!found) continue;
+                  const clone = { ...found };
+                  clone.id = `clone-${Date.now()}-${Math.random().toString(36).substr(2,9)}`;
+                  clone.x = (clone.x || 0) + (i + 1) * 100;
+                  clone.y = (clone.y || 0) + (i + 1) * 100;
+                  projectState.addAsset(clone, true);
+                }
+              } else if (source === 'project-shape') {
+                const projectState = useProjectStore.getState();
+                for (let i = 0; i < count; i++) {
+                  const found = projectState.shapes.find((s: any) => s.id === asset.id);
+                  if (!found) continue;
+                  const clone = { ...found };
+                  clone.id = `clone-${Date.now()}-${Math.random().toString(36).substr(2,9)}`;
+                  clone.x = (clone.x || 0) + (i + 1) * 100;
+                  clone.y = (clone.y || 0) + (i + 1) * 100;
+                  projectState.addShape(clone, true);
+                }
+              }
+              return;
+            }
+
+            // Handle group
+            if (data.action.type === 'group') {
+              const ids = resolved.map((r: any) => r.asset.id);
+              if (ids.length >= 2) {
+                const projectState = useProjectStore.getState();
+                const groupId = crypto.randomUUID();
+                projectState.addGroup({
+                  id: groupId,
+                  itemIds: ids,
+                  zIndex: Math.max(...ids.map((id: string) => {
+                    const s = projectState.shapes.find((sh: any) => sh.id === id);
+                    const a = projectState.assets.find((as: any) => as.id === id);
+                    return Math.max(s?.zIndex || 0, a?.zIndex || 0);
+                  })),
+                }, true);
+                ids.forEach((id: string) => {
+                  const s = projectState.shapes.find((sh: any) => sh.id === id);
+                  if (s) projectState.updateShape(id, { groupId } as any, true);
+                  const a = projectState.assets.find((as: any) => as.id === id);
+                  if (a) projectState.updateAsset(id, { groupId } as any, true);
+                });
+              }
+              return;
+            }
+
+            // Handle ungroup
+            if (data.action.type === 'ungroup') {
+              const projectState = useProjectStore.getState();
+              const resolvedGroups = projectState.resolveIdsWithGroups([asset.id]);
+              const group = projectState.groups.find((g: any) => g.id === asset.id);
+              if (group) {
+                projectState.removeGroup(group.id);
+              }
+              return;
+            }
+
             if (source === "project-asset") {
               if (data.action.type === 'resize') {
                 const scaleFactor = data.action.scaleFactor ?? 1;
@@ -2814,6 +2913,8 @@ export default function AiTrigger() {
                 if (rawUpdates.strokeColor && !rawUpdates.stroke) {
                   updates.stroke = rawUpdates.strokeColor;
                 }
+                if (rawUpdates.flipX !== undefined) updates.flipX = rawUpdates.flipX;
+                if (rawUpdates.flipY !== undefined) updates.flipY = rawUpdates.flipY;
                 updateWorkspaceAsset(asset.id, updates);
               }
             } else if (source === "project-shape") {
@@ -2866,6 +2967,8 @@ export default function AiTrigger() {
                 if (rawUpdates.strokeColor && !rawUpdates.stroke) {
                   updates.stroke = rawUpdates.strokeColor;
                 }
+                if (rawUpdates.flipX !== undefined) updates.flipX = rawUpdates.flipX;
+                if (rawUpdates.flipY !== undefined) updates.flipY = rawUpdates.flipY;
                 updateWorkspaceShape(asset.id, updates);
               }
             }

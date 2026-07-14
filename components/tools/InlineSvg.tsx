@@ -248,7 +248,37 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
                 }
             });
 
-            const hasExplicitAutoFill = !!doc.querySelector('[id="auto-fill"], .auto-fill, [data-auto-fill="true"]');
+            let hasExplicitAutoFill = !!doc.querySelector('[id="auto-fill"], .auto-fill, [data-auto-fill="true"]');
+
+            // Auto-generate auto-fill rect for wireframe SVGs without one
+            if (!hasExplicitAutoFill && src && (
+                src.toLowerCase().includes('seater') ||
+                src.toLowerCase().includes('sofa') ||
+                src.toLowerCase().includes('doughtnut') ||
+                src.toLowerCase().includes('chair') ||
+                src.toLowerCase().includes('curve')
+            )) {
+                const vb = svg.getAttribute('viewBox');
+                if (vb) {
+                    const parts = vb.trim().split(/\s+/).map(parseFloat);
+                    if (parts.length === 4) {
+                        const [vbX, vbY, vbW, vbH] = parts;
+                        const autoFillRect = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
+                        autoFillRect.setAttribute("id", "auto-fill");
+                        autoFillRect.setAttribute("class", "auto-fill");
+                        autoFillRect.setAttribute("data-auto-fill", "true");
+                        autoFillRect.setAttribute("x", String(vbX));
+                        autoFillRect.setAttribute("y", String(vbY));
+                        autoFillRect.setAttribute("width", String(vbW));
+                        autoFillRect.setAttribute("height", String(vbH));
+                        const cornerR = Math.min(vbW, vbH) * 0.08;
+                        autoFillRect.setAttribute("rx", String(cornerR));
+                        autoFillRect.setAttribute("ry", String(cornerR));
+                        svg.insertBefore(autoFillRect, svg.firstChild);
+                        hasExplicitAutoFill = true;
+                    }
+                }
+            }
 
             const styleId = "dynamic-inline-style";
             if (!doc.getElementById(styleId)) {

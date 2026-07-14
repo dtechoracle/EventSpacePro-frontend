@@ -430,10 +430,13 @@ export default function CanvasAssetLayer({
         }
 
         if (Math.max(assetWidth, assetHeight) < LOD_MIN_SCREEN_SIZE) {
-          ctx.save();
-          ctx.translate(screenX, screenY);
-          ctx.rotate(((asset.rotation || 0) * Math.PI) / 180);
-          ctx.globalAlpha = Math.max(0, Math.min(1, asset.opacity ?? 1));
+        ctx.save();
+        ctx.translate(screenX, screenY);
+        ctx.rotate(((asset.rotation || 0) * Math.PI) / 180);
+        const flipScaleX = (asset as any).flipX ? -1 : 1;
+        const flipScaleY = (asset as any).flipY ? -1 : 1;
+        ctx.scale(flipScaleX, flipScaleY);
+        ctx.globalAlpha = Math.max(0, Math.min(1, asset.opacity ?? 1));
           ctx.strokeStyle = '#111827';
           ctx.lineWidth = 1;
           ctx.strokeRect(-assetWidth / 2, -assetHeight / 2, assetWidth, assetHeight);
@@ -454,6 +457,9 @@ export default function CanvasAssetLayer({
         ctx.save();
         ctx.translate(screenX, screenY);
         ctx.rotate(((asset.rotation || 0) * Math.PI) / 180);
+        const flipScaleX = (asset as any).flipX ? -1 : 1;
+        const flipScaleY = (asset as any).flipY ? -1 : 1;
+        ctx.scale(flipScaleX, flipScaleY);
         ctx.globalAlpha = Math.max(0, Math.min(1, asset.opacity ?? 1));
         const rasterCanvas = shouldUseRasterCache
           ? getCachedRasterCanvas(path, image, assetWidth, assetHeight, dpr)

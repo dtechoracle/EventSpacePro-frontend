@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useEditorStore } from '@/store/editorStore';
 import { useProjectStore } from '@/store/projectStore';
@@ -53,7 +54,7 @@ import { findSnapPoint, findWallSnapPoint } from '@/utils/wallSnapping';
 import { convertAssetToShapes } from '@/utils/assetUtils';
 import { texturePatterns } from '@/utils/texturePatterns';
 import { calculateSmartSnap } from '@/utils/smartSnapping'; // Added import
-import { trimToBlendShapes } from '@/utils/shapeBoolean';
+import { blendShapes } from '@/utils/shapeBoolean';
 import { DEFAULT_ASSET_STROKE_WIDTH, canRenderAssetOnCanvas } from '@/utils/assetRenderMode';
 import { SpatialIndex, getRotatedItemBounds } from '@/utils/spatialIndex';
 import { TEXT_STYLE_FONTS, ensureGoogleFontsLoaded } from '@/utils/googleFonts';
@@ -501,6 +502,39 @@ export default function Workspace2D({
     isOpen: boolean;
     mode: 'duplicate' | 'distribute';
   }>({ isOpen: false, mode: 'duplicate' });
+  const [pendingBlend, setPendingBlend] = useState<{ shapes: Shape[]; clickPoint?: { x: number; y: number } } | null>(null);
+
+  const executeBlend = useCallback((mode: 'intersect' | 'subtract') => {
+    const blend = pendingBlend;
+    if (!blend || blend.shapes.length < 2) return;
+    setPendingBlend(null);
+    const projectStore = useProjectStore.getState();
+    const editorStore = useEditorStore.getState();
+    try {
+      const blendedShape = blendShapes(blend.shapes, mode);
+      if (blendedShape) {
+        projectStore.saveToHistory();
+        projectStore.removeShape(blend.shapes[1]!.id, true);
+        projectStore.addShape(blendedShape, true);
+        const groupId = crypto.randomUUID();
+        projectStore.addGroup({
+          id: groupId,
+          itemIds: [blend.shapes[0].id, blendedShape.id],
+          zIndex: Math.max(blend.shapes[0].zIndex || 0, blendedShape.zIndex || 0)
+        }, true);
+        editorStore.setSelectedIds([blendedShape.id]);
+        toast.success("Shape blended and grouped!", { icon: '✨' });
+      } else {
+        toast.error("Failed to blend shapes. Ensure they intersect cleanly.");
+        editorStore.setSelectedIds([]);
+      }
+    } catch (e) {
+      console.error("Blending error:", e);
+      toast.error("Failed to blend geometric shapes.");
+      editorStore.setSelectedIds([]);
+    }
+    editorStore.setActiveTool("select");
+  }, [pendingBlend]);
 
   useEffect(() => {
     ensureGoogleFontsLoaded(TEXT_STYLE_FONTS);
@@ -1889,6 +1923,7 @@ export default function Workspace2D({
             const expandedIds = resolveIdsWithGroups(ids);
 
             if ((activeTool as string) === 'trim-to-blend') {
+              setPendingBlend(null);
               const validShapeIds = expandedIds.filter(id => shapes.some(s => s.id === id));
               if (validShapeIds.length === 0) {
                 toast.error("Please select a valid shape.");
@@ -1926,43 +1961,7 @@ export default function Workspace2D({
                 ].filter(Boolean) as any[];
 
                 if (shapesToBlend.length === 2) {
-                  // Do not sort by zIndex; respect selection order for subtraction logic
-                  // Tool = shapesToBlend[0], Target = shapesToBlend[1]
-
-                  try {
-                    const projectStore = useProjectStore.getState();
-                    const blendedShape = trimToBlendShapes(shapesToBlend, clickPoint);
-                    if (blendedShape) {
-                      // Save history once for the entire atomic operation
-                      projectStore.saveToHistory();
-                      // Only remove the SECOND shape (the one being cut)
-                      // Keep the FIRST shape (the cutter/boundary)
-                      projectStore.removeShape(shapesToBlend[1]!.id, true);
-                      
-                      projectStore.addShape(blendedShape, true);
-                      
-                      // Group the cutter (shapesToBlend[0]) and the result (blendedShape)
-                      const groupId = crypto.randomUUID();
-                      projectStore.addGroup({
-                        id: groupId,
-                        itemIds: [shapesToBlend[0].id, blendedShape.id],
-                        zIndex: Math.max(shapesToBlend[0].zIndex || 0, blendedShape.zIndex || 0)
-                      }, true);
-
-                      setSelectedIds([blendedShape.id]);
-                      toast.success("Shape blended and grouped!", { icon: '✨' });
-                    } else {
-                      toast.error("Failed to blend shapes. Ensure they intersect cleanly.");
-                      setSelectedIds([]);
-                    }
-                  } catch (e) {
-                    console.error("Blending error:", e);
-                    toast.error("Failed to blend geometric shapes.");
-                    setSelectedIds([]);
-                  }
-
-                  // Revert to select tool
-                  setActiveTool("select");
+                  setPendingBlend({ shapes: shapesToBlend, clickPoint });
                 }
               }
               return;
@@ -2188,6 +2187,7 @@ export default function Workspace2D({
           if (!itemSelected) {
             // Clear selection and any auto-generated wall dimensions when clicking empty space
             clearSelection();
+            setPendingBlend(null);
             setSelectedEdgeId(null);
 
             // If we are in wall mode but clicked empty space (and not drawing), we might want to ensure we are not stuck
@@ -2775,6 +2775,10 @@ export default function Workspace2D({
         
         if (isDrawingTool) {
           // Let the specific tool handle it. If it wants to exit, it will call setActiveTool('select') itself.
+          if (active === 'trim-to-blend') {
+            setPendingBlend(null);
+            clearSelection();
+          }
           return;
         }
 
@@ -4204,6 +4208,37 @@ export default function Workspace2D({
           />
         )
       }
+
+      {/* Trim-to-Blend choice bar */}
+      {pendingBlend && activeTool === 'trim-to-blend' && (
+        <motion.div
+          initial={{ y: 30, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 30, opacity: 0 }}
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl shadow-lg border border-gray-200 z-50"
+        >
+          <span className="text-xs font-medium text-gray-600">Keep which part?</span>
+          <button
+            onClick={() => executeBlend('intersect')}
+            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+          >
+            Keep Inside (Intersection)
+          </button>
+          <button
+            onClick={() => executeBlend('subtract')}
+            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors"
+          >
+            Keep Outside (Subtraction)
+          </button>
+          <button
+            onClick={() => { setPendingBlend(null); setSelectedIds([]); }}
+            className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            title="Cancel"
+          >
+            ✕
+          </button>
+        </motion.div>
+      )}
 
       {/* Duplicate/Distribute Modal */}
       <DuplicateDistributeModal
