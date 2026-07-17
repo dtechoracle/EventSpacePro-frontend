@@ -1,4 +1,4 @@
-import { Wall, Shape, Asset } from '@/store/projectStore';
+import { Wall, Shape, Asset, TextAnnotation } from '@/store/projectStore';
 
 /**
  * Calculates the bounding box of all workspace items
@@ -6,7 +6,8 @@ import { Wall, Shape, Asset } from '@/store/projectStore';
 export function calculateWorkspaceBounds(
     walls: Wall[],
     shapes: Shape[],
-    assets: Asset[]
+    assets: Asset[],
+    textAnnotations?: TextAnnotation[]
 ): { minX: number; minY: number; maxX: number; maxY: number; width: number; height: number } | null {
     let minX = Infinity;
     let minY = Infinity;
@@ -102,6 +103,22 @@ export function calculateWorkspaceBounds(
         maxY = Math.max(maxY, bottom);
         hasActualContent = true;
     });
+
+    // Process text annotations
+    if (textAnnotations) {
+        textAnnotations.forEach(annotation => {
+            const fontSize = annotation.fontSize || 250;
+            const textWidth = (annotation.text.length || 1) * fontSize * 0.55;
+            const textHeight = fontSize * 1.2;
+            const halfW = textWidth / 2;
+            const halfH = textHeight / 2;
+            minX = Math.min(minX, annotation.x - halfW);
+            minY = Math.min(minY, annotation.y - halfH);
+            maxX = Math.max(maxX, annotation.x + halfW);
+            maxY = Math.max(maxY, annotation.y + halfH);
+            hasActualContent = true;
+        });
+    }
 
     // If no actual content found but we have a background, use the background
     if (!hasActualContent && backgroundShape) {

@@ -147,6 +147,106 @@ const getSvgMetrics = (svgText: string): SvgMetrics => {
     }
 };
 
+function getPathPoints(d: string): { x: number; y: number }[] {
+    const points: { x: number; y: number }[] = [];
+    const commands = d.match(/[a-df-z][^a-df-z]*/gi) || [];
+    let cx = 0;
+    let cy = 0;
+    
+    commands.forEach(cmdStr => {
+        const cmd = cmdStr[0];
+        const args = (cmdStr.slice(1).match(/-?[\d.]+/g) || []).map(Number);
+        
+        if (cmd.toUpperCase() === 'M' || cmd.toUpperCase() === 'L') {
+            for (let i = 0; i < args.length; i += 2) {
+                if (args[i] !== undefined && args[i+1] !== undefined) {
+                    cx = args[i];
+                    cy = args[i+1];
+                    points.push({ x: cx, y: cy });
+                }
+            }
+        } else if (cmd.toUpperCase() === 'A') {
+            for (let i = 0; i < args.length; i += 7) {
+                const x = args[i+5];
+                const y = args[i+6];
+                if (x !== undefined && y !== undefined) {
+                    cx = x;
+                    cy = y;
+                    points.push({ x: cx, y: cy });
+                }
+            }
+        } else if (cmd.toUpperCase() === 'C') {
+            for (let i = 0; i < args.length; i += 6) {
+                const x = args[i+4];
+                const y = args[i+5];
+                if (x !== undefined && y !== undefined) {
+                    cx = x;
+                    cy = y;
+                    points.push({ x: cx, y: cy });
+                }
+            }
+        } else if (cmd.toUpperCase() === 'S' || cmd.toUpperCase() === 'Q') {
+            for (let i = 0; i < args.length; i += 4) {
+                const x = args[i+2];
+                const y = args[i+3];
+                if (x !== undefined && y !== undefined) {
+                    cx = x;
+                    cy = y;
+                    points.push({ x: cx, y: cy });
+                }
+            }
+        } else if (cmd.toUpperCase() === 'H') {
+            for (let i = 0; i < args.length; i++) {
+                cx = args[i];
+                points.push({ x: cx, y: cy });
+            }
+        } else if (cmd.toUpperCase() === 'V') {
+            for (let i = 0; i < args.length; i++) {
+                cy = args[i];
+                points.push({ x: cx, y: cy });
+            }
+        }
+    });
+    return points;
+}
+
+function getElementMetrics(el: Element) {
+    const tag = el.tagName.toLowerCase();
+    
+    if (tag === 'circle') {
+        const cx = parseFloat(el.getAttribute('cx') || '0');
+        const cy = parseFloat(el.getAttribute('cy') || '0');
+        const r = parseFloat(el.getAttribute('r') || '0');
+        return { cx, cy, width: r * 2, height: r * 2 };
+    } else if (tag === 'ellipse') {
+        const cx = parseFloat(el.getAttribute('cx') || '0');
+        const cy = parseFloat(el.getAttribute('cy') || '0');
+        const rx = parseFloat(el.getAttribute('rx') || '0');
+        const ry = parseFloat(el.getAttribute('ry') || '0');
+        return { cx, cy, width: rx * 2, height: ry * 2 };
+    } else if (tag === 'rect') {
+        const x = parseFloat(el.getAttribute('x') || '0');
+        const y = parseFloat(el.getAttribute('y') || '0');
+        const w = parseFloat(el.getAttribute('width') || '0');
+        const h = parseFloat(el.getAttribute('height') || '0');
+        return { cx: x + w / 2, cy: y + h / 2, width: w, height: h };
+    } else if (tag === 'path') {
+        const d = el.getAttribute('d') || '';
+        const points = getPathPoints(d);
+        if (points.length > 0) {
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            points.forEach(p => {
+                minX = Math.min(minX, p.x);
+                maxX = Math.max(maxX, p.x);
+                minY = Math.min(minY, p.y);
+                maxY = Math.max(maxY, p.y);
+            });
+            return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY };
+        }
+    }
+    return null;
+}
+
 export const isKnownMissingSvg = (src: string) => Boolean(failedSvgCache[src]);
 export const validateSvgPath = async (src: string) => {
     if (!src) return false;
@@ -250,43 +350,11 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
 
             let hasExplicitAutoFill = !!doc.querySelector('[id="auto-fill"], .auto-fill, [data-auto-fill="true"]');
 
-            // Auto-generate auto-fill rect for wireframe SVGs without one
-            if (!hasExplicitAutoFill && src && (
-                src.toLowerCase().includes('seater') ||
-                src.toLowerCase().includes('sofa') ||
-                src.toLowerCase().includes('doughtnut') ||
-                src.toLowerCase().includes('chair') ||
-                src.toLowerCase().includes('curve')
-            )) {
-                const vb = svg.getAttribute('viewBox');
-                if (vb) {
-                    const parts = vb.trim().split(/\s+/).map(parseFloat);
-                    if (parts.length === 4) {
-                        const [vbX, vbY, vbW, vbH] = parts;
-                        const autoFillRect = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
-                        autoFillRect.setAttribute("id", "auto-fill");
-                        autoFillRect.setAttribute("class", "auto-fill");
-                        autoFillRect.setAttribute("data-auto-fill", "true");
-                        autoFillRect.setAttribute("x", String(vbX));
-                        autoFillRect.setAttribute("y", String(vbY));
-                        autoFillRect.setAttribute("width", String(vbW));
-                        autoFillRect.setAttribute("height", String(vbH));
-                        const cornerR = Math.min(vbW, vbH) * 0.08;
-                        autoFillRect.setAttribute("rx", String(cornerR));
-                        autoFillRect.setAttribute("ry", String(cornerR));
-                        svg.insertBefore(autoFillRect, svg.firstChild);
-                        hasExplicitAutoFill = true;
-                    }
-                }
-            }
-
             const styleId = "dynamic-inline-style";
             if (!doc.getElementById(styleId)) {
                 const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
                 styleEl.setAttribute("id", styleId);
-                const isLayoutAsset = category === "Layout";
-                const vectorEffectRule = isLayoutAsset ? "" : "svg path, svg circle, svg rect, svg line, svg polyline, svg ellipse { vector-effect: non-scaling-stroke !important; }";
-                styleEl.textContent = `${vectorEffectRule} svg .fill-none-el { fill: none !important; stroke: inherit !important; stroke-width: inherit !important; } svg .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } svg .auto-fill-el { fill: inherit !important; stroke: none !important; }`;
+                styleEl.textContent = `* { vector-effect: non-scaling-stroke !important; } .fill-none-el { fill: none !important; stroke: inherit !important; stroke-width: inherit !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } .auto-fill-el { fill: inherit !important; stroke: none !important; } .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
                 svg.prepend(styleEl);
             }
 
@@ -367,8 +435,37 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
                     }
                 }
 
+                const isMultiSeater = src.toLowerCase().includes('seater') || src.toLowerCase().includes('sofa') || src.toLowerCase().includes('doughtnut');
+
                 if (shouldBeNone && !hasFillRule && !isAutoFill) {
                     el.classList.add("fill-none-el");
+                } else if (isMultiSeater) {
+                    let isTable = false;
+                    const elMetrics = getElementMetrics(el);
+                    if (elMetrics && metrics.contentWidth && metrics.contentHeight) {
+                        const contentWidth = metrics.contentWidth;
+                        const contentHeight = metrics.contentHeight;
+                        const contentCenterX = metrics.contentX !== null ? (metrics.contentX + contentWidth / 2) : 500;
+                        const contentCenterY = metrics.contentY !== null ? (metrics.contentY + contentHeight / 2) : 500;
+                        const distToCenter = Math.hypot(elMetrics.cx - contentCenterX, elMetrics.cy - contentCenterY);
+                        const isCentral = distToCenter < contentWidth * 0.15;
+                        const isVeryLarge = elMetrics.width > contentWidth * 0.4 || elMetrics.height > contentHeight * 0.4;
+                        const getGDepth = (node: Element): number => {
+                            let depth = 0;
+                            let p = node.parentNode;
+                            while (p && p !== doc.documentElement) {
+                                if (p.nodeName.toLowerCase() === 'g') depth++;
+                                p = p.parentNode;
+                            }
+                            return depth;
+                        };
+                        isTable = (isCentral || isVeryLarge) && getGDepth(el) < 3;
+                    }
+                    if (isTable) {
+                        el.classList.add(isAutoFill ? "table-auto-fill-el" : "table-fill-el");
+                    } else {
+                        el.classList.add(isAutoFill ? "chair-auto-fill-el" : "chair-fill-el");
+                    }
                 } else if (isAutoFill) {
                     el.classList.add("auto-fill-el");
                 } else {
@@ -435,7 +532,18 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
         );
     }
 
-    return <div dangerouslySetInnerHTML={{ __html: svgContent }} style={{ width: '100%', height: '100%' }} />;
+    return (
+        <div 
+            dangerouslySetInnerHTML={{ __html: svgContent }} 
+            style={{ 
+                width: '100%', 
+                height: '100%',
+                // Map subcolor variables so they are read by children classes inside SVGs
+                '--table-color': fill,
+                '--chair-color': fill
+            } as any} 
+        />
+    );
 };
 
 export default InlineSvg;

@@ -365,12 +365,25 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
             if (wallPolygons.length === 0) return null;
 
             let surface = polygonClipping.union(wallPolygons[0], ...wallPolygons.slice(1));
-            const cutoutPolygons = getCutoutPolygonsForGroup(connectedWalls, wallCutouts);
-            if (cutoutPolygons.length > 0) {
-                surface = polygonClipping.difference(surface, ...cutoutPolygons);
+            
+            // Filter cutouts: Doors/gates subtract fully, but windows leave faint lines passing through
+            const doorCutouts = wallCutouts.filter(c => !c.assetId.toLowerCase().includes('window') && !assets.find(a => a.id === c.assetId)?.type.toLowerCase().includes('window'));
+            const windowCutouts = wallCutouts.filter(c => c.assetId.toLowerCase().includes('window') || !!assets.find(a => a.id === c.assetId)?.type.toLowerCase().includes('window'));
+            
+            const doorCutoutPolygons = getCutoutPolygonsForGroup(connectedWalls, doorCutouts);
+            if (doorCutoutPolygons.length > 0) {
+                surface = polygonClipping.difference(surface, ...doorCutoutPolygons);
             }
 
-            return surface;
+            const windowCutoutPolygons = getCutoutPolygonsForGroup(connectedWalls, windowCutouts);
+            if (windowCutoutPolygons.length > 0) {
+                surface = polygonClipping.difference(surface, ...windowCutoutPolygons);
+            }
+
+            return {
+                surface,
+                windowCutouts
+            };
         } catch (error) {
             console.error('Wall boolean merge failed; falling back to interactive wall rendering.', error);
             return null;
@@ -400,7 +413,7 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
                 isHighlightOnly ? (
                     (groupSelected || groupHovered) && (
                         <path
-                            d={multiPolygonToPath(unionedWallSurface)}
+                            d={multiPolygonToPath(unionedWallSurface.surface)}
                             fill="#3b82f6"
                             fillOpacity={groupSelected ? 0.2 : 0.1}
                             stroke="none"
@@ -409,16 +422,34 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
                         />
                     )
                 ) : (
-                    <path
-                        d={multiPolygonToPath(unionedWallSurface)}
-                        fill={wallFill}
-                        stroke={groupStrokeColor}
-                        strokeWidth={groupStrokeWidth}
-                        strokeLinejoin="round"
-                        strokeLinecap="round"
-                        vectorEffect="non-scaling-stroke"
-                        fillRule="evenodd"
-                    />
+                    <>
+                        <path
+                            d={multiPolygonToPath(unionedWallSurface.surface)}
+                            fill={wallFill}
+                            stroke={groupStrokeColor}
+                            strokeWidth={groupStrokeWidth}
+                            strokeLinejoin="round"
+                            strokeLinecap="round"
+                            vectorEffect="non-scaling-stroke"
+                            fillRule="evenodd"
+                        />
+                        {/* Render window wall paths as faint/low-opacity lines passing through */}
+                        {unionedWallSurface.windowCutouts.length > 0 && (
+                            <path
+                                d={multiPolygonToPath(getCutoutPolygonsForGroup(connectedWalls, unionedWallSurface.windowCutouts))}
+                                fill="none"
+                                stroke={groupStrokeColor}
+                                strokeWidth={groupStrokeWidth * 0.45}
+                                strokeOpacity={0.35}
+                                strokeDasharray="4 3"
+                                strokeLinejoin="round"
+                                strokeLinecap="round"
+                                vectorEffect="non-scaling-stroke"
+                                fillRule="evenodd"
+                                pointerEvents="none"
+                            />
+                        )}
+                    </>
                 )
             )}
 

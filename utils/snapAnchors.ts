@@ -46,17 +46,29 @@ export function calculateShapeAnchors(shape: Shape): AnchorPoint[] {
     const halfH = shape.height / 2;
     const rot = shape.rotation || 0;
 
-    const anchors: { id: AnchorType; label: string; x: number; y: number }[] = [
-        { id: 'top-left', label: 'Top-Left Corner', x: shape.x - halfW, y: shape.y - halfH },
-        { id: 'top-center', label: 'Top Center', x: shape.x, y: shape.y - halfH },
-        { id: 'top-right', label: 'Top-Right Corner', x: shape.x + halfW, y: shape.y - halfH },
-        { id: 'left-center', label: 'Left Center', x: shape.x - halfW, y: shape.y },
-        { id: 'center', label: 'Center', x: shape.x, y: shape.y },
-        { id: 'right-center', label: 'Right Center', x: shape.x + halfW, y: shape.y },
-        { id: 'bottom-left', label: 'Bottom-Left Corner', x: shape.x - halfW, y: shape.y + halfH },
-        { id: 'bottom-center', label: 'Bottom Center', x: shape.x, y: shape.y + halfH },
-        { id: 'bottom-right', label: 'Bottom-Right Corner', x: shape.x + halfW, y: shape.y + halfH },
-    ];
+    let anchors: { id: AnchorType; label: string; x: number; y: number }[] = [];
+
+    if (shape.type === 'ellipse') {
+        anchors = [
+            { id: 'top-center', label: 'Top Center', x: shape.x, y: shape.y - halfH },
+            { id: 'left-center', label: 'Left Center', x: shape.x - halfW, y: shape.y },
+            { id: 'center', label: 'Center', x: shape.x, y: shape.y },
+            { id: 'right-center', label: 'Right Center', x: shape.x + halfW, y: shape.y },
+            { id: 'bottom-center', label: 'Bottom Center', x: shape.x, y: shape.y + halfH },
+        ];
+    } else {
+        anchors = [
+            { id: 'top-left', label: 'Top-Left Corner', x: shape.x - halfW, y: shape.y - halfH },
+            { id: 'top-center', label: 'Top Center', x: shape.x, y: shape.y - halfH },
+            { id: 'top-right', label: 'Top-Right Corner', x: shape.x + halfW, y: shape.y - halfH },
+            { id: 'left-center', label: 'Left Center', x: shape.x - halfW, y: shape.y },
+            { id: 'center', label: 'Center', x: shape.x, y: shape.y },
+            { id: 'right-center', label: 'Right Center', x: shape.x + halfW, y: shape.y },
+            { id: 'bottom-left', label: 'Bottom-Left Corner', x: shape.x - halfW, y: shape.y + halfH },
+            { id: 'bottom-center', label: 'Bottom Center', x: shape.x, y: shape.y + halfH },
+            { id: 'bottom-right', label: 'Bottom-Right Corner', x: shape.x + halfW, y: shape.y + halfH },
+        ];
+    }
 
     if (rot === 0) return anchors;
 

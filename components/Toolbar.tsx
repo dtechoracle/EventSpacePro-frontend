@@ -4,6 +4,7 @@ import React from 'react';
 import { useEditorStore, type Tool } from '@/store/editorStore';
 import { useProjectStore } from '@/store/projectStore';
 import { useSceneStore } from '@/store/sceneStore';
+import PdfPagePicker, { type PageData, loadPdfJs } from './PdfPagePicker';
 
 interface ToolbarProps {
     className?: string;
@@ -17,6 +18,43 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
     const { setRectangularSelectionMode, snapToGridEnabled, showGrid } = useSceneStore();
 
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const [pdfImportData, setPdfImportData] = React.useState<ArrayBuffer | null>(null);
+
+    const handlePdfImport = React.useCallback((pages: PageData[]) => {
+        setPdfImportData(null);
+        const maxSize = 1500;
+        const gap = 50;
+        let offsetX = 0;
+        pages.forEach((page, i) => {
+            let w = page.width;
+            let h = page.height;
+            if (w > maxSize || h > maxSize) {
+                const ratio = Math.min(maxSize / w, maxSize / h);
+                w = w * ratio;
+                h = h * ratio;
+            }
+            const newShape = {
+                id: crypto.randomUUID(),
+                type: 'image' as any,
+                x: offsetX + (i === 0 ? 0 : 0),
+                y: i * (Math.max(100, h) + gap),
+                width: Math.max(100, w),
+                height: Math.max(100, h),
+                rotation: 0,
+                fillImage: page.dataUrl,
+                fillType: 'image' as any,
+                stroke: '#000000',
+                strokeWidth: 1,
+                zIndex: useProjectStore.getState().getNextZIndex(),
+            };
+            if (i === 0) {
+                useEditorStore.getState().setPendingImportShape(newShape);
+                useEditorStore.getState().setActiveTool('select');
+            } else {
+                useProjectStore.getState().addShape(newShape as any);
+            }
+        });
+    }, []);
 
     const compressImage = (dataUrl: string, maxWidth = 1200, maxHeight = 1200): Promise<string> => {
         return new Promise((resolve) => {
@@ -100,66 +138,41 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
         } else if (file.type === 'application/pdf') {
             reader.onload = async (event) => {
                 const arrayBuffer = event.target?.result as ArrayBuffer;
-
-                const loadPDFJS = () => {
-                    return new Promise<any>((resolve, reject) => {
-                        if ((window as any).pdfjsLib) {
-                            resolve((window as any).pdfjsLib);
-                            return;
-                        }
-                        const script = document.createElement('script');
-                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
-                        script.onload = () => {
-                            const pdfjsLib = (window as any).pdfjsLib;
-                            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
-                            resolve(pdfjsLib);
-                        };
-                        script.onerror = reject;
-                        document.head.appendChild(script);
-                    });
-                };
-
                 try {
-                    const pdfjsLib = await loadPDFJS();
+                    const pdfjsLib = await loadPdfJs();
                     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                    const page = await pdf.getPage(1);
-                    
-                    const viewport = page.getViewport({ scale: 1.5 });
-                    const canvas = document.createElement('canvas');
-                    const context = canvas.getContext('2d');
-                    if (context) {
-                        canvas.width = viewport.width;
-                        canvas.height = viewport.height;
-                        await page.render({ canvasContext: context, viewport }).promise;
-                        
-                        const dataUrl = await compressImage(canvas.toDataURL('image/jpeg', 0.7), 1200, 1200);
-                        
-                        const maxSize = 1500;
-                        let w = canvas.width;
-                        let h = canvas.height;
-                        if (w > maxSize || h > maxSize) {
-                            const ratio = Math.min(maxSize / w, maxSize / h);
-                            w = w * ratio;
-                            h = h * ratio;
+                    if (pdf.numPages === 1) {
+                        const page = await pdf.getPage(1);
+                        const viewport = page.getViewport({ scale: 1.5 });
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        if (context) {
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+                            await page.render({ canvasContext: context, viewport }).promise;
+                            const dataUrl = await compressImage(canvas.toDataURL('image/jpeg', 0.7), 1200, 1200);
+                            const maxSize = 1500;
+                            let w = canvas.width;
+                            let h = canvas.height;
+                            if (w > maxSize || h > maxSize) {
+                                const ratio = Math.min(maxSize / w, maxSize / h);
+                                w = w * ratio;
+                                h = h * ratio;
+                            }
+                            const newShape = {
+                                id: crypto.randomUUID(),
+                                type: 'image' as any,
+                                x: 0, y: 0,
+                                width: Math.max(100, w), height: Math.max(100, h),
+                                rotation: 0, fillImage: dataUrl, fillType: 'image' as any,
+                                stroke: '#000000', strokeWidth: 1,
+                                zIndex: useProjectStore.getState().getNextZIndex(),
+                            };
+                            useEditorStore.getState().setPendingImportShape(newShape);
+                            useEditorStore.getState().setActiveTool('select');
                         }
-
-                        const newShape = {
-                            id: crypto.randomUUID(),
-                            type: 'image' as any,
-                            x: 0,
-                            y: 0,
-                            width: Math.max(100, w),
-                            height: Math.max(100, h),
-                            rotation: 0,
-                            fillImage: dataUrl,
-                            fillType: 'image' as any,
-                            stroke: '#000000',
-                            strokeWidth: 1,
-                            zIndex: useProjectStore.getState().getNextZIndex(),
-                        };
-
-                        useEditorStore.getState().setPendingImportShape(newShape);
-                        useEditorStore.getState().setActiveTool('select');
+                    } else {
+                        setPdfImportData(arrayBuffer);
                     }
                 } catch (err) {
                     console.error("PDF import error:", err);
@@ -320,6 +333,13 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
                     </button>
                 </div>
             </div>
+            {pdfImportData && (
+                <PdfPagePicker
+                    arrayBuffer={pdfImportData}
+                    onImport={handlePdfImport}
+                    onCancel={() => setPdfImportData(null)}
+                />
+            )}
         </div>
     );
 }

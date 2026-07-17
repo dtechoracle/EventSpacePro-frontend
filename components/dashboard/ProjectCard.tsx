@@ -98,6 +98,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
               walls={previewData.walls}
               shapes={previewData.shapes}
               assets={previewData.assets}
+              textAnnotations={previewData.textAnnotations}
               width={400}
               height={180}
               backgroundColor="#ffffff"

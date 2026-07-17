@@ -631,8 +631,9 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
         return null;
     };
 
-    const scaleX = (shape as any).flipX ? -1 : 1;
-    const scaleY = (shape as any).flipY ? -1 : 1;
+    const baseScale = shape.scale || 1;
+    const scaleX = (shape as any).flipX ? -baseScale : baseScale;
+    const scaleY = (shape as any).flipY ? -baseScale : baseScale;
     const transform = `translate(${shape.x}, ${shape.y}) rotate(${shape.rotation}) scale(${scaleX}, ${scaleY})`;
 
 
@@ -672,7 +673,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
         if (shape.fillType !== 'hatch') return null;
 
         const pattern = shape.hatchPattern || 'horizontal';
-        const spacing = (shape.hatchSpacing || 25) * (shape.fillTextureScale || 4);
+        const spacing = (shape.hatchSpacing || 10) * (shape.fillTextureScale || 4);
         const color = shape.hatchColor || '#000000';
         const strokeWidth = shape.hatchThickness || 1;
 

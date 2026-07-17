@@ -102,11 +102,11 @@ export default function SnapMarkersRenderer() {
                 <g key={`${point.elementId}-${index}`} transform={`translate(${point.x}, ${point.y})`}>
                     {activePoint && activePoint.x === point.x && activePoint.y === point.y && (
                         <circle
-                            r={markerRadius * 1.9}
+                            r={markerRadius * 1.5}
                             fill="none"
-                            stroke="#ffffff"
-                            strokeWidth={strokeWidth * 1.5}
-                            opacity={0.95}
+                            stroke="#9ca3af"
+                            strokeWidth={strokeWidth * 1.2}
+                            opacity={0.8}
                         />
                     )}
                     <circle

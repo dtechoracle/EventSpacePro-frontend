@@ -1085,6 +1085,26 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   />
                 </div>
 
+                {/* Scale for Multi-Selection */}
+                <div className="flex justify-between items-center mb-2 mt-2 pt-2 border-t border-gray-100">
+                  <span className="text-xs text-gray-500">Scale</span>
+                  <input
+                    type="number"
+                    defaultValue={1}
+                    onChange={(e) => {
+                      const val = Math.max(0.01, Number(e.target.value) || 1);
+                      const sIds = selectedShapes.map(s => s.id);
+                      const aIds = selectedAssets.map(a => a.id);
+                      if (sIds.length > 0) updateShapeBatch(sIds, { scale: val } as any);
+                      if (aIds.length > 0) updateAssetBatch(aIds, { scale: val });
+                    }}
+                    className="sidebar-input w-16 text-center"
+                    min={0.01}
+                    step={0.1}
+                    placeholder="Set All"
+                  />
+                </div>
+
                 {/* Flip Controls for Multi-Selection */}
                 <div className="flex justify-between items-center mb-2 mt-2 pt-2 border-t border-gray-100">
                   <span className="text-xs text-gray-500">Flip</span>
@@ -1228,7 +1248,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
                 {/* Rotation (Unified Shape/Asset) */}
                 {(itemType === 'shape' || itemType === 'asset') && (
-                  <div className="mb-4 pt-2 border-t border-gray-100">
+                  <div className="mb-2 pt-2 border-t border-gray-100">
                     <div className="flex justify-between items-center mb-3">
                       <span className="text-xs text-gray-500">Rotation</span>
                       <div className="flex items-center">
@@ -1249,7 +1269,27 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       </div>
                     </div>
 
-                    {/* Redesigned Flip Controls */}
+                    {/* Scale */}
+                    <div className="flex justify-between items-center mb-3 py-2 border-t border-gray-100">
+                      <span className="text-xs text-gray-500">Scale</span>
+                      <input
+                        type="number"
+                        value={(selectedItem as any).scale || 1}
+                        onChange={(e) => {
+                          const val = Math.max(0.01, Number(e.target.value) || 1);
+                          if (itemType === 'shape') updateShape(selectedItem.id, { scale: val } as any);
+                          if (itemType === 'asset') {
+                            updateAsset(selectedItem.id, { scale: val });
+                            updateSceneAsset(selectedItem.id, { scale: val });
+                          }
+                        }}
+                        className="sidebar-input w-16 text-center"
+                        min={0.01}
+                        step={0.1}
+                      />
+                    </div>
+
+                    {/* Flip Controls */}
                     <div className="flex justify-between items-center mb-3 py-2 border-t border-gray-100">
                       <span className="text-xs text-gray-500">Flip</span>
                       <div className="flex gap-1">
@@ -1640,6 +1680,26 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             min={0.1}
                             max={10}
                             step={0.1}
+                          />
+                        </div>
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Rotation</span>
+                          <input
+                            type="number"
+                            value={(selectedItem as any).hatchRotation || 0}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (itemType === 'shape') {
+                                updateShape((selectedItem as any).id, { hatchRotation: val });
+                              } else {
+                                updateAsset(selectedItem.id, { hatchRotation: val } as any);
+                                updateSceneAsset(selectedItem.id, { hatchRotation: val } as any);
+                              }
+                            }}
+                            className="sidebar-input w-12 text-center text-xs"
+                            min={0}
+                            max={360}
+                            step={15}
                           />
                         </div>
                       </div>
@@ -2937,6 +2997,28 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             step={0.1}
                           />
                         </div>
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-gray-500 text-xs">Rotation</span>
+                          <input
+                            type="number"
+                            value={(selectedItem as any).hatchRotation || 0}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (itemType === 'wall') {
+                                updateWall(selectedItem.id, { hatchRotation: val });
+                                syncToScene(selectedItem.id, { hatchRotation: val });
+                              }
+                              else {
+                                updateAsset(selectedItem.id, { hatchRotation: val } as any);
+                                updateSceneAsset(selectedItem.id, { hatchRotation: val } as any);
+                              }
+                            }}
+                            className="sidebar-input w-12 text-center text-xs"
+                            min={0}
+                            max={360}
+                            step={15}
+                          />
+                        </div>
                       </div>
                     )}
 
@@ -3309,6 +3391,69 @@ export default function PropertiesSidebar(): React.JSX.Element {
             Table Numbering
           </div>
 
+          {/* Text Properties — shared between Auto and Manual modes */}
+          <div className="mb-4 pb-4 border-b border-slate-200/50 space-y-2">
+            <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Text</div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-600">Font</span>
+              <select
+                value={globalTableNumberingFontFamily}
+                onChange={(e) => setGlobalTableNumberingTextStyle({ fontFamily: e.target.value }, true)}
+                className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-36 focus:ring-1 focus:ring-blue-500 outline-none"
+              >
+                {textStyleFonts.map((font) => (
+                  <option key={font} value={font}>{getFontDisplayName(font)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-600">Size</span>
+              <input
+                type="number"
+                value={globalTableNumberingFontSize || 0}
+                onChange={(e) => setGlobalTableNumberingTextStyle({ fontSize: Math.max(0, Number(e.target.value) || 0) }, true)}
+                className="sidebar-input w-20 text-center text-xs"
+                min={0}
+                placeholder="Auto"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-600">Color</span>
+              <input
+                type="color"
+                value={globalTableNumberingColor || '#000000'}
+                onChange={(e) => setGlobalTableNumberingTextStyle({ color: e.target.value }, true)}
+                className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-600">Style</span>
+              <div className="flex gap-1 bg-white p-0.5 rounded border">
+                <button
+                  onClick={() => setGlobalTableNumberingTextStyle({ fontWeight: globalTableNumberingFontWeight === '900' ? '600' : '900' }, true)}
+                  className={`p-1.5 rounded transition-colors ${globalTableNumberingFontWeight === '900' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                  title="Bold"
+                >
+                  <FaBold size={12} />
+                </button>
+                <button
+                  onClick={() => setGlobalTableNumberingTextStyle({ fontStyle: globalTableNumberingFontStyle === 'italic' ? 'normal' : 'italic' }, true)}
+                  className={`p-1.5 rounded transition-colors ${globalTableNumberingFontStyle === 'italic' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                  title="Italic"
+                >
+                  <FaItalic size={12} />
+                </button>
+                <button
+                  onClick={() => setGlobalTableNumberingTextStyle({ textDecoration: globalTableNumberingTextDecoration === 'underline' ? 'none' : 'underline' }, true)}
+                  className={`p-1.5 rounded transition-colors ${globalTableNumberingTextDecoration === 'underline' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                  title="Underline"
+                >
+                  <FaUnderline size={12} />
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="mb-4 pb-4 border-b border-slate-200/50 space-y-3">
             <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
               {[
@@ -3459,74 +3604,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 ))}
               </div>
             </div>
-
-            <div className="pt-3 mt-3 border-t border-slate-200/60 space-y-2">
-              <div className="text-sm font-bold text-[#0056A9]">
-                Table Numbering Text
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-600">Font</span>
-                <select
-                  value={globalTableNumberingFontFamily}
-                  onChange={(e) => setGlobalTableNumberingTextStyle({ fontFamily: e.target.value }, true)}
-                  className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-36 focus:ring-1 focus:ring-blue-500 outline-none"
-                >
-                  {textStyleFonts.map((font) => (
-                    <option key={font} value={font}>{getFontDisplayName(font)}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-600">Size</span>
-                <input
-                  type="number"
-                  value={globalTableNumberingFontSize || 0}
-                  onChange={(e) => setGlobalTableNumberingTextStyle({ fontSize: Math.max(0, Number(e.target.value) || 0) }, true)}
-                  className="sidebar-input w-20 text-center text-xs"
-                  min={0}
-                  placeholder="Auto"
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-600">Color</span>
-                <input
-                  type="color"
-                  value={globalTableNumberingColor || '#000000'}
-                  onChange={(e) => setGlobalTableNumberingTextStyle({ color: e.target.value }, true)}
-                  className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-600">Style</span>
-                <div className="flex gap-1 bg-white p-0.5 rounded border">
-                  <button
-                    onClick={() => setGlobalTableNumberingTextStyle({ fontWeight: globalTableNumberingFontWeight === '900' ? '600' : '900' }, true)}
-                    className={`p-1.5 rounded transition-colors ${globalTableNumberingFontWeight === '900' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
-                    title="Bold"
-                  >
-                    <FaBold size={12} />
-                  </button>
-                  <button
-                    onClick={() => setGlobalTableNumberingTextStyle({ fontStyle: globalTableNumberingFontStyle === 'italic' ? 'normal' : 'italic' }, true)}
-                    className={`p-1.5 rounded transition-colors ${globalTableNumberingFontStyle === 'italic' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
-                    title="Italic"
-                  >
-                    <FaItalic size={12} />
-                  </button>
-                  <button
-                    onClick={() => setGlobalTableNumberingTextStyle({ textDecoration: globalTableNumberingTextDecoration === 'underline' ? 'none' : 'underline' }, true)}
-                    className={`p-1.5 rounded transition-colors ${globalTableNumberingTextDecoration === 'underline' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
-                    title="Underline"
-                  >
-                    <FaUnderline size={12} />
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
 
           <p className="text-[9px] text-slate-400 mt-2 leading-tight italic">
-            * Global position and orientation settings for all tables.
+            * These settings apply to both Auto and Manual numbering.
           </p>
         </div>
       )}

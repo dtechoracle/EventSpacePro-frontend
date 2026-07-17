@@ -4,6 +4,7 @@ import { InlineSvg } from "@/components/tools/InlineSvg";
 import { FiBox } from "react-icons/fi";
 import { AssetInstance } from "@/store/sceneStore";
 import { ASSET_LIBRARY } from "@/lib/assets";
+import { PRELOADED_VENUES } from "@/lib/preloadedVenues";
 import AssetHandlesRenderer from "./AssetHandlesRenderer";
 import WallRendering from "./WallRendering";
 
@@ -71,7 +72,9 @@ export const AssetRenderer = React.memo(({
     return null;
   }
 
-  const def = ASSET_LIBRARY.find((a) => a.id === asset.type);
+  const libDef = ASSET_LIBRARY.find((a) => a.id === asset.type);
+  const venueDef = !libDef ? PRELOADED_VENUES.find((v) => v.id === asset.type) : null;
+  const def: any = libDef || (venueDef ? { ...venueDef, category: '', label: venueDef.name } : null);
   const isMarquee = asset.type?.toLowerCase().includes('marquee');
   const defaultStrokeWidth = isMarquee ? 2 : 0.5;
   const currentStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : defaultStrokeWidth;

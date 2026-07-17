@@ -228,7 +228,7 @@ export default function PlanPreview({
           } else if (fillType === 'hatch') {
             const pattern = shape.hatchPattern || 'horizontal';
             const s = shape.fillTextureScale || 4;
-            const spacing = (shape.hatchSpacing || 25) * s;
+            const spacing = (shape.hatchSpacing || 10) * s;
             const color = shape.hatchColor || '#000000';
             const id = getHatchId(asset.id);
 

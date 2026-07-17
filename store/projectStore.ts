@@ -50,6 +50,7 @@ export type Shape = {
     height: number;
     flipX?: boolean;
     flipY?: boolean;
+    scale?: number;
     rotation: number;
     fill?: string;
     stroke?: string;

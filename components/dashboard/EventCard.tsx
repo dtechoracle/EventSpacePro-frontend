@@ -10,7 +10,7 @@ import RenameEventModal from "@/pages/(components)/projects/RenameEventModal";
 interface EventCardProps {
     event: any;
     user: any;
-    previewData?: { walls: any[]; shapes: any[]; assets: any[] };
+    previewData?: { walls: any[]; shapes: any[]; assets: any[]; textAnnotations?: any[] };
     onFavoriteToggle?: () => void; // Optional callback to refresh parent list
     onDelete?: () => void;
 }
@@ -31,7 +31,7 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
     const [showMenu, setShowMenu] = useState(false);
     const [showRenameModal, setShowRenameModal] = useState(false);
 
-    const { walls, shapes, assets } = previewData || (event ? buildPreviewData(event) : { walls: [], shapes: [], assets: [] });
+    const { walls, shapes, assets, textAnnotations } = previewData || (event ? buildPreviewData(event) : { walls: [], shapes: [], assets: [], textAnnotations: [] });
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -239,6 +239,7 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
                         walls={walls}
                         shapes={shapes}
                         assets={assets}
+                        textAnnotations={textAnnotations}
                         width={480}
                         height={160}
                         backgroundColor="#ffffff"

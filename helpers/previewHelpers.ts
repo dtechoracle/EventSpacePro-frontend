@@ -7,6 +7,7 @@ interface EventData {
         walls: any[];
         shapes: any[];
         assets: any[];
+        textAnnotations?: any[];
         layers?: any[];
         canvas?: any;
     };
@@ -25,19 +26,25 @@ export const buildPreviewData = (event: EventData | any) => {
     const walls = (event.canvasData?.walls as any[]) || [];
     const rawShapes = (event.canvasData?.shapes as any[]) || [];
     const rawAssets = (event.canvasData?.assets as any[]) || [];
+    const textAnnotations = (event.canvasData?.textAnnotations as any[]) || [];
 
     // Normalize shapes to ensure fill property is set - match ShapeRenderer logic
-    // Preserve ALL properties including width, height, x, y, etc.
+    // Preserve ALL properties including width, height, x, y, rotation, fillType, etc.
     const shapes = rawShapes.map((s: any) => {
         // Use fill if it exists and is not empty/transparent, otherwise use backgroundColor, otherwise transparent
-        const fill = (s.fill && s.fill !== 'transparent' && s.fill !== '')
-            ? s.fill
-            : (s.backgroundColor && s.backgroundColor !== 'transparent' && s.backgroundColor !== '')
-                ? s.backgroundColor
-                : 'transparent';
+        // Only override fill when fillType is not set to something that provides its own fill (gradient/hatch/texture/image)
+        const fillType = s.fillType;
+        const hasSpecialFill = fillType === 'gradient' || fillType === 'hatch' || fillType === 'hash' || fillType === 'texture' || fillType === 'image';
+        const fill = hasSpecialFill
+            ? s.fill || 'transparent'
+            : (s.fill && s.fill !== 'transparent' && s.fill !== '')
+                ? s.fill
+                : (s.backgroundColor && s.backgroundColor !== 'transparent' && s.backgroundColor !== '')
+                    ? s.backgroundColor
+                    : 'transparent';
         return {
-            ...s, // Preserve all original properties (width, height, x, y, rotation, stroke, strokeWidth, etc.)
-            fill: fill, // Override fill with normalized value
+            ...s, // Preserve all original properties (width, height, x, y, rotation, stroke, strokeWidth, fillType, etc.)
+            fill: fill,
         };
     });
 
@@ -62,7 +69,7 @@ export const buildPreviewData = (event: EventData | any) => {
 
     // If canvasData already has preview data, use it
     if (walls.length > 0 || shapes.length > 0 || assets.length > 0) {
-        return { walls, shapes, assets };
+        return { walls, shapes, assets, textAnnotations };
     }
 
     // PRIORITY 2: Fallback to canvasAssets (most events use this format)
@@ -208,5 +215,5 @@ export const buildPreviewData = (event: EventData | any) => {
         });
     }
 
-    return { walls: fallbackWalls, shapes: fallbackShapes, assets: fallbackAssets };
+    return { walls: fallbackWalls, shapes: fallbackShapes, assets: fallbackAssets, textAnnotations: textAnnotations };
 };

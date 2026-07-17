@@ -81,25 +81,37 @@ export function getSnapPoints(element: SnapTarget, vertices: { x: number; y: num
         const halfH = shape.height / 2;
         const rot = shape.rotation || 0;
 
-        const rawPoints = [
-            { x: shape.x - halfW, y: shape.y - halfH, type: 'corner' as const },
-            { x: shape.x + halfW, y: shape.y - halfH, type: 'corner' as const },
-            { x: shape.x + halfW, y: shape.y + halfH, type: 'corner' as const },
-            { x: shape.x - halfW, y: shape.y + halfH, type: 'corner' as const },
-            { x: shape.x - halfW / 2, y: shape.y - halfH, type: 'quad' as const },
-            { x: shape.x, y: shape.y - halfH, type: 'midpoint' as const },
-            { x: shape.x + halfW / 2, y: shape.y - halfH, type: 'quad' as const },
-            { x: shape.x + halfW, y: shape.y - halfH / 2, type: 'quad' as const },
-            { x: shape.x + halfW, y: shape.y, type: 'midpoint' as const },
-            { x: shape.x + halfW, y: shape.y + halfH / 2, type: 'quad' as const },
-            { x: shape.x + halfW / 2, y: shape.y + halfH, type: 'quad' as const },
-            { x: shape.x, y: shape.y + halfH, type: 'midpoint' as const },
-            { x: shape.x - halfW / 2, y: shape.y + halfH, type: 'quad' as const },
-            { x: shape.x - halfW, y: shape.y + halfH / 2, type: 'quad' as const },
-            { x: shape.x - halfW, y: shape.y, type: 'midpoint' as const },
-            { x: shape.x - halfW, y: shape.y - halfH / 2, type: 'quad' as const },
-            { x: shape.x, y: shape.y, type: 'center' as const }
-        ];
+        let rawPoints: { x: number; y: number; type: 'corner' | 'midpoint' | 'center' | 'quad' }[] = [];
+
+        if (shape.type === 'ellipse') {
+            rawPoints = [
+                { x: shape.x, y: shape.y - halfH, type: 'midpoint' as const },
+                { x: shape.x - halfW, y: shape.y, type: 'midpoint' as const },
+                { x: shape.x + halfW, y: shape.y, type: 'midpoint' as const },
+                { x: shape.x, y: shape.y + halfH, type: 'midpoint' as const },
+                { x: shape.x, y: shape.y, type: 'center' as const }
+            ];
+        } else {
+            rawPoints = [
+                { x: shape.x - halfW, y: shape.y - halfH, type: 'corner' as const },
+                { x: shape.x + halfW, y: shape.y - halfH, type: 'corner' as const },
+                { x: shape.x + halfW, y: shape.y + halfH, type: 'corner' as const },
+                { x: shape.x - halfW, y: shape.y + halfH, type: 'corner' as const },
+                { x: shape.x - halfW / 2, y: shape.y - halfH, type: 'quad' as const },
+                { x: shape.x, y: shape.y - halfH, type: 'midpoint' as const },
+                { x: shape.x + halfW / 2, y: shape.y - halfH, type: 'quad' as const },
+                { x: shape.x + halfW, y: shape.y - halfH / 2, type: 'quad' as const },
+                { x: shape.x + halfW, y: shape.y, type: 'midpoint' as const },
+                { x: shape.x + halfW, y: shape.y + halfH / 2, type: 'quad' as const },
+                { x: shape.x + halfW / 2, y: shape.y + halfH, type: 'quad' as const },
+                { x: shape.x, y: shape.y + halfH, type: 'midpoint' as const },
+                { x: shape.x - halfW / 2, y: shape.y + halfH, type: 'quad' as const },
+                { x: shape.x - halfW, y: shape.y + halfH / 2, type: 'quad' as const },
+                { x: shape.x - halfW, y: shape.y, type: 'midpoint' as const },
+                { x: shape.x - halfW, y: shape.y - halfH / 2, type: 'quad' as const },
+                { x: shape.x, y: shape.y, type: 'center' as const }
+            ];
+        }
 
         rawPoints.forEach(p => {
             const rotated = rotatePoint(p.x, p.y, shape.x, shape.y, rot);

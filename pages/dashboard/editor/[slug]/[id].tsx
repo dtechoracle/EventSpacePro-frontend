@@ -350,8 +350,8 @@ function ElementsPane() {
   };
 
   const renderMiniPreview = (item: any) => {
-    const assetDef = item.type === "Asset" && item.asset
-      ? ASSET_LIBRARY.find(a => a.id === item.asset.type)
+    const assetDef: any = item.type === "Asset" && item.asset
+      ? (ASSET_LIBRARY.find(a => a.id === item.asset.type) || PRELOADED_VENUES.find(v => v.id === item.asset.type))
       : null;
 
     return (
@@ -361,7 +361,7 @@ function ElementsPane() {
             <div className="w-full h-full p-1">
               <InlineSvg
                 src={assetDef.path}
-                fill={item.asset.fillColor || (item.asset as any).fill || "none"}
+                fill={item.asset.tableColor || item.asset.chairColor || item.asset.fillColor || (item.asset as any).fill || "none"}
                 stroke={item.asset.strokeColor || (item.asset as any).stroke || "currentColor"}
                 strokeWidth={0.6}
                 category={assetDef.category}
@@ -802,8 +802,8 @@ function ElementsPane() {
                 </span>
               </button>
               {isExpanded && groupedElementItems.venueItems.map((item) => {
-                const assetDef = item.type === 'Asset' && item.asset
-                  ? ASSET_LIBRARY.find(a => a.id === item.asset!.type)
+                const assetDef: any = item.type === 'Asset' && item.asset
+                  ? (ASSET_LIBRARY.find(a => a.id === item.asset!.type) || PRELOADED_VENUES.find(v => v.id === item.asset!.type))
                   : null;
                 const isSelected = selectedIds.includes(item.id);
                 return (
@@ -906,7 +906,7 @@ function ElementsPane() {
                                 <div className="w-full h-full p-1">
                                   <InlineSvg
                                     src={assetDef.path}
-                                    fill={item.asset.fillColor || (item.asset as any).fill || "none"}
+                                    fill={item.asset.tableColor || item.asset.chairColor || item.asset.fillColor || (item.asset as any).fill || "none"}
                                     stroke={item.asset.strokeColor || (item.asset as any).stroke || "currentColor"}
                                     strokeWidth={0.6}
                                     category={assetDef.category}
@@ -2251,7 +2251,14 @@ export default function Editor() {
               const sceneAsset = sceneAssetsById.get(asset.id);
               return sceneAsset ? { ...asset, ...sceneAsset } : asset;
             }),
-            hasUnsavedChanges: true,
+          }));
+        } else if (currentProjectHasChanges && projectStore.assets.length > 0) {
+          const projectAssetsById = new Map(projectStore.assets.map((projectAsset) => [projectAsset.id, projectAsset]));
+          useSceneStore.setState((state) => ({
+            assets: state.assets.map((asset) => {
+              const projectAsset = projectAssetsById.get(asset.id);
+              return projectAsset ? { ...asset, ...projectAsset } : asset;
+            }),
           }));
         }
 
@@ -2291,7 +2298,7 @@ export default function Editor() {
           });
         setTimeout(() => {
           justSavedRef.current = false;
-        }, 300);
+        }, 2500);
 
         const latestProjectStore = useProjectStore.getState();
         const latestSceneStore = useSceneStore.getState();

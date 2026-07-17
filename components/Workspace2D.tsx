@@ -607,6 +607,8 @@ export default function Workspace2D({
   const ungroupSelection = useProjectStore(s => s.ungroupSelection);
   const undo = useProjectStore(s => s.undo);
   const redo = useProjectStore(s => s.redo);
+  const past = useProjectStore(s => s.history.past);
+  const future = useProjectStore(s => s.history.future);
   const saveToHistory = useProjectStore(s => s.saveToHistory);
   const updateDimension = useProjectStore(s => s.updateDimension);
   const updateTextAnnotation = useProjectStore(s => s.updateTextAnnotation);
@@ -1162,6 +1164,7 @@ export default function Workspace2D({
         let finalY = worldY;
         let guides: any[] = [];
         let finalRotation: number | null = null;
+        let finalHeight: number | null = null;
 
         // Specific checks for Space Elements (Doors/Windows)
         const isSpaceElement = selectedIds.length === 1 &&
@@ -1241,10 +1244,21 @@ export default function Workspace2D({
               }
             }
 
+
             if (bestSnap) {
               finalRotation = bestSnap.wallAngle;
               finalX = worldX + (bestSnap.x - (asset.x + dx + bestSnap.localOffset.x));
               finalY = worldY + (bestSnap.y - (asset.y + dy + bestSnap.localOffset.y));
+
+              // Trim window height to match snapped wall thickness
+              const isWindow = (asset.type || asset.id).toLowerCase().includes('window');
+              if (isWindow && bestSnap.wallId) {
+                const wall = walls.find(w => w.id === bestSnap.wallId);
+                const edge = wall?.edges.find(e => e.id === bestSnap.edgeId);
+                if (edge) {
+                  finalHeight = edge.thickness || 150;
+                }
+              }
             }
           }
         } else if (snapToObjectsEnabled && selectedIds.length === 1) {
@@ -1477,7 +1491,8 @@ export default function Workspace2D({
             updates: {
               x: asset.x + snappedDx,
               y: asset.y + snappedDy,
-              ...(finalRotation !== null && finalRotation !== undefined ? { rotation: finalRotation } : {})
+              ...(finalRotation !== null && finalRotation !== undefined ? { rotation: finalRotation } : {}),
+              ...(finalHeight !== null && finalHeight !== undefined ? { height: finalHeight } : {})
             },
           });
         });
@@ -3944,6 +3959,31 @@ export default function Workspace2D({
       />
       {/* Grid unit / size control */}
       <div className="absolute top-3 right-3 z-50 flex items-center gap-3 bg-white/90 shadow-sm rounded-md px-3 py-2 text-xs sm:text-sm text-slate-700 border border-slate-200">
+        <button
+          onClick={() => useProjectStore.getState().undo()}
+          className={`px-2 py-1 rounded transition-colors flex items-center gap-1 ${
+            past.length > 0
+              ? 'hover:bg-gray-100 text-slate-700'
+              : 'text-slate-300 cursor-not-allowed'
+          }`}
+          disabled={past.length === 0}
+          title="Undo (Ctrl+Z)"
+        >
+          ↶ Undo
+        </button>
+        <button
+          onClick={() => useProjectStore.getState().redo()}
+          className={`px-2 py-1 rounded transition-colors flex items-center gap-1 ${
+            future.length > 0
+              ? 'hover:bg-gray-100 text-slate-700'
+              : 'text-slate-300 cursor-not-allowed'
+          }`}
+          disabled={future.length === 0}
+          title="Redo (Ctrl+Shift+Z)"
+        >
+          ↷ Redo
+        </button>
+        <div className="w-px h-4 bg-slate-300 mx-1"></div>
         <label className="flex items-center gap-1 cursor-pointer" title="Snap to grid intersections">
           <input
             type="checkbox"

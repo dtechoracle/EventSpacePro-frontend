@@ -553,10 +553,6 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             // (e.g. QCAD wireframe exports with only open paths). Adds a fillable
             // background rect so fill/stroke controls work without editing the SVG.
             if (!hasExplicitAutoFill && definition?.path && (
-                definition.path.toLowerCase().includes('seater') ||
-                definition.path.toLowerCase().includes('sofa') ||
-                definition.path.toLowerCase().includes('doughtnut') ||
-                definition.path.toLowerCase().includes('chair') ||
                 definition.path.toLowerCase().includes('curve')
             )) {
                 const vb = svg.getAttribute('viewBox');
@@ -666,7 +662,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
 
                 let shouldBeNone = wasExplicitlyNone || isLineElement || isOpenPath;
 
-                if (hasExplicitAutoFill && tag === 'path' && !isAutoFill) {
+                if (hasExplicitAutoFill && tag === 'path' && !isAutoFill && !isFurniture) {
                     shouldBeNone = true;
                 }
 
@@ -842,7 +838,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                         height={asset.height || 100}
                         fill="transparent"
                         stroke="none"
-                        pointerEvents={definition?.category === 'Marquee' ? 'none' : 'all'}
+                        pointerEvents="all"
                     />
 
 
