@@ -85,11 +85,11 @@ export default function CreateProjectModal({
         onClick={onClose}
       >
         <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 30 }}
+          initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 30 }}
-          transition={{ type: "spring", stiffness: 200, damping: 20 }}
-          className="bg-[#FDFDFF] text-[#272235] w-[35rem] min-h-[18.6rem] rounded-[2.25rem] p-[2.625rem] flex flex-col gap-6 relative"
+          exit={{ opacity: 0, scale: 0.95, y: 15 }}
+          transition={{ type: "spring", stiffness: 260, damping: 25 }}
+          className="bg-white text-gray-900 w-[30rem] min-h-[17.5rem] rounded-xl p-7 flex flex-col gap-5 relative border border-gray-200 shadow-xl"
           onClick={(e) => e.stopPropagation()}
         >
           <AnimatePresence mode="wait">
@@ -102,7 +102,7 @@ export default function CreateProjectModal({
                 transition={{ duration: 0.3 }}
                 className="flex flex-col gap-6"
               >
-                <h2 className="text-[2rem] font-semibold text-[#272235]">
+                <h2 className="text-xl font-bold text-gray-900 tracking-tight">
                   Create a new project
                 </h2>
                 <input
@@ -110,12 +110,12 @@ export default function CreateProjectModal({
                   placeholder="Project Name"
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
-                  className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
+                  className="w-full h-11 rounded-xl px-4 py-2 bg-gray-50 border border-gray-200 text-gray-900 text-xs outline-none focus:border-blue-500 placeholder:text-gray-400"
                 />
                 <button
                   onClick={() => projectName && setPhase(2)}
                   disabled={!projectName}
-                  className="w-full h-14 rounded-2xl text-white text-base font-medium bg-[var(--accent)] disabled:opacity-50"
+                  className="w-full h-11 rounded-xl text-white text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-40 transition-colors"
                 >
                   Next
                 </button>
@@ -129,26 +129,26 @@ export default function CreateProjectModal({
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -40 }}
                 transition={{ duration: 0.3 }}
-                className="flex flex-col gap-6"
+                className="flex flex-col gap-5"
               >
-                <div className="flex items-center justify-center gap-2 w-full">
-                  <h2 className="text-[2rem] font-semibold text-[#272235]">
+                <div className="flex items-center justify-between w-full">
+                  <h2 className="text-xl font-bold text-gray-900 tracking-tight">
                     Add Collaborators
                   </h2>
-                  <FaPlus className="text-xl text-[#272235]" />
+                  <FaPlus className="text-sm text-gray-500" />
                 </div>
                 <input
                   type="email"
                   placeholder="Email Address..."
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full h-14 rounded-2xl px-6 py-4 bg-[#0000000A] text-base outline-none"
+                  className="w-full h-11 rounded-xl px-4 py-2 bg-gray-50 border border-gray-200 text-gray-900 text-xs outline-none focus:border-blue-500 placeholder:text-gray-400"
                 />
                 <button
                   onClick={handleSubmit}
-                  className={`w-full h-14 rounded-2xl text-base font-medium ${email
-                      ? "bg-[var(--accent)] text-white"
-                      : "bg-[#0000000A] text-gray-500"
+                  className={`w-full h-11 rounded-xl text-xs font-semibold transition-colors ${email
+                      ? "bg-blue-600 text-white hover:bg-blue-500"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                     }`}
                 >
                   {email ? "Add" : "Skip for now"}

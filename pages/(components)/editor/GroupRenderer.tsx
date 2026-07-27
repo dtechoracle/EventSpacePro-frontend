@@ -24,6 +24,7 @@ interface GroupRendererProps {
   onRotationHandleMouseDown: (e: React.MouseEvent, assetId: string) => void;
   selectedAssetId: string | null;
   selectedAssetIds: string[];
+  workspaceZoom?: number;
 }
 
 const GroupRenderer = React.memo(({
@@ -47,6 +48,7 @@ const GroupRenderer = React.memo(({
   onRotationHandleMouseDown,
   selectedAssetId,
   selectedAssetIds,
+  workspaceZoom,
 }: GroupRendererProps) => {
   if (!group || !group.isGroup || !group.groupAssets) return null;
 
@@ -137,6 +139,7 @@ const GroupRenderer = React.memo(({
             onAssetContextMenu={(e, id) => onAssetContextMenu(e, id)}
             onScaleHandleMouseDown={onScaleHandleMouseDown}
             onRotationHandleMouseDown={onRotationHandleMouseDown}
+            workspaceZoom={workspaceZoom}
           />
         ))}
       </div>

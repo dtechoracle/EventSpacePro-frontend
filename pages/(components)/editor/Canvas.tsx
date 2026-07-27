@@ -482,6 +482,7 @@ export default function Canvas({
                 onRotationHandleMouseDown={assetHandlers.onRotationHandleMouseDown}
                 selectedAssetId={selectedAssetId}
                 selectedAssetIds={selectedAssetIds}
+                workspaceZoom={workspaceZoom}
               />
             ) : (
               <AssetRenderer
@@ -495,6 +496,7 @@ export default function Canvas({
                 onRotationHandleMouseDown={assetHandlers.onRotationHandleMouseDown}
                 onAssetContextMenu={handleAssetContextMenu}
                 globalPos={globalPos} globalOrientation={globalOrientation}
+                workspaceZoom={workspaceZoom}
               />
             )}
           </div>
@@ -647,7 +649,7 @@ export default function Canvas({
             <SnapGuidesRenderer mmToPx={mmToPx} workspaceZoom={workspaceZoom} />
             
             <SelectionBox mmToPx={mmToPx} />
-            <AnchorHighlights mmToPx={mmToPx} />
+            <AnchorHighlights mmToPx={mmToPx} zoom={workspaceZoom} />
           </div>
         </div>
         <ThreeDOverlay />

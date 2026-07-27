@@ -777,10 +777,10 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                             <circle
                                 cx={segments[0].start.x}
                                 cy={segments[0].start.y}
-                                r={12}
+                                r={12 / zoom}
                                 fill={isSnappingToStart ? "#22c55e" : "white"}
                                 stroke={isSnappingToStart ? "#ffffff" : "#3b82f6"}
-                                strokeWidth={3}
+                                strokeWidth={3 / zoom}
                                 style={{ opacity: isSnappingToStart ? 1 : 0.8 }}
                             />
                         )}
@@ -793,31 +793,31 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                         <circle
                             cx={snapIndicator.x}
                             cy={snapIndicator.y}
-                            r={8}
+                            r={8 / zoom}
                             fill="none"
-                            stroke="#f59e0b" // Amber-500
-                            strokeWidth={2}
+                            stroke="#f59e0b"
+                            strokeWidth={2 / zoom}
                         />
                         {snapIndicator.type === 'midpoint' && (
                             <path
-                                d={`M${snapIndicator.x - 4},${snapIndicator.y - 4} L${snapIndicator.x + 4},${snapIndicator.y + 4} M${snapIndicator.x + 4},${snapIndicator.y - 4} L${snapIndicator.x - 4},${snapIndicator.y + 4}`}
+                                d={`M${snapIndicator.x - 4 / zoom},${snapIndicator.y - 4 / zoom} L${snapIndicator.x + 4 / zoom},${snapIndicator.y + 4 / zoom} M${snapIndicator.x + 4 / zoom},${snapIndicator.y - 4 / zoom} L${snapIndicator.x - 4 / zoom},${snapIndicator.y + 4 / zoom}`}
                                 stroke="#f59e0b"
-                                strokeWidth={1}
+                                strokeWidth={1 / zoom}
                             />
                         )}
                         {snapIndicator.type === 'center' && (
                             <circle
                                 cx={snapIndicator.x}
                                 cy={snapIndicator.y}
-                                r={2}
+                                r={2 / zoom}
                                 fill="#f59e0b"
                             />
                         )}
                         <text
-                            x={snapIndicator.x + 12}
+                            x={snapIndicator.x + 12 / zoom}
                             y={snapIndicator.y}
                             fill="#f59e0b"
-                            fontSize={16}
+                            fontSize={16 / zoom}
                             fontWeight="bold"
                             dominantBaseline="middle"
                             style={{ textShadow: '0px 0px 2px white' }}

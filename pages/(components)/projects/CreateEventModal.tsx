@@ -13,6 +13,7 @@ import { MARQUEES } from "@/lib/marquees";
 import { PRELOADED_VENUES, PreloadedVenueDef } from "@/lib/preloadedVenues";
 import InlineSvg from "@/components/tools/InlineSvg";
 import { FaUserPlus, FaChevronDown, FaPlus, FaMapMarkerAlt } from "react-icons/fa";
+import { BsStars } from "react-icons/bs";
 
 interface ApiError {
   message: string;
@@ -49,6 +50,11 @@ export default function CreateEventModal({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [collabEmail, setCollabEmail] = useState("");
   const [collabPermission, setCollabPermission] = useState("editor");
+  // Refs to avoid stale-closure in useMutation's onSuccess callback
+  const collabEmailRef = useRef("");
+  const collabPermissionRef = useRef("editor");
+  collabEmailRef.current = collabEmail;
+  collabPermissionRef.current = collabPermission;
   const { assets } = useProjectStore();
   const router = useRouter();
   
@@ -245,20 +251,23 @@ export default function CreateEventModal({
       const eventId = response.data._id;
 
       // Send collaborator invitation if email is provided
-      if (collabEmail && collabEmail.includes("@")) {
+      // Use refs to avoid stale-closure capturing an empty string
+      const inviteEmail = collabEmailRef.current;
+      const inviteRole = collabPermissionRef.current;
+      if (inviteEmail && inviteEmail.includes("@")) {
         try {
           await apiRequest(`/projects/${selectedProjectId}/users`, "POST", {
             users: [
               {
-                email: collabEmail,
-                role: collabPermission
+                email: inviteEmail,
+                role: inviteRole
               }
             ]
           }, true);
-          toast.success(`Invitation sent to ${collabEmail}`);
-        } catch (e) {
+          toast.success(`Invitation sent to ${inviteEmail}`);
+        } catch (e: any) {
           console.error("Failed to send collaborator invitation", e);
-          toast.error("Event created but failed to send invitation");
+          toast.error(e?.message || "Event created but failed to send invitation");
         }
       }
 
@@ -383,11 +392,11 @@ export default function CreateEventModal({
         onClick={onClose}
       >
         <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 30 }}
+          initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 30 }}
-          transition={{ type: "spring", stiffness: 200, damping: 20 }}
-          className="bg-[#FDFDFF] text-[#272235] w-[35rem] min-h-[18.6rem] rounded-[2.25rem] p-[2.625rem] flex flex-col gap-6 relative"
+          exit={{ opacity: 0, scale: 0.95, y: 15 }}
+          transition={{ type: "spring", stiffness: 260, damping: 25 }}
+          className="bg-white text-gray-900 w-[32rem] min-h-[17.5rem] rounded-xl p-7 flex flex-col gap-5 relative border border-gray-200 shadow-xl"
           onClick={(e) => e.stopPropagation()}
         >
           <AnimatePresence mode="wait">
@@ -399,14 +408,16 @@ export default function CreateEventModal({
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -40 }}
                 transition={{ duration: 0.3 }}
-                className="flex flex-col gap-6"
+                className="flex flex-col gap-5"
               >
-                <h2 className="text-[2rem] font-semibold text-[#272235]">
-                  Create New Event
-                </h2>
-                <p className="text-sm text-gray-600">
-                  Choose how you'd like to create your event
-                </p>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 tracking-tight">
+                    Create New Event
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Select how you would like to begin your floorplan project
+                  </p>
+                </div>
 
                 <div className="flex flex-col gap-3">
                   <button
@@ -414,30 +425,42 @@ export default function CreateEventModal({
                       setCreationType('manual');
                       setStep('venue-selection');
                     }}
-                    className="w-full h-14 rounded-2xl text-[#272235] text-base font-medium bg-[#0000000A] hover:bg-[#0000001A] transition-colors"
+                    className="w-full p-4 rounded-xl text-left border border-gray-200 hover:border-blue-500 hover:bg-blue-50/50 transition-all flex items-center justify-between group"
                   >
-                    Create Event
+                    <div>
+                      <h3 className="font-semibold text-sm text-gray-900 group-hover:text-blue-600">Standard Creation</h3>
+                      <p className="text-xs text-gray-500 mt-0.5">Build or pick venue layouts manually</p>
+                    </div>
+                    <span className="text-gray-400 group-hover:text-blue-600 transition-colors">→</span>
                   </button>
+
                   <button
                     onClick={() => {
                       setCreationType('ai');
                       setStep('event-details');
                     }}
-                    className="w-full h-14 rounded-2xl text-white text-base font-medium bg-[var(--accent)] hover:opacity-90 transition-opacity"
+                    className="w-full p-4 rounded-xl text-left border border-blue-200 bg-blue-50/30 hover:bg-blue-50 hover:border-blue-500 transition-all flex items-center justify-between group"
                   >
-                    Create Event with AI
+                    <div>
+                      <h3 className="font-semibold text-sm text-blue-700 flex items-center gap-1.5">
+                        <BsStars className="text-blue-600" />
+                        <span>Create with AI</span>
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-0.5">Let AI generate and arrange your event space</p>
+                    </div>
+                    <span className="text-blue-600 transition-colors">→</span>
                   </button>
                 </div>
 
-                <div className="text-center mt-2 pb-2">
+                <div className="text-center pt-1">
                   <button 
                     onClick={() => {
                       router.push('/dashboard/projects');
                       onClose();
                     }}
-                    className="text-xs text-gray-400 hover:text-[var(--accent)] font-medium transition-all group inline-flex items-center justify-center gap-1.5 mx-auto"
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
                   >
-                    <span>Create a project instead?</span>
+                    Create a project instead?
                   </button>
                 </div>
               </motion.div>
@@ -780,12 +803,14 @@ export default function CreateEventModal({
                       }`}
                     >
                       <div className="w-full aspect-video bg-white rounded-xl border border-gray-100 overflow-hidden flex items-center justify-center p-3 group-hover:shadow-sm transition-all relative">
-                        <img 
-                          src={venue.path} 
-                          alt={venue.name}
-                          className="w-full h-full object-contain pointer-events-none"
-                          loading="lazy"
-                        />
+                        <div className="w-full h-full p-2 flex items-center justify-center">
+                          <InlineSvg
+                            src={venue.path}
+                            stroke="#272235"
+                            strokeWidth={2}
+                            fill="none"
+                          />
+                        </div>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -798,9 +823,9 @@ export default function CreateEventModal({
                           <FaMapMarkerAlt size={14} />
                         </button>
                       </div>
-                      <div className="text-center">
-                        <h3 className="font-semibold text-sm truncate w-full">{venue.name}</h3>
-                        <p className="text-[10px] text-gray-400 mt-0.5">{venue.width/1000}m x {venue.height/1000}m</p>
+                      <div className="text-center w-full px-1">
+                        <h3 className="font-semibold text-xs md:text-sm text-[#272235] leading-snug whitespace-normal break-words w-full">{venue.name}</h3>
+                        <p className="text-[10px] text-gray-400 mt-1">{venue.width/1000}m x {venue.height/1000}m</p>
                       </div>
                     </button>
                   ))}

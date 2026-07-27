@@ -79,28 +79,28 @@ export default function QuickCreateEventModal({ onClose }: { onClose: () => void
         onClick={onClose}
       >
         <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 30 }}
+          initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 30 }}
-          transition={{ type: "spring", stiffness: 200, damping: 20 }}
-          className="bg-[#FDFDFF] text-[#272235] w-[35rem] rounded-[2.25rem] p-[2.625rem] flex flex-col gap-6 relative"
+          exit={{ opacity: 0, scale: 0.95, y: 15 }}
+          transition={{ type: "spring", stiffness: 260, damping: 25 }}
+          className="bg-[#1E1E24] text-white w-[30rem] rounded-xl p-8 flex flex-col gap-6 relative border border-white/10 shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex flex-col gap-6">
-            <h2 className="text-[2rem] font-semibold text-[#272235]">
+          <div className="flex flex-col gap-5">
+            <h2 className="text-2xl font-bold text-white">
               Create a new event
             </h2>
 
             <div className="flex flex-col gap-4">
               {/* Event Name */}
-              <div className="flex flex-col gap-4">
-                <label className="text-sm font-medium text-gray-700 ml-1">Event Name</label>
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold text-gray-300 ml-1">Event Name</label>
                 <input
                   type="text"
                   placeholder="e.g. Summer Gala 2024"
                   value={eventName}
                   onChange={(e) => setEventName(e.target.value)}
-                  className="w-full h-14 rounded-2xl px-6 bg-[#0000000A] text-base outline-none"
+                  className="w-full h-12 rounded-xl px-5 bg-[#2A2A32] text-white border border-white/10 text-sm outline-none focus:border-blue-500 placeholder:text-gray-400"
                   autoFocus
                 />
               </div>
@@ -110,23 +110,23 @@ export default function QuickCreateEventModal({ onClose }: { onClose: () => void
               <button
                 onClick={() => mutation.mutate()}
                 disabled={!eventName || mutation.isPending}
-                className="w-full h-14 rounded-2xl text-white text-base font-bold bg-[var(--accent)] disabled:bg-gray-100 disabled:text-gray-400 disabled:opacity-100 transition-all flex items-center justify-center gap-2"
+                className="w-full h-12 rounded-xl text-white text-sm font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
               >
                 {mutation.isPending ? "Creating..." : (
                   <>
-                    <FaPlus size={16} />
+                    <FaPlus size={14} />
                     <span>Create event</span>
                   </>
                 )}
               </button>
 
-              <div className="text-center mt-2 pb-2">
+              <div className="text-center mt-1">
                 <button
                   onClick={() => {
                     router.push('/dashboard/projects');
                     onClose();
                   }}
-                  className="text-[18px] text-blue-600 hover:text-[var(--accent)] font-medium transition-all group inline-flex items-center justify-center gap-1.5 mx-auto"
+                  className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-all inline-flex items-center justify-center gap-1.5 mx-auto"
                 >
                   <span>Create a project instead?</span>
                 </button>

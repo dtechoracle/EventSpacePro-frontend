@@ -4,6 +4,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useEditorStore } from '@/store/editorStore';
 import { useProjectStore, Shape, Wall, Asset, Dimension, TextAnnotation, LabelArrow } from '@/store/projectStore';
 import { SpatialIndex, getRotatedItemBounds } from '@/utils/spatialIndex';
+import { ASSET_LIBRARY } from '@/lib/assets';
 
 interface SelectionToolProps {
     isActive: boolean;
@@ -105,8 +106,10 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
         selectedItems.forEach(item => {
             if (item.type === 'shape') {
                 const shape = item.object as Shape;
-                const halfW = shape.width / 2;
-                const halfH = shape.height / 2;
+                const w = shape.fixedSize ? 16 / zoom : shape.width;
+                const h = shape.fixedSize ? 16 / zoom : shape.height;
+                const halfW = w / 2;
+                const halfH = h / 2;
                 const rot = (shape.rotation || 0) * (Math.PI / 180);
                 const cosR = Math.cos(rot);
                 const sinR = Math.sin(rot);
@@ -121,8 +124,8 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                 if (selectedIds.length === 1) singleRotation = shape.rotation || 0;
             } else if (item.type === 'asset') {
                 const asset = item.object as Asset;
-                const width = asset.width * (asset.scale || 1);
-                const height = asset.height * (asset.scale || 1);
+                const width = (asset as any).fixedSize ? 16 / zoom : asset.width * (asset.scale || 1);
+                const height = (asset as any).fixedSize ? 16 / zoom : asset.height * (asset.scale || 1);
                 const halfW = width / 2;
                 const halfH = height / 2;
                 const rot = (asset.rotation || 0) * (Math.PI / 180);
@@ -176,9 +179,13 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                 const item = selectedItems[0].object as any;
                 const type = selectedItems[0].type;
                 if (type === 'asset') {
-                    nextGroupBounds = { x: item.x || 0, y: item.y || 0, width: (item.width || 0) * (item.scale || 1), height: (item.height || 0) * (item.scale || 1), rotation: item.rotation || 0 };
+                    const w = item.fixedSize ? 16 / zoom : (item.width || 0) * (item.scale || 1);
+                    const h = item.fixedSize ? 16 / zoom : (item.height || 0) * (item.scale || 1);
+                    nextGroupBounds = { x: item.x || 0, y: item.y || 0, width: w, height: h, rotation: item.rotation || 0 };
                 } else if (type === 'shape') {
-                    nextGroupBounds = { x: item.x || 0, y: item.y || 0, width: item.width || 0, height: item.height || 0, rotation: item.rotation || 0 };
+                    const w = item.fixedSize ? 16 / zoom : (item.width || 0);
+                    const h = item.fixedSize ? 16 / zoom : (item.height || 0);
+                    nextGroupBounds = { x: item.x || 0, y: item.y || 0, width: w, height: h, rotation: item.rotation || 0 };
                 } else if (type === 'textAnnotation') {
                     const fs = item.fontSize || 250;
                     const lineHeight = item.lineHeight || 1.2;
@@ -486,7 +493,13 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
         }
     }, [dragHandle, handleMouseMove, handleMouseUp]);
 
-    if (!isActive || selectedItems.length === 0) return null;
+    const hasSelectedVenue = selectedItems.some(it => {
+        if (it.type !== 'asset') return false;
+        const asset = it.object as any;
+        const libDef = ASSET_LIBRARY.find((item: any) => item.id === asset.type);
+        return libDef?.category === 'Venue' || asset.type === 'Venue' || asset.category === 'Venue';
+    });
+    if (!isActive || selectedItems.length === 0 || hasSelectedVenue) return null;
 
     // Only use initial state for Rotation to keep pivot stable.
     // Movement and Resizing should use the live recalculated groupBounds from the store.
@@ -699,7 +712,7 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                 }}
             />
             
-            {['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w'].map(h => {
+            {!selectedItems.some(it => (it.type === 'shape' || it.type === 'asset') && (it.object as any).fixedSize) && ['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w'].map(h => {
                 const px = h.includes('w') ? -halfW : (h.includes('e') ? halfW : 0);
                 const py = h.includes('n') ? -halfH : (h.includes('s') ? halfH : 0);
                 const pos = worldToScreenPoint(rotatePoint(px, py).x, rotatePoint(px, py).y);

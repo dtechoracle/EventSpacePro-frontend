@@ -871,8 +871,8 @@ function ElementsPane() {
               {isExpanded && (
                 <div>
                   {groupItems.map((item) => {
-                    const assetDef = item.type === "Asset" && item.asset
-                      ? ASSET_LIBRARY.find(a => a.id === item.asset.type)
+                    const assetDef: any = item.type === "Asset" && item.asset
+                      ? (ASSET_LIBRARY.find(a => a.id === item.asset.type) || PRELOADED_VENUES.find(v => v.id === item.asset.type))
                       : null;
 
                     const isAsset = item.type === "Asset";

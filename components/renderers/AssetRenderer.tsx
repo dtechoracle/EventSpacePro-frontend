@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSceneStore } from '@/store/sceneStore';
 import { Asset, useProjectStore } from '@/store/projectStore';
 import { ASSET_LIBRARY } from '@/lib/assets';
+import { PRELOADED_VENUES } from '@/lib/preloadedVenues';
 import { DEFAULT_ASSET_STROKE_WIDTH, canRenderAssetAsImage } from '@/utils/assetRenderMode';
 import { getRasterAssetPath } from '@/utils/assetRasterPath';
 
@@ -304,7 +305,9 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const globalTableColor = useProjectStore(s => s.globalTableNumberingColor);
 
     // Find the definition for this asset type
-    const definition = ASSET_LIBRARY.find(item => item.id === asset.type);
+    const libDef = ASSET_LIBRARY.find(item => item.id === asset.type);
+    const venueDef = !libDef ? PRELOADED_VENUES.find(v => v.id === asset.type) : null;
+    const definition: any = libDef || (venueDef ? { ...venueDef, category: 'Venue', label: venueDef.name } : null);
     const isMarquee = definition?.category === 'Marquee';
     const assetPath = definition?.path ? encodeURI(definition.path) : null;
     const rasterAssetPath = definition?.path ? encodeURI(getRasterAssetPath(definition.path) || '') : null;
@@ -363,8 +366,8 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             svgMetricsCache[definition.path] = metrics;
             setRawSvgContent(text);
 
-            const svgWidth = metrics.shouldCropToContent ? metrics.contentWidth : metrics.artboardWidth;
-            const svgHeight = metrics.shouldCropToContent ? metrics.contentHeight : metrics.artboardHeight;
+            const svgWidth = (metrics.shouldCropToContent && metrics.contentWidth) ? metrics.contentWidth : metrics.artboardWidth;
+            const svgHeight = (metrics.shouldCropToContent && metrics.contentHeight) ? metrics.contentHeight : metrics.artboardHeight;
 
             if (svgWidth && svgHeight) {
                 const currentW = asset.width;
@@ -428,7 +431,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         if (canUseFastImage) return null;
         if (!rawSvgContent || typeof window === 'undefined' || !definition?.path) return null;
 
-        const cacheKey = `${definition.path}_workspace_v42_content_bounds_normalized`;
+        const cacheKey = `${definition.path}_workspace_v48_content_bounds_normalized`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
@@ -578,7 +581,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             }
 
 
-            const children = Array.from(doc.querySelectorAll('path, circle, rect, line, polyline, ellipse'));
+            const children = Array.from(doc.querySelectorAll('path, circle, rect, line, polyline, ellipse')).filter(el => !el.closest('defs, clipPath'));
             const circles = Array.from(doc.querySelectorAll('circle'));
             const innerCircles = new Set();
 
@@ -634,6 +637,16 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
 
                 const isClosed = isZClosed || isCoordClosed;
                 const isOpenPath = tag === 'path' && !isClosed;
+                const isVenue = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
+                const isBgFill = isVenue && (tag === 'rect' || tag === 'path') && (() => {
+                    const m = getElementMetrics(el);
+                    if (!m) return false;
+                    const area = m.width * m.height;
+                    const canvasArea = contentWidth * contentHeight;
+                    // Any element covering more than 75% of the floorplan bounds is likely a solid background rectangle
+                    return area > canvasArea * 0.75;
+                })();
+
                 const autoFillContainer = el.closest('[id="auto-fill"], .auto-fill, [data-auto-fill="true"]');
                 const isAutoFill =
                     el.getAttribute("id") === "auto-fill" ||
@@ -647,24 +660,30 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 const catLower = category.toLowerCase();
                 const isFurniture = catLower === 'furniture' || catLower === 'structure' || catLower === 'furniture asset' || asset.type.includes('chair') || asset.type.includes('table');
 
+                let shouldBeNone = wasExplicitlyNone || isLineElement || isOpenPath || isBgFill;
+
+                if (hasExplicitAutoFill && tag === 'path' && !isAutoFill && !isFurniture) {
+                    shouldBeNone = true;
+                }
+
                 if (styleAttr) {
-                    const cleaned = styleAttr
-                        .replace(/fill\s*:[^;]+;?/gi, "")
-                        .replace(/stroke\s*:[^;]+;?/gi, "")
-                        .replace(/stroke-width\s*:[^;]+;?/gi, "");
-                    if (cleaned.trim()) el.setAttribute("style", cleaned);
-                    else el.removeAttribute("style");
+                    const cleaned = shouldBeNone
+                        ? styleAttr.replace(/fill\s*:[^;]+;?/gi, "").replace(/stroke\s*:[^;]+;?/gi, "").replace(/stroke-width\s*:[^;]+;?/gi, "")
+                        : styleAttr.replace(/fill\s*:[^;]+;?/gi, "").replace(/stroke\s*:[^;]+;?/gi, "").replace(/stroke-width\s*:[^;]+;?/gi, "");
+                    // For background elements, strip stroke definitions from inline styles so stroke='none' takes effect
+                    if (isBgFill) {
+                        const bgCleaned = cleaned.replace(/stroke\s*:[^;]+;?/gi, "").replace(/stroke-width\s*:[^;]+;?/gi, "");
+                        if (bgCleaned.trim()) el.setAttribute("style", bgCleaned);
+                        else el.removeAttribute("style");
+                    } else {
+                        if (cleaned.trim()) el.setAttribute("style", cleaned);
+                        else el.removeAttribute("style");
+                    }
                 }
 
                 el.removeAttribute("fill");
                 el.removeAttribute("stroke");
                 el.removeAttribute("stroke-width");
-
-                let shouldBeNone = wasExplicitlyNone || isLineElement || isOpenPath;
-
-                if (hasExplicitAutoFill && tag === 'path' && !isAutoFill && !isFurniture) {
-                    shouldBeNone = true;
-                }
 
                 if (!isFurniture) {
                     const isConsentricOuter = tag === 'circle' && circles.length > 1 && !innerCircles.has(el);
@@ -675,6 +694,8 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
 
                 if (shouldBeNone && !hasFillRule && !isAutoFill) {
                     el.classList.add("fill-none-el");
+                    el.setAttribute("stroke", "none");
+                    (el as HTMLElement).style.stroke = "none";
                 } else if (isMultiSeater) {
                     const elMetrics = getElementMetrics(el);
                     let isTable = false;
@@ -734,7 +755,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         let fill = asset.fillColor || 'transparent'; // Standard default
         const a = asset as any;
         if (a.fillType === 'texture' || a.fillType === 'hatch' || a.fillType === 'hash') {
-            const scale = a.fillTextureScale || 4;
+            const scale = a.fillTextureScale !== undefined ? a.fillTextureScale : 10;
             const thickness = a.fillTextureThickness || 1;
             if (a.fillTexture) {
                 const rotation = a.hatchRotation || 0;

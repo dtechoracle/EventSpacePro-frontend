@@ -112,6 +112,7 @@ export type Shape = {
     tableNumberingFontStyle?: string;
     tableNumberingTextDecoration?: string;
     tableNumberingColor?: string;
+    fixedSize?: boolean;
 };
 
 export type Asset = {

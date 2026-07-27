@@ -1344,64 +1344,65 @@ const renderAssetToCanvas = (
 
   return (
     <div className="mt-4 border-t border-slate-200 pt-4 font-sans">
-      <div className="flex items-center justify-between pb-3">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex w-full items-center justify-between py-1 text-left"
+      >
         <h3 className="text-sm font-semibold text-slate-900">Export</h3>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50"
-          title={isExpanded ? "Collapse export" : "Expand export"}
-        >
-          {isExpanded ? <FaTimes size={10} /> : <FaPlus size={10} />}
-        </button>
-      </div>
+        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-[#0056A9] transition-colors">
+          {isExpanded ? <FaTimes size={9} /> : <FaPlus size={9} />}
+        </div>
+      </button>
 
       {primaryOption && (
         <div className="space-y-3">
-          <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+          <div className="flex items-center gap-2">
             <select
-              className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none"
+              className="flex-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-[#0056A9]"
               value={primaryOption.paperSize}
               onChange={e => setExportOptions(exportOptions.map(o => o.id === primaryOption.id ? { ...o, paperSize: e.target.value as PaperSize } : o))}
             >
               {Object.keys(PAPER_SIZES).map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <select
-              className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-800 outline-none"
-              value={primaryOption.format}
-              onChange={e => setExportOptions(exportOptions.map(o => o.id === primaryOption.id ? { ...o, format: e.target.value as ExportFormat } : o))}
-            >
-              <option value="pdf">PDF</option>
-              <option value="png">PNG</option>
-              <option value="jpg">JPG</option>
-              <option value="dxf">DXF</option>
-            </select>
+            <div className="relative flex-1">
+              <select
+                className="w-full h-9 rounded-lg border border-slate-200 bg-white pl-3 pr-8 text-xs font-semibold text-slate-700 outline-none appearance-none focus:border-[#0056A9]"
+                value={primaryOption.format}
+                onChange={e => setExportOptions(exportOptions.map(o => o.id === primaryOption.id ? { ...o, format: e.target.value as ExportFormat } : o))}
+              >
+                <option value="pdf">PDF</option>
+                <option value="png">PNG</option>
+                <option value="jpg">JPG</option>
+                <option value="dxf">DXF</option>
+              </select>
+            </div>
             <button
               type="button"
               onClick={() => setExportOptions([...exportOptions, { id: `${exportOptions.length + 1}`, paperSize: 'A4', format: 'pdf', exportSelection: false, isProfessional: true }])}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 transition-colors hover:bg-blue-50 hover:text-[#0056A9]"
               title="Add export config"
             >
               <FaPlus size={10} />
             </button>
           </div>
 
-          <div className="flex items-center gap-4 text-[11px] text-slate-600">
-            <label className="flex items-center gap-2 cursor-pointer">
+          <div className="flex items-center gap-4 text-xs text-slate-500">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={primaryOption.exportSelection}
                 disabled={!hasSelection}
                 onChange={e => setExportOptions(exportOptions.map(o => o.id === primaryOption.id ? { ...o, exportSelection: e.target.checked } : o))}
-                className="h-3.5 w-3.5 rounded border-gray-300 text-slate-800"
+                className="h-3.5 w-3.5 rounded border-slate-300 text-[#0056A9] focus:ring-[#0056A9]/30"
               />
               <span className={!hasSelection ? "text-slate-300" : ""}>Selection only</span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={primaryOption.isProfessional}
                 onChange={e => setExportOptions(exportOptions.map(o => o.id === primaryOption.id ? { ...o, isProfessional: e.target.checked } : o))}
-                className="h-3.5 w-3.5 rounded border-gray-300 text-slate-800"
+                className="h-3.5 w-3.5 rounded border-slate-300 text-[#0056A9] focus:ring-[#0056A9]/30"
               />
               <span>Professional</span>
             </label>
@@ -1414,31 +1415,34 @@ const renderAssetToCanvas = (
               else handleExport(primaryOption);
             }}
             disabled={isExporting}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-900 transition-colors hover:bg-slate-50"
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#0056A9] text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#004b93] active:bg-[#004080] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isExporting ? <FaExpand className="animate-spin" size={12} /> : <FaDownload size={12} />}
+            {isExporting ? <FaExpand className="animate-spin" size={11} /> : <FaDownload size={11} />}
             {isExporting ? `Exporting ${primaryOption.format.toUpperCase()}...` : `Export ${projectName || "Layout"}`}
           </button>
         </div>
       )}
 
       {isExpanded && primaryOption && (
-        <div className="space-y-3 border-t border-slate-100 pt-3">
+        <div className="mt-3 space-y-2">
           {exportOptions.map(opt => (
-            <div key={opt.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            <div key={opt.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
               <div className="mb-2 flex items-center justify-between">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                   Layout {opt.id}
                 </div>
-                <div className="text-[10px] font-medium text-slate-500">
-                  {opt.paperSize} · {opt.format.toUpperCase()}
-                </div>
+                <button
+                  onClick={() => setExportOptions(exportOptions.filter(o => o.id !== opt.id))}
+                  className="text-slate-300 hover:text-red-400 transition-colors"
+                >
+                  <X size={12} />
+                </button>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700 outline-none" value={opt.paperSize} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, paperSize: e.target.value as PaperSize}:o))}>
+                <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-600 outline-none" value={opt.paperSize} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, paperSize: e.target.value as PaperSize}:o))}>
                   {Object.keys(PAPER_SIZES).map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700 outline-none" value={opt.format} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, format: e.target.value as ExportFormat}:o))}>
+                <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-600 outline-none" value={opt.format} onChange={e => setExportOptions(exportOptions.map(o=>o.id===opt.id?{...o, format: e.target.value as ExportFormat}:o))}>
                   <option value="pdf">PDF</option>
                   <option value="png">PNG</option>
                   <option value="jpg">JPG</option>
@@ -1450,31 +1454,44 @@ const renderAssetToCanvas = (
         </div>
       )}
 
-      {/* Professional Export Modal - Align with Share UI */}
+      {/* Professional Export Modal */}
       {showProfessionalModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 backdrop-blur-sm bg-black/30" onClick={() => setShowProfessionalModal(false)}>
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9, y: 30 }} 
-            animate={{ opacity: 1, scale: 1, y: 0 }} 
-            className="w-[32rem] bg-white rounded-[2.25rem] shadow-2xl overflow-hidden relative"
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm bg-black/30" onClick={() => setShowProfessionalModal(false)}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className={`p-8 text-white text-center transition-colors duration-300`} style={{ backgroundColor: profDetails.panelColor }}>
-              <h2 className="text-2xl font-black tracking-tight">Export Panel</h2>
-              <p className="opacity-70 text-[10px] uppercase font-bold tracking-[0.2em] mt-2">Professional Layout Details</p>
+            {/* Header */}
+            <div className="px-6 py-5 flex items-center justify-between border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Export Panel</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Professional layout details</p>
+              </div>
+              <button
+                onClick={() => setShowProfessionalModal(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+              >
+                <X size={16} />
+              </button>
             </div>
 
-            <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
-              {/* Logo Upload Section */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="flex-1 flex flex-col items-center gap-3">
-                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Event Logo</label>
-                  <div className="relative group w-full">
-                    <div className="w-full h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-slate-400">
+            {/* Body */}
+            <div className="px-6 py-5 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              {/* Branding Section */}
+              <div>
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Branding</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="relative group">
+                    <div className="w-full h-20 rounded-xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-colors group-hover:border-slate-300">
                       {profDetails.logo ? (
                         <img src={profDetails.logo} className="w-full h-full object-contain p-2" />
                       ) : (
-                        <Upload className="text-slate-300 group-hover:text-slate-500 transition-colors" size={24} />
+                        <div className="text-center">
+                          <Upload className="mx-auto text-slate-300 group-hover:text-slate-400 transition-colors" size={18} />
+                          <p className="text-[10px] text-slate-400 mt-1">Event Logo</p>
+                        </div>
                       )}
                       <input type="file" accept="image/*" onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -1486,19 +1503,18 @@ const renderAssetToCanvas = (
                       }} className="absolute inset-0 opacity-0 cursor-pointer" />
                     </div>
                     {profDetails.logo && (
-                      <button onClick={() => setProfDetails({...profDetails, logo: null})} className="absolute -top-2 -right-2 w-6 h-6 bg-white border border-slate-100 rounded-full shadow-md flex items-center justify-center text-slate-400 hover:text-red-500 transition-all"><X size={12}/></button>
+                      <button onClick={() => setProfDetails({...profDetails, logo: null})} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-white border border-slate-200 rounded-full shadow-sm flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"><X size={10}/></button>
                     )}
                   </div>
-                </div>
-
-                <div className="flex-1 flex flex-col items-center gap-3">
-                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Event By (Logo)</label>
-                  <div className="relative group w-full">
-                    <div className="w-full h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-slate-400">
+                  <div className="relative group">
+                    <div className="w-full h-20 rounded-xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-colors group-hover:border-slate-300">
                       {profDetails.byLogo ? (
                         <img src={profDetails.byLogo} className="w-full h-full object-contain p-2" />
                       ) : (
-                        <Upload className="text-slate-300 group-hover:text-slate-500 transition-colors" size={24} />
+                        <div className="text-center">
+                          <Upload className="mx-auto text-slate-300 group-hover:text-slate-400 transition-colors" size={18} />
+                          <p className="text-[10px] text-slate-400 mt-1">By Logo</p>
+                        </div>
                       )}
                       <input type="file" accept="image/*" onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -1510,77 +1526,96 @@ const renderAssetToCanvas = (
                       }} className="absolute inset-0 opacity-0 cursor-pointer" />
                     </div>
                     {profDetails.byLogo && (
-                      <button onClick={() => setProfDetails({...profDetails, byLogo: null})} className="absolute -top-2 -right-2 w-6 h-6 bg-white border border-slate-100 rounded-full shadow-md flex items-center justify-center text-slate-400 hover:text-red-500 transition-all"><X size={12}/></button>
+                      <button onClick={() => setProfDetails({...profDetails, byLogo: null})} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-white border border-slate-200 rounded-full shadow-sm flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"><X size={10}/></button>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Theme Selection */}
-              <div className="space-y-3 text-center">
-                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Panel Theme</label>
-                <div className="flex justify-center gap-3">
+              {/* Theme */}
+              <div>
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Theme</h4>
+                <div className="flex items-center gap-2.5">
                   {['#0056A9', '#1e293b', '#0f172a', '#334155', '#272235', '#dc3545'].map(color => (
-                    <button 
+                    <button
                       key={color}
                       onClick={() => setProfDetails({...profDetails, panelColor: color})}
-                      className={`w-8 h-8 rounded-full border-4 transition-all ${profDetails.panelColor === color ? 'border-slate-200 scale-125' : 'border-white hover:scale-110'}`}
+                      className={`w-7 h-7 rounded-full border-2 transition-all ${profDetails.panelColor === color ? 'border-slate-400 scale-110 ring-2 ring-slate-200/50' : 'border-white hover:scale-105'}`}
                       style={{ backgroundColor: color }}
                     />
                   ))}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Event Name</label>
-                  <input className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" value={profDetails.eventName} onChange={e=>setProfDetails({...profDetails, eventName: e.target.value})}/>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Client</label>
-                  <input className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" placeholder="Client Name" value={profDetails.client} onChange={e=>setProfDetails({...profDetails, client: e.target.value})}/>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Venue</label>
-                  <input className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" value={profDetails.venue} onChange={e=>setProfDetails({...profDetails, venue: e.target.value})}/>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Event Planner</label>
-                  <input className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" placeholder="Planner Name" value={profDetails.eventPlanner} onChange={e=>setProfDetails({...profDetails, eventPlanner: e.target.value})}/>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Sitting Code</label>
-                  <input className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" placeholder="Code (optional)" value={profDetails.sittingCode} onChange={e=>setProfDetails({...profDetails, sittingCode: e.target.value})}/>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Date</label>
-                  <input type="text" inputMode="numeric" placeholder="DD/MM/YYYY" className="w-full h-12 bg-slate-50/50 rounded-2xl px-5 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none" value={formatDateForDisplay(profDetails.date)} onChange={e=>setProfDetails({...profDetails, date: normalizeDateInput(e.target.value)})}/>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Guest Allocation (Optional)</label>
-                <textarea rows={3} className="w-full bg-slate-50/50 rounded-2xl p-4 text-sm font-medium border-2 border-transparent focus:border-slate-800/10 focus:bg-white transition-all outline-none resize-none" placeholder="e.g. Tables: 20\nChairs: 200" value={profDetails.guestAllocation} onChange={e=>setProfDetails({...profDetails, guestAllocation: e.target.value})}/>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Panel Position</label>
-                <div className="flex gap-3">
-                  <button onClick={()=>setProfDetails({...profDetails, panelPosition: 'left'})} className={`flex-1 h-12 text-sm font-bold rounded-2xl border-2 transition-all ${profDetails.panelPosition==='left'?'bg-[var(--accent)] border-[var(--accent)] text-white shadow-xl translate-y-[-2px]':'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}>Left Side</button>
-                  <button onClick={()=>setProfDetails({...profDetails, panelPosition: 'right'})} className={`flex-1 h-12 text-sm font-bold rounded-2xl border-2 transition-all ${profDetails.panelPosition==='right'?'bg-[var(--accent)] border-[var(--accent)] text-white shadow-xl translate-y-[-2px]':'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}>Right Side</button>
+              {/* Event Details */}
+              <div>
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Event Details</h4>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Event Name</label>
+                      <input className="w-full h-10 rounded-xl bg-slate-50 px-4 text-sm text-slate-700 border border-slate-200 focus:border-slate-400 focus:bg-white transition-all outline-none" value={profDetails.eventName} onChange={e=>setProfDetails({...profDetails, eventName: e.target.value})}/>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Client</label>
+                      <input className="w-full h-10 rounded-xl bg-slate-50 px-4 text-sm text-slate-700 border border-slate-200 focus:border-slate-400 focus:bg-white transition-all outline-none" placeholder="Client Name" value={profDetails.client} onChange={e=>setProfDetails({...profDetails, client: e.target.value})}/>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Venue</label>
+                      <input className="w-full h-10 rounded-xl bg-slate-50 px-4 text-sm text-slate-700 border border-slate-200 focus:border-slate-400 focus:bg-white transition-all outline-none" value={profDetails.venue} onChange={e=>setProfDetails({...profDetails, venue: e.target.value})}/>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Event Planner</label>
+                      <input className="w-full h-10 rounded-xl bg-slate-50 px-4 text-sm text-slate-700 border border-slate-200 focus:border-slate-400 focus:bg-white transition-all outline-none" placeholder="Planner Name" value={profDetails.eventPlanner} onChange={e=>setProfDetails({...profDetails, eventPlanner: e.target.value})}/>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Sitting Code</label>
+                      <input className="w-full h-10 rounded-xl bg-slate-50 px-4 text-sm text-slate-700 border border-slate-200 focus:border-slate-400 focus:bg-white transition-all outline-none" placeholder="Optional" value={profDetails.sittingCode} onChange={e=>setProfDetails({...profDetails, sittingCode: e.target.value})}/>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Date</label>
+                      <input type="text" inputMode="numeric" placeholder="DD/MM/YYYY" className="w-full h-10 rounded-xl bg-slate-50 px-4 text-sm text-slate-700 border border-slate-200 focus:border-slate-400 focus:bg-white transition-all outline-none" value={formatDateForDisplay(profDetails.date)} onChange={e=>setProfDetails({...profDetails, date: normalizeDateInput(e.target.value)})}/>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex gap-4 pt-4">
-                <button onClick={() => setShowProfessionalModal(false)} className="flex-1 h-14 rounded-[1.25rem] bg-slate-50 font-bold text-slate-400 hover:bg-slate-100 transition-all">Cancel</button>
-                <button onClick={() => { setShowProfessionalModal(false); if(currentOption) handleExport(currentOption, profDetails); }} className="flex-1 h-14 rounded-[1.25rem] bg-[var(--accent)] text-white font-bold shadow-2xl shadow-slate-200 hover:opacity-90 transition-all">Start Export</button>
+              {/* Guest Allocation */}
+              <div>
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Guest Allocation</h4>
+                <textarea rows={3} className="w-full rounded-xl bg-slate-50 p-4 text-sm text-slate-700 border border-slate-200 focus:border-slate-400 focus:bg-white transition-all outline-none resize-none" placeholder="e.g. Tables: 20&#10;Chairs: 200" value={profDetails.guestAllocation} onChange={e=>setProfDetails({...profDetails, guestAllocation: e.target.value})}/>
               </div>
+
+              {/* Panel Position */}
+              <div>
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Panel Position</h4>
+                <div className="flex gap-2">
+                  <button onClick={()=>setProfDetails({...profDetails, panelPosition: 'left'})} className={`flex-1 h-10 text-sm font-semibold rounded-xl border-2 transition-all ${profDetails.panelPosition==='left'?'bg-[#0056A9] border-[#0056A9] text-white':'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>Left</button>
+                  <button onClick={()=>setProfDetails({...profDetails, panelPosition: 'right'})} className={`flex-1 h-10 text-sm font-semibold rounded-xl border-2 transition-all ${profDetails.panelPosition==='right'?'bg-[#0056A9] border-[#0056A9] text-white':'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>Right</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowProfessionalModal(false)}
+                className="h-9 px-4 rounded-xl bg-slate-100 text-xs font-semibold text-slate-500 hover:bg-slate-200 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowProfessionalModal(false); if(currentOption) handleExport(currentOption, profDetails); }}
+                className="h-9 px-5 rounded-xl bg-[#0056A9] text-white text-xs font-semibold hover:bg-[#004b93] active:scale-[0.97] transition-all"
+              >
+                Start Export
+              </button>
             </div>
           </motion.div>
         </div>

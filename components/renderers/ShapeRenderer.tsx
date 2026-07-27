@@ -9,18 +9,21 @@ interface ShapeRendererProps {
     isSelected?: boolean;
     isHovered?: boolean;
     isHighlightOnly?: boolean;
+    zoom?: number;
 }
 
-const ShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHighlightOnly = false }: ShapeRendererProps) => {
+const ShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHighlightOnly = false, zoom: propZoom }: ShapeRendererProps) => {
     const isSelectedOrHovered = isSelected || isHovered;
     const hasDashes = shape.lineType === 'dashed' || shape.lineType === 'dotted';
     
-    const zoom = useEditorStore(s => {
-        if (isSelectedOrHovered || hasDashes) {
+    const storeZoom = useEditorStore(s => {
+        if (isSelectedOrHovered || hasDashes || shape.fixedSize) {
             return s.zoom;
         }
         return 1;
     });
+
+    const zoom = propZoom !== undefined ? propZoom : storeZoom;
 
     return (
         <InnerShapeRenderer 
@@ -69,7 +72,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
         } else if (fillType === 'none') {
             return 'transparent';
         } else if (fillType === 'hatch' || fillType === 'texture' || fillType === 'hash') {
-            const scale = shape.fillTextureScale || 4;
+            const scale = shape.fillTextureScale !== undefined ? shape.fillTextureScale : 10;
             const thickness = shape.fillTextureThickness || 1;
             if (shape.fillTexture) {
                 const rotation = shape.hatchRotation || 0;
@@ -141,26 +144,30 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
         }
 
         if (shape.type === 'rectangle') {
+            const w = shape.fixedSize ? 16 / zoom : shape.width;
+            const h = shape.fixedSize ? 16 / zoom : shape.height;
             return (
                 <rect
-                    x={-shape.width / 2}
-                    y={-shape.height / 2}
-                    width={shape.width}
-                    height={shape.height}
-                    rx={shape.borderRadius || 0}
-                    ry={shape.borderRadius || 0}
+                    x={-w / 2}
+                    y={-h / 2}
+                    width={w}
+                    height={h}
+                    rx={shape.borderRadius ? (shape.fixedSize ? shape.borderRadius / zoom : shape.borderRadius) : 0}
+                    ry={shape.borderRadius ? (shape.fixedSize ? shape.borderRadius / zoom : shape.borderRadius) : 0}
                     {...commonProps}
                 />
             );
         }
 
         if (shape.type === 'ellipse') {
+            const rx = shape.fixedSize ? 8 / zoom : shape.width / 2;
+            const ry = shape.fixedSize ? 8 / zoom : shape.height / 2;
             return (
                 <ellipse
                     cx={0}
                     cy={0}
-                    rx={shape.width / 2}
-                    ry={shape.height / 2}
+                    rx={rx}
+                    ry={ry}
                     {...commonProps}
                 />
             );

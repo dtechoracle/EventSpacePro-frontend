@@ -203,32 +203,32 @@ const Dashboard = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-white/60 backdrop-blur-sm border-b border-gray-300/50 px-8 py-5 shadow-sm">
+        <div className="bg-white border-b border-gray-200 px-8 py-5">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-[var(--accent)]">
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
                 Recent Events
               </h1>
-              <p className="text-sm text-gray-500 mt-1">Pick up where you left off</p>
+              <p className="text-xs text-gray-500 mt-0.5">Pick up where you left off</p>
             </div>
             <div className="flex items-center gap-3">
               <div className="relative">
-                <BsSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <BsSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
                 <input
                   type="text"
                   placeholder="Search projects..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent w-64 bg-white/80"
+                  className="pl-9 pr-4 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 w-60 bg-gray-50/50"
                 />
               </div>
               <button
                 onClick={() => {
                   setShowCreateEventModal(true);
                 }}
-                className="px-5 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-md hover:opacity-90 flex items-center gap-2 transition-all"
+                className="px-4 py-2 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-500 flex items-center gap-1.5 transition-colors"
               >
-                <FaPlus size={14} />
+                <FaPlus size={12} />
                 <span>New Event</span>
               </button>
             </div>
@@ -259,24 +259,52 @@ const Dashboard = () => {
           {/* Recent Events Section */}
           <section className="mb-16">
             {!isLoading && (filteredProjects.length === 0) && !searchQuery ? (
-              <div className="flex flex-col items-center justify-center h-full max-h-[60vh] text-center space-y-6 animate-in fade-in zoom-in duration-500">
-                <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mb-4 shadow-sm">
-                  <svg className="w-10 h-10 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                  </svg>
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to EventSpacePro</h2>
-                  <p className="text-gray-500 max-w-md mx-auto text-lg mb-8">
-                    You don't have any projects yet. Create your first project to start organizing your events and layouts.
+              <div className="w-full bg-white rounded-xl border border-gray-200 p-8 my-4">
+                <div className="max-w-2xl">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-blue-50 text-blue-600 text-xs font-semibold mb-4 border border-blue-100">
+                    <BsStars className="w-3.5 h-3.5" />
+                    <span>Get Started</span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-900 tracking-tight">
+                    Welcome to EventSpacePro
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed max-w-lg">
+                    You don't have any projects yet. Create a project to start organizing your floor plans, venues, and layout events.
                   </p>
-                  <button
-                    onClick={() => setShowCreateProjectModal(true)}
-                    className="px-8 py-4 bg-blue-600 text-white text-lg rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl active:scale-95 transform transition-transform inline-flex items-center gap-2"
-                  >
-                    <BsStars className="w-5 h-5" />
-                    <span>Create First Project</span>
-                  </button>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
+                    <button
+                      onClick={() => setShowCreateProjectModal(true)}
+                      className="p-4 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50/40 text-left transition-all group flex flex-col justify-between h-28"
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs font-bold">
+                          +
+                        </span>
+                        <span className="text-xs text-gray-400 group-hover:text-blue-600 transition-colors">→</span>
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-xs text-gray-900 group-hover:text-blue-600">Create Blank Project</h3>
+                        <p className="text-[11px] text-gray-400 mt-0.5">Start with a custom empty space</p>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => setShowCreateEventModal(true)}
+                      className="p-4 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50/40 text-left transition-all group flex flex-col justify-between h-28"
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">
+                          <BsStars size={12} />
+                        </span>
+                        <span className="text-xs text-gray-400 group-hover:text-blue-600 transition-colors">→</span>
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-xs text-gray-900 group-hover:text-blue-600">Quick Event Layout</h3>
+                        <p className="text-[11px] text-gray-400 mt-0.5">Pick a preloaded venue or marquee</p>
+                      </div>
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (

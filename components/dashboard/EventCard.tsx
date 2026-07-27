@@ -159,7 +159,7 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
                 onClick={() => {
                     router.push(`/dashboard/editor/${event.projectSlug}/${event._id}`);
                 }}
-                className="bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300 transition-colors group relative"
+                className="bg-white rounded-xl border border-gray-200 cursor-pointer hover:border-blue-500 transition-colors group relative shadow-none"
             >
                 {/* Visual Favorited Indicator (Small heart/star) */}
                 {isFavorited && (
@@ -234,7 +234,7 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
                 </div>
 
                 {/* Workspace Preview */}
-                <div className="bg-white w-full relative overflow-hidden rounded-lg" style={{ height: '160px' }}>
+                <div className="bg-white w-full relative overflow-hidden rounded-xl" style={{ height: '160px' }}>
                     <WorkspacePreview
                         walls={walls}
                         shapes={shapes}

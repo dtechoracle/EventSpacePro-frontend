@@ -6,9 +6,10 @@ import { calculateShapeAnchors, calculateAssetAnchors, AnchorPoint } from "@/uti
 
 interface AnchorHighlightsProps {
   mmToPx: number;
+  zoom?: number;
 }
 
-export default function AnchorHighlights({ mmToPx }: AnchorHighlightsProps) {
+export default function AnchorHighlights({ mmToPx, zoom = 1 }: AnchorHighlightsProps) {
   const snapToAnchorMode = useSceneStore((s) => s.snapToAnchorMode);
   const snapTargetAssetId = useSceneStore((s) => s.snapTargetAssetId);
   const snapTargetAnchor = useSceneStore((s) => s.snapTargetAnchor);
@@ -41,7 +42,8 @@ export default function AnchorHighlights({ mmToPx }: AnchorHighlightsProps) {
         y: asset.y,
         width: asset.width || 0,
         height: asset.height || 0,
-      } as any)
+        fixedSize: (asset as any).fixedSize,
+      } as any, zoom)
       : calculateAssetAnchors({
         x: asset.x,
         y: asset.y,

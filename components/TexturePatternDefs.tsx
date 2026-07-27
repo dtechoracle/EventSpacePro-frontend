@@ -21,7 +21,7 @@ export default function TexturePatternDefs() {
             if (!scales.has(textureId)) scales.set(textureId, new Set());
 
             const set = scales.get(textureId)!;
-            const s = scale === undefined ? 4 : scale;
+            const s = scale === undefined ? 10 : scale;
             const t = thickness === undefined ? 1 : thickness;
             const r = rotation === undefined ? 0 : rotation;
 

@@ -6,8 +6,9 @@ import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
 import toast from "react-hot-toast";
 import { useMutation } from "@tanstack/react-query";
-import { ApiError } from "@/interfaces/index"
 import Cookies from "js-cookie";
+import { useUserStore } from "@/store/userStore";
+import { ApiError } from "@/interfaces/index";
 
 
 const OtpVerification = () => {
@@ -68,16 +69,24 @@ const OtpVerification = () => {
       const res = await apiRequest("/auth/verify-otp", "POST", { email, otp: code }, false);
       return res;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       toast.success("OTP verified successfully!");
       Cookies.set("authToken", data.token);
-      localStorage.removeItem("email")
-      const verifyType = localStorage.getItem("verifyType")
+      
+      // Pre-fetch user state now that we have a valid authToken
+      try {
+        await useUserStore.getState().fetchUser();
+      } catch (e) {
+        console.error("Failed to pre-fetch user info on verify", e);
+      }
+
+      localStorage.removeItem("email");
+      const verifyType = localStorage.getItem("verifyType");
       if (verifyType == "reset") {
-        localStorage.removeItem("verifyType")
+        localStorage.removeItem("verifyType");
         router.push("/auth/reset-password");
       } else {
-        localStorage.removeItem("verifyType")
+        localStorage.removeItem("verifyType");
         router.push("/dashboard");
       }
     },

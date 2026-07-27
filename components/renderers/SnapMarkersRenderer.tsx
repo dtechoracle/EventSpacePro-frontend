@@ -19,7 +19,7 @@ export default function SnapMarkersRenderer() {
     const activeTool = useEditorStore(s => s.activeTool);
     const shapes = useProjectStore(s => s.shapes);
     const allAssets = useProjectStore(s => s.assets);
-    const assets = useMemo(
+    const marqueeAssets = useMemo(
         () => allAssets.filter(asset => marqueeAssetTypes.has(asset.type)),
         [allAssets]
     );
@@ -31,14 +31,11 @@ export default function SnapMarkersRenderer() {
         const candidates: Array<{ id: string; points: ReturnType<typeof getSnapPoints> }> = [
             ...shapes.map((shape) => ({ id: shape.id, points: getSnapPoints(shape) })),
             ...walls.map((wall) => ({ id: wall.id, points: getSnapPoints(wall) })),
+            ...allAssets.map((asset) => ({ id: asset.id, points: getSnapPoints(asset) })),
         ];
 
-        assets.forEach((asset) => {
-            candidates.push({ id: asset.id, points: getSnapPoints(asset) });
-        });
-
         return candidates;
-    }, [activeTool, assets, shapes, walls]);
+    }, [activeTool, allAssets, shapes, walls]);
 
     const fallbackSnapTargetId = useMemo<string | null>(() => {
         if (fallbackCandidates.length === 0) {
@@ -70,7 +67,7 @@ export default function SnapMarkersRenderer() {
         const shape = shapes.find(s => s.id === markerSourceId);
         if (shape) return getSnapPoints(shape);
 
-        const asset = assets.find(a => a.id === markerSourceId);
+        const asset = allAssets.find(a => a.id === markerSourceId);
         if (asset) {
             return getSnapPoints(asset);
         }
@@ -79,7 +76,7 @@ export default function SnapMarkersRenderer() {
         if (wall) return getSnapPoints(wall);
 
         return [];
-    }, [markerSourceId, shapes, assets, walls]);
+    }, [markerSourceId, shapes, allAssets, walls]);
 
     const activePoint = useMemo(() => {
         if (!markerSourceId || snapPoints.length === 0) return null;
@@ -88,9 +85,8 @@ export default function SnapMarkersRenderer() {
 
     if (!markerSourceId || snapPoints.length === 0) return null;
 
-    // Scale markers based on zoom
-    const markerRadius = 3.5 / zoom;
-    const strokeWidth = 1 / zoom;
+    const markerRadius = 10;
+    const strokeWidth = 2.5;
 
     return (
         <g pointerEvents="none" className="snap-markers">

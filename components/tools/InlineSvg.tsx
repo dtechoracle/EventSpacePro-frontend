@@ -320,7 +320,7 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
     const baseSvg = useMemo(() => {
         if (!rawSvg || typeof window === "undefined") return "";
         
-        const cacheKey = `${src}_${category || 'none'}_v3_viewbox_normalized`;
+        const cacheKey = `${src}_${category || 'none'}_v8_viewbox_normalized`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
@@ -350,16 +350,19 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
 
             let hasExplicitAutoFill = !!doc.querySelector('[id="auto-fill"], .auto-fill, [data-auto-fill="true"]');
 
+            // Strip ALL pre-existing <style> elements so that SVGs with embedded global
+            // styles (e.g. Eko Hotel's `* { stroke-width: 1.8px !important }`) cannot
+            // cascade and affect other elements on the page once inlined.
+            doc.querySelectorAll("style").forEach(s => s.remove());
+
             const styleId = "dynamic-inline-style";
-            if (!doc.getElementById(styleId)) {
-                const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
-                styleEl.setAttribute("id", styleId);
-                styleEl.textContent = `* { vector-effect: non-scaling-stroke !important; } .fill-none-el { fill: none !important; stroke: inherit !important; stroke-width: inherit !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } .auto-fill-el { fill: inherit !important; stroke: none !important; } .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
-                svg.prepend(styleEl);
-            }
+            const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
+            styleEl.setAttribute("id", styleId);
+            styleEl.textContent = `* { vector-effect: non-scaling-stroke !important; } .fill-none-el { fill: none !important; stroke: inherit !important; stroke-width: inherit !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } .auto-fill-el { fill: inherit !important; stroke: none !important; } .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
+            svg.prepend(styleEl);
 
 
-            const children = Array.from(doc.querySelectorAll('path, circle, rect, line, polyline, ellipse'));
+            const children = Array.from(doc.querySelectorAll('path, circle, rect, line, polyline, ellipse')).filter(el => !el.closest('defs, clipPath'));
             const circles = Array.from(doc.querySelectorAll('circle'));
             const innerCircles = new Set();
             
@@ -399,6 +402,18 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
 
                 const isClosed = isZClosed || isCoordClosed;
                 const isOpenPath = tag === 'path' && !isClosed;
+                const isVenue = category === 'Venue' || src?.toLowerCase().includes('preloaded-venues');
+                const isBgFill = isVenue && (tag === 'rect' || tag === 'path') && (() => {
+                    const m = getElementMetrics(el);
+                    if (!m) return false;
+                    const area = m.width * m.height;
+                    const artboardWidth = metrics.artboardWidth || 1000;
+                    const artboardHeight = metrics.artboardHeight || 1000;
+                    const canvasArea = artboardWidth * artboardHeight;
+                    // Any element covering more than 75% of the floorplan bounds is likely a solid background rectangle
+                    return area > canvasArea * 0.75;
+                })();
+
                 const autoFillContainer = el.closest('[id="auto-fill"], .auto-fill, [data-auto-fill="true"]');
                 const isAutoFill =
                     el.getAttribute("id") === "auto-fill" ||
@@ -414,15 +429,21 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
                         .replace(/fill\s*:[^;]+;?/gi, "")
                         .replace(/stroke\s*:[^;]+;?/gi, "")
                         .replace(/stroke-width\s*:[^;]+;?/gi, "");
-                    if (cleaned.trim()) el.setAttribute("style", cleaned);
-                    else el.removeAttribute("style");
+                    if (isBgFill) {
+                        const bgCleaned = cleaned.replace(/stroke\s*:[^;]+;?/gi, "").replace(/stroke-width\s*:[^;]+;?/gi, "");
+                        if (bgCleaned.trim()) el.setAttribute("style", bgCleaned);
+                        else el.removeAttribute("style");
+                    } else {
+                        if (cleaned.trim()) el.setAttribute("style", cleaned);
+                        else el.removeAttribute("style");
+                    }
                 }
                 
                 el.removeAttribute("fill");
                 el.removeAttribute("stroke");
                 el.removeAttribute("stroke-width");
 
-                let shouldBeNone = wasExplicitlyNone || isLineElement || isOpenPath;
+                let shouldBeNone = wasExplicitlyNone || isLineElement || isOpenPath || isBgFill;
 
                 if (hasExplicitAutoFill && tag === 'path' && !isAutoFill) {
                     shouldBeNone = true;
@@ -439,6 +460,8 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
 
                 if (shouldBeNone && !hasFillRule && !isAutoFill) {
                     el.classList.add("fill-none-el");
+                    el.setAttribute("stroke", "none");
+                    (el as HTMLElement).style.stroke = "none";
                 } else if (isMultiSeater) {
                     let isTable = false;
                     const elMetrics = getElementMetrics(el);
@@ -488,7 +511,8 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
             svg.removeAttribute("stroke-width");
             svg.removeAttribute("width");
             svg.removeAttribute("height");
-            if (metrics.shouldCropToContent && metrics.contentX !== null && metrics.contentY !== null && metrics.contentWidth && metrics.contentHeight) {
+            const isVenue = category === 'Venue' || src.toLowerCase().includes('preloaded-venues');
+            if (metrics.shouldCropToContent && !isVenue && metrics.contentX !== null && metrics.contentY !== null && metrics.contentWidth && metrics.contentHeight) {
                 svg.setAttribute("viewBox", `${metrics.contentX} ${metrics.contentY} ${metrics.contentWidth} ${metrics.contentHeight}`);
             } else if (!svg.getAttribute("viewBox") && metrics.artboardWidth && metrics.artboardHeight) {
                 svg.setAttribute("viewBox", `0 0 ${metrics.artboardWidth} ${metrics.artboardHeight}`);

@@ -14,6 +14,7 @@ import { useProjectStore } from "@/store/projectStore";
 import { texturePatterns } from '@/utils/texturePatterns';
 import { useRouter } from "next/router";
 import { useUserStore } from "@/store/userStore";
+import { ASSET_LIBRARY } from "@/lib/assets";
 import toast from "react-hot-toast";
 import { convertAssetToShapes } from "@/utils/assetUtils";
 import LineTypeSelector from "@/components/ui/LineTypeSelector";
@@ -312,6 +313,11 @@ export default function PropertiesSidebar(): React.JSX.Element {
     () => shapes.filter(s => selectedIdSet.has(s.id)),
     [shapes, selectedIdSet]
   );
+  
+  const isSelectedVenue = useMemo(() => {
+    if (!selectedAsset) return false;
+    return ASSET_LIBRARY.find(item => item.id === selectedAsset.type)?.category === 'Venue';
+  }, [selectedAsset]);
   const selectedAssets = useMemo(
     () => assets.filter(a => selectedIdSet.has(a.id)),
     [assets, selectedIdSet]
@@ -1214,6 +1220,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <input
                         type="number"
                         value={roundForDisplay((selectedItem as any).width)}
+                        disabled={isSelectedVenue}
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           const storeVal = toStoreValue(val, unitSystem);
@@ -1223,7 +1230,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             updateSceneAsset(selectedItem.id, { width: storeVal });
                           }
                         }}
-                        className="sidebar-input w-full text-center font-medium"
+                        className={`sidebar-input w-full text-center font-medium ${isSelectedVenue ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-transparent' : ''}`}
                       />
                     </div>
                     <div className="flex flex-col">
@@ -1231,6 +1238,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <input
                         type="number"
                         value={roundForDisplay((selectedItem as any).height)}
+                        disabled={isSelectedVenue}
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           const storeVal = toStoreValue(val, unitSystem);
@@ -1240,7 +1248,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             updateSceneAsset(selectedItem.id, { height: storeVal });
                           }
                         }}
-                        className="sidebar-input w-full text-center font-medium"
+                        className={`sidebar-input w-full text-center font-medium ${isSelectedVenue ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-transparent' : ''}`}
                       />
                     </div>
                   </div>
@@ -1255,6 +1263,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         <input
                           type="number"
                           value={Math.round(((selectedItem as any).rotation || 0) * 100) / 100}
+                          disabled={isSelectedVenue}
                           onChange={(e) => {
                             const val = Number(e.target.value);
                             if (itemType === 'shape') updateShape(selectedItem.id, { rotation: val });
@@ -1263,7 +1272,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               updateSceneAsset(selectedItem.id, { rotation: val });
                             }
                           }}
-                          className="sidebar-input w-16 text-center"
+                          className={`sidebar-input w-16 text-center ${isSelectedVenue ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-transparent' : ''}`}
                         />
                         <span className="ml-1 text-gray-400">°</span>
                       </div>
@@ -1275,6 +1284,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <input
                         type="number"
                         value={(selectedItem as any).scale || 1}
+                        disabled={isSelectedVenue}
                         onChange={(e) => {
                           const val = Math.max(0.01, Number(e.target.value) || 1);
                           if (itemType === 'shape') updateShape(selectedItem.id, { scale: val } as any);
@@ -1283,7 +1293,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             updateSceneAsset(selectedItem.id, { scale: val });
                           }
                         }}
-                        className="sidebar-input w-16 text-center"
+                        className={`sidebar-input w-16 text-center ${isSelectedVenue ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-transparent' : ''}`}
                         min={0.01}
                         step={0.1}
                       />
@@ -1321,6 +1331,27 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         >V</button>
                       </div>
                     </div>
+
+                    {/* Fixed Screen Size Toggle */}
+                    {(itemType === 'shape' || (itemType === 'asset' && ((selectedItem as any).type === 'circle' || (selectedItem as any).type === 'square'))) && (
+                      <div className="flex justify-between items-center mb-3 py-2 border-t border-gray-100">
+                        <span className="text-xs text-gray-500">Fixed Screen Size</span>
+                        <input
+                          type="checkbox"
+                          checked={!!(selectedItem as any).fixedSize}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            if (itemType === 'shape') {
+                              updateShape(selectedItem.id, { fixedSize: val });
+                            } else {
+                              updateAsset(selectedItem.id, { fixedSize: val } as any);
+                              updateSceneAsset(selectedItem.id, { fixedSize: val } as any);
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                      </div>
+                    )}
 
                     {/* Relocated Appearance Section */}
                     {/* Appearance (Shape/Asset) */}

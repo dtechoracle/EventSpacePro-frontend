@@ -239,11 +239,13 @@ const isPointInsideWall = (wall: Wall, worldX: number, worldY: number) => {
 const StaticDrawingLayer = React.memo(({
   visibleRenderables,
   hiddenIds,
-  selectedIds
+  selectedIds,
+  zoom
 }: {
   visibleRenderables: any[],
   hiddenIds?: Set<string>,
-  selectedIds: string[]
+  selectedIds: string[],
+  zoom: number
 }) => {
   const selectedIdSet = React.useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -259,7 +261,7 @@ const StaticDrawingLayer = React.memo(({
             if (item.type === 'freehand') {
               return <FreehandRenderer key={item.id} shape={item} />;
             }
-            return <ShapeRenderer key={item.id} shape={item} />;
+            return <ShapeRenderer key={item.id} shape={item} zoom={zoom} />;
 
           case 'asset':
             if (canRenderAssetOnCanvas(item)) return null;
@@ -369,12 +371,14 @@ const SelectionHighlightLayer = React.memo(({
   visibleRenderables,
   selectedIds, 
   hoveredId,
-  verticesMap
+  verticesMap,
+  zoom
 }: { 
   visibleRenderables: any[],
   selectedIds: string[], 
   hoveredId: string | null,
-  verticesMap: Record<string, { x: number; y: number }[]>
+  verticesMap: Record<string, { x: number; y: number }[]>,
+  zoom: number
 }) => {
   const selectionSet = React.useMemo(() => new Set(selectedIds), [selectedIds]);
   
@@ -395,7 +399,7 @@ const SelectionHighlightLayer = React.memo(({
         return (
           <React.Fragment key={`highlight-group-${item.id}`}>
             {item._renderType === 'shape' && (
-              <ShapeRenderer shape={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
+              <ShapeRenderer shape={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly zoom={zoom} />
             )}
             {item._renderType === 'asset' && (
               <AssetRenderer asset={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
@@ -404,7 +408,7 @@ const SelectionHighlightLayer = React.memo(({
               <WallRenderer key={`highlight-${getWallRenderKey(item)}`} wall={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
             )}
             
-            {/* Premium Vertex Visualization */}
+            {/* Premium Vertex Visualization — zoom-compensated to stay fixed on screen */}
             {(isSelected || isHovered) && vertices.length > 0 && (
               <g className="vertex-anchors pointer-events-none">
                 {vertices.map((v, i) => (
@@ -412,11 +416,10 @@ const SelectionHighlightLayer = React.memo(({
                     key={`v-${item.id}-${i}`}
                     cx={v.x}
                     cy={v.y}
-                    r={i % 5 === 0 ? 4 : 2} // Visual distinction for base vs offset points
-                    fill={i % 5 === 0 ? "#3b82f6" : "#22c55e"} // Blue for base, Green for offsets
+                    r={i % 5 === 0 ? 4 : 2}
+                    fill={i % 5 === 0 ? "#3b82f6" : "#22c55e"}
                     stroke="white"
                     strokeWidth={1}
-
                     style={{ filter: 'drop-shadow(0 0 2px rgba(0, 0, 0, 0.3))' }}
                   />
                 ))}
@@ -453,7 +456,7 @@ const RenderLayer = React.memo(({
 
   return (
     <>
-      <StaticDrawingLayer visibleRenderables={visibleRenderables} hiddenIds={previewHiddenIds} selectedIds={selectedIds} />
+      <StaticDrawingLayer visibleRenderables={visibleRenderables} hiddenIds={previewHiddenIds} selectedIds={selectedIds} zoom={zoom} />
       <AnnotationDrawingLayer visibleRenderables={visibleRenderables} zoom={zoom} hiddenIds={previewHiddenIds} />
       <DragPreviewLayer visibleRenderables={visibleRenderables} preview={dragPreview} zoom={zoom} />
       {!dragPreview && (
@@ -462,6 +465,7 @@ const RenderLayer = React.memo(({
           selectedIds={selectedIds} 
           hoveredId={hoveredId} 
           verticesMap={verticesMap}
+          zoom={zoom}
         />
       )}
     </>

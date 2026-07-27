@@ -41,9 +41,11 @@ function rotatePoint(x: number, y: number, cx: number, cy: number, angleDeg: num
 /**
  * Calculate all anchor points for a shape
  */
-export function calculateShapeAnchors(shape: Shape): AnchorPoint[] {
-    const halfW = shape.width / 2;
-    const halfH = shape.height / 2;
+export function calculateShapeAnchors(shape: Shape, zoom: number = 1): AnchorPoint[] {
+    const w = shape.fixedSize ? 16 / zoom : shape.width;
+    const h = shape.fixedSize ? 16 / zoom : shape.height;
+    const halfW = w / 2;
+    const halfH = h / 2;
     const rot = shape.rotation || 0;
 
     let anchors: { id: AnchorType; label: string; x: number; y: number }[] = [];
@@ -287,11 +289,12 @@ export function findNearestObject(
  * Get anchor points for any object type
  */
 export function getAnchorsForObject(
-    obj: { type: 'shape' | 'wall' | 'asset'; object: Shape | Wall | Asset }
+    obj: { type: 'shape' | 'wall' | 'asset'; object: Shape | Wall | Asset },
+    zoom: number = 1
 ): AnchorPoint[] {
     switch (obj.type) {
         case 'shape':
-            return calculateShapeAnchors(obj.object as Shape);
+            return calculateShapeAnchors(obj.object as Shape, zoom);
         case 'wall':
             return calculateWallAnchors(obj.object as Wall);
         case 'asset':

@@ -28,6 +28,7 @@ type AssetRendererProps = {
   ) => void;
   onRotationHandleMouseDown: (e: React.MouseEvent, assetId: string) => void;
   onAssetContextMenu: (e: React.MouseEvent, assetId: string) => void;
+  workspaceZoom?: number;
 };
 
 import { useProjectStore } from "@/store/projectStore";
@@ -50,6 +51,7 @@ export const AssetRenderer = React.memo(({
   onAssetContextMenu,
   globalPos,
   globalOrientation,
+  workspaceZoom,
 }: AssetRendererProps & { globalPos?: string, globalOrientation?: string }) => {
   // ─── LOCAL TEXT EDITING STATE ────────────────────────────────────────────────
   // Must be declared before any early returns to comply with React hooks rules.
@@ -106,6 +108,10 @@ export const AssetRenderer = React.memo(({
     const isCircle = asset.type === "circle";
     const borderRadius = isCircle ? "50%" : "0%";
 
+    const zoomFactor = (asset as any).fixedSize ? (workspaceZoom || 1) : 1;
+    const widthVal = (asset as any).fixedSize ? 16 / zoomFactor : (asset.width ?? 50) * asset.scale;
+    const heightVal = (asset as any).fixedSize ? 16 / zoomFactor : (asset.height ?? 50) * asset.scale;
+
     return (
       <div className="relative" onContextMenu={(e) => onAssetContextMenu(e, asset.id)}>
         {/* Background layer */}
@@ -115,8 +121,8 @@ export const AssetRenderer = React.memo(({
               position: "absolute",
               left: leftPx,
               top: topPx,
-              width: (asset.width ?? 50) * asset.scale,
-              height: (asset.height ?? 50) * asset.scale,
+              width: widthVal,
+              height: heightVal,
               backgroundColor: asset.backgroundColor,
               borderRadius: borderRadius,
               transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,
@@ -132,8 +138,8 @@ export const AssetRenderer = React.memo(({
             position: "absolute",
             left: leftPx,
             top: topPx,
-            width: (asset.width ?? 50) * asset.scale,
-            height: (asset.height ?? 50) * asset.scale,
+            width: widthVal,
+            height: heightVal,
             backgroundColor: asset.fillColor ?? "transparent",
             border: `${asset.strokeWidth ?? 2}px solid ${asset.strokeColor ?? "#000000"
               }`,
@@ -154,8 +160,8 @@ export const AssetRenderer = React.memo(({
               position: "absolute",
               left: leftPx,
               top: topPx,
-              width: (asset.width ?? 50) * asset.scale,
-              height: (asset.height ?? 50) * asset.scale,
+              width: widthVal,
+              height: heightVal,
               border: "2px dashed #3B82F6",
               borderRadius: borderRadius,
               transform: `translate(-50%, -50%) rotate(${totalRotation}deg)`,

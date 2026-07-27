@@ -81,7 +81,7 @@ export default function DashboardSidebar() {
   const collapsed = hydrated ? isCollapsed : false;
 
   return (
-    <div className={`${collapsed ? 'w-16' : 'w-56'} bg-white/80 backdrop-blur-sm border-r border-gray-300/50 flex flex-col shadow-sm transition-all duration-300 relative z-50`}>
+    <div className={`${collapsed ? 'w-16' : 'w-56'} bg-white border-r border-gray-200 flex flex-col transition-all duration-300 relative z-50`}>
       {/* Collapse Toggle Button */}
       <button
         onClick={toggleCollapse}
