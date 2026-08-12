@@ -743,11 +743,11 @@ function ElementsPane() {
         <button
           type="button"
           onClick={() => setExpanded(prev => ({ ...prev, [groupKey]: !isExpanded }))}
-          className="flex w-full items-center justify-between px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500 hover:bg-gray-50 transition-colors"
+          className="flex w-full items-center justify-between px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)] hover:bg-[var(--accent)]/5 transition-colors"
         >
           <span>{groupLabel}</span>
           <span className="flex items-center gap-2">
-            <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold tracking-normal text-gray-600">{groupItems.length}</span>
+            <span className="rounded-full bg-[var(--accent)]/10 px-1.5 py-0.5 text-[9px] font-semibold tracking-normal text-[var(--accent)]">{groupItems.length}</span>
             <span className="text-xs text-gray-400">{isExpanded ? "▾" : "▸"}</span>
           </span>
         </button>
@@ -793,11 +793,11 @@ function ElementsPane() {
               <button
                 type="button"
                 onClick={() => setExpandedAssetGroups(prev => ({ ...prev, venue: !isExpanded }))}
-                className="flex w-full items-center justify-between px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-indigo-600 hover:bg-indigo-50 transition-colors"
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)] hover:bg-[var(--accent)]/5 transition-colors"
               >
                 <span className="flex items-center gap-1.5">🏛️ Venue</span>
                 <span className="flex items-center gap-2">
-                  <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] font-semibold tracking-normal text-indigo-600">{groupedElementItems.venueItems.length}</span>
+                  <span className="rounded-full bg-[var(--accent)]/10 px-1.5 py-0.5 text-[9px] font-semibold tracking-normal text-[var(--accent)]">{groupedElementItems.venueItems.length}</span>
                   <span className="text-xs text-gray-400">{isExpanded ? '▾' : '▸'}</span>
                 </span>
               </button>
@@ -857,11 +857,11 @@ function ElementsPane() {
                     [groupKey]: !isExpanded,
                   }))
                 }
-                className="flex w-full items-center justify-between px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500 hover:bg-gray-50 transition-colors"
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)] hover:bg-[var(--accent)]/5 transition-colors"
               >
                 <span>{assetGroupLabels[groupKey] || groupKey}</span>
                 <span className="flex items-center gap-2">
-                  <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold tracking-normal text-gray-600">
+                  <span className="rounded-full bg-[var(--accent)]/10 px-1.5 py-0.5 text-[9px] font-semibold tracking-normal text-[var(--accent)]">
                     {groupItems.length}
                   </span>
                   <span className="text-xs text-gray-400">{isExpanded ? "▾" : "▸"}</span>
@@ -1171,6 +1171,13 @@ export default function Editor() {
   const router = useRouter();
   const { slug, id, preview, aiMode } = router.query;
   const queryClient = useQueryClient();
+
+  // Allow the AI assistant to open the asset library via a window event
+  useEffect(() => {
+    const openAssets = () => setShowAssetsModal(true);
+    window.addEventListener("esp-open-assets", openAssets);
+    return () => window.removeEventListener("esp-open-assets", openAssets);
+  }, []);
 
   // Open AI modal if aiMode is set
   useEffect(() => {

@@ -1113,7 +1113,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
                 {/* Flip Controls for Multi-Selection */}
                 <div className="flex justify-between items-center mb-2 mt-2 pt-2 border-t border-gray-100">
-                  <span className="text-xs text-gray-500">Flip</span>
+                  <span className="text-xs text-gray-500">Flip/Mirror</span>
                   <div className="flex gap-1">
                     <button
                       type="button"
@@ -1301,7 +1301,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
                     {/* Flip Controls */}
                     <div className="flex justify-between items-center mb-3 py-2 border-t border-gray-100">
-                      <span className="text-xs text-gray-500">Flip</span>
+                      <span className="text-xs text-gray-500">Flip/Mirror</span>
                       <div className="flex gap-1">
                         <button
                           type="button"

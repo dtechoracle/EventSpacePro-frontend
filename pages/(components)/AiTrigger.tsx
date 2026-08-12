@@ -227,12 +227,6 @@ export default function AiTrigger() {
   const updateProjectWall = useProjectStore((s) => s.updateWall);
   const deleteWorkspaceAsset = useProjectStore((s) => s.removeAsset);
   const deleteProjectWall = useProjectStore((s) => s.removeWall);
-  const addGroup = useProjectStore((s) => s.addGroup);
-  const removeGroup = useProjectStore((s) => s.removeGroup);
-  const removeItemsBatch = useProjectStore((s) => s.removeItemsBatch);
-  const copySelection = useProjectStore((s) => s.copySelection);
-  const pasteSelection = useProjectStore((s) => s.pasteSelection);
-  const batchUpdateItems = useProjectStore((s) => s.batchUpdateItems);
   const updateAsset = useSceneStore((s) => s.updateAsset);
   const canvas = projectCanvas || useSceneStore((s) => s.canvas);
   const existingAssets = [...workspaceAssets, ...useSceneStore((s) => s.assets)];
@@ -2185,6 +2179,223 @@ export default function AiTrigger() {
 
 
 
+  // Execute a workspace operation returned by the AI backend. Returns a
+  // human-readable message describing what was done (or an empty string if the
+  // operation was not recognised).
+  const executeOperation = (op: any): { handled: boolean; message: string } => {
+    if (!op || !op.type) return { handled: false, message: "" };
+    const project = useProjectStore.getState();
+    const editor = useEditorStore.getState();
+    const scene = useSceneStore.getState();
+    let message = "";
+
+    switch (op.type) {
+      case "tool": {
+        const toolMap: Record<string, string> = {
+          "draw-wall": "wall",
+          rectangle: "shape-rectangle",
+          circle: "shape-ellipse",
+          line: "shape-line",
+          "draw-line": "shape-line",
+          "arrow-shape": "shape-arrow",
+          freehand: "freehand",
+          polygon: "shape-polygon",
+          arch: "arch",
+          "pointer-select": "select",
+          "rectangular-select": "rectangular-select",
+          pan: "pan",
+          trim: "trim",
+          "trim-to-blend": "trim-to-blend",
+          "label-arrow": "label-arrow",
+          dimensions: "dimension",
+          "text-annotation": "text-annotation",
+        };
+        if (op.tool === "open-assets") {
+          try { window.dispatchEvent(new CustomEvent("esp-open-assets")); } catch { }
+          message = "Opened the asset library.";
+          break;
+        }
+        if (op.tool === "export-project") {
+          try { window.dispatchEvent(new CustomEvent("esp-open-export")); } catch { }
+          message = "Opened the export panel.";
+          break;
+        }
+        if (op.tool === "import-project") {
+          message = "Project import is available from the dashboard.";
+          break;
+        }
+        const tool = toolMap[op.tool] || op.tool;
+        scene.setPenMode(false);
+        scene.setWallMode(false);
+        scene.setWallDrawingMode(false);
+        scene.setRectangularSelectionMode(false);
+        scene.setShapeMode(null);
+        editor.setActiveTool(tool as any);
+        if (tool === "wall") { scene.setWallMode(true); scene.setWallDrawingMode(true); }
+        else if (tool === "shape-rectangle") scene.setShapeMode("rectangle");
+        else if (tool === "shape-ellipse") scene.setShapeMode("ellipse");
+        else if (tool === "shape-line") scene.setShapeMode("line");
+        else if (tool === "freehand") scene.setPenMode(true);
+        else if (tool === "rectangular-select") scene.setRectangularSelectionMode(true);
+        message = `Switched to the ${op.tool} tool.`;
+        break;
+      }
+      case "align": {
+        const ids = op.assetIds && op.assetIds.length ? op.assetIds : getResolvedSelection().map((a: any) => a.asset.id);
+        if (ids.length < 2) { message = "Select at least two items to align."; break; }
+        project.alignSelection(op.alignment || "left", ids);
+        message = `Aligned ${ids.length} items (${op.alignment}).`;
+        break;
+      }
+      case "distribute": {
+        const ids = op.assetIds && op.assetIds.length ? op.assetIds : getResolvedSelection().map((a: any) => a.asset.id);
+        if (ids.length < 2) { message = "Select at least two items to distribute."; break; }
+        project.distributeSelection(op.direction === "vertical" ? "vertical" : "horizontal", op.spacing, ids);
+        message = `Distributed ${ids.length} items ${op.direction === "vertical" ? "vertically" : "horizontally"}.`;
+        break;
+      }
+      case "undo":
+        project.undo();
+        message = "Undid the last action.";
+        break;
+      case "redo":
+        project.redo();
+        message = "Redid the last action.";
+        break;
+      case "zoom": {
+        if (op.zoom === "in") editor.zoomIn();
+        else if (op.zoom === "out") editor.zoomOut();
+        else editor.resetZoom();
+        message = `Zoomed ${op.zoom || "to 100%"}.`;
+        break;
+      }
+      case "toggle-grid":
+        editor.toggleGrid();
+        message = "Toggled the grid.";
+        break;
+      case "snap": {
+        if (op.snap === "grid") editor.toggleSnapToGrid();
+        else editor.toggleSnapToObjects();
+        message = `Toggled snap to ${op.snap}.`;
+        break;
+      }
+      case "select": {
+        if (op.selectAll) {
+          const allIds = [
+            ...workspaceAssets.map((a: any) => a.id),
+            ...workspaceShapes.map((s: any) => s.id),
+            ...workspaceWalls.map((w: any) => w.id),
+          ];
+          editor.setSelectedIds(allIds);
+          scene.selectAsset(allIds[0] || null);
+          message = `Selected all ${allIds.length} items.`;
+        } else if (op.assetType || op.criteria?.assetType) {
+          const type = String(op.assetType || op.criteria?.assetType || "").toLowerCase();
+          const ids = workspaceAssets
+            .filter((a: any) => (a.type || "").toLowerCase().includes(type) || (a.name || "").toLowerCase().includes(type))
+            .map((a: any) => a.id);
+          editor.setSelectedIds(ids);
+          message = `Selected ${ids.length} ${type} item(s).`;
+        } else {
+          message = "Select a specific item or say 'select all'.";
+        }
+        break;
+      }
+      case "deselect":
+        editor.clearSelection();
+        scene.clearSelection();
+        scene.selectAsset(null);
+        message = "Cleared the selection.";
+        break;
+      case "group": {
+        const ids = getResolvedSelection().map((a: any) => a.asset.id);
+        if (ids.length > 1) {
+          const groupId = `group-${Date.now()}`;
+          project.addGroup({ id: groupId, itemIds: ids, zIndex: project.getNextZIndex() });
+          editor.setSelectedIds([groupId]);
+          message = `Grouped ${ids.length} items.`;
+        } else {
+          message = "Select at least two items to group.";
+        }
+        break;
+      }
+      case "ungroup": {
+        const resolved = getResolvedSelection();
+        let count = 0;
+        let children: string[] = [];
+        resolved.forEach((r: any) => {
+          if (r.asset.isGroup) {
+            project.removeGroup(r.asset.id);
+            count++;
+            if (r.asset.groupAssets) children.push(...r.asset.groupAssets.map((c: any) => c.id));
+          }
+        });
+        if (count > 0) { editor.setSelectedIds(children); message = `Ungrouped ${count} group(s).`; }
+        else message = "No group selected to ungroup.";
+        break;
+      }
+      case "delete": {
+        const idsToDelete = op.deleteSelected
+          ? getResolvedSelection().map((a: any) => a.asset.id)
+          : op.deleteAll
+            ? [...workspaceAssets.map((a: any) => a.id), ...workspaceShapes.map((s: any) => s.id), ...workspaceWalls.map((w: any) => w.id)]
+            : (op.assetIds || []);
+        if (idsToDelete.length > 0) { project.removeItemsBatch(idsToDelete); message = `Deleted ${idsToDelete.length} item(s).`; }
+        else message = "Nothing to delete.";
+        break;
+      }
+      case "duplicate": {
+        const ids = op.assetIds && op.assetIds.length ? op.assetIds : getResolvedSelection().map((a: any) => a.asset.id);
+        if (ids.length > 0) {
+          const count = op.count || 1;
+          project.copySelection(ids);
+          let newIds: string[] = [];
+          for (let i = 0; i < count; i++) {
+            const pasted = project.pasteSelection();
+            newIds.push(...(Array.isArray(pasted) ? pasted : []));
+          }
+          if (newIds.length > 0) editor.setSelectedIds(newIds);
+          message = `Duplicated ${ids.length} item(s) ${count} time(s).`;
+        } else {
+          message = "Select an item to duplicate.";
+        }
+        break;
+      }
+      case "bring-to-front":
+      case "send-to-back": {
+        const ids = getResolvedSelection().map((a: any) => a.asset.id);
+        if (ids.length === 0) { message = "Select an item first."; break; }
+        const allItems = [...project.walls, ...project.shapes, ...project.assets, ...project.dimensions, ...project.textAnnotations, ...project.labelArrows];
+        const currentMaxZ = allItems.length ? Math.max(...allItems.map((i: any) => i.zIndex || 0)) : 0;
+        const currentMinZ = allItems.length ? Math.min(...allItems.map((i: any) => i.zIndex || 0)) : 0;
+        project.saveToHistory();
+        let counter = op.type === "bring-to-front" ? currentMaxZ + 1 : currentMinZ - ids.length;
+        const applyZ = (itemId: string) => {
+          const z = counter++;
+          if (project.shapes.find((s: any) => s.id === itemId)) project.updateShape(itemId, { zIndex: z }, true);
+          else if (project.walls.find((w: any) => w.id === itemId)) project.updateWall(itemId, { zIndex: z }, true);
+          else if (project.assets.find((a: any) => a.id === itemId)) project.updateAsset(itemId, { zIndex: z }, true);
+          else if (project.dimensions.find((d: any) => d.id === itemId)) project.updateDimension(itemId, { zIndex: z }, true);
+          else if (project.labelArrows.find((la: any) => la.id === itemId)) project.updateLabelArrow(itemId, { zIndex: z }, true);
+          else if (project.textAnnotations.find((t: any) => t.id === itemId)) project.updateTextAnnotation(itemId, { zIndex: z } as any, true);
+        };
+        ids.forEach(applyZ);
+        message = op.type === "bring-to-front" ? `Brought ${ids.length} item(s) to front.` : `Sent ${ids.length} item(s) to back.`;
+        break;
+      }
+      case "export-project":
+        try { window.dispatchEvent(new CustomEvent("esp-open-export")); } catch { }
+        message = "Opened the export panel.";
+        break;
+      case "import-project":
+        message = "Project import is available from the dashboard.";
+        break;
+      default:
+        return { handled: false, message: "" };
+    }
+    return { handled: true, message };
+  };
+
   const applyPlan = (plan: any) => {
     if (!plan) return;
     const result = processPlan(plan, canvas);
@@ -2239,65 +2450,12 @@ export default function AiTrigger() {
       }
     }
 
-    // 3. Process Operations (Delete, Align, Duplicate, Group, etc.)
+    // 3. Process Operations (Tool switch, Align, Distribute, Delete, Duplicate,
+    //    Group, Ungroup, Layers, Undo/Redo, Zoom, Grid/Snap, Select, etc.)
     if (plan.operation) {
-      const op = plan.operation;
-      let opMessage = "";
-      
-      if (op.type === "delete") {
-        const idsToDelete = op.deleteSelected 
-          ? getResolvedSelection().map((a: any) => a.asset.id)
-          : (op.assetIds || []);
-        
-        if (idsToDelete.length > 0) {
-          removeItemsBatch(idsToDelete);
-          opMessage = `Deleted ${idsToDelete.length} items`;
-        }
-      } 
-      else if (op.type === "duplicate") {
-        const selectedIds = getResolvedSelection().map((a: any) => a.asset.id);
-        if (selectedIds.length > 0) {
-          const count = op.count || 1;
-          copySelection(selectedIds);
-          let newIds: string[] = [];
-          for (let i = 0; i < count; i++) {
-            const pasted = pasteSelection();
-            newIds.push(...(Array.isArray(pasted) ? pasted : []));
-          }
-          if (newIds.length > 0) setEditorSelectedIds(newIds);
-          opMessage = `Duplicated items ${count} time(s)`;
-        }
-      }
-      else if (op.type === "group") {
-        const selectedIds = getResolvedSelection().map((a: any) => a.asset.id);
-        if (selectedIds.length > 1) {
-          const groupId = `group-${Date.now()}`;
-          addGroup({ id: groupId, itemIds: selectedIds, zIndex: 100 });
-          setEditorSelectedIds([groupId]);
-          opMessage = `Grouped ${selectedIds.length} items`;
-        }
-      }
-      else if (op.type === "ungroup") {
-        const resolved = getResolvedSelection();
-        let ungroupedCount = 0;
-        let childrenToSelect: string[] = [];
-        resolved.forEach((r: any) => {
-           if (r.asset.isGroup) {
-             removeGroup(r.asset.id);
-             ungroupedCount++;
-             if (r.asset.groupAssets) {
-               childrenToSelect.push(...r.asset.groupAssets.map((c: any) => c.id));
-             }
-           }
-        });
-        if (ungroupedCount > 0) {
-          setEditorSelectedIds(childrenToSelect);
-          opMessage = `Ungrouped ${ungroupedCount} group(s)`;
-        }
-      }
-
-      if (opMessage) {
-        setMessages((m: any) => [...m, { role: 'assistant', content: `✅ ${opMessage}` }]);
+      const opResult = executeOperation(plan.operation);
+      if (opResult.handled && opResult.message) {
+        setMessages((m: any) => [...m, { role: 'assistant', content: `✅ ${opResult.message}` }]);
       }
     }
   };
@@ -2437,6 +2595,24 @@ export default function AiTrigger() {
         // Capture groupContext and prompt in closure for use in handlers
         const capturedGroupContext = groupContext;
         const capturedPrompt = prompt;
+
+        // Workspace-level operations that act on the whole selection (or editor)
+        // rather than a single asset — route through executeOperation.
+        const workspaceOpTypes = ['align', 'distribute', 'bring-to-front', 'send-to-back', 'select', 'deselect'];
+        if (workspaceOpTypes.includes(data.action.type)) {
+          const opResult = executeOperation({
+            ...data.action,
+            type: data.action.type === 'send-to-back' ? 'send-to-back' : data.action.type === 'bring-to-front' ? 'bring-to-front' : data.action.type,
+          });
+          if (opResult.handled) {
+            setMessages((m: any) => [...m, {
+              role: 'assistant',
+              content: opResult.message ? `✅ ${opResult.message}` : data.message || 'Done!'
+            }]);
+            return;
+          }
+        }
+
         // Apply the action to selected assets (both new editor + Workspace2D)
         resolved.forEach(({ asset, source }) => {
           console.log(`Applying action to ${source} asset:`, asset.id); // Debug log
@@ -3282,6 +3458,21 @@ export default function AiTrigger() {
       });
       const data = await res.json();
 
+      // Workspace operations (tool switch, align, distribute, undo/redo, zoom,
+      // grid/snap, delete, duplicate, layers, select, export/import) are executed
+      // directly and do not generate a layout plan or preview.
+      if (data?.operation) {
+        const opResult = executeOperation(data.operation);
+        if (opResult.handled) {
+          setMessages((m: any) => [...m, {
+            role: 'assistant',
+            content: opResult.message ? `✅ ${opResult.message}` : 'Done!'
+          }]);
+          setIsLoading(false);
+          return;
+        }
+      }
+
       let previewData: any[] | undefined;
       let previewPlanData: any | undefined;
       let planData: any | undefined;
@@ -3313,7 +3504,7 @@ export default function AiTrigger() {
         if (!assetSelection && followUpText && !isAssetSelectionReply) {
           inferredAssetSelection = buildFallbackAssetSelectionFromFollowUp(followUpText);
         }
-      if ((!previewData || previewData.length === 0) && followUpText) {
+      if ((!previewData || previewData.length === 0) && followUpText && !assetSelection) {
         const fallbackProcessed = buildFallbackPreviewFromPrompt(prompt);
         if (fallbackProcessed) {
           previewPlanData = fallbackProcessed;

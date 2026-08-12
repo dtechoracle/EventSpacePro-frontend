@@ -218,6 +218,19 @@ Return EXACTLY ONE of these action shapes:
 { "action": { "type": "ungroup" }, "message": "…" }
   • "group these together", "ungroup this"
 
+9. WORKSPACE OPERATIONS (multi-item or editor-level commands — operate on the current selection)
+{ "action": { "type": "align", "alignment": "left"|"right"|"center"|"top"|"middle"|"bottom" }, "message": "…" }
+  • "align left/right/top/bottom/center", "line them up"
+{ "action": { "type": "distribute", "direction": "horizontal"|"vertical" }, "message": "…" }
+  • "distribute evenly", "evenly space horizontally/vertically"
+{ "action": { "type": "bring-to-front" }, "message": "…" }
+{ "action": { "type": "send-to-back" }, "message": "…" }
+  • "bring to front", "send to back" (prefer these over update zIndex)
+{ "action": { "type": "select", "selectAll": true }, "message": "…" }
+{ "action": { "type": "select", "assetType": "table" }, "message": "…" }
+{ "action": { "type": "deselect" }, "message": "…" }
+  • "select all", "select every table", "clear selection"
+
 ═══════════════════════════════════════════════════
   GROUP CHILD MATCHING (when groupContext is provided)
 ═══════════════════════════════════════════════════
@@ -241,8 +254,8 @@ To find the right child from groupContext.childAssets:
 • If user says "make it [color]", ALWAYS use type="update" with the fill property.
 • If user says "change the border/outline/stroke to [color]", use type="update" with stroke property.
 • If user says "remove fill" or "no fill", use update: { fill: "transparent" }.
-• "bring to front" / "on top" → update: { zIndex: 99999 }
-• "send to back" / "behind everything" → update: { zIndex: 0 }
+• "bring to front" / "on top" → action: { type: "bring-to-front" }
+• "send to back" / "behind everything" → action: { type: "send-to-back" }
 • Words like "nudge", "slightly", "a bit" imply small relative movements (50–200 mm).
 • Words like "a lot", "way over", "far" imply larger movements (1000–3000 mm).
 • ALWAYS include a "message" field confirming what was done in plain English.
@@ -265,7 +278,7 @@ To find the right child from groupContext.childAssets:
 "flip horizontal" → { "action": { "type": "update", "updates": { "flipX": true } }, "message": "Flipped horizontally." }
 "flip vertical" → { "action": { "type": "update", "updates": { "flipY": true } }, "message": "Flipped vertically." }
 "unflip" → { "action": { "type": "update", "updates": { "flipX": false, "flipY": false } }, "message": "Removed all flips." }
-"bring to front" → { "action": { "type": "update", "updates": { "zIndex": 99999 } }, "message": "Brought to front." }
+"bring to front" → { "action": { "type": "bring-to-front" }, "message": "Brought to front." }
 "dashed border" → { "action": { "type": "update", "updates": { "lineType": "dashed" } }, "message": "Changed to dashed border." }
 "thicker border" → { "action": { "type": "update", "updates": { "strokeWidth": 8 } }, "message": "Made border thicker." }
 "gradient fill from red to blue" → { "action": { "type": "update", "updates": { "fillType": "gradient", "fillGradientStart": "#ef4444", "fillGradientEnd": "#3b82f6", "gradientAngle": 90 } }, "message": "Applied red-to-blue gradient fill." }

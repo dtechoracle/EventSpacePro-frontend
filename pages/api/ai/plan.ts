@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getCompactAssetList, findAssetByName, searchAssetsByTags } from '@/lib/aiAssetLibrary';
-import { WALL_TYPES, findWallType, TOOLBAR_OPERATIONS, LAYOUT_OPERATIONS } from '@/lib/aiOperations';
+import { WALL_TYPES, findWallType, TOOLBAR_OPERATIONS, LAYOUT_OPERATIONS, detectWorkspaceOperation, getOperationsContext } from '@/lib/aiOperations';
 
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
 
@@ -1768,7 +1768,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (isNewLayoutIntent) {
       return res.status(200).json({
         followUp: 'Would you like to use one of our event location and space options?',
-        choices: ['Marquee', 'Grassy field', 'Parking lot', 'Beach', 'Custom'],
+        choices: ['Custom', 'Marquee', 'Grassy field', 'Parking lot', 'Beach'],
       });
     }
 
@@ -2368,6 +2368,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    // ─── Local workspace-operation detection (no LLM cost) ─────────────────────
+    // Map common workspace commands (tool switching, align, distribute, undo/redo,
+    // zoom, grid/snap, delete, duplicate, layers, select) to executable operations.
+    if (!commandCanonical && !commandText) {
+      // fallthrough
+    } else {
+      const detectedOp = detectWorkspaceOperation(commandText || '');
+      if (detectedOp) {
+        return res.status(200).json({ operation: detectedOp });
+      }
+    }
+
     if (!DEEPSEEK_API_KEY) return res.status(500).json({ error: 'DEEPSEEK_API_KEY not configured' });
 
     const assetContext = assetList.map(a => `"${a.name}" (${a.category})`).join(', ');
@@ -2496,6 +2508,20 @@ DO NOT guess absolute canvas coordinates. DO NOT use negative numbers. Just plot
 AVAILABLE ASSETS (${assetList.length} total): ${assetContext}
 
 WALL TYPES: ${WALL_TYPES.map(w => w.label + ' (' + w.thickness + 'mm thick)').join(', ')}
+
+WORKSPACE COMMANDS (route these to the "operation" response shape whenever the user asks to perform an action on existing items):
+${getOperationsContext()}
+- Tool switch: return operation: { "type": "tool", "tool": "draw-wall" | "rectangle" | "circle" | "line" | "arrow-shape" | "freehand" | "polygon" | "arch" | "draw-line" | "pointer-select" | "rectangular-select" | "pan" | "trim" | "trim-to-blend" | "label-arrow" | "dimensions" | "text-annotation" | "open-assets" | "export-project" | "import-project" }
+- Align: operation: { "type": "align", "alignment": "left" | "right" | "center" | "top" | "middle" | "bottom", "assetIds": [...] }
+- Distribute: operation: { "type": "distribute", "direction": "horizontal" | "vertical", "assetIds": [...] }
+- Undo/redo: operation: { "type": "undo" } or { "type": "redo" }
+- Zoom: operation: { "type": "zoom", "zoom": "in" | "out" | "reset" }
+- Grid/snap: operation: { "type": "toggle-grid" } or { "type": "snap", "snap": "grid" | "objects" }
+- Delete: operation: { "type": "delete", "deleteSelected": true } or { "type": "delete", "deleteAll": true }
+- Duplicate: operation: { "type": "duplicate", "count": N }
+- Layers: operation: { "type": "bring-to-front" } or { "type": "send-to-back" }
+- Select all: operation: { "type": "select", "selectAll": true }
+- Group/ungroup: operation: { "type": "group" } or { "type": "ungroup" }
 
 SHAPE TYPES: rectangle, ellipse (circle), polygon, line, arrow, arc, text
 

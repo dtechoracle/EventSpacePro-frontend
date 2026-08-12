@@ -1342,6 +1342,13 @@ const renderAssetToCanvas = (
     }
   };
 
+  // Allow the AI assistant to expand/open the export panel via a window event
+  useEffect(() => {
+    const openExport = () => setIsExpanded(true);
+    window.addEventListener("esp-open-export", openExport);
+    return () => window.removeEventListener("esp-open-export", openExport);
+  }, []);
+
   return (
     <div className="mt-4 border-t border-slate-200 pt-4 font-sans">
       <button
