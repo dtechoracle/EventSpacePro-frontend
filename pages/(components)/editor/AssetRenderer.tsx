@@ -803,7 +803,9 @@ export const AssetRenderer = React.memo(({
               fontFamily: 'Inter, sans-serif'
             }}
           >
-            {(asset as any).tableName}
+            <span style={{ display: 'inline-block' }}>
+              {(asset as any).tableName}
+            </span>
           </div>
         )}
 

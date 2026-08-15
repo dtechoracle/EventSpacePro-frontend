@@ -645,7 +645,7 @@ export default function Canvas({
 
             <CanvasControls selectedAssetId={selectedAssetId} onRotateCW={rotateCW} onRotateCCW={rotateCCW} canvas={canvas} />
             <PatternIndicator />
-            <DimensionOverlay mmToPx={mmToPx} />
+            <DimensionOverlay mmToPx={mmToPx} zoom={zoom} />
             <SnapGuidesRenderer mmToPx={mmToPx} workspaceZoom={workspaceZoom} />
             
             <SelectionBox mmToPx={mmToPx} />

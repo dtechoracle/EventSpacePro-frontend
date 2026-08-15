@@ -795,8 +795,75 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const scaleY = (asset as any).flipY ? -baseScale : baseScale;
     const transform = `translate(${asset.x}, ${asset.y}) rotate(${rotation}) scale(${scaleX}, ${scaleY})`;
 
+    const flipX = !!(asset as any).flipX;
+
+    let tableLabel: React.ReactNode = null;
+    if (asset.tableName && !isHighlightOnly) {
+        const pos = (asset as any).tableNumberingPosition || globalPos || 'center';
+        const orientation = (asset as any).tableNumberingOrientation || globalOrientation || 'horizontal';
+        const labelFontSize = (asset as any).tableNumberingFontSize || globalTableFontSize || Math.max(14, (asset.width || 100) * 0.14);
+        const labelFontFamily = (asset as any).tableNumberingFontFamily || globalTableFontFamily || 'Inter, sans-serif';
+        const labelFontWeight = (asset as any).tableNumberingFontWeight || globalTableFontWeight || '900';
+        const labelFontStyle = (asset as any).tableNumberingFontStyle || globalTableFontStyle || 'normal';
+        const labelTextDecoration = (asset as any).tableNumberingTextDecoration || globalTableTextDecoration || 'none';
+        const labelColor = (asset as any).tableNumberingColor || globalTableColor || '#000000';
+        const circleR = Math.max(16, (asset.width || 100) * 0.12);
+        const padding = circleR * 1.5;
+        const halfW = (asset.width || 100) / 2;
+        const halfH = (asset.height || 100) / 2;
+
+        let tx = 0;
+        let ty = 0;
+
+        switch (pos) {
+            case 'top': ty = -halfH - padding; break;
+            case 'bottom': ty = halfH + padding; break;
+            case 'top-left': tx = -halfW; ty = -halfH - padding; break;
+            case 'top-right': tx = halfW; ty = -halfH - padding; break;
+            case 'bottom-left': tx = -halfW; ty = halfH + padding; break;
+            case 'bottom-right': tx = halfW; ty = halfH + padding; break;
+            case 'middle-left': tx = -halfW - padding; break;
+            case 'middle-right': tx = halfW + padding; break;
+            default: break;
+        }
+
+        if (flipX) tx = -tx;
+
+        const rad = rotation * Math.PI / 180;
+        const cosR = Math.cos(rad);
+        const sinR = Math.sin(rad);
+        const worldX = asset.x + baseScale * (cosR * tx - sinR * ty);
+        const worldY = asset.y + baseScale * (sinR * tx + cosR * ty);
+        let worldRotation = rotation;
+        if (orientation === 'vertical') worldRotation += 90;
+
+        tableLabel = (
+            <g transform={`translate(${worldX}, ${worldY}) rotate(${worldRotation})`}>
+                <text
+                    x={0}
+                    y={0}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={labelFontSize}
+                    fill={labelColor}
+                    fontWeight={labelFontWeight}
+                    fontStyle={labelFontStyle}
+                    textDecoration={labelTextDecoration}
+                    pointerEvents="none"
+                    style={{
+                        userSelect: 'none',
+                        fontFamily: labelFontFamily
+                    }}
+                >
+                    {asset.tableName}
+                </text>
+            </g>
+        );
+    }
+
 
     return (
+        <>
         <g
             transform={transform}
             style={{ 
@@ -889,69 +956,11 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                             </text>
                         </g>
                     )}
-
-                    {asset.tableName && (
-                        (() => {
-                            const pos = (asset as any).tableNumberingPosition || globalPos || 'center';
-                            const orientation = (asset as any).tableNumberingOrientation || globalOrientation || 'horizontal';
-                            const labelFontSize = (asset as any).tableNumberingFontSize || globalTableFontSize || Math.max(14, (asset.width || 100) * 0.14);
-                            const labelFontFamily = (asset as any).tableNumberingFontFamily || globalTableFontFamily || 'Inter, sans-serif';
-                            const labelFontWeight = (asset as any).tableNumberingFontWeight || globalTableFontWeight || '900';
-                            const labelFontStyle = (asset as any).tableNumberingFontStyle || globalTableFontStyle || 'normal';
-                            const labelTextDecoration = (asset as any).tableNumberingTextDecoration || globalTableTextDecoration || 'none';
-                            const labelColor = (asset as any).tableNumberingColor || globalTableColor || '#000000';
-                            const circleR = Math.max(16, (asset.width || 100) * 0.12);
-                            const padding = circleR * 1.5;
-                            const halfW = (asset.width || 100) / 2;
-                            const halfH = (asset.height || 100) / 2;
-
-                            let tx = 0;
-                            let ty = 0;
-
-                            switch (pos) {
-                                case 'top': ty = -halfH - padding; break;
-                                case 'bottom': ty = halfH + padding; break;
-                                case 'top-left': tx = -halfW; ty = -halfH - padding; break;
-                                case 'top-right': tx = halfW; ty = -halfH - padding; break;
-                                case 'bottom-left': tx = -halfW; ty = halfH + padding; break;
-                                case 'bottom-right': tx = halfW; ty = halfH + padding; break;
-                                case 'middle-left': tx = -halfW - padding; break;
-                                case 'middle-right': tx = halfW + padding; break;
-                                default: break; // center
-                            }
-
-                            let finalRotation = -rotation;
-                            if (orientation === 'vertical') {
-                                finalRotation += 90;
-                            }
-
-                            return (
-                                <g transform={`translate(${tx}, ${ty}) rotate(${finalRotation})`}>
-                                    <text
-                                        x={0}
-                                        y={0}
-                                        textAnchor="middle"
-                                        dominantBaseline="middle"
-                                        fontSize={labelFontSize}
-                                        fill={labelColor}
-                                        fontWeight={labelFontWeight}
-                                        fontStyle={labelFontStyle}
-                                        textDecoration={labelTextDecoration}
-                                        pointerEvents="none"
-                                        style={{
-                                            userSelect: 'none',
-                                            fontFamily: labelFontFamily
-                                        }}
-                                    >
-                                        {asset.tableName}
-                                    </text>
-                                </g>
-                            );
-                        })()
-                    )}
                 </>
             )}
         </g>
+        {tableLabel}
+        </>
     );
 };
 

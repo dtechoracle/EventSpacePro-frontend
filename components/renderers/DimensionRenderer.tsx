@@ -90,7 +90,7 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
 
     // Display value
     const mmValue = value !== undefined ? value : length;
-    const textStr = formatValue(mmValue);
+    const textStr = (dimension as any).customLabel || formatValue(mmValue);
 
     // Arrow size scaled by zoom (inverse scale to keep constant visual size)
     // Actually, in SVG world space, we want it to look consistent relative to the drawing?
@@ -272,7 +272,6 @@ export const DimensionRenderer: React.FC<DimensionRendererProps> = ({ dimension,
             {/* Text Label */}
             {(() => {
                 const labelFontSize = fontSize || 11;
-                // standard px/py for offset logic. textPosition shifts are in world units or screen units?
                 // since we are in fixed screen scale(1/zoom), shifts in text coordinates are in screen pixels.
                 let offsetY = 0;
                 if (textPosition === 'above') offsetY = -labelFontSize;

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { extractPdfElements, toWorkspaceItems, type PdfElement } from "@/utils/pdfToSvg";
 
 export type PageData = {
   pageIndex: number;
@@ -10,17 +11,28 @@ export type PageData = {
   height: number;
 };
 
+export type SvgPageData = {
+  pageIndex: number;
+  shapes: any[];
+  textAnnotations: any[];
+  width: number;
+  height: number;
+};
+
 export type PdfPagePickerProps = {
   arrayBuffer: ArrayBuffer;
+  mode: 'image' | 'svg';
   onImport: (pages: PageData[]) => void;
+  onImportSvg?: (pages: SvgPageData[]) => void;
   onCancel: () => void;
 };
 
 const RENDER_SCALE = 0.3;
 
-const PdfPagePicker = ({ arrayBuffer, onImport, onCancel }: PdfPagePickerProps) => {
+const PdfPagePicker = ({ arrayBuffer, mode, onImport, onImportSvg, onCancel }: PdfPagePickerProps) => {
   const [pages, setPages] = useState<{ index: number; selected: boolean; thumbnail: string; width: number; height: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [extracting, setExtracting] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -76,6 +88,39 @@ const PdfPagePicker = ({ arrayBuffer, onImport, onCancel }: PdfPagePickerProps) 
     const selected = pages.filter(p => p.selected);
     if (selected.length === 0) return;
 
+    if (mode === 'svg' && onImportSvg) {
+      setExtracting(true);
+      try {
+        const pdfjsLib = (window as any).pdfjsLib;
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+        const results: SvgPageData[] = [];
+        for (const s of selected) {
+          const page = await pdf.getPage(s.index);
+          const viewport = page.getViewport({ scale: 1 });
+          const elements = await extractPdfElements(page, 1);
+          const { shapes, textAnnotations } = toWorkspaceItems(
+            elements,
+            viewport.width,
+            viewport.height
+          );
+          results.push({
+            pageIndex: s.index,
+            shapes,
+            textAnnotations,
+            width: viewport.width,
+            height: viewport.height,
+          });
+        }
+        onImportSvg(results);
+      } catch (err) {
+        console.error("SVG extraction error:", err);
+      } finally {
+        setExtracting(false);
+      }
+      return;
+    }
+
     const pdfjsLib = (window as any).pdfjsLib;
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
@@ -94,7 +139,10 @@ const PdfPagePicker = ({ arrayBuffer, onImport, onCancel }: PdfPagePickerProps) 
       }
     }
     onImport(results);
-  }, [pages, arrayBuffer, onImport]);
+  }, [pages, arrayBuffer, onImport, onImportSvg, mode]);
+
+  const selectedCount = pages.filter(p => p.selected).length;
+  const isSvg = mode === 'svg';
 
   return (
     <AnimatePresence>
@@ -121,8 +169,9 @@ const PdfPagePicker = ({ arrayBuffer, onImport, onCancel }: PdfPagePickerProps) 
               <div className="flex items-center gap-2">
                 <button onClick={selectAll} className="text-xs px-3 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700">Select All</button>
                 <button onClick={deselectAll} className="text-xs px-3 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700">Deselect All</button>
-                <span className="text-xs text-gray-400 ml-2">{pages.filter(p => p.selected).length} of {pages.length} selected</span>
+                <span className="text-xs text-gray-400 ml-2">{selectedCount} of {pages.length} selected</span>
               </div>
+
               <div className="grid grid-cols-3 gap-3 max-h-[50vh] overflow-y-auto pr-1">
                 {pages.map(p => (
                   <button
@@ -142,10 +191,22 @@ const PdfPagePicker = ({ arrayBuffer, onImport, onCancel }: PdfPagePickerProps) 
               </div>
               <button
                 onClick={handleImport}
-                disabled={pages.filter(p => p.selected).length === 0}
-                className="w-full h-12 rounded-2xl text-white text-base font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={selectedCount === 0 || extracting}
+                className="w-full h-12 rounded-2xl text-white text-base font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Import {pages.filter(p => p.selected).length > 0 ? `(${pages.filter(p => p.selected).length} page${pages.filter(p => p.selected).length > 1 ? 's' : ''})` : ''}
+                {extracting ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Extracting vectors...
+                  </>
+                ) : (
+                  <>
+                    {isSvg ? 'Import as SVG' : 'Import'}{selectedCount > 0 ? ` (${selectedCount} page${selectedCount > 1 ? 's' : ''})` : ''}
+                  </>
+                )}
               </button>
             </>
           )}

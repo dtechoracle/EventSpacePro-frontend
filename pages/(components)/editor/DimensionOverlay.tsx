@@ -4,7 +4,7 @@ import React from "react";
 import { useSceneStore, AssetInstance } from "@/store/sceneStore";
 import { DimensionRenderer } from "@/components/renderers/DimensionRenderer";
 
-export default function DimensionOverlay({ mmToPx }: { mmToPx: number }) {
+export default function DimensionOverlay({ mmToPx, zoom = 1 }: { mmToPx: number; zoom?: number }) {
     const assets = useSceneStore((s) => s.assets);
 
     // Helper to transform local point to world point
@@ -150,7 +150,7 @@ export default function DimensionOverlay({ mmToPx }: { mmToPx: number }) {
                                         ...dim,
                                         labelPosition: (asset as any).dimensionLabelPosition
                                     } as any}
-                                    zoom={1}
+                                    zoom={zoom}
                                 />
                             ))}
                         </g>

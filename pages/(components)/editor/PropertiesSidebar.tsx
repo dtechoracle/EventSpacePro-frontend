@@ -48,6 +48,7 @@ const isTableLike = (item: any) => {
     item?.label,
     item?.tableName,
   ].filter(Boolean).join(' ').toLowerCase();
+  if (haystack.includes('sofa') || haystack.includes('couch')) return false;
   return haystack.includes('table');
 };
 
@@ -427,21 +428,39 @@ export default function PropertiesSidebar(): React.JSX.Element {
   }, [numberingMode, isNumberingEnabled, numberingPattern, numberingDirection, startingNumber]);
 
   // ── AUTO-NUMBERING EFFECT ──────────────────────────────────────────────────
+  // Only number tables that don't already have a tableName (assigned by handleAssetDrop).
+  // This preserves insertion-order numbers from drop while still numbering legacy unnumbered tables.
   useEffect(() => {
     if (!isNumberingEnabled || numberingMode !== 'auto') return;
     if (tableNumberingItems.length === 0) return;
 
-    // Only apply if the current numbering differs from the intended one
-    const updates = tableNumberingItems.map((t, idx) => {
-      const expectedName = String(startingNumber + idx);
-      if (t.name !== expectedName) {
-        return { id: t.id, type: t.type, updates: { tableName: expectedName } };
-      }
-      return null;
-    }).filter(u => u !== null) as any[];
+    const unnumbered = tableNumberingItems.filter(t => !t.name || t.name.trim() === '');
+    if (unnumbered.length === 0) return;
+
+    const usedNums = new Set(
+      tableNumberingItems
+        .filter(t => t.name && t.name.trim() !== '')
+        .map(t => Number(t.name))
+        .filter(n => Number.isFinite(n))
+    );
+
+    let nextNum = startingNumber;
+    const getUnusedNum = () => {
+      while (usedNums.has(nextNum)) nextNum++;
+      const n = nextNum;
+      usedNums.add(n);
+      nextNum++;
+      return n;
+    };
+
+    const updates = unnumbered.map(t => ({
+      id: t.id,
+      type: t.type,
+      updates: { tableName: String(getUnusedNum()) },
+    }));
 
     if (updates.length > 0) {
-      batchUpdateItems(updates);
+      batchUpdateItems(updates, true);
     }
   }, [
     isNumberingEnabled, 
@@ -487,6 +506,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
   const [showModel, setShowModel] = useState(true);
   const [showCanvas, setShowCanvas] = useState(true);
+  const [showMultiProps, setShowMultiProps] = useState(false);
+  const [showSingleProps, setShowSingleProps] = useState(false);
+  const [showTableNumbering, setShowTableNumbering] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [modelName, setModelName] = useState<string>("");
@@ -1012,7 +1034,15 @@ export default function PropertiesSidebar(): React.JSX.Element {
             {/* MULTI SELECTION PROPERTIES */}
             {(isMultiSelection || (selectedIds.length === 1 && useProjectStore.getState().groups.some(g => g.id === selectedIds[0]))) && (
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="text-sm font-bold text-[#0056A9] mb-3">Properties</div>
+                <button
+                  type="button"
+                  onClick={() => setShowMultiProps(s => !s)}
+                  className="flex w-full items-center justify-between text-left mb-2"
+                >
+                  <div className="text-sm font-bold text-[#0056A9]">Properties</div>
+                  {showMultiProps ? <FaChevronDown size={12} className="text-[#0056A9]" /> : <FaChevronRight size={12} className="text-[#0056A9]" />}
+                </button>
+                {showMultiProps && (<div className="space-y-2">
 
                 {/* Bounding Box Info */}
                 {collectiveBounds && (
@@ -1091,6 +1121,57 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   />
                 </div>
 
+                {/* Chair/Table Color for Multi-Selection (only if seater assets selected) */}
+                {selectedAssets.some(a => /seater|sofa/i.test(a.type)) && (() => {
+                  const seaterIds = selectedAssets.filter(a => /seater|sofa/i.test(a.type)).map(a => a.id);
+                  const seaterAssets = selectedAssets.filter(a => /seater|sofa/i.test(a.type));
+                  const firstTableColor = seaterAssets[0]?.tableColor || seaterAssets[0]?.fillColor || '#ffffff';
+                  const firstChairColor = seaterAssets[0]?.chairColor || '#ffffff';
+                  return (
+                    <>
+                      <div className="flex justify-between items-center mb-2 mt-2 pt-2 border-t border-gray-100">
+                        <span className="text-gray-500 text-xs">Table/Sofa Color</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={firstTableColor}
+                            onChange={(e) => {
+                              updateAssetBatch(seaterIds, { tableColor: e.target.value });
+                            }}
+                            className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-gray-500 text-xs">Chair Color</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={firstChairColor}
+                            onChange={(e) => {
+                              updateAssetBatch(seaterIds, { chairColor: e.target.value });
+                            }}
+                            className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center mb-2 border-t border-dashed border-gray-100 pt-2">
+                        <span className="text-gray-400 text-[10px]">Reset Both Colors</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              updateAssetBatch(seaterIds, { fillColor: val, tableColor: undefined, chairColor: undefined });
+                            }}
+                            className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+
                 {/* Scale for Multi-Selection */}
                 <div className="flex justify-between items-center mb-2 mt-2 pt-2 border-t border-gray-100">
                   <span className="text-xs text-gray-500">Scale</span>
@@ -1121,19 +1202,15 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       onClick={() => {
                         const sIds = selectedShapes.map(s => s.id);
                         const aIds = selectedAssets.map(a => a.id);
-                        const allItems = [...selectedShapes, ...selectedAssets];
-                        if (allItems.length === 0) return;
-                        const cx = allItems.reduce((sum, item) => sum + item.x, 0) / allItems.length;
-                        const cy = allItems.reduce((sum, item) => sum + item.y, 0) / allItems.length;
                         if (sIds.length > 0) sIds.forEach(id => {
                           const s = useProjectStore.getState().shapes.find(sh => sh.id === id);
-                          if (s) updateShape(id, { flipY: !(s as any).flipY, y: cy - (s.y - cy) });
+                          if (s) updateShape(id, { flipY: !(s as any).flipY });
                         });
                         if (aIds.length > 0) aIds.forEach(id => {
                           const a = useProjectStore.getState().assets.find(as => as.id === id);
                           if (a) {
-                            updateAsset(id, { flipY: !(a as any).flipY, y: cy - (a.y - cy) });
-                            updateSceneAsset(id, { flipY: !(a as any).flipY, y: cy - (a.y - cy) });
+                            updateAsset(id, { flipY: !(a as any).flipY });
+                            updateSceneAsset(id, { flipY: !(a as any).flipY });
                           }
                         });
                       }}
@@ -1145,19 +1222,15 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       onClick={() => {
                         const sIds = selectedShapes.map(s => s.id);
                         const aIds = selectedAssets.map(a => a.id);
-                        const allItems = [...selectedShapes, ...selectedAssets];
-                        if (allItems.length === 0) return;
-                        const cx = allItems.reduce((sum, item) => sum + item.x, 0) / allItems.length;
-                        const cy = allItems.reduce((sum, item) => sum + item.y, 0) / allItems.length;
                         if (sIds.length > 0) sIds.forEach(id => {
                           const s = useProjectStore.getState().shapes.find(sh => sh.id === id);
-                          if (s) updateShape(id, { flipX: !(s as any).flipX, x: cx - (s.x - cx) });
+                          if (s) updateShape(id, { flipX: !(s as any).flipX });
                         });
                         if (aIds.length > 0) aIds.forEach(id => {
                           const a = useProjectStore.getState().assets.find(as => as.id === id);
                           if (a) {
-                            updateAsset(id, { flipX: !(a as any).flipX, x: cx - (a.x - cx) });
-                            updateSceneAsset(id, { flipX: !(a as any).flipX, x: cx - (a.x - cx) });
+                            updateAsset(id, { flipX: !(a as any).flipX });
+                            updateSceneAsset(id, { flipX: !(a as any).flipX });
                           }
                         });
                       }}
@@ -1165,13 +1238,22 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     >V</button>
                   </div>
                 </div>
+                </div>)}
               </div>
             )}
 
             {/* SELECTED ITEM PROPERTIES */}
             {selectedItem && !(selectedIds.length === 1 && useProjectStore.getState().groups.some(g => g.id === selectedIds[0])) && (
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="text-sm font-bold text-[#0056A9] mb-3">Properties</div>
+                <button
+                  type="button"
+                  onClick={() => setShowSingleProps(s => !s)}
+                  className="flex w-full items-center justify-between text-left mb-2"
+                >
+                  <div className="text-sm font-bold text-[#0056A9]">Properties</div>
+                  {showSingleProps ? <FaChevronDown size={12} className="text-[#0056A9]" /> : <FaChevronRight size={12} className="text-[#0056A9]" />}
+                </button>
+                {showSingleProps && (<div className="space-y-2">
                 {/* Position */}
                 {(itemType === 'shape' || itemType === 'asset') && (
                   <div className="grid grid-cols-2 gap-2 mb-2">
@@ -2717,6 +2799,24 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       </select>
                     </div>
 
+                    {/* Custom Label */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500">Custom Label</span>
+                      <input
+                        type="text"
+                        value={(selectedDimension as any).customLabel || ''}
+                        placeholder={(() => {
+                          const len = Math.sqrt(
+                            Math.pow((selectedDimension.endPoint?.x || 0) - (selectedDimension.startPoint?.x || 0), 2) +
+                            Math.pow((selectedDimension.endPoint?.y || 0) - (selectedDimension.startPoint?.y || 0), 2)
+                          );
+                          return `${Math.round(len)} mm`;
+                        })()}
+                        onChange={(e) => updateDimension(selectedDimension.id, { customLabel: e.target.value || undefined } as any)}
+                        className="sidebar-input w-24 text-xs"
+                      />
+                    </div>
+
                     {/* Dimension Gap */}
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-gray-500">Dimension Gap</span>
@@ -3408,6 +3508,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
 
                 {/* End Of Object Properties */}
+                </div>)}
               </div>
             )}
 
@@ -3418,9 +3519,15 @@ export default function PropertiesSidebar(): React.JSX.Element {
       {/* Workspace Numbering Section */}
       {tableNumberingItems.length > 0 && (
         <div className="mb-4 border-b border-slate-200 pb-2">
-          <div className="text-sm font-bold text-[#0056A9] mb-2">
-            Table Numbering
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowTableNumbering(s => !s)}
+            className="flex w-full items-center justify-between text-left mb-2"
+          >
+            <div className="text-sm font-bold text-[#0056A9]">Table Numbering</div>
+            {showTableNumbering ? <FaChevronDown size={12} className="text-[#0056A9]" /> : <FaChevronRight size={12} className="text-[#0056A9]" />}
+          </button>
+          {showTableNumbering && (<div className="space-y-2">
 
           {/* Text Properties — shared between Auto and Manual modes */}
           <div className="mb-4 pb-4 border-b border-slate-200/50 space-y-2">
@@ -3640,6 +3747,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
           <p className="text-[9px] text-slate-400 mt-2 leading-tight italic">
             * These settings apply to both Auto and Manual numbering.
           </p>
+        </div>)}
         </div>
       )}
       </div>

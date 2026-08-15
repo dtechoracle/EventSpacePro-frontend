@@ -55,7 +55,7 @@ import { convertAssetToShapes } from '@/utils/assetUtils';
 import { texturePatterns } from '@/utils/texturePatterns';
 import { calculateSmartSnap } from '@/utils/smartSnapping'; // Added import
 import { blendShapes } from '@/utils/shapeBoolean';
-import { DEFAULT_ASSET_STROKE_WIDTH, canRenderAssetOnCanvas } from '@/utils/assetRenderMode';
+import { canRenderAssetOnCanvas } from '@/utils/assetRenderMode';
 import { SpatialIndex, getRotatedItemBounds } from '@/utils/spatialIndex';
 import { TEXT_STYLE_FONTS, ensureGoogleFontsLoaded } from '@/utils/googleFonts';
 
@@ -633,22 +633,7 @@ export default function Workspace2D({
   const removeComment = useProjectStore(s => s.removeComment);
   const resolveComment = useProjectStore(s => s.resolveComment);
 
-  useEffect(() => {
-    const legacyStrokeUpdates = assets
-      .filter((asset) =>
-        !asset.isExploded &&
-        asset.strokeWidth !== undefined &&
-        Math.abs(asset.strokeWidth - 0.5) < 0.001
-      )
-      .map((asset) => ({
-        id: asset.id,
-        updates: { strokeWidth: DEFAULT_ASSET_STROKE_WIDTH },
-      }));
 
-    if (legacyStrokeUpdates.length > 0) {
-      batchUpdateAssets(legacyStrokeUpdates, true);
-    }
-  }, [assets, batchUpdateAssets]);
 
   
   const { activeUsers, updateCursor, updateTyping } = useCollaboration(undefined, undefined);
@@ -904,7 +889,11 @@ export default function Workspace2D({
     const asset = assetById.get(hoveredId);
     if (asset) {
       const assetDef = assetDefinitionById.get(asset.type);
-      return assetDef?.category === 'Marquee' ? getSnapPoints(asset) : [];
+      const category = assetDef?.category;
+      if (category === 'Marquee' || category === 'Venue') {
+        return getSnapPoints(asset);
+      }
+      return [];
     }
 
     const wall = walls.find((item) => item.id === hoveredId);
@@ -2675,6 +2664,28 @@ export default function Workspace2D({
         fillColor,
         metadata: template ? { label: template.label } : {},
       };
+
+      const isTableDrop = (typeLower.includes('table') || labelLower.includes('table'))
+        && !typeLower.includes('sofa') && !typeLower.includes('couch')
+        && !typeLower.includes('bench');
+
+      if (isTableDrop) {
+        try {
+          const raw = window.localStorage.getItem('eventspacepro-table-numbering-settings');
+          if (raw) {
+            const settings = JSON.parse(raw);
+            if (settings.enabled && settings.mode === 'auto') {
+              const startNum = Number(settings.startingNumber) || 1;
+              const existingTables = assets.filter(a => {
+                const h = [a.type, (a as any).name, (a as any).label, (a as any).tableName].filter(Boolean).join(' ').toLowerCase();
+                return h.includes('table') && !h.includes('sofa') && !h.includes('couch') && !h.includes('bench');
+              });
+              const nextNum = startNum + existingTables.length;
+              (newAsset as any).tableName = String(nextNum);
+            }
+          }
+        } catch {}
+      }
 
       addAsset(newAsset);
       setSelectedIds([newAsset.id]);

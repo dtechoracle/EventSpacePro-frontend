@@ -1543,14 +1543,20 @@ const renderAssetToCanvas = (
               <div>
                 <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Theme</h4>
                 <div className="flex items-center gap-2.5">
-                  {['#0056A9', '#1e293b', '#0f172a', '#334155', '#272235', '#dc3545'].map(color => (
-                    <button
-                      key={color}
-                      onClick={() => setProfDetails({...profDetails, panelColor: color})}
-                      className={`w-7 h-7 rounded-full border-2 transition-all ${profDetails.panelColor === color ? 'border-slate-400 scale-110 ring-2 ring-slate-200/50' : 'border-white hover:scale-105'}`}
-                      style={{ backgroundColor: color }}
+                  <label className="w-8 h-8 rounded-full border-2 border-white hover:scale-105 cursor-pointer flex items-center justify-center transition-all shadow-sm"
+                    style={{ backgroundColor: profDetails.panelColor || '#0056A9' }}
+                  >
+                    <input
+                      type="color"
+                      value={profDetails.panelColor || '#0056A9'}
+                      onChange={(e) => setProfDetails({...profDetails, panelColor: e.target.value})}
+                      className="w-0 h-0 opacity-0 absolute"
                     />
-                  ))}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                    </svg>
+                  </label>
+                  <span className="text-xs text-slate-400 font-mono">{profDetails.panelColor || '#0056A9'}</span>
                 </div>
               </div>
 

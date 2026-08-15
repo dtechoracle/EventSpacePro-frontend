@@ -336,6 +336,7 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
             {pdfImportData && (
                 <PdfPagePicker
                     arrayBuffer={pdfImportData}
+                    mode="image"
                     onImport={handlePdfImport}
                     onCancel={() => setPdfImportData(null)}
                 />

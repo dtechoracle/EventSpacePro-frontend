@@ -120,7 +120,7 @@ export function commitWallSegment(newSeg: Segment) {
       end: sg.end,
     })),
     wallGap: 8,
-    wallThickness: useSceneStore.getState().getCurrentWallThickness?.() || 2,
+    wallThickness: useSceneStore.getState().getCurrentWallThickness?.() || 75,
     lineColor: "#000000",
     zIndex: 0,
     backgroundColor: "#f3f4f6",

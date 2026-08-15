@@ -96,11 +96,11 @@ export default function UnifiedWallRendering({ mmToPx }: UnifiedWallRenderingPro
         for (const e of a.wallEdges) {
           const p1 = a.wallNodes![e.a];
           const p2 = a.wallNodes![e.b];
-          segs.push({ a: { x: p1.x, y: p1.y }, b: { x: p2.x, y: p2.y }, t: a.wallThickness ?? 2 });
+          segs.push({ a: { x: p1.x, y: p1.y }, b: { x: p2.x, y: p2.y }, t: a.wallThickness ?? 75 });
         }
       } else if (a.wallSegments) {
         for (const s of a.wallSegments) {
-          segs.push({ a: { x: s.start.x + a.x, y: s.start.y + a.y }, b: { x: s.end.x + a.x, y: s.end.y + a.y }, t: a.wallThickness ?? 2 });
+          segs.push({ a: { x: s.start.x + a.x, y: s.start.y + a.y }, b: { x: s.end.x + a.x, y: s.end.y + a.y }, t: a.wallThickness ?? 75 });
         }
       }
     }

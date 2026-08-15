@@ -8,7 +8,7 @@ import { useProjectStore } from "@/store/projectStore";
 import { toast } from "react-hot-toast";
 import { mergeAllWallIntersections } from "@/utils/mergeWalls";
 import { trimToBlendShapes } from "@/utils/shapeBoolean";
-import PdfPagePicker, { type PageData, loadPdfJs } from "@/components/PdfPagePicker";
+import PdfPagePicker, { type PageData, type SvgPageData, loadPdfJs } from "@/components/PdfPagePicker";
 // import AssetsModal from "./AssetsModal";
 
 // Tooltip Component
@@ -66,6 +66,8 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     const [showWallTypeSubmenu, setShowWallTypeSubmenu] = useState(false);
     const [activeTool, setActiveTool] = useState<string | null>(null);
     const [pdfImportData, setPdfImportData] = useState<ArrayBuffer | null>(null);
+    const [pdfImportMode, setPdfImportMode] = useState<'image' | 'svg'>('image');
+    const [showSvgConfirm, setShowSvgConfirm] = useState(false);
     const handlePdfImport = React.useCallback((pages: PageData[]) => {
         setPdfImportData(null);
         const maxSize = 1500;
@@ -100,6 +102,45 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
             }
         });
     }, []);
+
+    const handlePdfSvgImport = React.useCallback((pages: SvgPageData[]) => {
+        setPdfImportData(null);
+        const gap = 50;
+        let currentY = 0;
+
+        pages.forEach((page) => {
+            const pageWidth = page.width;
+            const pageHeight = page.height;
+            const baseZIndex = useProjectStore.getState().getNextZIndex();
+
+            const shapesWithPosition = page.shapes.map((s: any, i: number) => ({
+                ...s,
+                x: s.x,
+                y: s.y + currentY,
+                zIndex: baseZIndex + i,
+            }));
+
+            const textsWithPosition = page.textAnnotations.map((t: any, i: number) => ({
+                ...t,
+                x: t.x,
+                y: t.y + currentY,
+                zIndex: baseZIndex + page.shapes.length + i,
+            }));
+
+            shapesWithPosition.forEach((s: any) => {
+                useProjectStore.getState().addShape(s, true);
+            });
+            textsWithPosition.forEach((t: any) => {
+                useProjectStore.getState().addTextAnnotation(t, true);
+            });
+
+            currentY += pageHeight + gap;
+        });
+
+        useProjectStore.getState().saveToHistory();
+        toast.success(`Imported ${pages.reduce((sum, p) => sum + p.shapes.length + p.textAnnotations.length, 0)} vector elements`);
+    }, []);
+
     // NEW STORE
     const { setActiveTool: setEditorTool, activeTool: editorActiveTool, archWaveMode, toggleArchWaveMode } = useEditorStore();
 
@@ -759,6 +800,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                                         }
                                     } else {
                                         setPdfImportData(arrayBuffer);
+                                        setShowSvgConfirm(true);
                                     }
                                 } catch (err) {
                                     console.error("PDF import error:", err);
@@ -1172,10 +1214,46 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                 )}
             </AnimatePresence>
 
-            {pdfImportData && (
+            {showSvgConfirm && pdfImportData && (
+                <div
+                    className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[9999]"
+                    onClick={() => { setShowSvgConfirm(false); setPdfImportData(null); }}
+                >
+                    <div
+                        className="bg-[#FDFDFF] w-[28rem] rounded-[2.25rem] p-[2rem] flex flex-col gap-4"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h2 className="text-[1.35rem] font-semibold text-[#272235]">Import PDF</h2>
+                        <p className="text-sm text-gray-500 leading-relaxed">
+                            Would you like to convert this PDF to editable vector shapes?
+                        </p>
+                        <p className="text-xs text-gray-400 -mt-2">
+                            Vector import extracts paths &amp; text so you can edit them individually. Image import places a flat bitmap.
+                        </p>
+                        <div className="flex gap-3 mt-1">
+                            <button
+                                onClick={() => { setPdfImportMode('image'); setShowSvgConfirm(false); }}
+                                className="flex-1 h-11 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
+                            >
+                                No, keep as image
+                            </button>
+                            <button
+                                onClick={() => { setPdfImportMode('svg'); setShowSvgConfirm(false); }}
+                                className="flex-1 h-11 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                            >
+                                Yes, convert to SVG
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {pdfImportData && !showSvgConfirm && (
                 <PdfPagePicker
                     arrayBuffer={pdfImportData}
+                    mode={pdfImportMode}
                     onImport={handlePdfImport}
+                    onImportSvg={handlePdfSvgImport}
                     onCancel={() => setPdfImportData(null)}
                 />
             )}

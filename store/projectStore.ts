@@ -248,6 +248,7 @@ export interface Dimension {
     offset: number;
 
     value?: number; // Optional manual override or cached value
+    customLabel?: string; // Custom text override for the dimension label
     targetId?: string; // ID of the object being measured (e.g., wall ID)
     targetIds?: string[]; // IDs of objects touched by a manual dimension
 
