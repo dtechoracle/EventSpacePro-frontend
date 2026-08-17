@@ -138,9 +138,12 @@ function ElementsPane() {
       }
     });
 
+    // Only exclude items whose groupId references an existing group
+    const existingGroupIds = new Set(groups.map(g => g.id));
+
     return [
-    // Filter out items that belong to a group
-    ...walls.filter(w => !w.groupId).map((w) => {
+    // Filter out items that belong to an existing group
+    ...walls.filter(w => !w.groupId || !existingGroupIds.has(w.groupId)).map((w) => {
       if (!w.nodes || w.nodes.length === 0) {
         return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: 0, y: 0, wall: w };
       }
@@ -150,7 +153,7 @@ function ElementsPane() {
       const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
       return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: centerX, y: centerY, wall: w };
     }),
-    ...independentShapes.filter(s => !s.groupId).map((s) => ({
+    ...independentShapes.filter(s => !s.groupId || !existingGroupIds.has(s.groupId)).map((s) => ({
       id: s.id,
       label: s.name || s.type,
       type: "Shape" as const,
@@ -158,7 +161,7 @@ function ElementsPane() {
       y: s.y,
       shape: s,
     })),
-    ...assets.filter(a => !a.groupId).map((a) => ({
+    ...assets.filter(a => !a.groupId || !existingGroupIds.has(a.groupId)).map((a) => ({
       id: a.id,
       label: a.name || (a.metadata as any)?.label || a.type || "Asset",
       type: "Asset" as const,
@@ -167,7 +170,7 @@ function ElementsPane() {
       asset: a,
       childShapes: assetChildrenMap[a.id] || [],
     })),
-    ...textAnnotations.filter(t => !t.groupId).map((t) => ({
+    ...textAnnotations.filter(t => !t.groupId || !existingGroupIds.has(t.groupId)).map((t) => ({
       id: t.id,
       label: t.name || t.text || "Text",
       type: "Text" as const,
@@ -175,7 +178,7 @@ function ElementsPane() {
       y: t.y,
       text: t,
     })),
-    ...dimensions.filter(d => !d.groupId).map((d) => ({
+    ...dimensions.filter(d => !d.groupId || !existingGroupIds.has(d.groupId)).map((d) => ({
       id: d.id,
       label: d.name || ((d.type as string) === "wall" ? "Wall Dimension" : "Dimension"),
       type: "Dimension" as const,
@@ -183,7 +186,7 @@ function ElementsPane() {
       y: (d.startPoint.y + d.endPoint.y) / 2,
       dimension: d,
     })),
-    ...labelArrows.filter(la => !la.groupId).map((la) => ({
+    ...labelArrows.filter(la => !la.groupId || !existingGroupIds.has(la.groupId)).map((la) => ({
       id: la.id,
       label: la.name || la.label || "Label",
       type: "Label" as const,
@@ -274,8 +277,13 @@ function ElementsPane() {
     const nonAssetItems: typeof items = [];
     const wallItems: typeof items = [];
     const shapeItems: typeof items = [];
+    const groupItems: typeof items = [];
 
     items.forEach((item) => {
+      if (item.type === "Group") {
+        groupItems.push(item);
+        return;
+      }
       if (item.type === "Wall") {
         wallItems.push(item);
         return;
@@ -308,7 +316,7 @@ function ElementsPane() {
       assetBuckets[bucket].push(item);
     });
 
-    return { nonAssetItems, assetBuckets, wallItems, shapeItems, venueItems };
+    return { nonAssetItems, assetBuckets, wallItems, shapeItems, venueItems, groupItems };
   }, [items]);
 
 
@@ -384,7 +392,7 @@ function ElementsPane() {
                 fill={(() => {
                   if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
                     if (item.shape.fillTexture) {
-                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1})`;
+                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1}-rot-${item.shape.hatchRotation || 0})`;
                     }
                   }
                   return item.shape.fill || "transparent";
@@ -404,7 +412,7 @@ function ElementsPane() {
                 fill={(() => {
                   if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
                     if (item.shape.fillTexture) {
-                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1})`;
+                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1}-rot-${item.shape.hatchRotation || 0})`;
                     }
                   }
                   return item.shape.fill || "transparent";
@@ -446,7 +454,7 @@ function ElementsPane() {
                 fill={(() => {
                   if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
                     if (item.shape.fillTexture) {
-                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1})`;
+                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1}-rot-${item.shape.hatchRotation || 0})`;
                     }
                   }
                   return item.shape.fill || "transparent";
@@ -460,8 +468,10 @@ function ElementsPane() {
         )}
         {item.type === "Group" && (
           <svg width={24} height={24} viewBox="0 0 24 24">
-            <path d="M3 7h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" fill="none" stroke="#2563eb" strokeWidth={1.5} />
-            <path d="M7 4h10a1 1 0 0 1 1 1v2H6V5a1 1 0 0 1 1-1z" fill="none" stroke="#2563eb" strokeWidth={1.5} />
+            <rect x={4} y={4} width={7} height={7} rx={1.5} fill="#2563eb" fillOpacity={0.15} stroke="#2563eb" strokeWidth={1.2} />
+            <rect x={13} y={4} width={7} height={7} rx={1.5} fill="#2563eb" fillOpacity={0.15} stroke="#2563eb" strokeWidth={1.2} />
+            <rect x={4} y={13} width={7} height={7} rx={1.5} fill="#2563eb" fillOpacity={0.15} stroke="#2563eb" strokeWidth={1.2} />
+            <rect x={13} y={13} width={7} height={7} rx={1.5} fill="#2563eb" fillOpacity={0.15} stroke="#2563eb" strokeWidth={1.2} />
           </svg>
         )}
         {item.type === "Wall" && (
@@ -475,7 +485,7 @@ function ElementsPane() {
                 const w = (item as any).wall || item.wall;
                 if (!w) return "#cbd5e1";
                 if ((w.fillType === 'texture' || w.fillType === 'hatch' || w.fillType === 'hash') && w.fillTexture) {
-                  return `url(#${w.fillTexture}-scale-${w.fillTextureScale || 1}-thick-${w.fillTextureThickness || 1})`;
+                  return `url(#${w.fillTexture}-scale-${w.fillTextureScale || 1}-thick-${w.fillTextureThickness || 1}-rot-${w.hatchRotation || 0})`;
                 }
                 return w.fill || "#cbd5e1";
               })()}
@@ -644,7 +654,7 @@ function ElementsPane() {
                         fill={(() => {
                           if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
                             if (s.fillTexture) {
-                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1})`;
+                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
                             }
                           }
                           return s.fill || "transparent";
@@ -664,7 +674,7 @@ function ElementsPane() {
                         fill={(() => {
                           if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
                             if (s.fillTexture) {
-                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1})`;
+                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
                             }
                           }
                           return s.fill || "transparent";
@@ -706,7 +716,7 @@ function ElementsPane() {
                         fill={(() => {
                           if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
                             if (s.fillTexture) {
-                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1})`;
+                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
                             }
                           }
                           return s.fill || "transparent";
@@ -785,6 +795,8 @@ function ElementsPane() {
         }}
       >
         {groupedElementItems.nonAssetItems.map((item) => renderItemRow(item, "px-3"))}
+        {/* Groups section — collapsible */}
+        {renderItemGroup('Groups', 'groups', groupedElementItems.groupItems, expandedAssetGroups, setExpandedAssetGroups)}
         {/* Venue section — shown first when a preloaded venue is on the canvas */}
         {groupedElementItems.venueItems.length > 0 && (() => {
           const isExpanded = expandedAssetGroups['venue'] ?? true;
@@ -971,7 +983,7 @@ function ElementsPane() {
                                         fill={(() => {
                                           if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
                                             if (s.fillTexture) {
-                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1})`;
+                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
                                             }
                                           }
                                           return s.fill || "transparent";
@@ -991,7 +1003,7 @@ function ElementsPane() {
                                         fill={(() => {
                                           if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
                                             if (s.fillTexture) {
-                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1})`;
+                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
                                             }
                                           }
                                           return s.fill || "transparent";
@@ -1033,7 +1045,7 @@ function ElementsPane() {
                                         fill={(() => {
                                           if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
                                             if (s.fillTexture) {
-                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1})`;
+                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
                                             }
                                           }
                                           return s.fill || "transparent";

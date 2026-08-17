@@ -314,11 +314,21 @@ AnnotationDrawingLayer.displayName = 'AnnotationDrawingLayer';
 const DragPreviewLayer = React.memo(({
   visibleRenderables,
   preview,
-  zoom
+  zoom,
+  groups,
+  allShapes,
+  allAssets,
+  allWalls,
+  allTextAnnotations,
 }: {
   visibleRenderables: any[],
   preview: DragPreview | null,
-  zoom: number
+  zoom: number,
+  groups?: any[],
+  allShapes?: any[],
+  allAssets?: any[],
+  allWalls?: any[],
+  allTextAnnotations?: any[],
 }) => {
   const items = React.useMemo(() => {
     if (!preview) return [];
@@ -326,11 +336,97 @@ const DragPreviewLayer = React.memo(({
     return visibleRenderables.filter(item => previewIds.has(item.id));
   }, [visibleRenderables, preview?.ids]);
 
+  // Compute group bounding boxes for the dragged items
+  const dragGroupBounds = React.useMemo(() => {
+    if (!preview || !groups || groups.length === 0) return [];
+    const dragIdSet = new Set(preview.ids);
+    if (dragIdSet.size === 0) return [];
+
+    const itemById = new Map<string, any>();
+    (allShapes || []).forEach(s => itemById.set(s.id, s));
+    (allAssets || []).forEach(a => itemById.set(a.id, a));
+    (allWalls || []).forEach(w => itemById.set(w.id, w));
+    (allTextAnnotations || []).forEach(t => itemById.set(t.id, t));
+
+    const result: { x: number; y: number; width: number; height: number; id: string }[] = [];
+
+    groups.forEach(g => {
+      if (g.itemIds.length === 0) return;
+      const anyDragged = g.itemIds.some((id: string) => dragIdSet.has(id));
+      if (!anyDragged) return;
+
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+      g.itemIds.forEach((itemId: string) => {
+        const item = itemById.get(itemId);
+        if (!item) return;
+
+        if (item.nodes && Array.isArray(item.nodes)) {
+          item.nodes.forEach((n: any) => {
+            if (n.x < minX) minX = n.x;
+            if (n.y < minY) minY = n.y;
+            if (n.x > maxX) maxX = n.x;
+            if (n.y > maxY) maxY = n.y;
+          });
+        } else if (item.startPoint && item.endPoint) {
+          [item.startPoint, item.endPoint].forEach((p: any) => {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y > maxY) maxY = p.y;
+          });
+        } else {
+          const x = item.x ?? 0;
+          const y = item.y ?? 0;
+          const w = item.width ?? 100;
+          const h = item.height ?? 100;
+          const halfW = w / 2;
+          const halfH = h / 2;
+          if (x - halfW < minX) minX = x - halfW;
+          if (y - halfH < minY) minY = y - halfH;
+          if (x + halfW > maxX) maxX = x + halfW;
+          if (y + halfH > maxY) maxY = y + halfH;
+        }
+      });
+
+      if (minX < Infinity) {
+        const pad = 12;
+        result.push({
+          x: minX - pad,
+          y: minY - pad,
+          width: maxX - minX + pad * 2,
+          height: maxY - minY + pad * 2,
+          id: g.id,
+        });
+      }
+    });
+
+    return result;
+  }, [preview?.ids, groups, allShapes, allAssets, allWalls, allTextAnnotations]);
+
   if (!preview) return null;
-  if (items.length === 0) return null;
+  if (items.length === 0 && dragGroupBounds.length === 0) return null;
 
   return (
     <g transform={`translate(${preview.dx}, ${preview.dy})`} className="drag-preview-layer pointer-events-none">
+      {/* Group bounding boxes during drag */}
+      {dragGroupBounds.map(gb => (
+        <rect
+          key={`drag-group-bound-${gb.id}`}
+          x={gb.x}
+          y={gb.y}
+          width={gb.width}
+          height={gb.height}
+          fill="none"
+          stroke="#3b82f6"
+          strokeWidth={1.5 / zoom}
+          strokeDasharray={`${6 / zoom} ${3 / zoom}`}
+          rx={4 / zoom}
+          ry={4 / zoom}
+          opacity={0.6}
+        />
+      ))}
+
       {items.map((item) => {
         switch (item._renderType) {
           case 'wall':
@@ -372,13 +468,23 @@ const SelectionHighlightLayer = React.memo(({
   selectedIds, 
   hoveredId,
   verticesMap,
-  zoom
+  zoom,
+  groups,
+  allShapes,
+  allAssets,
+  allWalls,
+  allTextAnnotations,
 }: { 
   visibleRenderables: any[],
   selectedIds: string[], 
   hoveredId: string | null,
   verticesMap: Record<string, { x: number; y: number }[]>,
-  zoom: number
+  zoom: number,
+  groups?: any[],
+  allShapes?: any[],
+  allAssets?: any[],
+  allWalls?: any[],
+  allTextAnnotations?: any[],
 }) => {
   const selectionSet = React.useMemo(() => new Set(selectedIds), [selectedIds]);
   
@@ -387,10 +493,95 @@ const SelectionHighlightLayer = React.memo(({
     return visibleRenderables.filter(item => selectionSet.has(item.id) || item.id === hoveredId);
   }, [visibleRenderables, selectionSet, hoveredId]);
 
-  if (highlights.length === 0) return null;
+  // Compute bounding boxes for fully-selected groups
+  const groupBounds = React.useMemo(() => {
+    if (!groups || groups.length === 0 || selectionSet.size === 0) return [];
+
+    const itemById = new Map<string, any>();
+    (allShapes || []).forEach(s => itemById.set(s.id, s));
+    (allAssets || []).forEach(a => itemById.set(a.id, a));
+    (allWalls || []).forEach(w => itemById.set(w.id, w));
+    (allTextAnnotations || []).forEach(t => itemById.set(t.id, t));
+
+    const result: { x: number; y: number; width: number; height: number; id: string }[] = [];
+
+    groups.forEach(g => {
+      if (g.itemIds.length === 0) return;
+      const allSelected = g.itemIds.every((id: string) => selectionSet.has(id));
+      if (!allSelected) return;
+
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+      g.itemIds.forEach((itemId: string) => {
+        const item = itemById.get(itemId);
+        if (!item) return;
+
+        if (item.nodes && Array.isArray(item.nodes)) {
+          item.nodes.forEach((n: any) => {
+            if (n.x < minX) minX = n.x;
+            if (n.y < minY) minY = n.y;
+            if (n.x > maxX) maxX = n.x;
+            if (n.y > maxY) maxY = n.y;
+          });
+        } else if (item.startPoint && item.endPoint) {
+          const pts = [item.startPoint, item.endPoint];
+          pts.forEach(p => {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y > maxY) maxY = p.y;
+          });
+        } else {
+          const x = item.x ?? 0;
+          const y = item.y ?? 0;
+          const w = item.width ?? 100;
+          const h = item.height ?? 100;
+          const halfW = w / 2;
+          const halfH = h / 2;
+          if (x - halfW < minX) minX = x - halfW;
+          if (y - halfH < minY) minY = y - halfH;
+          if (x + halfW > maxX) maxX = x + halfW;
+          if (y + halfH > maxY) maxY = y + halfH;
+        }
+      });
+
+      if (minX < Infinity) {
+        const pad = 12;
+        result.push({
+          x: minX - pad,
+          y: minY - pad,
+          width: maxX - minX + pad * 2,
+          height: maxY - minY + pad * 2,
+          id: g.id,
+        });
+      }
+    });
+
+    return result;
+  }, [groups, selectionSet, allShapes, allAssets, allWalls, allTextAnnotations]);
+
+  if (highlights.length === 0 && groupBounds.length === 0) return null;
 
   return (
     <g className="interaction-highlights pointer-events-none">
+      {/* Group bounding boxes */}
+      {groupBounds.map(gb => (
+        <rect
+          key={`group-bound-${gb.id}`}
+          x={gb.x}
+          y={gb.y}
+          width={gb.width}
+          height={gb.height}
+          fill="none"
+          stroke="#3b82f6"
+          strokeWidth={1.5 / zoom}
+          strokeDasharray={`${6 / zoom} ${3 / zoom}`}
+          rx={4 / zoom}
+          ry={4 / zoom}
+          className="pointer-events-none"
+        />
+      ))}
+
       {highlights.map(item => {
         const isSelected = selectionSet.has(item.id);
         const isHovered = hoveredId === item.id;
@@ -440,14 +631,24 @@ const RenderLayer = React.memo(({
   hoveredId, 
   zoom,
   verticesMap,
-  dragPreview
+  dragPreview,
+  groups,
+  allShapes,
+  allAssets,
+  allWalls,
+  allTextAnnotations,
 }: { 
   visibleRenderables: any[], 
   selectedIds: string[], 
   hoveredId: string | null, 
   zoom: number,
   verticesMap: Record<string, { x: number; y: number }[]>,
-  dragPreview: DragPreview | null
+  dragPreview: DragPreview | null,
+  groups?: any[],
+  allShapes?: any[],
+  allAssets?: any[],
+  allWalls?: any[],
+  allTextAnnotations?: any[],
 }) => {
   const previewHiddenIds = React.useMemo(
     () => dragPreview ? new Set(dragPreview.ids) : undefined,
@@ -458,7 +659,7 @@ const RenderLayer = React.memo(({
     <>
       <StaticDrawingLayer visibleRenderables={visibleRenderables} hiddenIds={previewHiddenIds} selectedIds={selectedIds} zoom={zoom} />
       <AnnotationDrawingLayer visibleRenderables={visibleRenderables} zoom={zoom} hiddenIds={previewHiddenIds} />
-      <DragPreviewLayer visibleRenderables={visibleRenderables} preview={dragPreview} zoom={zoom} />
+      <DragPreviewLayer visibleRenderables={visibleRenderables} preview={dragPreview} zoom={zoom} groups={groups} allShapes={allShapes} allAssets={allAssets} allWalls={allWalls} allTextAnnotations={allTextAnnotations} />
       {!dragPreview && (
         <SelectionHighlightLayer 
           visibleRenderables={visibleRenderables}
@@ -466,6 +667,11 @@ const RenderLayer = React.memo(({
           hoveredId={hoveredId} 
           verticesMap={verticesMap}
           zoom={zoom}
+          groups={groups}
+          allShapes={allShapes}
+          allAssets={allAssets}
+          allWalls={allWalls}
+          allTextAnnotations={allTextAnnotations}
         />
       )}
     </>
@@ -488,6 +694,7 @@ export default function Workspace2D({
   const dragPreviewRef = useRef<DragPreview | null>(null);
   const pendingDragPreviewRef = useRef<DragPreview | null>(null);
   const dragPreviewRafRef = useRef<number | null>(null);
+  const dragMultiBoundsRef = useRef<{ minX: number; minY: number; maxX: number; maxY: number } | null>(null);
   const lastHoverHitTestRef = useRef(0);
   const [selectionRect, setSelectionRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const [gridHud, setGridHud] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
@@ -1254,49 +1461,129 @@ export default function Workspace2D({
               }
             }
           }
-        } else if (snapToObjectsEnabled && selectedIds.length === 1) {
-          const id = selectedIds[0];
+        } else if (snapToObjectsEnabled && selectedIds.length >= 1) {
+          // Compute bounds — for single items use item bounds, for multi-selection use combined bounding box
           let itemBounds: any = null;
 
-          const shape = shapes.find(s => s.id === id);
-          if (shape) {
-            itemBounds = {
-              x: shape.x + (worldX - dragOrigin.x),
-              y: shape.y + (worldY - dragOrigin.y),
-              width: shape.width,
-              height: shape.height,
-              id: shape.id
-            };
-          } else {
-            const asset = assets.find(a => a.id === id);
-            if (asset) {
+          if (selectedIds.length === 1) {
+            const id = selectedIds[0];
+            const shape = shapes.find(s => s.id === id);
+            if (shape) {
               itemBounds = {
-                x: asset.x + (worldX - dragOrigin.x),
-                y: asset.y + (worldY - dragOrigin.y),
-                width: (asset.width || 0) * (asset.scale || 1),
-                height: (asset.height || 0) * (asset.scale || 1),
-                rotation: asset.rotation,
-                id: asset.id
+                x: shape.x + (worldX - dragOrigin.x),
+                y: shape.y + (worldY - dragOrigin.y),
+                width: shape.width,
+                height: shape.height,
+                id: shape.id
               };
             } else {
-              const textAnnotation = textAnnotations.find(t => t.id === id);
-              if (textAnnotation) {
-                const fs = textAnnotation.fontSize || 250;
-                const lh = textAnnotation.lineHeight || 1.2;
-                const lines = (textAnnotation.text || '').split('\n');
-                const maxChars = Math.max(...lines.map(l => l.length), 1);
+              const asset = assets.find(a => a.id === id);
+              if (asset) {
                 itemBounds = {
-                   x: textAnnotation.x + (worldX - dragOrigin.x),
-                   y: textAnnotation.y + (worldY - dragOrigin.y),
-                   width: maxChars * fs * 0.6,
-                   height: lines.length * fs * lh,
-                   id: textAnnotation.id
+                  x: asset.x + (worldX - dragOrigin.x),
+                  y: asset.y + (worldY - dragOrigin.y),
+                  width: (asset.width || 0) * (asset.scale || 1),
+                  height: (asset.height || 0) * (asset.scale || 1),
+                  rotation: asset.rotation,
+                  id: asset.id
+                };
+              } else {
+                const textAnnotation = textAnnotations.find(t => t.id === id);
+                if (textAnnotation) {
+                  const fs = textAnnotation.fontSize || 250;
+                  const lh = textAnnotation.lineHeight || 1.2;
+                  const lines = (textAnnotation.text || '').split('\n');
+                  const maxChars = Math.max(...lines.map(l => l.length), 1);
+                  itemBounds = {
+                     x: textAnnotation.x + (worldX - dragOrigin.x),
+                     y: textAnnotation.y + (worldY - dragOrigin.y),
+                     width: maxChars * fs * 0.6,
+                     height: lines.length * fs * lh,
+                     id: textAnnotation.id
+                  };
+                }
+              }
+            }
+          } else {
+            // Multi-selection / Group: compute combined bounding box (cached after first frame)
+            const cachedBounds = dragMultiBoundsRef.current;
+            if (cachedBounds) {
+              const dx = worldX - dragOrigin.x;
+              const dy = worldY - dragOrigin.y;
+              const cx = (cachedBounds.minX + cachedBounds.maxX) / 2 + dx;
+              const cy = (cachedBounds.minY + cachedBounds.maxY) / 2 + dy;
+              itemBounds = {
+                x: cx,
+                y: cy,
+                width: cachedBounds.maxX - cachedBounds.minX,
+                height: cachedBounds.maxY - cachedBounds.minY,
+                id: '__group_bounds__'
+              };
+            } else {
+              const selectedIdSet = new Set(selectedIds);
+              const dx = worldX - dragOrigin.x;
+              const dy = worldY - dragOrigin.y;
+              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+              shapes.forEach(s => {
+                if (!selectedIdSet.has(s.id)) return;
+                const halfW = s.width / 2, halfH = s.height / 2;
+                if (s.x - halfW < minX) minX = s.x - halfW;
+                if (s.y - halfH < minY) minY = s.y - halfH;
+                if (s.x + halfW > maxX) maxX = s.x + halfW;
+                if (s.y + halfH > maxY) maxY = s.y + halfH;
+              });
+              assets.forEach(a => {
+                if (!selectedIdSet.has(a.id)) return;
+                const w = (a.width || 0) * (a.scale || 1), h = (a.height || 0) * (a.scale || 1);
+                const rad = ((a.rotation || 0) * Math.PI) / 180;
+                const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+                const ew = w * cos + h * sin, eh = w * sin + h * cos;
+                if (a.x - ew / 2 < minX) minX = a.x - ew / 2;
+                if (a.y - eh / 2 < minY) minY = a.y - eh / 2;
+                if (a.x + ew / 2 > maxX) maxX = a.x + ew / 2;
+                if (a.y + eh / 2 > maxY) maxY = a.y + eh / 2;
+              });
+              walls.forEach(w => {
+                if (!selectedIdSet.has(w.id)) return;
+                w.nodes.forEach(n => {
+                  if (n.x < minX) minX = n.x;
+                  if (n.y < minY) minY = n.y;
+                  if (n.x > maxX) maxX = n.x;
+                  if (n.y > maxY) maxY = n.y;
+                });
+              });
+              textAnnotations.forEach(t => {
+                if (!selectedIdSet.has(t.id)) return;
+                const fs = t.fontSize || 250;
+                const lh = t.lineHeight || 1.2;
+                const lines = (t.text || '').split('\n');
+                const maxChars = Math.max(...lines.map(l => l.length), 1);
+                const w = maxChars * fs * 0.6;
+                const h = lines.length * fs * lh;
+                if (t.x - w / 2 < minX) minX = t.x - w / 2;
+                if (t.y - h / 2 < minY) minY = t.y - h / 2;
+                if (t.x + w / 2 > maxX) maxX = t.x + w / 2;
+                if (t.y + h / 2 > maxY) maxY = t.y + h / 2;
+              });
+
+              if (minX < Infinity) {
+                dragMultiBoundsRef.current = { minX, minY, maxX, maxY };
+                const cx = (minX + maxX) / 2 + dx;
+                const cy = (minY + maxY) / 2 + dy;
+                itemBounds = {
+                  x: cx,
+                  y: cy,
+                  width: maxX - minX,
+                  height: maxY - minY,
+                  id: '__group_bounds__'
                 };
               }
             }
           }
 
           if (itemBounds) {
+            const selectedIdSet = new Set(selectedIds);
             const targetSearchMargin = Math.max(itemBounds.width, itemBounds.height, 2500 / zoom);
             const nearbyAssets = assetSpatialIndex
               .query({
@@ -1306,11 +1593,11 @@ export default function Workspace2D({
                 bottom: itemBounds.y + (itemBounds.height / 2) + targetSearchMargin,
               })
               .map((entry) => entry.item)
-              .filter((asset) => asset.id !== id);
+              .filter((asset) => !selectedIdSet.has(asset.id));
 
-            // Collect targets
+            // Collect targets (exclude all selected items)
             const targets = [
-              ...shapes.filter(s => s.id !== id).map(s => {
+              ...shapes.filter(s => !selectedIdSet.has(s.id)).map(s => {
                 const rad = ((s.rotation || 0) * Math.PI) / 180;
                 const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
                 return { id: s.id, x: s.x, y: s.y, width: s.width * cos + s.height * sin, height: s.width * sin + s.height * cos };
@@ -1341,12 +1628,12 @@ export default function Workspace2D({
                 }
                 return targets;
               }),
-              ...walls.filter(w => w.id !== id).map(w => {
+              ...walls.filter(w => !selectedIdSet.has(w.id)).map(w => {
                 let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
                 w.nodes.forEach(n => { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); });
                 return { id: w.id, x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY };
               }),
-              ...textAnnotations.filter(t => t.id !== id).map(t => {
+              ...textAnnotations.filter(t => !selectedIdSet.has(t.id)).map(t => {
                 const fs = t.fontSize || 250;
                 const lh = t.lineHeight || 1.2;
                 const lines = (t.text || '').split('\n');
@@ -1408,14 +1695,16 @@ export default function Workspace2D({
               finalY = gridSnapped.y;
             }
 
-            // Marquee Vertex Snapping Integration
-            const marqueeVertices = verticesMap[id] || [];
-            if (marqueeVertices.length > 0) {
-                const snapPoint = findSnapPointInShapes({ x: worldX, y: worldY }, nearbyAssets, 20 / zoom, verticesMap);
-                if (snapPoint) {
-                    finalX = worldX + (snapPoint.x - worldX);
-                    finalY = worldY + (snapPoint.y - worldY);
-                }
+            // Marquee Vertex Snapping Integration (skip for multi-selection)
+            if (selectedIds.length === 1) {
+              const marqueeVertices = verticesMap[selectedIds[0]] || [];
+              if (marqueeVertices.length > 0) {
+                  const snapPoint = findSnapPointInShapes({ x: worldX, y: worldY }, nearbyAssets, 20 / zoom, verticesMap);
+                  if (snapPoint) {
+                      finalX = worldX + (snapPoint.x - worldX);
+                      finalY = worldY + (snapPoint.y - worldY);
+                  }
+              }
             }
           }
 
@@ -2549,6 +2838,7 @@ export default function Workspace2D({
     setDragStart(null);
     setIsDraggingItem(false);
     draggedItemStartRef.current = null;
+    dragMultiBoundsRef.current = null;
     setDraggedItemStart(null);
     setDraggedPoint(null);
     setSnapGuides([]); // Clear snap guides
@@ -2925,67 +3215,7 @@ export default function Workspace2D({
       // Duplicate (Ctrl+D)
       else if (ctrlKey && e.key === 'd') {
         e.preventDefault();
-        const newSelectedIds: string[] = [];
-        const offset = 20; // Base offset between duplicates (move to side)
-
-        saveToHistory();
-
-        selectedIds.forEach(id => {
-          const shape = shapes.find(s => s.id === id);
-          if (shape) {
-            const newShape = {
-              ...shape,
-              id: generateId(),
-              x: shape.x + offset,
-              y: shape.y + offset,
-              zIndex: getNextZIndex()
-            };
-            addShape(newShape, true); // skipHistory
-            newSelectedIds.push(newShape.id);
-            return;
-          }
-
-          const asset = assets.find(a => a.id === id);
-          if (asset) {
-            const newAsset = {
-              ...asset,
-              id: generateId(),
-              x: asset.x + offset,
-              y: asset.y + offset,
-              zIndex: getNextZIndex()
-            };
-            addAsset(newAsset, true); // skipHistory
-            newSelectedIds.push(newAsset.id);
-            return;
-          }
-
-          const wall = walls.find(w => w.id === id);
-          if (wall) {
-            const nodeIdMap = new Map<string, string>();
-            const newWallNodes = wall.nodes.map(n => {
-              const newId = generateId();
-              nodeIdMap.set(n.id, newId);
-              return { ...n, id: newId, x: n.x + offset, y: n.y + offset };
-            });
-
-            const newEdges = wall.edges.map(e => ({
-              ...e,
-              id: generateId(),
-              nodeA: nodeIdMap.get(e.nodeA)!,
-              nodeB: nodeIdMap.get(e.nodeB)!
-            }));
-
-            const newId = generateId();
-            addWall({ ...wall, id: newId, nodes: newWallNodes, edges: newEdges, zIndex: getNextZIndex() }, true); // skipHistory
-            newSelectedIds.push(newId);
-          }
-        });
-
-        if (newSelectedIds.length > 0) {
-          setSelectedIds(newSelectedIds);
-          selectMultipleAssets(newSelectedIds);
-          toast.success(`Duplicated ${selectedIds.length} item(s)`);
-        }
+        duplicateSelection(1);
       }
       // Delete key (global delete for selected items)
       else if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -3147,15 +3377,83 @@ export default function Workspace2D({
       }
 
       const store = useProjectStore.getState();
-      const { shapes, walls, assets } = store;
-      const newSelectedIds: string[] = [...selectedIds]; // Include originals
-      const offset = 20; // Base offset between duplicates (move to side)
+      const { shapes, walls, assets, groups } = store;
+      const newSelectedIds: string[] = []; // Only select new copies
+      const offset = 300; // Offset between duplicates so they're visually separated
 
       // Save history once for the whole batch
       saveToHistory();
 
+      // Collect group IDs from selected member IDs — duplicate entire groups as units
+      const selectedGroupIdSet = new Set<string>();
+      const selectedMemberSet = new Set(selectedIds);
+      groups.forEach(g => {
+        if (g.itemIds.some(itemId => selectedMemberSet.has(itemId))) {
+          selectedGroupIdSet.add(g.id);
+        }
+      });
+
+      // Track which member IDs are already handled by group duplication
+      const groupedMemberIds = new Set<string>();
+      groups.forEach(g => {
+        if (selectedGroupIdSet.has(g.id)) {
+          g.itemIds.forEach(itemId => groupedMemberIds.add(itemId));
+        }
+      });
+
       for (let i = 0; i < count; i++) {
+        // First: duplicate entire groups
+        selectedGroupIdSet.forEach(groupId => {
+          const group = groups.find(g => g.id === groupId);
+          if (!group) return;
+
+          const newGroupId = generateId();
+          const newChildIds: string[] = [];
+
+          group.itemIds.forEach(childId => {
+            const shape = shapes.find(s => s.id === childId);
+            if (shape) {
+              const newShape = { ...shape, id: generateId(), groupId: newGroupId, x: shape.x + offset * (i + 1), y: shape.y, zIndex: getNextZIndex() };
+              addShape(newShape, true);
+              newChildIds.push(newShape.id);
+              return;
+            }
+            const asset = assets.find(a => a.id === childId);
+            if (asset) {
+              const newAsset = { ...asset, id: generateId(), groupId: newGroupId, x: asset.x + offset * (i + 1), y: asset.y, zIndex: getNextZIndex() };
+              addAsset(newAsset, true);
+              newChildIds.push(newAsset.id);
+              return;
+            }
+            const wall = walls.find(w => w.id === childId);
+            if (wall) {
+              const nodeIdMap = new Map<string, string>();
+              const newWallNodes = wall.nodes.map(n => {
+                const nid = generateId();
+                nodeIdMap.set(n.id, nid);
+                return { ...n, id: nid, x: n.x + offset * (i + 1), y: n.y };
+              });
+              const newEdges = wall.edges.map(e => ({
+                ...e, id: generateId(),
+                nodeA: nodeIdMap.get(e.nodeA)!,
+                nodeB: nodeIdMap.get(e.nodeB)!
+              }));
+              const newWall = { ...wall, id: generateId(), nodes: newWallNodes, edges: newEdges, groupId: newGroupId, zIndex: getNextZIndex() };
+              addWall(newWall, true);
+              newChildIds.push(newWall.id);
+              return;
+            }
+          });
+
+          const newGroup = { ...group, id: newGroupId, itemIds: newChildIds, zIndex: getNextZIndex() };
+          addGroup(newGroup, true);
+          newSelectedIds.push(...newChildIds);
+        });
+
+        // Then: duplicate ungrouped individual items
         selectedIds.forEach(id => {
+          if (groupedMemberIds.has(id)) return; // Skip items already handled by group duplication
+
           // Try shape
           const shape = shapes.find(s => s.id === id);
           if (shape) {
@@ -3163,7 +3461,7 @@ export default function Workspace2D({
               ...shape,
               id: generateId(),
               x: shape.x + offset * (i + 1),
-              y: shape.y + offset * (i + 1),
+              y: shape.y,
               zIndex: getNextZIndex()
             };
             addShape(newShape, true); // skipHistory
@@ -3178,7 +3476,7 @@ export default function Workspace2D({
               ...asset,
               id: generateId(),
               x: asset.x + offset * (i + 1),
-              y: asset.y + offset * (i + 1),
+              y: asset.y,
               zIndex: getNextZIndex()
             };
             addAsset(newAsset, true); // skipHistory
@@ -3193,7 +3491,7 @@ export default function Workspace2D({
             const newWallNodes = wall.nodes.map(n => {
               const newId = generateId();
               nodeIdMap.set(n.id, newId);
-              return { ...n, id: newId, x: n.x + offset * (i + 1), y: n.y + offset * (i + 1) };
+              return { ...n, id: newId, x: n.x + offset * (i + 1), y: n.y };
             });
 
             const newEdges = wall.edges.map(e => ({
@@ -3212,36 +3510,6 @@ export default function Workspace2D({
             };
             addWall(newWall, true); // skipHistory
             newSelectedIds.push(newWall.id);
-            return;
-          }
-
-          // Try Group
-          const group = store.groups.find(g => g.id === id);
-          if (group) {
-            const newGroupId = generateId();
-            const newChildIds: string[] = [];
-
-            group.itemIds.forEach(childId => {
-              // Duplicate child
-              const shape = shapes.find(s => s.id === childId);
-              if (shape) {
-                const newShape = { ...shape, id: generateId(), groupId: newGroupId, x: shape.x + offset * (i + 1), y: shape.y + offset * (i + 1), zIndex: getNextZIndex() };
-                addShape(newShape, true);
-                newChildIds.push(newShape.id);
-                return;
-              }
-              const asset = assets.find(a => a.id === childId);
-              if (asset) {
-                const newAsset = { ...asset, id: generateId(), groupId: newGroupId, x: asset.x + offset * (i + 1), y: asset.y + offset * (i + 1), zIndex: getNextZIndex() };
-                addAsset(newAsset, true);
-                newChildIds.push(newAsset.id);
-                return;
-              }
-            });
-
-            const newGroup = { ...group, id: newGroupId, itemIds: newChildIds, zIndex: getNextZIndex() };
-            addGroup(newGroup, true);
-            newSelectedIds.push(newGroupId);
             return;
           }
         });
@@ -4099,6 +4367,11 @@ export default function Workspace2D({
             zoom={zoom}
             verticesMap={verticesMap}
             dragPreview={dragPreview}
+            groups={groups}
+            allShapes={shapes}
+            allAssets={assets}
+            allWalls={walls}
+            allTextAnnotations={textAnnotations}
           />
 
           {/* Auto Dimensions (Show Dimensions Toggle) */}

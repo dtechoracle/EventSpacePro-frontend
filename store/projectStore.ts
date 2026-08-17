@@ -1363,27 +1363,53 @@ export const useProjectStore = create<ProjectState>()(
                             textAnnotations, dimensions, labelArrows, groups, wallSegments,
                             activeLayerId, comments
                         } = data.canvasData;
+                        const loadedShapes = shapes || [];
+                        const loadedAssets = assets || [];
+                        const loadedWalls = (walls || []).map((wall: any) => ({
+                            ...wall,
+                            stroke: normalizeLegacyWallStroke(wall.stroke, wall.strokeColor),
+                            strokeWidth: wall.strokeWidth ?? 2,
+                        }));
+                        const loadedTextAnnotations = textAnnotations || [];
+                        const loadedGroups = groups || [];
+
+                        // Reconstruct groups from items' groupId if groups are empty but items have groupId
+                        let finalGroups = loadedGroups;
+                        if (finalGroups.length === 0) {
+                            const groupIdMap = new Map<string, string[]>();
+                            [...loadedShapes, ...loadedAssets, ...loadedWalls, ...loadedTextAnnotations].forEach((item: any) => {
+                                if (item.groupId) {
+                                    if (!groupIdMap.has(item.groupId)) groupIdMap.set(item.groupId, []);
+                                    groupIdMap.get(item.groupId)!.push(item.id);
+                                }
+                            });
+                            if (groupIdMap.size > 0) {
+                                finalGroups = Array.from(groupIdMap.entries()).map(([groupId, itemIds], idx) => ({
+                                    id: groupId,
+                                    itemIds,
+                                    zIndex: idx,
+                                }));
+                                console.log(`✓ Reconstructed ${finalGroups.length} group(s) from item groupId references`);
+                            }
+                        }
+
                         set({
-                            shapes: shapes || [],
-                            assets: assets || [],
-                            walls: (walls || []).map((wall: any) => ({
-                                ...wall,
-                                stroke: normalizeLegacyWallStroke(wall.stroke, wall.strokeColor),
-                                strokeWidth: wall.strokeWidth ?? 2,
-                            })),
+                            shapes: loadedShapes,
+                            assets: loadedAssets,
+                            walls: loadedWalls,
                             wallSegments: wallSegments || [],
                             layers: layers || [DEFAULT_LAYER],
-                            groups: groups || [],
+                            groups: finalGroups,
                             activeLayerId: activeLayerId || (layers && layers[0]?.id) || DEFAULT_LAYER.id,
                             canvas: canvas || DEFAULT_CANVAS,
-                            textAnnotations: textAnnotations || [],
+                            textAnnotations: loadedTextAnnotations,
                             dimensions: dimensions || [],
                             labelArrows: labelArrows || [],
                             comments: normalizeLoadedComments(comments || data.comments || []),
                             hasUnsavedChanges: false,
                             lastSaved: new Date(),
                         });
-                        console.log(`✓ Loaded event ${eventId} from backend with ${shapes?.length || 0} shapes and ${assets?.length || 0} assets`);
+                        console.log(`✓ Loaded event ${eventId} from backend with ${loadedShapes.length} shapes, ${loadedAssets.length} assets, ${finalGroups.length} groups`);
                     } else if (data.canvasAssets) {
                         // Fallback to legacy canvasAssets
                         set({
@@ -2300,11 +2326,14 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             pasteSelection: (cursorPos?: { x: number; y: number }) => {
-                const { clipboard, shapes, walls, assets, textAnnotations, labelArrows, dimensions } = get();
+                const { clipboard, shapes, walls, assets, textAnnotations, labelArrows, dimensions, groups } = get();
                 if (clipboard.length === 0) return [];
 
                 get().saveToHistory();
                 const newIds: string[] = [];
+
+                // Track old→new ID mapping for group remapping
+                const idMap = new Map<string, string>();
 
                 // Calculate center of clipboard items
                 let centerX = 0;
@@ -2362,19 +2391,24 @@ export const useProjectStore = create<ProjectState>()(
                 clipboard.forEach(item => {
                     const newId = generateId();
                     newIds.push(newId);
+                    idMap.set(item.data.id, newId);
 
                     if (item.type === 'shape') {
                         const newShape = { ...item.data, id: newId, x: item.data.x + offsetX, y: item.data.y + offsetY };
+                        if (item.data.groupId) newShape.groupId = item.data.groupId;
                         newShapes.push(newShape);
                     } else if (item.type === 'wall') {
                         const newNodes = item.data.nodes.map((n: any) => ({ ...n, x: n.x + offsetX, y: n.y + offsetY }));
                         const newWall = { ...item.data, id: newId, nodes: newNodes };
+                        if (item.data.groupId) newWall.groupId = item.data.groupId;
                         newWalls.push(newWall);
                     } else if (item.type === 'asset') {
                         const newAsset = { ...item.data, id: newId, x: item.data.x + offsetX, y: item.data.y + offsetY };
+                        if (item.data.groupId) newAsset.groupId = item.data.groupId;
                         newAssets.push(newAsset);
                     } else if (item.type === 'textAnnotation') {
                         const newText = { ...item.data, id: newId, x: item.data.x + offsetX, y: item.data.y + offsetY };
+                        if (item.data.groupId) newText.groupId = item.data.groupId;
                         newTextAnnotations.push(newText);
                     } else if (item.type === 'labelArrow') {
                         const newLabel = {
@@ -2383,6 +2417,7 @@ export const useProjectStore = create<ProjectState>()(
                             startPoint: { x: item.data.startPoint.x + offsetX, y: item.data.startPoint.y + offsetY },
                             endPoint: { x: item.data.endPoint.x + offsetX, y: item.data.endPoint.y + offsetY },
                         };
+                        if (item.data.groupId) newLabel.groupId = item.data.groupId;
                         newLabelArrows.push(newLabel);
                     } else if (item.type === 'dimension') {
                         const newDim = {
@@ -2401,7 +2436,41 @@ export const useProjectStore = create<ProjectState>()(
                     }
                 });
 
-                set({ shapes: newShapes, walls: newWalls, assets: newAssets, textAnnotations: newTextAnnotations, labelArrows: newLabelArrows, dimensions: newDimensions });
+                // Remap group IDs: create new groups for pasted items that were grouped
+                const newGroups = [...groups];
+                const oldGroupIds = new Set<string>();
+                clipboard.forEach(item => {
+                    if (item.data.groupId) oldGroupIds.add(item.data.groupId);
+                });
+
+                const newIdSet = new Set(newIds);
+
+                oldGroupIds.forEach(oldGroupId => {
+                    const oldGroup = groups.find(g => g.id === oldGroupId);
+                    if (!oldGroup) return;
+
+                    const newGroupId = generateId();
+                    const newItemIds = oldGroup.itemIds
+                        .map(oldId => idMap.get(oldId))
+                        .filter(Boolean) as string[];
+
+                    if (newItemIds.length > 0) {
+                        newGroups.push({
+                            ...oldGroup,
+                            id: newGroupId,
+                            itemIds: newItemIds,
+                        });
+
+                        // Update groupId on all pasted items that belong to this group
+                        newShapes.forEach(s => { if (s.groupId === oldGroupId && newIdSet.has(s.id)) s.groupId = newGroupId; });
+                        newAssets.forEach(a => { if (a.groupId === oldGroupId && newIdSet.has(a.id)) a.groupId = newGroupId; });
+                        newWalls.forEach(w => { if (w.groupId === oldGroupId && newIdSet.has(w.id)) w.groupId = newGroupId; });
+                        newTextAnnotations.forEach(t => { if (t.groupId === oldGroupId && newIdSet.has(t.id)) t.groupId = newGroupId; });
+                        newLabelArrows.forEach(l => { if (l.groupId === oldGroupId && newIdSet.has(l.id)) l.groupId = newGroupId; });
+                    }
+                });
+
+                set({ shapes: newShapes, walls: newWalls, assets: newAssets, textAnnotations: newTextAnnotations, labelArrows: newLabelArrows, dimensions: newDimensions, groups: newGroups });
                 return newIds;
             },
 

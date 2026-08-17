@@ -209,9 +209,6 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
         e.stopPropagation();
         const worldPos = screenToWorld(e.clientX, e.clientY);
         useProjectStore.getState().saveToHistory();
-        if (selectedIds.length > 3) {
-            useSceneStore.getState().setSnapGuides([]);
-        }
         lastMoveFrameRef.current = 0;
         setDragHandle(handle);
         setInitialState({
@@ -244,7 +241,7 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
             let finalDx = dx;
             let finalDy = dy;
 
-            const shouldUseObjectSnap = snapToObjects && selectedIds.length <= 3;
+            const shouldUseObjectSnap = snapToObjects;
             if (shouldUseObjectSnap) {
                 const currentBounds: Bounds = {
                     x: initialState.groupBounds.x + dx,
