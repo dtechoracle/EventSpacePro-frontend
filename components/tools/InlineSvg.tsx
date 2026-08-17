@@ -423,6 +423,7 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
                 
                 const catLower = (category || "").toLowerCase();
                 const isFurniture = catLower === 'furniture' || catLower === 'structure' || catLower === 'furniture asset';
+                const isMultiSeater = src.toLowerCase().includes('seater') || src.toLowerCase().includes('sofa') || src.toLowerCase().includes('doughtnut');
 
                 if (styleAttr) {
                     const cleaned = styleAttr
@@ -443,7 +444,7 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
                 el.removeAttribute("stroke");
                 el.removeAttribute("stroke-width");
 
-                let shouldBeNone = wasExplicitlyNone || isLineElement || isOpenPath || isBgFill;
+                let shouldBeNone = wasExplicitlyNone || isLineElement || (isOpenPath && !isMultiSeater) || isBgFill;
 
                 if (hasExplicitAutoFill && tag === 'path' && !isAutoFill) {
                     shouldBeNone = true;
@@ -456,14 +457,13 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
                     }
                 }
 
-                const isMultiSeater = src.toLowerCase().includes('seater') || src.toLowerCase().includes('sofa') || src.toLowerCase().includes('doughtnut');
-
                 if (shouldBeNone && !hasFillRule && !isAutoFill) {
                     el.classList.add("fill-none-el");
                     el.setAttribute("stroke", "none");
                     (el as HTMLElement).style.stroke = "none";
                 } else if (isMultiSeater) {
                     let isTable = false;
+                    let isVeryLarge = false;
                     const elMetrics = getElementMetrics(el);
                     if (elMetrics && metrics.contentWidth && metrics.contentHeight) {
                         const contentWidth = metrics.contentWidth;
@@ -472,7 +472,7 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
                         const contentCenterY = metrics.contentY !== null ? (metrics.contentY + contentHeight / 2) : 500;
                         const distToCenter = Math.hypot(elMetrics.cx - contentCenterX, elMetrics.cy - contentCenterY);
                         const isCentral = distToCenter < contentWidth * 0.15;
-                        const isVeryLarge = elMetrics.width > contentWidth * 0.4 || elMetrics.height > contentHeight * 0.4;
+                        isVeryLarge = elMetrics.width > contentWidth * 0.4 || elMetrics.height > contentHeight * 0.4;
                         const getGDepth = (node: Element): number => {
                             let depth = 0;
                             let p = node.parentNode;
@@ -482,12 +482,17 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
                             }
                             return depth;
                         };
-                        isTable = (isCentral || isVeryLarge) && getGDepth(el) < 3;
+                        isTable = isCentral && getGDepth(el) < 3;
                     }
                     if (isTable) {
                         el.classList.add(isAutoFill ? "table-auto-fill-el" : "table-fill-el");
                     } else {
                         el.classList.add(isAutoFill ? "chair-auto-fill-el" : "chair-fill-el");
+                    }
+                    if (isVeryLarge && !isTable) {
+                        el.setAttribute("stroke", "none");
+                        el.removeAttribute("stroke-width");
+                        (el as HTMLElement).style.stroke = "none";
                     }
                 } else if (isAutoFill) {
                     el.classList.add("auto-fill-el");

@@ -52,6 +52,15 @@ const isTableLike = (item: any) => {
   return haystack.includes('table');
 };
 
+const isSofa = (item: any) => {
+  const haystack = [
+    item?.type,
+    item?.name,
+    item?.label,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return haystack.includes('sofa');
+};
+
 const isStageLike = (item: any) => {
   const haystack = [
     item?.type,
@@ -1125,8 +1134,28 @@ export default function PropertiesSidebar(): React.JSX.Element {
                 {selectedAssets.some(a => /seater|sofa/i.test(a.type)) && (() => {
                   const seaterIds = selectedAssets.filter(a => /seater|sofa/i.test(a.type)).map(a => a.id);
                   const seaterAssets = selectedAssets.filter(a => /seater|sofa/i.test(a.type));
+                  const hasSofa = seaterAssets.some(a => isSofa(a));
                   const firstTableColor = seaterAssets[0]?.tableColor || seaterAssets[0]?.fillColor || '#ffffff';
                   const firstChairColor = seaterAssets[0]?.chairColor || '#ffffff';
+                  const firstFillColor = seaterAssets[0]?.fillColor || '#ffffff';
+                  if (hasSofa) {
+                    return (
+                      <div className="flex justify-between items-center mb-2 mt-2 pt-2 border-t border-gray-100">
+                        <span className="text-gray-500 text-xs">Fill Color</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={firstFillColor}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              updateAssetBatch(seaterIds, { fillColor: val, tableColor: val, chairColor: val });
+                            }}
+                            className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    );
+                  }
                   return (
                     <>
                       <div className="flex justify-between items-center mb-2 mt-2 pt-2 border-t border-gray-100">
@@ -1463,6 +1492,36 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     {((!((selectedItem as any).fillType) || (selectedItem as any).fillType === 'solid' || (selectedItem as any).fillType === 'color') && (() => {
                       const isMultiSeater = itemType === 'asset' && (selectedItem as any).type && /seater|sofa/i.test((selectedItem as any).type);
                       if (isMultiSeater) {
+                        const itemIsSofa = isSofa(selectedItem);
+                        if (itemIsSofa) {
+                          return (
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-gray-500 text-xs">Fill Color</span>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={(selectedItem as any).fillColor || '#ffffff'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateAsset(selectedItem.id, { fillColor: val, tableColor: val, chairColor: val });
+                                    updateSceneAsset(selectedItem.id, { fillColor: val, tableColor: val, chairColor: val });
+                                  }}
+                                  className="sidebar-input w-20 text-xs"
+                                />
+                                <input
+                                  type="color"
+                                  value={(selectedItem as any).fillColor || '#ffffff'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateAsset(selectedItem.id, { fillColor: val, tableColor: val, chairColor: val });
+                                    updateSceneAsset(selectedItem.id, { fillColor: val, tableColor: val, chairColor: val });
+                                  }}
+                                  className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                                />
+                              </div>
+                            </div>
+                          );
+                        }
                         return (
                           <>
                             {/* Table / Sofa Color */}

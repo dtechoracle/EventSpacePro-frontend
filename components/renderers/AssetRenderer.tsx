@@ -660,7 +660,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 const catLower = category.toLowerCase();
                 const isFurniture = catLower === 'furniture' || catLower === 'structure' || catLower === 'furniture asset' || asset.type.includes('chair') || asset.type.includes('table');
 
-                let shouldBeNone = wasExplicitlyNone || isLineElement || isOpenPath || isBgFill;
+                let shouldBeNone = wasExplicitlyNone || isLineElement || (isOpenPath && !isMultiSeater) || isBgFill;
 
                 if (hasExplicitAutoFill && tag === 'path' && !isAutoFill && !isFurniture) {
                     shouldBeNone = true;
@@ -699,16 +699,22 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 } else if (isMultiSeater) {
                     const elMetrics = getElementMetrics(el);
                     let isTable = false;
+                    let isVeryLarge = false;
                     if (elMetrics) {
                         const distToCenter = Math.hypot(elMetrics.cx - contentCenterX, elMetrics.cy - contentCenterY);
                         const isCentral = distToCenter < contentWidth * 0.15;
-                        const isVeryLarge = elMetrics.width > contentWidth * 0.4 || elMetrics.height > contentHeight * 0.4;
-                        isTable = (isCentral || isVeryLarge) && getGDepth(el) < 3;
+                        isVeryLarge = elMetrics.width > contentWidth * 0.4 || elMetrics.height > contentHeight * 0.4;
+                        isTable = isCentral && getGDepth(el) < 3;
                     }
                     if (isTable) {
                         el.classList.add(isAutoFill ? "table-auto-fill-el" : "table-fill-el");
                     } else {
                         el.classList.add(isAutoFill ? "chair-auto-fill-el" : "chair-fill-el");
+                    }
+                    if (isVeryLarge && !isTable) {
+                        el.setAttribute("stroke", "none");
+                        el.removeAttribute("stroke-width");
+                        (el as HTMLElement).style.stroke = "none";
                     }
                 } else if (isAutoFill) {
                     el.classList.add("auto-fill-el");
