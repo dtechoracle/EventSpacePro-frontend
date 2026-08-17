@@ -519,6 +519,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const [showSingleProps, setShowSingleProps] = useState(false);
   const [showTableNumbering, setShowTableNumbering] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameName, setRenameName] = useState("");
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [modelName, setModelName] = useState<string>("");
   const [targetProjectSlug, setTargetProjectSlug] = useState('');
@@ -601,9 +603,30 @@ export default function PropertiesSidebar(): React.JSX.Element {
   };
 
   const handleSave = async () => {
+    // If event name is still the placeholder, prompt for a real name first
+    if (projectName === "Untitled Event" || !projectName) {
+      setRenameName("");
+      setShowRenameModal(true);
+      return;
+    }
     if (id && typeof id === 'string' && slug && typeof slug === 'string') {
       await saveEvent(id, slug);
     }
+  };
+
+  const handleRenameAndSave = async () => {
+    if (!renameName.trim()) {
+      toast.error("Please enter an event name");
+      return;
+    }
+    setProjectName(renameName.trim());
+    setShowRenameModal(false);
+    // Wait for state to update, then save
+    setTimeout(async () => {
+      if (id && typeof id === 'string' && slug && typeof slug === 'string') {
+        await saveEvent(id, slug);
+      }
+    }, 50);
   };
 
   const [canvasName, setCanvasName] = useState<string>("");
@@ -619,11 +642,53 @@ export default function PropertiesSidebar(): React.JSX.Element {
         <ShareModal onClose={() => setShowShareModal(false)} slug={slug as string} />
       )}
 
+      {/* Rename Modal - shown on first save for template-created events */}
+      {showRenameModal && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[9999]" onClick={() => setShowRenameModal(false)}>
+          <div className="bg-white rounded-xl p-6 w-[28rem] shadow-xl border border-gray-200" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Name Your Event</h3>
+            <p className="text-sm text-gray-500 mb-4">Enter a name for this event before saving.</p>
+            <input
+              type="text"
+              placeholder="Event Name"
+              value={renameName}
+              onChange={(e) => setRenameName(e.target.value)}
+              className="w-full h-12 rounded-xl px-4 bg-gray-50 border border-gray-200 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
+              autoFocus
+              onKeyDown={(e) => { if (e.key === 'Enter') handleRenameAndSave(); }}
+            />
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => setShowRenameModal(false)}
+                className="flex-1 h-10 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRenameAndSave}
+                disabled={!renameName.trim()}
+                className="flex-1 h-10 rounded-xl bg-[var(--accent)] text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
+              >
+                Save Event
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="sticky top-0 z-20 border-b border-slate-200 bg-[#fcfcfd]/95 px-3 pb-3 pt-3 backdrop-blur">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-slate-900">
-              {projectName || "Untitled Event"}
+            <div className="flex items-center gap-2">
+              <div className="truncate text-sm font-semibold text-slate-900">
+                {projectName || "Untitled Event"}
+              </div>
+              {(projectName === "Untitled Event" || !projectName) && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-semibold text-amber-600 border border-amber-200 whitespace-nowrap">
+                  <span className="w-1 h-1 rounded-full bg-amber-400" />
+                  Unsaved
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-1">

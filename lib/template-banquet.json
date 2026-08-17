@@ -1,0 +1,1737 @@
+[
+    {
+        "id":  "fd9b357b-1cba-42e7-a226-c58b5b190e87",
+        "type":  "rectangle",
+        "x":  36935.72569014081,
+        "y":  4804.109795295784,
+        "width":  12000,
+        "height":  3600,
+        "rotation":  0,
+        "fill":  "#ffffff",
+        "fillType":  "solid",
+        "stroke":  "#000000",
+        "strokeWidth":  1,
+        "zIndex":  2,
+        "fillColor":  "#ffffff",
+        "strokeColor":  "#000000",
+        "backgroundColor":  "#ffffff"
+    },
+    {
+        "id":  "fe874385-0861-4145-a945-4a7e3af2f409",
+        "type":  "rectangle",
+        "x":  36479.26941575941,
+        "y":  13934.98892428436,
+        "width":  61945.752613566205,
+        "height":  2100,
+        "rotation":  0,
+        "fill":  "#ffffff",
+        "fillType":  "solid",
+        "stroke":  "#000000",
+        "strokeWidth":  1,
+        "zIndex":  3,
+        "fillColor":  "#ffffff",
+        "strokeColor":  "#000000",
+        "backgroundColor":  "#ffffff"
+    },
+    {
+        "id":  "3834ef48-404e-4fa1-9f9f-e631829e348e",
+        "type":  "rectangle",
+        "x":  21600.952714969564,
+        "y":  20864.577005780524,
+        "width":  2100,
+        "height":  11759.17616299233,
+        "rotation":  0,
+        "fill":  "#ffffff",
+        "fillType":  "solid",
+        "stroke":  "#000000",
+        "strokeWidth":  1,
+        "zIndex":  9,
+        "fillColor":  "#ffffff",
+        "strokeColor":  "#000000",
+        "backgroundColor":  "#ffffff"
+    },
+    {
+        "id":  "5f0ea289-5def-4365-a0b6-0e9f7313f549",
+        "type":  "rectangle",
+        "x":  36495.72569014081,
+        "y":  24717.986429163706,
+        "width":  6000,
+        "height":  3600,
+        "rotation":  0,
+        "fill":  "#ffffff",
+        "fillType":  "solid",
+        "stroke":  "#000000",
+        "strokeWidth":  2,
+        "zIndex":  12,
+        "fillColor":  "#ffffff",
+        "strokeColor":  "#000000",
+        "backgroundColor":  "#ffffff"
+    },
+    {
+        "id":  "01d58146-4b0e-441a-a899-c83b794c3d88",
+        "type":  "rectangle",
+        "x":  51940.0511979984,
+        "y":  20864.577005780524,
+        "width":  2100,
+        "height":  11759.17616299233,
+        "rotation":  0,
+        "fill":  "#ffffff",
+        "fillType":  "solid",
+        "stroke":  "#000000",
+        "strokeWidth":  1,
+        "zIndex":  9,
+        "fillColor":  "#ffffff",
+        "strokeColor":  "#000000",
+        "backgroundColor":  "#ffffff"
+    },
+    {
+        "id":  "e96edb47-d8d4-48c3-b73d-2cb703b3daa9",
+        "type":  "rectangle",
+        "x":  37095.72569014081,
+        "y":  9629.517603252903,
+        "width":  4800,
+        "height":  4800,
+        "rotation":  0,
+        "fill":  "#ffffff",
+        "fillType":  "texture",
+        "stroke":  "#000000",
+        "strokeWidth":  1,
+        "zIndex":  15,
+        "fillColor":  "#ffffff",
+        "strokeColor":  "#000000",
+        "backgroundColor":  "#ffffff",
+        "fillTexture":  "marble-01"
+    },
+    {
+        "id":  "venue-1784122360901",
+        "name":  "Harbour point",
+        "type":  "harbour-point",
+        "x":  39495.72569014082,
+        "y":  16363.45799530049,
+        "width":  74885,
+        "height":  28047,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  0,
+        "strokeWidth":  1
+    },
+    {
+        "id":  "9d471f60-e08c-4a46-b5b1-c18497ad441b",
+        "type":  "10-seater-round-table-01",
+        "x":  7138.858190425457,
+        "y":  24310.125307806666,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "71"
+    },
+    {
+        "id":  "4c04011b-2358-462d-be40-50f0ace827d3",
+        "type":  "10-seater-round-table-01",
+        "x":  7138.858190425457,
+        "y":  17726.502894436886,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "43"
+    },
+    {
+        "id":  "27e97c5b-3959-4bf2-aaeb-b6e7ee6fb6d4",
+        "type":  "10-seater-round-table-01",
+        "x":  7138.858190425457,
+        "y":  20950.250621835614,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "57"
+    },
+    {
+        "id":  "56e4dcf8-cc41-4692-8d1a-b5df3ad693ec",
+        "type":  "10-seater-round-table-01",
+        "x":  10545.325781466212,
+        "y":  10784.28373650228,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "29"
+    },
+    {
+        "id":  "c466fed5-0d4e-409e-9967-0540149c32a9",
+        "type":  "10-seater-round-table-01",
+        "x":  10545.325781466212,
+        "y":  4200.661323132505,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "2"
+    },
+    {
+        "id":  "2c15f872-17e0-490d-8438-e869cab228f4",
+        "type":  "10-seater-round-table-01",
+        "x":  10545.325781466212,
+        "y":  7424.409050531232,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "15"
+    },
+    {
+        "id":  "441264d4-e22c-43a8-985e-c934eabfb87f",
+        "type":  "10-seater-round-table-01",
+        "x":  10545.325781466212,
+        "y":  24394.72790127305,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "72"
+    },
+    {
+        "id":  "f9f0e2f4-32f7-411d-880e-18259733ddcc",
+        "type":  "10-seater-round-table-01",
+        "x":  10545.325781466212,
+        "y":  17811.105487903274,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "44"
+    },
+    {
+        "id":  "dfe17124-075b-4413-b3b4-f3c8d5fb735c",
+        "type":  "10-seater-round-table-01",
+        "x":  10545.325781466212,
+        "y":  21034.853215302,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "58"
+    },
+    {
+        "id":  "fa6c17ae-0c91-470a-a699-46864f0f1ad6",
+        "type":  "10-seater-round-table-01",
+        "x":  14162.826390108157,
+        "y":  10695.636243899498,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "30"
+    },
+    {
+        "id":  "b22071e9-788c-4851-af65-a8bcabcceb2b",
+        "type":  "10-seater-round-table-01",
+        "x":  14162.826390108157,
+        "y":  4112.013830529721,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "3"
+    },
+    {
+        "id":  "f64576b0-69d6-4a9b-9d82-222c2c5a986e",
+        "type":  "10-seater-round-table-01",
+        "x":  14162.826390108157,
+        "y":  7335.761557928447,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "16"
+    },
+    {
+        "id":  "f02a7568-eaa5-46c9-993d-9fff67452e0f",
+        "type":  "10-seater-round-table-01",
+        "x":  14162.826390108157,
+        "y":  24306.08040867027,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "73"
+    },
+    {
+        "id":  "00a3b4db-e66e-49b6-983e-7023313f2c71",
+        "type":  "10-seater-round-table-01",
+        "x":  14162.826390108157,
+        "y":  17722.45799530049,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "45"
+    },
+    {
+        "id":  "80478220-a465-4ee9-a088-5519f207d2df",
+        "type":  "10-seater-round-table-01",
+        "x":  14162.826390108157,
+        "y":  20946.20572269922,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "59"
+    },
+    {
+        "id":  "e550152b-1b11-4592-989f-230c6d91a2aa",
+        "type":  "10-seater-round-table-01",
+        "x":  17569.293981148912,
+        "y":  10780.238837365885,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "31"
+    },
+    {
+        "id":  "0510c07a-f8b2-441c-9b50-d85cd70f2edc",
+        "type":  "10-seater-round-table-01",
+        "x":  17569.293981148912,
+        "y":  4196.616423996109,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "4"
+    },
+    {
+        "id":  "792f3008-bb1f-4831-8992-f20d9309c60f",
+        "type":  "10-seater-round-table-01",
+        "x":  17569.293981148912,
+        "y":  7420.364151394837,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "17"
+    },
+    {
+        "id":  "1ca01432-1473-47c6-bdd1-e2339fe89745",
+        "type":  "10-seater-round-table-01",
+        "x":  17569.293981148912,
+        "y":  24390.683002136655,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "74"
+    },
+    {
+        "id":  "06493805-0459-4798-ae57-1c15893a185a",
+        "type":  "10-seater-round-table-01",
+        "x":  17569.293981148912,
+        "y":  17807.06058876688,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "46"
+    },
+    {
+        "id":  "cbef0182-ef8c-4b56-bdf6-8d075c4a1509",
+        "type":  "10-seater-round-table-01",
+        "x":  17569.293981148912,
+        "y":  21030.808316165603,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "60"
+    },
+    {
+        "id":  "d60611fc-aa21-49bf-a928-72e12e374abc",
+        "type":  "10-seater-round-table-01",
+        "x":  20923.452714969564,
+        "y":  10793.217860209117,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "32"
+    },
+    {
+        "id":  "5bbccad6-3a59-4448-a2fd-c98e6089a0bb",
+        "type":  "10-seater-round-table-01",
+        "x":  20923.452714969564,
+        "y":  4209.595446839341,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "5"
+    },
+    {
+        "id":  "53b444da-7459-49df-9381-94339104d046",
+        "type":  "10-seater-round-table-01",
+        "x":  20923.452714969564,
+        "y":  7433.343174238065,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "18"
+    },
+    {
+        "id":  "56e6c2ef-c6ba-4201-be10-24671453bd95",
+        "type":  "10-seater-round-table-01",
+        "x":  24329.920306010317,
+        "y":  10877.820453675504,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "33"
+    },
+    {
+        "id":  "fef6fba9-232c-42f2-b2b3-cee9debdf769",
+        "type":  "10-seater-round-table-01",
+        "x":  24329.920306010317,
+        "y":  4294.198040305728,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "6"
+    },
+    {
+        "id":  "60d9f3a5-2e32-450a-9cb5-694beb261089",
+        "type":  "10-seater-round-table-01",
+        "x":  24329.920306010317,
+        "y":  7517.945767704456,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "19"
+    },
+    {
+        "id":  "18a7da0e-1fdb-4453-b029-f381af39abf4",
+        "type":  "10-seater-round-table-01",
+        "x":  24329.920306010317,
+        "y":  24488.264618446272,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "75"
+    },
+    {
+        "id":  "81ce4e93-07b7-411a-951f-dec687086ea8",
+        "type":  "10-seater-round-table-01",
+        "x":  24329.920306010317,
+        "y":  17904.642205076496,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "47"
+    },
+    {
+        "id":  "125ae357-5728-46a9-87b2-f9dcffadbd29",
+        "type":  "10-seater-round-table-01",
+        "x":  24329.920306010317,
+        "y":  21128.38993247522,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "61"
+    },
+    {
+        "id":  "21b3c8fa-c4f1-4170-8d8f-ee12c676ab07",
+        "type":  "10-seater-round-table-01",
+        "x":  27947.420914652263,
+        "y":  10789.172961072722,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "34"
+    },
+    {
+        "id":  "3bd9e562-ed3e-43b0-993e-8ffe496daa0d",
+        "type":  "10-seater-round-table-01",
+        "x":  27947.420914652263,
+        "y":  4205.550547702946,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "7"
+    },
+    {
+        "id":  "5d0c837a-e0e6-4d31-941e-9186892373de",
+        "type":  "10-seater-round-table-01",
+        "x":  27947.420914652263,
+        "y":  7429.29827510167,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "20"
+    },
+    {
+        "id":  "7bec651a-c490-4653-9e77-689fd2d55209",
+        "type":  "10-seater-round-table-01",
+        "x":  27947.420914652263,
+        "y":  24399.61712584349,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "76"
+    },
+    {
+        "id":  "c7de8cfc-1f15-4695-977e-372c678be85a",
+        "type":  "10-seater-round-table-01",
+        "x":  27947.420914652263,
+        "y":  17815.994712473715,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "48"
+    },
+    {
+        "id":  "57584770-a4eb-469b-b842-0c37d888b50b",
+        "type":  "10-seater-round-table-01",
+        "x":  27947.420914652263,
+        "y":  21039.74243987244,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "62"
+    },
+    {
+        "id":  "e3f0f7f5-93e8-49ee-bd98-5ca3d0800710",
+        "type":  "10-seater-round-table-01",
+        "x":  45288.5829983157,
+        "y":  10950.003150212713,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "37"
+    },
+    {
+        "id":  "7438e457-2a3f-40af-b27d-3e2f0d0e576d",
+        "type":  "10-seater-round-table-01",
+        "x":  45288.5829983157,
+        "y":  4366.380736842937,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "8"
+    },
+    {
+        "id":  "6ee4f105-5861-42d8-9481-968424af5168",
+        "type":  "10-seater-round-table-01",
+        "x":  45288.5829983157,
+        "y":  7590.128464241665,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "23"
+    },
+    {
+        "id":  "01ddb186-eace-418d-b940-f166999a6e2f",
+        "type":  "10-seater-round-table-01",
+        "x":  45288.5829983157,
+        "y":  24560.447314983485,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "79"
+    },
+    {
+        "id":  "79c36504-9b56-462a-b91d-21d8eab52cd6",
+        "type":  "10-seater-round-table-01",
+        "x":  45288.5829983157,
+        "y":  17976.82490161371,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "51"
+    },
+    {
+        "id":  "12391f2e-a2d3-4956-91ca-0cfa4c190822",
+        "type":  "10-seater-round-table-01",
+        "x":  45288.5829983157,
+        "y":  21200.572629012433,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "65"
+    },
+    {
+        "id":  "8712b9af-cd69-4fad-bff1-f4a7fe1d559c",
+        "type":  "10-seater-round-table-01",
+        "x":  48695.050589356455,
+        "y":  11034.605743679102,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "38"
+    },
+    {
+        "id":  "f9a6e7b2-c1da-4ed4-8d9b-585e832d2e0e",
+        "type":  "10-seater-round-table-01",
+        "x":  48695.050589356455,
+        "y":  4450.9833303093255,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "9"
+    },
+    {
+        "id":  "07313952-e4b5-4f4d-9aab-8d20df2f2674",
+        "type":  "10-seater-round-table-01",
+        "x":  48695.050589356455,
+        "y":  7674.731057708053,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "24"
+    },
+    {
+        "id":  "d8885b71-ef26-4576-a6a8-f671637a80d2",
+        "type":  "10-seater-round-table-01",
+        "x":  48695.050589356455,
+        "y":  24645.04990844987,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "80"
+    },
+    {
+        "id":  "d200d641-7261-44b4-b34b-33c81c5a40ca",
+        "type":  "10-seater-round-table-01",
+        "x":  48695.050589356455,
+        "y":  18061.427495080094,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "52"
+    },
+    {
+        "id":  "9d8e2dfd-c528-4a8d-b150-eb947e56f3d8",
+        "type":  "10-seater-round-table-01",
+        "x":  48695.050589356455,
+        "y":  21285.175222478818,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "66"
+    },
+    {
+        "id":  "0cc6d0a6-34b5-4b96-b0c4-4fb291a6ca21",
+        "type":  "10-seater-round-table-01",
+        "x":  52312.5511979984,
+        "y":  10945.958251076318,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "39"
+    },
+    {
+        "id":  "bd52d699-3016-47eb-8045-ef71e200d56e",
+        "type":  "10-seater-round-table-01",
+        "x":  52312.5511979984,
+        "y":  4362.3358377065415,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "10"
+    },
+    {
+        "id":  "673a6409-4398-4aad-a639-7f04b9616d81",
+        "type":  "10-seater-round-table-01",
+        "x":  52312.5511979984,
+        "y":  7586.083565105266,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "25"
+    },
+    {
+        "id":  "dd5c2fcf-6d75-4f55-8972-911496937d40",
+        "type":  "10-seater-round-table-01",
+        "x":  55719.01878903916,
+        "y":  24641.005009313474,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "81"
+    },
+    {
+        "id":  "d39d5ccc-4aa3-42bb-8983-ee5ee4077e0d",
+        "type":  "10-seater-round-table-01",
+        "x":  55719.01878903916,
+        "y":  18057.382595943698,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "53"
+    },
+    {
+        "id":  "19c50409-d3a8-4b36-96d1-5cafffc4a1f0",
+        "type":  "10-seater-round-table-01",
+        "x":  55719.01878903916,
+        "y":  21281.130323342422,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "67"
+    },
+    {
+        "id":  "976d23fd-3203-4ef4-8988-da688e43ecfa",
+        "type":  "10-seater-round-table-01",
+        "x":  59073.17752285981,
+        "y":  24653.984032156706,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "82"
+    },
+    {
+        "id":  "17123cab-6172-4db4-b116-6b10a71b86a2",
+        "type":  "10-seater-round-table-01",
+        "x":  59073.17752285981,
+        "y":  18070.36161878693,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "54"
+    },
+    {
+        "id":  "bc6d4458-808c-4e5e-9bb9-0fc7837a6c51",
+        "type":  "10-seater-round-table-01",
+        "x":  59073.17752285981,
+        "y":  21294.109346185654,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "68"
+    },
+    {
+        "id":  "67c52987-4431-43e7-b460-b87dfb729e74",
+        "type":  "10-seater-round-table-01",
+        "x":  62479.645113900566,
+        "y":  24738.58662562309,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "83"
+    },
+    {
+        "id":  "14fcd070-109d-45a5-9d02-97187dcca33f",
+        "type":  "10-seater-round-table-01",
+        "x":  62479.645113900566,
+        "y":  18154.964212253315,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "55"
+    },
+    {
+        "id":  "aca56cd0-a2d7-4d0d-9d71-4f68d2fb9028",
+        "type":  "10-seater-round-table-01",
+        "x":  62479.645113900566,
+        "y":  21378.71193965204,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "69"
+    },
+    {
+        "id":  "85f67527-dc13-46a5-bf9a-168d4d11d1b0",
+        "type":  "10-seater-round-table-01",
+        "x":  66097.14572254251,
+        "y":  24649.93913302031,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "84"
+    },
+    {
+        "id":  "ee4bfffc-8c97-4194-a801-f77288dfd2f1",
+        "type":  "10-seater-round-table-01",
+        "x":  66097.14572254251,
+        "y":  18066.316719650535,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "56"
+    },
+    {
+        "id":  "744bfc4d-0af2-4995-91fa-9af6e8826b19",
+        "type":  "10-seater-round-table-01",
+        "x":  66097.14572254251,
+        "y":  21290.06444704926,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "70"
+    },
+    {
+        "id":  "sofa-set-with-coffe-table-04-1785960555537",
+        "type":  "sofa-set-with-coffe-table-04",
+        "x":  57718.17752285981,
+        "y":  4078.6097952957844,
+        "width":  3912,
+        "height":  2411,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  6,
+        "fillType":  "solid",
+        "fillColor":  "#512929",
+        "metadata":  {
+                         "label":  "Sofa set with coffe table 04"
+                     },
+        "strokeWidth":  0.6,
+        "tableColor":  "#ffffff",
+        "tableName":  "11"
+    },
+    {
+        "id":  "3cbe20d6-b404-498f-8bd4-2cf2d663e304",
+        "type":  "10-seater-round-table-01",
+        "x":  7138.858190425456,
+        "y":  10695.636243899498,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "28"
+    },
+    {
+        "id":  "7914332c-6c3d-423e-bde0-b58215fa209b",
+        "type":  "10-seater-round-table-01",
+        "x":  7138.858190425456,
+        "y":  4112.013830529723,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "1"
+    },
+    {
+        "id":  "622e377a-0966-4f61-b512-d6aa0771048a",
+        "type":  "10-seater-round-table-01",
+        "x":  7138.858190425456,
+        "y":  7335.761557928451,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "14"
+    },
+    {
+        "id":  "70663e4a-c485-4f0d-aa3a-50b3e66beae8",
+        "type":  "10-seater-round-table-01",
+        "x":  42013.08395171817,
+        "y":  24576.986429163706,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "78"
+    },
+    {
+        "id":  "45061570-86f4-416c-8759-bb5ba9d46d58",
+        "type":  "10-seater-round-table-01",
+        "x":  42013.08395171817,
+        "y":  17993.36401579393,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "50"
+    },
+    {
+        "id":  "319ef198-836b-47bd-a055-187d2134309b",
+        "type":  "10-seater-round-table-01",
+        "x":  42013.08395171817,
+        "y":  21217.111743192654,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "64"
+    },
+    {
+        "id":  "397a61ab-6bc5-43a7-9591-8231509edffa",
+        "type":  "10-seater-round-table-01",
+        "x":  31530.883571623843,
+        "y":  24576.986429163706,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "77"
+    },
+    {
+        "id":  "5472a325-3e58-4f9b-a473-c528a529daba",
+        "type":  "10-seater-round-table-01",
+        "x":  31530.883571623843,
+        "y":  17993.36401579393,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "49"
+    },
+    {
+        "id":  "35be0309-c2a6-41b8-9552-492e7f0d2e1b",
+        "type":  "10-seater-round-table-01",
+        "x":  31530.883571623843,
+        "y":  21217.111743192654,
+        "width":  2710,
+        "height":  2718,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  1,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "10 seater round table 01"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "63"
+    },
+    {
+        "id":  "4-seater-cocktail-table-1785963442552",
+        "type":  "4-seater-cocktail-table",
+        "x":  66562.64572254251,
+        "y":  4394.609795295784,
+        "width":  1779,
+        "height":  1779,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  13,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "4 seater cocktail table"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "13"
+    },
+    {
+        "id":  "4-seater-vip-table-1785963458138",
+        "type":  "4-seater-vip-table",
+        "x":  41185.72569014081,
+        "y":  8269.628464241665,
+        "width":  2500,
+        "height":  1409,
+        "rotation":  90,
+        "scale":  1,
+        "zIndex":  14,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "4 seater VIP table"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "22"
+    },
+    {
+        "id":  "a93e80cc-5191-4764-bf9a-2c6415156c26",
+        "type":  "sofa-set-with-coffe-table-04",
+        "x":  57718.17752285981,
+        "y":  6489.609795295784,
+        "width":  3912,
+        "height":  2411,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  6,
+        "fillType":  "solid",
+        "fillColor":  "#512929",
+        "metadata":  {
+                         "label":  "Sofa set with coffe table 04"
+                     },
+        "strokeWidth":  0.6,
+        "tableColor":  "#ffffff",
+        "flipY":  true,
+        "flipX":  true,
+        "tableName":  "26"
+    },
+    {
+        "id":  "8d4c3a14-2aa0-47cd-b103-9912fef5c847",
+        "type":  "sofa-set-with-coffe-table-04",
+        "x":  64818.64572254252,
+        "y":  8112.083565105264,
+        "width":  3912,
+        "height":  2411,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  6,
+        "fillType":  "solid",
+        "fillColor":  "#512929",
+        "metadata":  {
+                         "label":  "Sofa set with coffe table 04"
+                     },
+        "strokeWidth":  0.6,
+        "tableColor":  "#ffffff",
+        "tableName":  "27"
+    },
+    {
+        "id":  "26f2efc0-17cb-491c-846f-32d5460b16c9",
+        "type":  "sofa-set-with-coffe-table-04",
+        "x":  64818.64572254252,
+        "y":  10523.083565105264,
+        "width":  3912,
+        "height":  2411,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  6,
+        "fillType":  "solid",
+        "fillColor":  "#512929",
+        "metadata":  {
+                         "label":  "Sofa set with coffe table 04"
+                     },
+        "strokeWidth":  0.6,
+        "tableColor":  "#ffffff",
+        "flipY":  true,
+        "flipX":  true,
+        "tableName":  "42"
+    },
+    {
+        "id":  "e8b30a1a-5776-489c-b735-a601a23cb233",
+        "type":  "4-seater-cocktail-table",
+        "x":  62951.14572254252,
+        "y":  4324.109795295784,
+        "width":  1779,
+        "height":  1779,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  13,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "4 seater cocktail table"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "12"
+    },
+    {
+        "id":  "7929f164-7baa-48bb-8995-c2461c51753a",
+        "type":  "4-seater-cocktail-table",
+        "x":  60263.177522859805,
+        "y":  10546.958251076318,
+        "width":  1779,
+        "height":  1779,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  13,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "4 seater cocktail table"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "41"
+    },
+    {
+        "id":  "d2815329-f138-4b48-98a6-0ba1f98a369d",
+        "type":  "4-seater-cocktail-table",
+        "x":  56651.67752285981,
+        "y":  10476.458251076318,
+        "width":  1779,
+        "height":  1779,
+        "rotation":  0,
+        "scale":  1,
+        "zIndex":  13,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "4 seater cocktail table"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "40"
+    },
+    {
+        "id":  "1a18b6ef-1199-4914-9aa0-aa487223a0c7",
+        "type":  "4-seater-vip-table",
+        "x":  41185.72569014081,
+        "y":  10781.771834043127,
+        "width":  2500,
+        "height":  1409,
+        "rotation":  90,
+        "scale":  1,
+        "zIndex":  14,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "4 seater VIP table"
+                     },
+        "strokeWidth":  0.6,
+        "tableName":  "36"
+    },
+    {
+        "id":  "7cfa45cf-97d4-4321-a3b1-0fe947e25f7d",
+        "type":  "4-seater-vip-table",
+        "x":  32656.874458395036,
+        "y":  8267.37423345144,
+        "width":  2500,
+        "height":  1409,
+        "rotation":  90,
+        "scale":  1,
+        "zIndex":  14,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "4 seater VIP table"
+                     },
+        "strokeWidth":  0.6,
+        "flipX":  false,
+        "flipY":  true,
+        "tableName":  "21"
+    },
+    {
+        "id":  "1069dbbe-4de7-4361-bb30-73ef8259aa20",
+        "type":  "4-seater-vip-table",
+        "x":  32656.874458395036,
+        "y":  10779.517603252903,
+        "width":  2500,
+        "height":  1409,
+        "rotation":  90,
+        "scale":  1,
+        "zIndex":  14,
+        "fillType":  "solid",
+        "fillColor":  "transparent",
+        "metadata":  {
+                         "label":  "4 seater VIP table"
+                     },
+        "strokeWidth":  0.6,
+        "flipX":  false,
+        "flipY":  true,
+        "tableName":  "35"
+    },
+    {
+        "id":  "ebc9a9e4-f34d-4a24-8c99-953dc1297b7a",
+        "type":  "dimension",
+        "startPoint":  {
+                           "x":  4479.074470152619,
+                           "y":  1821.0378512838597
+                       },
+        "endPoint":  {
+                         "x":  69430.469568394,
+                         "y":  1878.9784356712294
+                     },
+        "targetIds":  [
+
+                      ],
+        "offset":  -1039.6221683002914,
+        "zIndex":  16,
+        "strokeWidth":  1.5,
+        "color":  "#000000",
+        "fontSize":  10,
+        "fontFamily":  "Inter, sans-serif",
+        "itemType":  "dimension",
+        "dimensionType":  "linear",
+        "x":  36954.7720192733,
+        "y":  1850.0081434775445
+    },
+    {
+        "id":  "e7c5c077-7254-4536-860d-b3ee98bc4b70",
+        "type":  "dimension",
+        "startPoint":  {
+                           "x":  1779.3986910032336,
+                           "y":  26966.132589374138
+                       },
+        "endPoint":  {
+                         "x":  1710.5926269765523,
+                         "y":  1783.1131556087832
+                     },
+        "targetIds":  [
+
+                      ],
+        "offset":  -1105.3107744816775,
+        "zIndex":  16,
+        "strokeWidth":  1.5,
+        "color":  "#000000",
+        "fontSize":  10,
+        "fontFamily":  "Inter, sans-serif",
+        "itemType":  "dimension",
+        "dimensionType":  "linear",
+        "x":  1744.995658989893,
+        "y":  14374.62287249146
+    },
+    {
+        "id":  "text-annotation-1784122910952",
+        "x":  36935.72569014081,
+        "y":  4804.109795295784,
+        "text":  "40ft by 16ft \nStage",
+        "fontSize":  600,
+        "color":  "#000000",
+        "fontFamily":  "Poppins, sans-serif",
+        "rotation":  0,
+        "zIndex":  3,
+        "type":  "text-annotation",
+        "itemType":  "text-annotation",
+        "fontWeight":  "normal",
+        "lineHeight":  1.1
+    },
+    {
+        "id":  "e99ce6da-1895-4c7f-b61b-7c64c03ca37f",
+        "x":  37095.72569014081,
+        "y":  9629.517603252903,
+        "text":  "16ft by 16ft \nDancefloor",
+        "fontSize":  600,
+        "color":  "#000000",
+        "fontFamily":  "Poppins, sans-serif",
+        "rotation":  0,
+        "zIndex":  3,
+        "type":  "text-annotation",
+        "itemType":  "text-annotation",
+        "fontWeight":  "normal",
+        "lineHeight":  1.1
+    },
+    {
+        "id":  "810ed84f-dd72-439a-bb99-51fbd1b735cf",
+        "x":  36495.72569014081,
+        "y":  24717.986429163706,
+        "text":  "16ft by 12ft \nBand Stage",
+        "fontSize":  600,
+        "color":  "#000000",
+        "fontFamily":  "Poppins, sans-serif",
+        "rotation":  0,
+        "zIndex":  3,
+        "type":  "text-annotation",
+        "itemType":  "text-annotation",
+        "fontWeight":  "normal",
+        "lineHeight":  1.1
+    }
+]

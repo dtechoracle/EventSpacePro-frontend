@@ -1,3 +1,5 @@
+import banquetData from './template-banquet.json';
+
 export const TEMPLATES = [
     {
         id: "bedroom",
@@ -60,5 +62,19 @@ export const TEMPLATES = [
             assets: [],
             shapes: []
         }
+    },
+    {
+        id: "banquet-hall",
+        name: "Banquet Hall Layout",
+        description: "Pre-configured banquet hall with round tables, sofa sets, and venue",
+        icon: "🏛️",
+        author: "EventSpace Pro",
+        authorAvatar: "EP",
+        category: "Banquet",
+        tags: ["Banquet", "Round Tables", "Sofa Sets", "Large Venue"],
+        usageCount: 1240,
+        rating: 4.8,
+        canvasAssets: banquetData,
+        canvases: [{ size: "layout", width: 80000, height: 32000 }],
     }
 ];

@@ -1455,19 +1455,19 @@ export const useProjectStore = create<ProjectState>()(
                 const { 
                     shapes, assets, walls, layers, canvas, 
                     textAnnotations, dimensions, labelArrows, groups, wallSegments,
-                    activeLayerId, comments
+                    activeLayerId, comments, projectName
                 } = get();
                 set({ isSaving: true });
                 try {
-                    // GET current event to preserve name and other fields
-                    let eventName = 'Untitled Event';
+                    // Use projectName from store (local changes) instead of fetching stale backend name
+                    let eventName = projectName || 'Untitled Event';
                     let eventType = 'custom venue';
                     let canvases: any[] = [];
 
                     try {
                         const currentEvent = await apiRequest(`/projects/${slug}/events/${eventId}`, 'GET', null, true);
                         const event = currentEvent.data || currentEvent;
-                        eventName = event.name || eventName;
+                        // Only use backend type/canvases, NOT name (use store projectName instead)
                         eventType = event.type || eventType;
                         canvases = event.canvases || [];
                     } catch (e) {
