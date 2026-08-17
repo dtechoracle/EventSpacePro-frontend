@@ -78,7 +78,7 @@ export default function WorkspacePreview({
         if (fillType === 'hatch' || fillType === 'hash') return `url(#hatch-${uid}-${item.id})`;
         if (fillType === 'image' && item.fillImage) return `url(#image-${uid}-${item.id})`;
         if (fillType === 'texture' && item.fillTexture) {
-            const s = item.fillTextureScale || 4;
+            const s = item.fillTextureScale || 1;
             const t = item.fillTextureThickness || 1;
             return `url(#${item.fillTexture}-scale-${s}-thick-${t})`;
         }
@@ -91,8 +91,8 @@ export default function WorkspacePreview({
         const hatchIds: string[] = [];
         const imageIds: string[] = [];
 
-        // Collect shapes and assets with special fills
-        [...shapes, ...assets].forEach((item: any) => {
+        // Collect shapes, assets, and walls with special fills
+        [...shapes, ...assets, ...walls].forEach((item: any) => {
             const fillType = item.fillType || 'color';
             if (fillType === 'gradient') gradientIds.push(item.id);
             else if (fillType === 'hatch' || fillType === 'hash') hatchIds.push(item.id);
@@ -138,7 +138,7 @@ export default function WorkspacePreview({
                     const item = [...shapes, ...assets].find((s: any) => s.id === id) as any;
                     if (!item) return null;
                     const pattern = item.hatchPattern || 'horizontal';
-                    const spacing = (item.hatchSpacing || 10) * (item.fillTextureScale || 4);
+                    const spacing = (item.hatchSpacing || 10) * (item.fillTextureScale || 1);
                     const color = item.hatchColor || '#000000';
                     const strokeWidth = item.hatchThickness || 1;
                     return (
@@ -189,9 +189,9 @@ export default function WorkspacePreview({
                 {/* Texture Library */}
                 {texturePatterns.map(p => {
                     const usages = new Set<string>();
-                    [...shapes, ...assets].forEach((item: any) => {
+                    [...shapes, ...assets, ...walls].forEach((item: any) => {
                         if (item.fillType === 'texture' && item.fillTexture === p.id) {
-                            usages.add(`${item.fillTextureScale || 4}-${item.fillTextureThickness || 1}`);
+                            usages.add(`${item.fillTextureScale || 1}-${item.fillTextureThickness || 1}`);
                         }
                     });
                     usages.add('1-1');
@@ -253,7 +253,7 @@ export default function WorkspacePreview({
                             if (hasPolygon) {
                                 const poly = (wall as any).wallPolygon as Array<{ x: number; y: number }>;
                                 const points = poly.map(p => `${p.x + ((wall as any).x || 0)} ${p.y + ((wall as any).y || 0)}`).join(' ');
-                                const fillColor = (wall as any).backgroundColor || 'transparent';
+                                const fillColor = resolveFill(wall as any);
                                 
                                 return (
                                     <polygon

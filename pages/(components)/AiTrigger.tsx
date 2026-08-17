@@ -786,11 +786,11 @@ export default function AiTrigger() {
       if (isTextureId(fillColor)) {
         fillType = 'texture';
         fillTexture = fillColor;
-        const scale = item.fillTextureScale || 4;
+        const scale = item.fillTextureScale || 1;
         const thickness = item.fillTextureThickness || 1;
         fillColor = `url(#${fillTexture}-scale-${scale}-thick-${thickness})`;
       } else if (fillType === 'texture' && fillTexture) {
-        const scale = item.fillTextureScale || 4;
+        const scale = item.fillTextureScale || 1;
         const thickness = item.fillTextureThickness || 1;
         fillColor = `url(#${fillTexture}-scale-${scale}-thick-${thickness})`;
       }
@@ -3273,7 +3273,7 @@ export default function AiTrigger() {
           heightMm,
           fillType: 'texture',
           fillTexture: 'grass-01',
-          fillTextureScale: 4,
+          fillTextureScale: 1,
           fillTextureThickness: 1,
           stroke: 'transparent',
           strokeWidth: 0,
@@ -3290,7 +3290,7 @@ export default function AiTrigger() {
           heightMm,
           fillType: 'texture',
           fillTexture: 'parking-lot',
-          fillTextureScale: 4,
+          fillTextureScale: 1,
           fillTextureThickness: 1,
           stroke: 'transparent',
           strokeWidth: 0,
@@ -3307,7 +3307,7 @@ export default function AiTrigger() {
           heightMm,
           fillType: 'texture',
           fillTexture: 'sand-01',
-          fillTextureScale: 4,
+          fillTextureScale: 1,
           fillTextureThickness: 1,
           stroke: 'transparent',
           strokeWidth: 0,

@@ -19,6 +19,22 @@ export const TEMPLATES = [
         }
     },
     {
+        id: "indoor",
+        name: "Indoor Event",
+        description: "Indoor event layout with walls and seating",
+        icon: "🏠",
+        canvasData: {
+            walls: [
+                { id: "w1", start: { x: 100, y: 100 }, end: { x: 600, y: 100 }, thickness: 10 },
+                { id: "w2", start: { x: 600, y: 100 }, end: { x: 600, y: 500 }, thickness: 10 },
+                { id: "w3", start: { x: 600, y: 500 }, end: { x: 100, y: 500 }, thickness: 10 },
+                { id: "w4", start: { x: 100, y: 500 }, end: { x: 100, y: 100 }, thickness: 10 }
+            ],
+            assets: [],
+            shapes: []
+        }
+    },
+    {
         id: "office",
         name: "Marquee Event",
         description: "Large marquee setup for special events",
@@ -30,10 +46,7 @@ export const TEMPLATES = [
                 { id: "w3", start: { x: 600, y: 400 }, end: { x: 100, y: 400 }, thickness: 10 },
                 { id: "w4", start: { x: 100, y: 400 }, end: { x: 100, y: 100 }, thickness: 10 }
             ],
-            assets: [
-                // { id: "desk1", type: "furniture-desk", x: 150, y: 150, width: 120, height: 60, rotation: 0 },
-                // { id: "chair1", type: "furniture-chair-office", x: 200, y: 220, width: 40, height: 40, rotation: 0 }
-            ],
+            assets: [],
             shapes: []
         }
     },

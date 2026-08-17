@@ -761,7 +761,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         let fill = asset.fillColor || 'transparent'; // Standard default
         const a = asset as any;
         if (a.fillType === 'texture' || a.fillType === 'hatch' || a.fillType === 'hash') {
-            const scale = a.fillTextureScale !== undefined ? a.fillTextureScale : 10;
+            const scale = a.fillTextureScale !== undefined ? a.fillTextureScale : 1;
             const thickness = a.fillTextureThickness || 1;
             if (a.fillTexture) {
                 const rotation = a.hatchRotation || 0;

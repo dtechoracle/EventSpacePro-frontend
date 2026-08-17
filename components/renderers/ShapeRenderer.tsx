@@ -72,7 +72,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
         } else if (fillType === 'none') {
             return 'transparent';
         } else if (fillType === 'hatch' || fillType === 'texture' || fillType === 'hash') {
-            const scale = shape.fillTextureScale !== undefined ? shape.fillTextureScale : 10;
+            const scale = shape.fillTextureScale !== undefined ? shape.fillTextureScale : 1;
             const thickness = shape.fillTextureThickness || 1;
             if (shape.fillTexture) {
                 const rotation = shape.hatchRotation || 0;
@@ -680,7 +680,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
         if (shape.fillType !== 'hatch') return null;
 
         const pattern = shape.hatchPattern || 'horizontal';
-        const spacing = (shape.hatchSpacing || 10) * (shape.fillTextureScale || 4);
+        const spacing = (shape.hatchSpacing || 10) * (shape.fillTextureScale || 1);
         const color = shape.hatchColor || '#000000';
         const strokeWidth = shape.hatchThickness || 1;
 

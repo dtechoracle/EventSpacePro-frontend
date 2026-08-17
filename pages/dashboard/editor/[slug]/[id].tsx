@@ -384,7 +384,7 @@ function ElementsPane() {
                 fill={(() => {
                   if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
                     if (item.shape.fillTexture) {
-                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 4}-thick-${item.shape.fillTextureThickness || 1})`;
+                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1})`;
                     }
                   }
                   return item.shape.fill || "transparent";
@@ -404,7 +404,7 @@ function ElementsPane() {
                 fill={(() => {
                   if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
                     if (item.shape.fillTexture) {
-                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 4}-thick-${item.shape.fillTextureThickness || 1})`;
+                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1})`;
                     }
                   }
                   return item.shape.fill || "transparent";
@@ -446,7 +446,7 @@ function ElementsPane() {
                 fill={(() => {
                   if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
                     if (item.shape.fillTexture) {
-                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 4}-thick-${item.shape.fillTextureThickness || 1})`;
+                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1})`;
                     }
                   }
                   return item.shape.fill || "transparent";
@@ -644,7 +644,7 @@ function ElementsPane() {
                         fill={(() => {
                           if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
                             if (s.fillTexture) {
-                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1})`;
                             }
                           }
                           return s.fill || "transparent";
@@ -664,7 +664,7 @@ function ElementsPane() {
                         fill={(() => {
                           if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
                             if (s.fillTexture) {
-                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1})`;
                             }
                           }
                           return s.fill || "transparent";
@@ -706,7 +706,7 @@ function ElementsPane() {
                         fill={(() => {
                           if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
                             if (s.fillTexture) {
-                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1})`;
                             }
                           }
                           return s.fill || "transparent";
@@ -971,7 +971,7 @@ function ElementsPane() {
                                         fill={(() => {
                                           if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
                                             if (s.fillTexture) {
-                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1})`;
                                             }
                                           }
                                           return s.fill || "transparent";
@@ -991,7 +991,7 @@ function ElementsPane() {
                                         fill={(() => {
                                           if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
                                             if (s.fillTexture) {
-                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1})`;
                                             }
                                           }
                                           return s.fill || "transparent";
@@ -1033,7 +1033,7 @@ function ElementsPane() {
                                         fill={(() => {
                                           if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
                                             if (s.fillTexture) {
-                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 4}-thick-${s.fillTextureThickness || 1})`;
+                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1})`;
                                             }
                                           }
                                           return s.fill || "transparent";

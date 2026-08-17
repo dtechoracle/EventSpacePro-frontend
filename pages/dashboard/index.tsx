@@ -378,6 +378,7 @@ const Dashboard = () => {
                   className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
                 >
                   <div className={`h-40 flex items-center justify-center ${template.id === 'bedroom' ? 'bg-gradient-to-br from-orange-400 to-orange-600' :
+                    template.id === 'indoor' ? 'bg-gradient-to-br from-purple-400 to-purple-600' :
                     template.id === 'office' ? 'bg-gradient-to-br from-blue-400 to-blue-600' :
                       'bg-gradient-to-br from-green-400 to-green-600'
                     }`}>

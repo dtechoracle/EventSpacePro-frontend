@@ -169,7 +169,7 @@ export default function PlanPreview({
           const usages = new Set<string>();
           allItems.forEach((item: any) => {
             if (item && (item.fillType === 'texture' || item.fillType === 'hatch') && item.fillTexture === p.id) {
-              usages.add(`${item.fillTextureScale || 4}-${item.fillTextureThickness || 1}`);
+              usages.add(`${item.fillTextureScale || 1}-${item.fillTextureThickness || 1}`);
             }
           });
           // Also add default 1,1 for safety
@@ -227,7 +227,7 @@ export default function PlanPreview({
             }
           } else if (fillType === 'hatch') {
             const pattern = shape.hatchPattern || 'horizontal';
-            const s = shape.fillTextureScale || 4;
+            const s = shape.fillTextureScale || 1;
             const spacing = (shape.hatchSpacing || 10) * s;
             const color = shape.hatchColor || '#000000';
             const id = getHatchId(asset.id);
@@ -265,7 +265,7 @@ export default function PlanPreview({
     if (fillType === 'hatch') return `url(#${getHatchId(asset.id)})`;
     if (fillType === 'image' && asset.fillImage) return `url(#${getPatternId(asset.id)})`;
     if (fillType === 'texture' && asset.fillTexture) {
-      const scale = asset.fillTextureScale || 4;
+      const scale = asset.fillTextureScale || 1;
       const thickness = asset.fillTextureThickness || 1;
       return `url(#${asset.fillTexture}-scale-${scale}-thick-${thickness})`;
     }

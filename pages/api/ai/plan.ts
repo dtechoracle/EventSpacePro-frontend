@@ -1195,7 +1195,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         height: activeSpaceHeightMm,
         fillType: 'texture',
         fillTexture,
-        fillTextureScale: 4,
+        fillTextureScale: 1,
         fillTextureThickness: 1,
         fill: 'transparent',
         stroke: 'transparent',
