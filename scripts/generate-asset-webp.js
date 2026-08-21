@@ -6,7 +6,13 @@ const ROOT = process.cwd();
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const OUTPUT_ROOT = path.join(PUBLIC_DIR, 'assets', 'raster');
 const MAX_SIDE = 2048;
-const WORKSPACE_DEFAULT_STROKE_WIDTH = 1;
+
+// Stroke width proportional to the artboard size so it stays visible when the
+// raster is displayed at scaled-down sizes (thumbnails, zoomed-out floor
+// plans). A fixed 1-unit stroke in a ~2700-unit QCAD viewBox renders as a
+// near-invisible hairline. 0.9% of the larger artboard side keeps strokes
+// readable at typical display scales.
+const WORKSPACE_STROKE_RATIO = 0.009;
 
 const INPUT_DIRS = [
   path.join(PUBLIC_DIR, 'assets', 'modal'),
@@ -33,12 +39,12 @@ function readSvgSize(svgText) {
   return { width: MAX_SIDE, height: MAX_SIDE };
 }
 
-function prepareSvgForWorkspaceRaster(svgText) {
+function prepareSvgForWorkspaceRaster(svgText, strokeWidth) {
   const style = `
     <style id="esp-workspace-raster-style">
       * {
         stroke: #000000 !important;
-        stroke-width: ${WORKSPACE_DEFAULT_STROKE_WIDTH} !important;
+        stroke-width: ${strokeWidth} !important;
         stroke-opacity: 1 !important;
         vector-effect: non-scaling-stroke;
         filter: none !important;
@@ -84,9 +90,13 @@ async function convertSvg(svgPath) {
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
 
   const svgText = await fs.readFile(svgPath, 'utf8');
-  const rasterSvgText = prepareSvgForWorkspaceRaster(svgText);
   const { width, height } = readSvgSize(svgText);
   const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
+
+  // Stroke width proportional to the larger artboard side, so it remains
+  // visible at scaled-down display sizes instead of collapsing to a hairline.
+  const strokeWidth = Math.max(1, Math.round(Math.max(width, height) * WORKSPACE_STROKE_RATIO));
+  const rasterSvgText = prepareSvgForWorkspaceRaster(svgText, strokeWidth);
 
   await sharp(Buffer.from(rasterSvgText), { density: 144, limitInputPixels: false })
     .resize({
