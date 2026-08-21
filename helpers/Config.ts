@@ -72,11 +72,12 @@ export const apiRequest = async (
     console.log('✅ API Request Success:', { endpoint, method, url });
     return data;
   } catch (error: any) {
-    // Catch CORS errors, network errors, etc.
-    const isCorsError = error.message?.includes('CORS') || 
+    // Only treat as CORS/network error if it's an actual fetch failure
+    // (TypeError from fetch rejection or message containing network-level keywords)
+    const isCorsError = (error.name === 'TypeError' && !error.message?.includes('Unauthorized')) ||
                        error.message?.includes('Failed to fetch') ||
-                       error.name === 'TypeError' ||
-                       !error.response;
+                       error.message?.includes('NetworkError') ||
+                       error.message?.includes('Load failed');
     
     if (isCorsError) {
       console.error('🚫 CORS or Network Error:', {
@@ -87,10 +88,10 @@ export const apiRequest = async (
         name: error.name,
         stack: error.stack,
       });
-      throw new Error(`CORS/Network Error: Unable to fetch ${endpoint}. Check backend CORS configuration. Original error: ${error.message}`);
+      throw new Error(`Network error: Unable to reach the server. Check your connection.`);
     }
     
-    // Re-throw other errors
+    // Re-throw all other errors as-is (including validation errors like "Email already in use")
     console.error('❌ API Request Error:', {
       endpoint,
       method,
