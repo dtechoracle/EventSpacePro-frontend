@@ -74,7 +74,7 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, [fetchUser]);
 
-  const { data, isLoading } = useQuery<ApiResponse>({
+  const { data, isLoading, error: projectsError } = useQuery<ApiResponse>({
     queryKey: ["projects"],
     queryFn: () => {
       console.log('[Dashboard] Fetching projects from DATABASE');
@@ -85,12 +85,14 @@ const Dashboard = () => {
   });
 
   // Fetch events for all projects separately to get full event data (needed for thumbnails)
-  const { data: allProjectEvents, isLoading: isLoadingEvents } = useQuery({
+  const { data: allProjectEvents, isLoading: isLoadingEvents, error: eventsError } = useQuery({
     queryKey: ["all-events", data?.data?.map(p => p.slug)],
     queryFn: async () => {
       if (!data?.data) return [];
 
       console.log('[Dashboard] Fetching ALL events from DATABASE for projects:', data.data.map(p => p.slug));
+
+      const failedProjects: string[] = [];
 
       // Fetch events for each project
       const eventPromises = data.data.map(async (project) => {
@@ -104,12 +106,6 @@ const Dashboard = () => {
           // CRITICAL: Fetch full event data for each event to get canvasData
           const fullEventPromises = events.map(async (event: any) => {
             try {
-              // Only fetch full data if canvasData is missing or we need it for thumbnail
-              // But for Dashboard list, we might want to optimize?
-              // ProjectCard needs Last Event's preview.
-              // So we effectively need details for at least the last updated event.
-              // For now, keep existing logic to be safe.
-
               const fullEventRes = await apiRequest(`/projects/${project.slug}/events/${event._id}`, "GET", null, true);
               const fullEvent = fullEventRes.data || fullEventRes;
               return fullEvent;
@@ -129,6 +125,7 @@ const Dashboard = () => {
           };
         } catch (error: any) {
           console.error(`[Dashboard] ❌ Failed to fetch events for project ${project.slug}:`, error);
+          failedProjects.push(project.slug);
           return {
             projectSlug: project.slug,
             projectName: project.name,
@@ -138,7 +135,14 @@ const Dashboard = () => {
         }
       });
 
-      return Promise.all(eventPromises);
+      const results = await Promise.all(eventPromises);
+
+      // If ALL projects failed, throw so react-query sets isError
+      if (failedProjects.length === data.data.length && data.data.length > 0) {
+        throw new Error("Failed to load events from server");
+      }
+
+      return results;
     },
     enabled: !!data?.data && data.data.length > 0,
     staleTime: 0,
@@ -325,13 +329,41 @@ const Dashboard = () => {
                 </div>
 
                 {(isLoading || isLoadingEvents) ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {[1, 2, 3, 4].map((i) => (
                       <div
                         key={i}
-                        className="bg-gray-100 rounded-lg h-48 animate-pulse"
-                      />
+                        className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden animate-pulse"
+                      >
+                        <div className="h-40 bg-gray-200" />
+                        <div className="p-4 space-y-3">
+                          <div className="h-4 bg-gray-200 rounded w-3/4" />
+                          <div className="h-3 bg-gray-100 rounded w-1/2" />
+                          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                            <div className="h-3 bg-gray-100 rounded w-1/3" />
+                            <div className="h-3 bg-gray-100 rounded w-1/4" />
+                          </div>
+                        </div>
+                      </div>
                     ))}
+                  </div>
+                ) : projectsError || eventsError ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
+                    <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center">
+                      <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                    </div>
+                    <h2 className="text-xl font-bold text-gray-800">Failed to load events</h2>
+                    <p className="text-gray-500 max-w-md text-sm">
+                      Something went wrong while fetching your events. Please try again.
+                    </p>
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Retry
+                    </button>
                   </div>
                 ) : recentEvents.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center space-y-6 animate-in fade-in zoom-in duration-500">

@@ -15,7 +15,8 @@ import { getDimensionsForWall, getDimensionsForObject, renderDimensionToCanvas }
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
-import { canRenderAssetOnCanvas } from "@/utils/assetRenderMode";
+import { canRenderAssetAsImage } from "@/utils/assetRenderMode";
+import { getRasterAssetPath } from "@/utils/assetRasterPath";
 import { downloadDxf } from "@/lib/dxfExport";
 
 type ExportFormat = "pdf" | "png" | "jpg" | "jpeg" | "dxf";
@@ -151,6 +152,25 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
     }
 
     try {
+      // Prefer the pre-rasterized WebP (same thick-stroke image the workspace uses).
+      // DOM-processed SVGs use hairline strokes (stroke-width 0.5 + non-scaling-stroke),
+      // which render nearly invisible at export scale.
+      const rasterPath = definition.path ? getRasterAssetPath(definition.path) : null;
+      if (rasterPath) {
+        const rasterImg = new Image();
+        const rasterOk = await new Promise<boolean>((resolve) => {
+          const timer = setTimeout(() => resolve(false), 5000);
+          rasterImg.onload = () => { clearTimeout(timer); resolve(rasterImg.naturalWidth > 0); };
+          rasterImg.onerror = () => { clearTimeout(timer); resolve(false); };
+          rasterImg.src = rasterPath;
+        });
+        if (rasterOk) {
+          loadedImages.set(asset.id, rasterImg);
+          if (!typeIconCache[asset.type]) typeIconCache[asset.type] = rasterImg;
+          return;
+        }
+      }
+
       let svg = svgCache[definition.path];
       if (!svg) {
         // Encode URI to handle spaces in filenames correctly
@@ -455,6 +475,10 @@ export default function ExportPanel() {
       (node as SVGElement).style.display = '';
       (node as SVGElement).removeAttribute('display');
     });
+    // Remove raster-backed asset <image> elements from the snapshot. SVG loaded as
+    // an <img> from a blob URL cannot render external <image> references, so these
+    // would appear blank (and would double-draw over the manually rendered assets).
+    clone.querySelectorAll('image[href*="/assets/raster/"], image[xlink\\:href*="/assets/raster/"]').forEach((node) => node.remove());
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     clone.setAttribute('width', `${screenWidth}`);
     clone.setAttribute('height', `${screenHeight}`);
@@ -1281,7 +1305,7 @@ const renderAssetToCanvas = (
           .filter(asset =>
             !asset.isExploded &&
             assetTypesWithSvgPaths.has(asset.type) &&
-            canRenderAssetOnCanvas(asset) &&
+            canRenderAssetAsImage(asset) &&
             (!option.exportSelection || selectedIds.includes(asset.id))
           )
           .map(asset => asset.id)

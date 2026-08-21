@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import { useUserStore } from "@/store/userStore";
-import { FiCamera, FiSave, FiUser, FiMail, FiCalendar } from "react-icons/fi";
-import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import Head from "next/head";
 import { apiRequest } from "@/helpers/Config";
@@ -37,9 +35,8 @@ export default function ProfilePage() {
             reader.onloadend = () => {
                 const img = new Image();
                 img.onload = () => {
-                    // Create a canvas to downscale the image
-                    const canvas = document.createElement('canvas');
-                    const MAX_SIZE = 200; // Profile photos don't need to be huge
+                    const canvas = document.createElement("canvas");
+                    const MAX_SIZE = 400;
                     let width = img.width;
                     let height = img.height;
 
@@ -57,20 +54,26 @@ export default function ProfilePage() {
 
                     canvas.width = width;
                     canvas.height = height;
-                    const ctx = canvas.getContext('2d');
+                    const ctx = canvas.getContext("2d");
                     ctx?.drawImage(img, 0, 0, width, height);
 
-                    // Convert to optimized JPEG with 0.8 quality
-                    const optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                    canvas.toBlob((blob) => {
-                        if (!blob) {
-                            toast.error("Failed to process image.");
-                            return;
-                        }
-
-                        setAvatar(optimizedDataUrl);
-                        setAvatarFile(new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }));
-                    }, 'image/jpeg', 0.8);
+                    const optimizedDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+                    canvas.toBlob(
+                        (blob) => {
+                            if (!blob) {
+                                toast.error("Failed to process image.");
+                                return;
+                            }
+                            setAvatar(optimizedDataUrl);
+                            setAvatarFile(
+                                new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", {
+                                    type: "image/jpeg",
+                                })
+                            );
+                        },
+                        "image/jpeg",
+                        0.85
+                    );
                 };
                 img.src = reader.result as string;
             };
@@ -103,21 +106,17 @@ export default function ProfilePage() {
                 firstName,
                 lastName,
                 avatar: savedAvatar,
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
             };
 
             setUser(updatedUser);
-
-            // Also persist to localStorage manually just in case
             localStorage.setItem("user-storage", JSON.stringify({ state: { user: updatedUser } }));
-            
-            // Persist avatar independently of user session so it survives logouts
+
             if (savedAvatar) {
                 localStorage.setItem(`avatar_${user._id}`, savedAvatar);
             }
 
             setAvatarFile(null);
-
             toast.success("Profile updated successfully!");
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to update profile.");
@@ -127,36 +126,41 @@ export default function ProfilePage() {
     };
 
     const userInitial = firstName?.[0]?.toUpperCase() || user?.firstName?.[0]?.toUpperCase() || "U";
+    const fullName = [firstName, lastName].filter(Boolean).join(" ") || "Your Name";
 
     return (
-        <div className="flex h-screen bg-[#F8FAFC]">
+        <div className="flex h-screen bg-gray-50">
             <Head>
                 <title>Profile | EventSpace Pro</title>
             </Head>
 
             <DashboardSidebar />
 
-            <main className="flex-1 overflow-y-auto p-8 lg:p-12">
-                <div className="max-w-4xl mx-auto">
-                    <header className="mb-10">
-                        <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Account Settings</h1>
-                        <p className="text-gray-500 mt-2">Manage your personal information and profile preferences.</p>
-                    </header>
+            <main className="flex-1 overflow-y-auto">
+                <div className="max-w-3xl mx-auto px-6 py-10">
+                    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
 
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* Left: Avatar Upload */}
-                        <div className="lg:col-span-1">
-                            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col items-center">
-                                <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                                    <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-lg bg-blue-500 flex items-center justify-center text-white text-4xl font-bold transition-transform group-hover:scale-105">
+                        <div className="p-8 pb-6">
+                            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+
+                                <div
+                                    className="relative group cursor-pointer flex-shrink-0"
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <div className="w-32 h-32 rounded-full overflow-hidden bg-gray-200 ring-4 ring-white shadow-md">
                                         {avatar ? (
                                             <img src={avatar} alt="Avatar" className="w-full h-full object-cover" />
                                         ) : (
-                                            userInitial
+                                            <div className="w-full h-full flex items-center justify-center bg-[var(--accent)] text-white text-4xl font-semibold">
+                                                {userInitial}
+                                            </div>
                                         )}
                                     </div>
-                                    <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <FiCamera className="text-white text-2xl" />
+                                    <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
                                     </div>
                                     <input
                                         type="file"
@@ -167,98 +171,53 @@ export default function ProfilePage() {
                                     />
                                 </div>
 
-                                <h3 className="mt-4 font-semibold text-gray-900 text-lg">Your Photo</h3>
-                                <p className="text-sm text-gray-500 text-center mt-1">Click to upload a new profile picture. Recommended: 500x500px.</p>
-
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="mt-6 text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline transition-all"
-                                >
-                                    Change Photo
-                                </button>
+                                <div className="flex-1 text-center sm:text-left">
+                                    <h1 className="text-2xl font-bold text-gray-900">{fullName}</h1>
+                                    <p className="mt-1 text-sm text-gray-500">{user?.email || "No email"}</p>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Right: Info Form */}
-                        <div className="lg:col-span-2 space-y-6">
-                            <section className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                                <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                                    <FiUser className="text-blue-500" /> Personal Information
-                                </h2>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-semibold text-gray-700">First Name</label>
-                                        <input
-                                            type="text"
-                                            value={firstName}
-                                            onChange={(e) => setFirstName(e.target.value)}
-                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                                            placeholder="Enter first name"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-semibold text-gray-700">Last Name</label>
-                                        <input
-                                            type="text"
-                                            value={lastName}
-                                            onChange={(e) => setLastName(e.target.value)}
-                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                                            placeholder="Enter last name"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="mt-6 space-y-2">
-                                    <label className="text-sm font-semibold text-gray-700">Email Address</label>
-                                    <div className="relative">
-                                        <FiMail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                                        <input
-                                            type="email"
-                                            value={user?.email || ""}
-                                            disabled
-                                            className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-500 outline-none cursor-not-allowed"
-                                        />
-                                    </div>
-                                    <p className="text-xs text-gray-400 mt-1 italic">Email cannot be changed manually for security reasons.</p>
-                                </div>
-                            </section>
-
-                            <section className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                                <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                    <FiCalendar className="text-blue-500" /> Account Details
-                                </h2>
-                                <div className="flex items-center justify-between py-3 border-b border-gray-50">
-                                    <span className="text-sm text-gray-500">Member Since</span>
-                                    <span className="text-sm font-medium text-gray-900">
-                                        {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : "March 2026"}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between py-3">
-                                    <span className="text-sm text-gray-500">Account status</span>
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                        Active
-                                    </span>
-                                </div>
-                            </section>
-
-                            <div className="flex items-center justify-end pt-4">
-                                <button
-                                    onClick={handleSave}
-                                    disabled={isSaving}
-                                    className={`flex items-center gap-2 px-8 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 hover:bg-blue-700 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:scale-100`}
-                                >
-                                    {isSaving ? (
-                                        <motion.div
-                                            animate={{ rotate: 360 }}
-                                            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                                        >
-                                            <FiSave className="w-4 h-4" />
-                                        </motion.div>
-                                    ) : <FiSave className="w-4 h-4" />}
-                                    Save Changes
-                                </button>
+                        <div className="px-8 pb-8 space-y-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">First name</label>
+                                <input
+                                    type="text"
+                                    value={firstName}
+                                    onChange={(e) => setFirstName(e.target.value)}
+                                    className="mt-2 w-full px-0 py-2.5 border-0 border-b border-gray-200 focus:border-[var(--accent)] focus:ring-0 outline-none text-sm text-gray-900 bg-transparent transition-colors"
+                                    placeholder="First name"
+                                />
                             </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Last name</label>
+                                <input
+                                    type="text"
+                                    value={lastName}
+                                    onChange={(e) => setLastName(e.target.value)}
+                                    className="mt-2 w-full px-0 py-2.5 border-0 border-b border-gray-200 focus:border-[var(--accent)] focus:ring-0 outline-none text-sm text-gray-900 bg-transparent transition-colors"
+                                    placeholder="Last name"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Email</label>
+                                <div className="mt-2 px-0 py-2.5 border-b border-gray-200 text-sm text-gray-400">
+                                    {user?.email || "No email"}
+                                </div>
+                                <p className="mt-1.5 text-xs text-gray-400">Email cannot be changed for security reasons.</p>
+                            </div>
+                        </div>
+
+                        <div className="px-8 pb-8">
+                            <button
+                                onClick={handleSave}
+                                disabled={isSaving}
+                                className="w-full py-3 rounded-lg bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 transition-all disabled:opacity-50"
+                            >
+                                {isSaving ? "Saving..." : "Save changes"}
+                            </button>
                         </div>
                     </div>
                 </div>
