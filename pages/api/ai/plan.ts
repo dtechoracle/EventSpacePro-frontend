@@ -1203,6 +1203,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
     };
     const buildRoomShellPreview = () => {
+      const lShape = parseLShapeDimensions(lowerUserHistoryText);
       const preview: any =
         selectedSpaceChoice === 'marquee' && selectedMarqueeForFlow
           ? {
@@ -1218,9 +1219,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 },
               ],
             }
-          : {
-              walls: [{ widthMm: activeSpaceWidthMm, heightMm: activeSpaceHeightMm, wallType: 'enclosure-150' }],
-            };
+          : lShape
+            ? {
+                walls: [{
+                  widthMm: lShape.overallWidth,
+                  heightMm: lShape.overallHeight,
+                  wallType: 'enclosure-150',
+                  shape: 'l-shape',
+                  cutoutWidth: lShape.cutoutWidth,
+                  cutoutHeight: lShape.cutoutHeight,
+                }],
+              }
+            : {
+                walls: [{ widthMm: activeSpaceWidthMm, heightMm: activeSpaceHeightMm, wallType: 'enclosure-150' }],
+              };
       const surfaceShape = getSpaceSurfaceShape();
       if (surfaceShape) preview.shapes = [surfaceShape];
       return preview;
@@ -1787,6 +1799,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         followUp: 'Great choice! What are the dimensions of the grassy field space you want to use? Please provide the width and height in meters, millimeters, or feet.',
       });
     }
+
+    const parseLShapeDimensions = (text: string) => {
+      const lower = String(text || '').toLowerCase();
+      const lMatch = lower.match(/l[\s-]*shape/i);
+      if (!lMatch) return null;
+      const nums = [...lower.matchAll(/(\d+(?:\.\d+)?)\s*(mm|m|ft)?/gi)].map(m => ({
+        value: Number(m[1]),
+        unit: (m[2] || '').toLowerCase()
+      }));
+      if (nums.length < 4) return null;
+      const toMm = (v: number, u: string) => u === 'm' ? v * 1000 : u === 'ft' ? v * 304.8 : v;
+      return {
+        overallWidth: toMm(nums[0].value, nums[0].unit),
+        overallHeight: toMm(nums[1].value, nums[1].unit),
+        cutoutWidth: toMm(nums[2].value, nums[2].unit),
+        cutoutHeight: toMm(nums[3].value, nums[3].unit),
+      };
+    };
 
     if (
       normalizedCommand === 'parking lot' ||
@@ -2725,7 +2755,12 @@ USE THE AVAILABLE ASSETS LIST TO FULFILL ALL REQUESTS.
     → plan.shapes: [{ type: "rectangle"|"ellipse"|"line"|"polygon", x, y, width, height, fillColor, strokeColor, strokeWidth }]
 
 11. ADD ANNOTATIONS / TEXT
-    → plan.annotations: [{ type: "text"|"label"|"arrow", x, y, text, fontSize }]
+    → plan.annotations: [{ type: "text"|"label"|"arrow"|"callout", x, y, text, fontSize, targetX, targetY, color }]
+    → Arrows: type "arrow" with x,y (start) and targetX,targetY (end). Stroke color and width configurable.
+    → Callouts: type "callout" with x,y position, text, and optional targetX,targetY for a pointer line.
+    → Use annotations for: room labels ("Banquet Hall"), zone labels ("VIP Area", "Stage"), directional labels ("North Entrance"), measurements, and arrows pointing to specific items.
+    → When a user says "label the stage" or "add an arrow pointing to the VIP area", return annotations.
+    → Arrow annotations generate line shapes with an arrowhead marker.
 
 12. CIRCULAR / RADIAL ARRANGEMENTS
     → plan.chairsAround: [{ centerX, centerY, radiusMm, count, chairAsset, tableAsset, chairSizePx, tableSizePx, fillColor, strokeColor, strokeWidth }]
@@ -2735,6 +2770,18 @@ USE THE AVAILABLE ASSETS LIST TO FULFILL ALL REQUESTS.
 
 14. STYLING (for generated items)
    → Use fillColor, strokeColor, strokeWidth, rotation on any asset/shape
+
+15. IRREGULAR ROOMS
+    → L-shape: { "walls": [{ "widthMm": W, "heightMm": H, "wallType": "enclosure-150", "shape": "l-shape", "cutoutWidth": CW, "cutoutHeight": CH }] }
+       The cutout is removed from the bottom-right corner. CW = width of the removed section, CH = height.
+    → Polygon: { "walls": [{ "shape": "polygon", "nodes": [{x,y},...], "wallType": "enclosure-150" }] }
+       Nodes define the room outline as a closed polygon (min 3 points).
+    → If user says "L-shaped room", extract overall dimensions + cutout size from their description.
+    → Example: "L-shaped room 12m x 10m with a 4m x 5m cutout" → { "shape": "l-shape", "widthMm": 12000, "heightMm": 10000, "cutoutWidth": 4000, "cutoutHeight": 5000 }
+
+16. CUSTOM ASSETS (uploaded by user)
+    → If user provides an uploaded asset ID, use it directly: { "assetName": "uploaded-<id>", ... }
+    → Uploaded assets are treated like any other asset for positioning and arrangement.
 
 ══════════════════════════════════════════════════════════════
   COLOUR PALETTE (map common words to hex)
@@ -2958,6 +3005,28 @@ ${obstaclesContext}`;
         console.warn(`Asset not found: ${asset.assetName}`);
         return asset;
       });
+
+      // Conflict resolution: detect and separate overlapping assets
+      const assetsWithPositions = parsed.plan.assets.filter((a: any) => typeof a.xMm === 'number' && typeof a.yMm === 'number');
+      const MIN_GAP = 500;
+      for (let i = 0; i < assetsWithPositions.length; i++) {
+        for (let j = i + 1; j < assetsWithPositions.length; j++) {
+          const a = assetsWithPositions[i];
+          const b = assetsWithPositions[j];
+          const aw = (a.widthMm || 800) / 2 + MIN_GAP;
+          const ah = (a.heightMm || 800) / 2 + MIN_GAP;
+          const bw = (b.widthMm || 800) / 2 + MIN_GAP;
+          const bh = (b.heightMm || 800) / 2 + MIN_GAP;
+          const overlapX = aw + bw - Math.abs(a.xMm - b.xMm);
+          const overlapY = ah + bh - Math.abs(a.yMm - b.yMm);
+          if (overlapX > 0 && overlapY > 0) {
+            const pushX = overlapX > 0 ? (overlapX / 2 + 100) * Math.sign(b.xMm - a.xMm || 1) : 0;
+            const pushY = overlapY > 0 ? (overlapY / 2 + 100) * Math.sign(b.yMm - a.yMm || 1) : 0;
+            b.xMm += pushX;
+            b.yMm += pushY;
+          }
+        }
+      }
     }
 
     // Validate chairsAround assets

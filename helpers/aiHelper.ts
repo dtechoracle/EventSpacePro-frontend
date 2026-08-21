@@ -12,16 +12,39 @@ export const convertPlanToCanvasData = (plan: any, canvasWidth = 10000, canvasHe
         createdAssetsInBatch.push(asset);
     };
 
-    // Find empty space (simplified for new canvas)
+    // Find empty space avoiding existing items
     const findEmptySpace = (requiredWidth: number, requiredHeight: number): { x: number; y: number } => {
-        // Simple grid search or just return center if empty
-        if (createdAssetsInBatch.length === 0) return canvasCenter;
+        if (createdAssetsInBatch.length === 0) {
+            if (wallBounds) {
+                return { x: (wallBounds.minX + wallBounds.maxX) / 2, y: (wallBounds.minY + wallBounds.maxY) / 2 };
+            }
+            return canvasCenter;
+        }
 
-        const margin = 100;
-        const edgeMargin = 1000;
-        // ... (simplified logic: just offset from center if occupied)
-        // For now, let's just place them in a grid logic if explicit position isn't given
-        return canvasCenter;
+        const bounds = wallBounds || { minX: 0, minY: 0, maxX: canvasWidth, maxY: canvasHeight };
+        const margin = 500;
+        const step = Math.max(requiredWidth, requiredHeight, 1000) + margin;
+        const cols = Math.max(1, Math.floor((bounds.maxX - bounds.minX - margin * 2) / step));
+        const startX = bounds.minX + margin + step / 2;
+        const startY = bounds.minY + margin + step / 2;
+
+        for (let row = 0; row < 50; row++) {
+            for (let col = 0; col < cols; col++) {
+                const cx = startX + col * step;
+                const cy = startY + row * step;
+                const overlaps = createdAssetsInBatch.some((existing: any) => {
+                    const ex = existing.x || 0;
+                    const ey = existing.y || 0;
+                    const ew = (existing.width || 500) / 2 + requiredWidth / 2 + margin;
+                    const eh = (existing.height || 500) / 2 + requiredHeight / 2 + margin;
+                    return Math.abs(cx - ex) < ew && Math.abs(cy - ey) < eh;
+                });
+                if (!overlaps) return { x: cx, y: cy };
+            }
+        }
+        // Fallback: offset from center
+        const offset = createdAssetsInBatch.length * step;
+        return { x: canvasCenter.x + offset, y: canvasCenter.y };
     };
 
     // --- LOGIC PORTED FROM AiTrigger.tsx ---
@@ -54,6 +77,66 @@ export const convertPlanToCanvasData = (plan: any, canvasWidth = 10000, canvasHe
 
             const halfW = width / 2;
             const halfH = height / 2;
+
+            // L-shape walls: generate polygon nodes for the L-cutout
+            if (w.shape === 'l-shape' && w.cutoutWidth && w.cutoutHeight) {
+                const cw = Number(w.cutoutWidth);
+                const ch = Number(w.cutoutHeight);
+                const nodes = [
+                    { x: cx - halfW, y: cy - halfH },
+                    { x: cx + halfW, y: cy - halfH },
+                    { x: cx + halfW, y: cy + halfH },
+                    { x: cx - halfW + cw, y: cy + halfH },
+                    { x: cx - halfW + cw, y: cy - halfH + ch },
+                    { x: cx - halfW, y: cy - halfH + ch },
+                ];
+                const edges = [
+                    { a: 0, b: 1 }, { a: 1, b: 2 }, { a: 2, b: 3 },
+                    { a: 3, b: 4 }, { a: 4, b: 5 }, { a: 5, b: 0 },
+                ];
+                addAsset({
+                    id: `wall-${Date.now()}-${idx}`,
+                    type: "wall-segments",
+                    x: cx,
+                    y: cy,
+                    scale: 1,
+                    rotation: 0,
+                    zIndex: 0,
+                    wallNodes: nodes,
+                    wallEdges: edges,
+                    wallThickness: w.thicknessPx ?? 150,
+                    wallGap: 8,
+                    lineColor: "#000000",
+                    backgroundColor: "transparent",
+                });
+                return;
+            }
+
+            // Polygon walls: arbitrary node list from plan
+            if (w.shape === 'polygon' && Array.isArray(w.nodes) && w.nodes.length >= 3) {
+                const nodes = w.nodes.map((n: any) => ({ x: Number(n.x), y: Number(n.y) }));
+                const edges = [];
+                for (let i = 0; i < nodes.length; i++) {
+                    edges.push({ a: i, b: (i + 1) % nodes.length });
+                }
+                addAsset({
+                    id: `wall-${Date.now()}-${idx}`,
+                    type: "wall-segments",
+                    x: cx,
+                    y: cy,
+                    scale: 1,
+                    rotation: 0,
+                    zIndex: 0,
+                    wallNodes: nodes,
+                    wallEdges: edges,
+                    wallThickness: w.thicknessPx ?? 150,
+                    wallGap: 8,
+                    lineColor: "#000000",
+                    backgroundColor: "transparent",
+                });
+                return;
+            }
+
             const nodes = [
                 { x: cx - halfW, y: cy - halfH },
                 { x: cx + halfW, y: cy - halfH },

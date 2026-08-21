@@ -18,7 +18,7 @@ const Sidebar = () => {
   const { user, fetchUser, clearUser } = useUserStore();
 
   const handleLogout = () => {
-    Cookies.remove("authToken");
+    Cookies.remove("authToken", { path: "/" });
     clearUser();
     try {
       if (typeof window !== "undefined") {

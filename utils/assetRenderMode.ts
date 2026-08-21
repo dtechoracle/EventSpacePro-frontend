@@ -49,7 +49,7 @@ const isDefaultStyledAsset = (asset: FastRenderableAsset, isPreview = false) => 
   const hasCustomFill = !isTransparentFill(asset.fillColor);
   const hasCustomStroke = !isDefaultStrokeColor(asset.strokeColor) || !isDefaultStrokeWidth(asset.strokeWidth, defaultStrokeWidth);
 
-  return !isPreview && !hasCustomFill && !hasTextureFill && !hasCustomStroke;
+  return !hasCustomFill && !hasTextureFill && !hasCustomStroke;
 };
 
 export const canRenderAssetAsImage = (asset: FastRenderableAsset, isPreview = false) => {

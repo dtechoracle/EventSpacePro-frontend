@@ -143,6 +143,23 @@ Return an ERROR (to fall through to plan generation) ONLY IF the request is clea
   • Generating a whole new layout or room
   • General platform questions
 
+MULTI-ASSET OPERATIONS:
+When multiple assets are selected (selectedAssets has >1 item), ALL actions apply to ALL selected items:
+  • "move left 500mm" → each selected item moves left by 500mm
+  • "make them red" → all selected items get fill: "#ef4444"
+  • "double the size" → all selected items get scaleFactor: 2
+  • "align left" → operation: { "type": "align", "alignment": "left" }
+  • "distribute evenly" → operation: { "type": "distribute", "direction": "horizontal"|"vertical" }
+
+NO-SELECTION OPERATIONS:
+When NO assets are selected (selectedAssets is empty), detect type-based selection:
+  • "move all tables left" → operation: { "type": "select", "assetType": "table" }, then follow-up with move
+  • "change all chairs to red" → return a multi-step: first select, then update
+  • "select all tables" → operation: { "type": "select", "assetType": "table" }
+  • "delete all walls" → operation: { "type": "delete", "wallIds": [...] }
+  For type-based operations with no selection, return:
+  { "action": { "type": "batchUpdate", "assetType": "table", "updates": { ... } }, "message": "Updated all tables." }
+
 ═══════════════════════════════════════════════════
   COLOUR MAPPING (non-exhaustive — infer anything standard)
 ═══════════════════════════════════════════════════

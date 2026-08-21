@@ -44,7 +44,10 @@ export const apiRequest = async (
 
     if (response.status === 401 || response.status === 403) {
       if (typeof window !== "undefined" && requiresAuth) {
-        window.location.href = "/auth/login";
+        // Clear stale token and redirect to login with redirect param
+        Cookies.remove("authToken", { path: "/" });
+        const currentPath = window.location.pathname;
+        window.location.href = `/auth/login?redirect=${encodeURIComponent(currentPath)}`;
       }
       throw new Error("Unauthorized: Redirecting to login");
     }

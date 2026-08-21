@@ -71,7 +71,7 @@ const OtpVerification = () => {
     },
     onSuccess: async (data) => {
       toast.success("OTP verified successfully!");
-      Cookies.set("authToken", data.token);
+      Cookies.set("authToken", data.token, { path: "/" });
       
       // Pre-fetch user state now that we have a valid authToken
       try {

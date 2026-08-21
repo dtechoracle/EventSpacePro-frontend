@@ -58,7 +58,7 @@ export default function DashboardSidebar() {
 
   const handleLogout = () => {
     // Clear auth cookie (this is what middleware checks)
-    Cookies.remove("authToken");
+    Cookies.remove("authToken", { path: "/" });
 
     // Clear user state from Zustand store
     clearUser();

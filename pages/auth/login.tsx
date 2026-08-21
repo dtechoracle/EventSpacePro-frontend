@@ -40,7 +40,7 @@ const Login = () => {
     }, false),
     onSuccess: (data) => {
       toast.success("Logged in successfully!");
-      Cookies.set("authToken", data.token);
+      Cookies.set("authToken", data.token, { path: "/" });
       
       // Redirect to the intended page or default to dashboard
       const redirectTo = router.query.redirect as string || "/dashboard";
