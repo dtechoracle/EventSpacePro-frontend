@@ -275,10 +275,16 @@ export default function CreateEventModal({
       if (initialTemplateData || (venueType === 'marquee' && selectedMarquee) || (venueType === 'preloaded' && selectedPreloadedVenue)) {
         try {
           const dataToApply = initialTemplateData || lastCanvasDataRef.current;
-          await apiRequest(`/projects/${selectedProjectId}/events/${eventId}`, "PUT", {
-            canvasData: dataToApply,
-            canvases: lastCanvasesRef.current // Ensure canvas dimensions are sync'd
-          }, true);
+          // Templates may use either canvasData or canvasAssets format
+          const putBody: any = {
+            canvases: lastCanvasesRef.current
+          };
+          if (dataToApply?.canvasAssets && Array.isArray(dataToApply.canvasAssets)) {
+            putBody.canvasAssets = dataToApply.canvasAssets;
+          } else {
+            putBody.canvasData = dataToApply;
+          }
+          await apiRequest(`/projects/${selectedProjectId}/events/${eventId}`, "PUT", putBody, true);
         } catch (e) {
           console.error("Failed to apply marquee/template/venue data", e);
           toast.error("Created event but failed to apply initial layout");

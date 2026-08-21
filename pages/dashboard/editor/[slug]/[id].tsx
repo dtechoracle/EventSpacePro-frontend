@@ -1740,94 +1740,76 @@ export default function Editor() {
             assetTypes: eventData.canvasAssets.map((a: any) => a.type),
           });
 
-          // CRITICAL: Always clear and load from database when opening an event
-          // This ensures we show the actual database data, not localStorage
-          console.log(`[Editor] Clearing workspace and loading from DATABASE`);
-          projectStore.reset();
-          projectStore.clearWorkspace();
+          // Categorize all canvasAssets by type first, then batch-load each category.
+          // This avoids 78+ individual Zustand state updates that cause race conditions
+          // with React rendering (assets invisible until next save triggers re-render).
+          const wallsToLoad: any[] = [];
+          const shapesToLoad: any[] = [];
+          const assetsToLoad: any[] = [];
+          const dimensionsToLoad: any[] = [];
+          const arrowsToLoad: any[] = [];
+          const annotationsToLoad: any[] = [];
 
-          // Load into sceneStore (new editor) - use the store's set method
-          useSceneStore.setState({ assets: eventData.canvasAssets });
-
-          // Always load canvasAssets from database into workspace
-          console.log(`[Editor] Converting canvasAssets to workspace format:`, {
-            canvasAssetsCount: eventData.canvasAssets.length,
-          });
-
-          let loadedCount = 0;
           eventData.canvasAssets.forEach((asset: AssetInstance | any) => {
+            // Dimensions
             if ((asset.itemType === 'dimension' || asset.type === 'dimension') && asset.startPoint && asset.endPoint) {
-              const existingDimension = projectStore.dimensions.find(d => d.id === asset.id);
-              if (!existingDimension) {
-                projectStore.addDimension({
-                  ...asset,
-                  id: asset.id,
-                  type: asset.dimensionType || asset.dimensionKind || 'linear',
-                  startPoint: asset.startPoint,
-                  endPoint: asset.endPoint,
-                  offset: asset.offset || 0,
-                  zIndex: asset.zIndex || 0,
-                }, true);
-                loadedCount++;
-              }
+              dimensionsToLoad.push({
+                ...asset,
+                id: asset.id,
+                type: asset.dimensionType || asset.dimensionKind || 'linear',
+                startPoint: asset.startPoint,
+                endPoint: asset.endPoint,
+                offset: asset.offset || 0,
+                zIndex: asset.zIndex || 0,
+              });
               return;
             }
 
+            // Label arrows
             if ((asset.itemType === 'label-arrow' || asset.type === 'label-arrow') && asset.startPoint && asset.endPoint) {
-              const existingArrow = projectStore.labelArrows.find(a => a.id === asset.id);
-              if (!existingArrow) {
-                projectStore.addLabelArrow({
-                  ...asset,
-                  id: asset.id,
-                  startPoint: asset.startPoint,
-                  endPoint: asset.endPoint,
-                  label: asset.label || '',
-                  zIndex: asset.zIndex || 0,
-                }, true);
-                loadedCount++;
-              }
+              arrowsToLoad.push({
+                ...asset,
+                id: asset.id,
+                startPoint: asset.startPoint,
+                endPoint: asset.endPoint,
+                label: asset.label || '',
+                zIndex: asset.zIndex || 0,
+              });
               return;
             }
 
+            // Text annotations
             if ((asset.itemType === 'text-annotation' || asset.type === 'text-annotation' || asset.itemType === 'textAnnotation' || asset.type === 'textAnnotation') && asset.text !== undefined) {
-              const existingAnnotation = projectStore.textAnnotations.find(t => t.id === asset.id);
-              if (!existingAnnotation) {
-                projectStore.addTextAnnotation({
-                  ...asset,
-                  id: asset.id,
-                  x: asset.x || 0,
-                  y: asset.y || 0,
-                  text: asset.text || '',
-                  zIndex: asset.zIndex || 0,
-                }, true);
-                loadedCount++;
-              }
+              annotationsToLoad.push({
+                ...asset,
+                id: asset.id,
+                x: asset.x || 0,
+                y: asset.y || 0,
+                text: asset.text || '',
+                zIndex: asset.zIndex || 0,
+              });
               return;
             }
 
-            // Handle wall-polygon type (new format)
+            // Wall-polygon type (new format)
             if (asset.type === 'wall-polygon') {
               const savedWall = asset.wallData || asset.wall;
               if (savedWall?.nodes?.length && savedWall?.edges?.length) {
-                const existingWall = projectStore.walls.find(w => w.id === asset.id);
-                if (!existingWall) {
-                  projectStore.addWall({
-                    ...savedWall,
-                    id: asset.id,
-                    name: savedWall.name || asset.name,
-                    nodes: savedWall.nodes,
-                    edges: savedWall.edges,
-                    fill: savedWall.fill ?? asset.fill ?? asset.backgroundColor,
-                    stroke: normalizeLegacyWallStroke(savedWall.stroke, asset.stroke, asset.strokeColor),
-                    strokeWidth: savedWall.strokeWidth ?? asset.strokeWidth ?? 2,
-                    fillType: savedWall.fillType ?? asset.fillType,
-                    fillTexture: savedWall.fillTexture ?? asset.fillTexture,
-                    fillTextureScale: savedWall.fillTextureScale ?? asset.fillTextureScale,
-                    fillTextureThickness: savedWall.fillTextureThickness ?? asset.fillTextureThickness,
-                    zIndex: savedWall.zIndex ?? asset.zIndex ?? 0,
-                  }, true);
-                  loadedCount++;
-                }
+                wallsToLoad.push({
+                  ...savedWall,
+                  id: asset.id,
+                  name: savedWall.name || asset.name,
+                  nodes: savedWall.nodes,
+                  edges: savedWall.edges,
+                  fill: savedWall.fill ?? asset.fill ?? asset.backgroundColor,
+                  stroke: normalizeLegacyWallStroke(savedWall.stroke, asset.stroke, asset.strokeColor),
+                  strokeWidth: savedWall.strokeWidth ?? asset.strokeWidth ?? 2,
+                  fillType: savedWall.fillType ?? asset.fillType,
+                  fillTexture: savedWall.fillTexture ?? asset.fillTexture,
+                  fillTextureScale: savedWall.fillTextureScale ?? asset.fillTextureScale,
+                  fillTextureThickness: savedWall.fillTextureThickness ?? asset.fillTextureThickness,
+                  zIndex: savedWall.zIndex ?? asset.zIndex ?? 0,
+                });
                 return;
               }
 
@@ -1837,7 +1819,6 @@ export default function Editor() {
                   x: node.x,
                   y: node.y,
                 }));
-
                 const wallEdges = asset.wallEdges.map((edge: any, idx: number) => ({
                   id: edge.id || `edge-${asset.id}-${idx}`,
                   nodeA: edge.nodeA || wallNodes[edge.a]?.id || '',
@@ -1845,9 +1826,8 @@ export default function Editor() {
                   thickness: edge.thickness ?? asset.wallThickness ?? 75,
                 })).filter((edge: any) => edge.nodeA && edge.nodeB);
 
-                const existingWall = projectStore.walls.find(w => w.id === asset.id);
-                if (!existingWall && wallNodes.length > 0 && wallEdges.length > 0) {
-                  projectStore.addWall({
+                if (wallNodes.length > 0 && wallEdges.length > 0) {
+                  wallsToLoad.push({
                     id: asset.id,
                     name: asset.name,
                     nodes: wallNodes,
@@ -1860,38 +1840,31 @@ export default function Editor() {
                     fillTextureScale: asset.fillTextureScale,
                     fillTextureThickness: asset.fillTextureThickness,
                     zIndex: asset.zIndex || 0,
-                  }, true);
-                  loadedCount++;
+                  });
                 }
                 return;
               }
 
               if (asset.wallPolygon && Array.isArray(asset.wallPolygon)) {
-              // Convert wall-polygon to wall format with nodes and edges
-              const wallNodes = asset.wallPolygon.map((point: any, idx: number) => ({
-                id: `node-${asset.id}-${idx}`,
-                x: asset.x + (point.x || 0),
-                y: asset.y + (point.y || 0),
-              }));
-
-              // Create edges connecting consecutive nodes
-              const wallEdges = [];
-              for (let i = 0; i < wallNodes.length; i++) {
-                const nextIdx = (i + 1) % wallNodes.length;
-                wallEdges.push({
-                  id: `edge-${asset.id}-${i}`,
-                  nodeA: wallNodes[i].id,
-                  nodeB: wallNodes[nextIdx].id,
-                  thickness: asset.wallThickness ?? 75,
-                });
-              }
-
-              if (wallNodes.length > 0 && wallEdges.length > 0) {
-                const existingWall = projectStore.walls.find(w => w.id === asset.id);
-                if (!existingWall) {
-                  projectStore.addWall({
+                const wallNodes = asset.wallPolygon.map((point: any, idx: number) => ({
+                  id: `node-${asset.id}-${idx}`,
+                  x: asset.x + (point.x || 0),
+                  y: asset.y + (point.y || 0),
+                }));
+                const wallEdges = [];
+                for (let i = 0; i < wallNodes.length; i++) {
+                  const nextIdx = (i + 1) % wallNodes.length;
+                  wallEdges.push({
+                    id: `edge-${asset.id}-${i}`,
+                    nodeA: wallNodes[i].id,
+                    nodeB: wallNodes[nextIdx].id,
+                    thickness: asset.wallThickness ?? 75,
+                  });
+                }
+                if (wallNodes.length > 0 && wallEdges.length > 0) {
+                  wallsToLoad.push({
                     id: asset.id,
-                    name: asset.name, // RESTORE NAME
+                    name: asset.name,
                     nodes: wallNodes,
                     edges: wallEdges,
                     fill: asset.fill ?? asset.backgroundColor,
@@ -1902,165 +1875,135 @@ export default function Editor() {
                     fillTextureScale: asset.fillTextureScale,
                     fillTextureThickness: asset.fillTextureThickness,
                     zIndex: asset.zIndex || 0
-                  }, true);
-                  loadedCount++;
+                  });
                 }
               }
-              }
+              return;
             }
-            // Check if it's a wall-segments (legacy format)
-            else if (asset.type === 'wall-segments' && asset.wallNodes && asset.wallEdges) {
-              // Convert to Wall format
+
+            // Wall-segments (legacy format)
+            if (asset.type === 'wall-segments' && asset.wallNodes && asset.wallEdges) {
               const wallNodes = asset.wallNodes.map((node: any, idx: number) => ({
                 id: `node-${asset.id}-${idx}`,
                 x: node.x,
                 y: node.y
               }));
-
               const wallEdges = asset.wallEdges.map((edge: any, idx: number) => ({
                 id: `edge-${asset.id}-${idx}`,
                 nodeA: wallNodes[edge.a]?.id || '',
                 nodeB: wallNodes[edge.b]?.id || '',
                 thickness: asset.wallThickness ?? 75
               }));
-
               if (wallNodes.length > 0 && wallEdges.length > 0) {
-                const existingWall = projectStore.walls.find(w => w.id === asset.id);
-                if (!existingWall) {
-                  projectStore.addWall({
-                    id: asset.id,
-                    name: asset.name, // RESTORE NAME
-                    nodes: wallNodes,
-                    edges: wallEdges,
-                    zIndex: asset.zIndex || 0
-                  }, true);
-                  loadedCount++;
-                  console.log(`[Editor] ✅ Loaded wall-segments from DATABASE:`, asset.id);
-                }
+                wallsToLoad.push({
+                  id: asset.id,
+                  name: asset.name,
+                  nodes: wallNodes,
+                  edges: wallEdges,
+                  zIndex: asset.zIndex || 0
+                });
               }
+              return;
             }
-            // Handle line-segment type (convert to line shape)
-            else if (asset.type === 'line-segment' && asset.startPoint && asset.endPoint) {
-              // Convert line-segment to line shape format
+
+            // Line-segment (convert to line shape)
+            if (asset.type === 'line-segment' && asset.startPoint && asset.endPoint) {
               const startX = asset.startPoint.x || asset.x;
               const startY = asset.startPoint.y || asset.y;
               const endX = asset.endPoint.x || (asset.x + asset.width);
               const endY = asset.endPoint.y || (asset.y + asset.height);
-
-              const existingShape = projectStore.shapes.find(s => s.id === asset.id);
-              if (!existingShape) {
-                projectStore.addShape({
-                  id: asset.id,
-                  type: 'line',
-                  x: (startX + endX) / 2, // Center point
-                  y: (startY + endY) / 2, // Center point
-                  width: Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2)), // Length
-                  height: 2, // Line thickness
-                  rotation: asset.rotation || 0,
-                  fill: asset.backgroundColor || 'transparent',
-                  stroke: asset.strokeColor || '#3B82F6',
-                  strokeWidth: asset.strokeWidth ?? 2,
-                  points: [
-                    { x: startX - (startX + endX) / 2, y: startY - (startY + endY) / 2 },
-                    { x: endX - (startX + endX) / 2, y: endY - (startY + endY) / 2 },
-                  ],
-                  zIndex: asset.zIndex || 0
-                }, true);
-                loadedCount++;
-                console.log(`[Editor] ✅ Loaded line-segment from DATABASE:`, asset.id);
-              }
+              shapesToLoad.push({
+                id: asset.id,
+                type: 'line',
+                x: (startX + endX) / 2,
+                y: (startY + endY) / 2,
+                width: Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2)),
+                height: 2,
+                rotation: asset.rotation || 0,
+                fill: asset.backgroundColor || 'transparent',
+                stroke: asset.strokeColor || '#3B82F6',
+                strokeWidth: asset.strokeWidth ?? 2,
+                points: [
+                  { x: startX - (startX + endX) / 2, y: startY - (startY + endY) / 2 },
+                  { x: endX - (startX + endX) / 2, y: endY - (startY + endY) / 2 },
+                ],
+                zIndex: asset.zIndex || 0
+              });
+              return;
             }
-            // Handle standard shape types (rectangle, ellipse, line, arrow, freehand)
-            else if (asset.type && ['rectangle', 'ellipse', 'line', 'arrow', 'freehand'].includes(asset.type)) {
-              // Convert to Shape format
-              const existingShape = projectStore.shapes.find(s => s.id === asset.id);
-              if (!existingShape) {
-                // Use reasonable defaults for missing dimensions
-                const defaultWidth = asset.width || 100;
-                const defaultHeight = asset.height || 100;
 
-                projectStore.addShape({
-                  ...asset, // BRING IN EVERYTHING!
-                  id: asset.id,
-                  name: asset.name, // RESTORE NAME
-                  type: asset.type as 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand',
-                  x: asset.x || 0,
-                  y: asset.y || 0,
-                  width: defaultWidth,
-                  height: defaultHeight,
-                  rotation: asset.rotation || 0,
-                  fill: asset.fillColor || asset.backgroundColor || asset.fill || "#3B82F6",
-                  stroke: asset.strokeColor || asset.stroke || "#1E40AF",
-                  strokeWidth: asset.strokeWidth ?? 2,
-                  points: asset.points,
-                  zIndex: asset.zIndex || 0
-                }, true);
+            // Standard shape types
+            if (asset.type && ['rectangle', 'ellipse', 'line', 'arrow', 'freehand'].includes(asset.type)) {
+              shapesToLoad.push({
+                ...asset,
+                id: asset.id,
+                name: asset.name,
+                type: asset.type as 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand',
+                x: asset.x || 0,
+                y: asset.y || 0,
+                width: asset.width || 100,
+                height: asset.height || 100,
+                rotation: asset.rotation || 0,
+                fill: asset.fillColor || asset.backgroundColor || asset.fill || "#3B82F6",
+                stroke: asset.strokeColor || asset.stroke || "#1E40AF",
+                strokeWidth: asset.strokeWidth ?? 2,
+                points: asset.points,
+                zIndex: asset.zIndex || 0
+              });
+              return;
+            }
 
-                console.log(`[Editor] ✅ Loaded ${asset.type} shape from DATABASE:`, {
-                  id: asset.id,
-                  x: asset.x,
-                  y: asset.y,
-                  width: defaultWidth,
-                  height: defaultHeight,
-                });
-                loadedCount++;
+            // Furniture / standard assets
+            if (asset.type) {
+              let defaultWidth = asset.width || 100;
+              let defaultHeight = asset.height || 100;
+              if (asset.type.includes('chair')) {
+                defaultWidth = asset.width || 80;
+                defaultHeight = asset.height || 80;
+              } else if (asset.type.includes('table') || asset.type.includes('cocktail')) {
+                defaultWidth = asset.width || 200;
+                defaultHeight = asset.height || 200;
               }
-            } else if (asset.type) {
-              // Convert to Asset format - load furniture/assets from database
-              const existingAsset = projectStore.assets.find(a => a.id === asset.id);
-              if (!existingAsset) {
-                // Use reasonable defaults based on asset type
-                // Chairs and tables typically need larger dimensions to be visible
-                let defaultWidth = asset.width || 100;
-                let defaultHeight = asset.height || 100;
-
-                // Set better defaults for common asset types
-                if (asset.type.includes('chair')) {
-                  defaultWidth = asset.width || 80;
-                  defaultHeight = asset.height || 80;
-                } else if (asset.type.includes('table') || asset.type.includes('cocktail')) {
-                  defaultWidth = asset.width || 200;
-                  defaultHeight = asset.height || 200;
-                }
-
-                projectStore.addAsset({
-                  ...asset, // BRING IN EVERYTHING!
-                  id: asset.id,
-                  name: asset.name, // RESTORE NAME
-                  type: asset.type,
-                  x: asset.x || 0,
-                  y: asset.y || 0,
-                  width: defaultWidth,
-                  height: defaultHeight,
-                  rotation: asset.rotation || 0,
-                  scale: asset.scale || 1,
-                  zIndex: asset.zIndex || 0,
-                }, true);
-
-                console.log(`[Editor] ✅ Loaded asset from DATABASE:`, {
-                  id: asset.id,
-                  type: asset.type,
-                  x: asset.x,
-                  y: asset.y,
-                  width: defaultWidth,
-                  height: defaultHeight,
-                });
-                loadedCount++;
-              }
+              assetsToLoad.push({
+                ...asset,
+                id: asset.id,
+                name: asset.name,
+                type: asset.type,
+                x: asset.x || 0,
+                y: asset.y || 0,
+                width: defaultWidth,
+                height: defaultHeight,
+                rotation: asset.rotation || 0,
+                scale: asset.scale || 1,
+                strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : 0.6,
+                zIndex: asset.zIndex || 0,
+              });
             }
           });
 
-          console.log(`[Editor] ✅ Loaded ${loadedCount} items from DATABASE into workspace`);
-          console.log(`[Editor] Workspace state after load:`, {
-            walls: projectStore.walls.length,
-            shapes: projectStore.shapes.length,
-            assets: projectStore.assets.length,
-          });
+          // Batch-load all categories at once — single Zustand state update per category
+          // instead of 78+ individual addAsset calls that race with React rendering.
+          if (wallsToLoad.length > 0) projectStore.addWallBatch(wallsToLoad, true);
+          if (shapesToLoad.length > 0) projectStore.addShapeBatch(shapesToLoad, true);
+          if (assetsToLoad.length > 0) projectStore.addAssetBatch(assetsToLoad, true);
+          dimensionsToLoad.forEach(d => projectStore.addDimension(d, true));
+          arrowsToLoad.forEach(a => projectStore.addLabelArrow(a, true));
+          annotationsToLoad.forEach(t => projectStore.addTextAnnotation(t, true));
+
           useProjectStore.setState((state) => ({
             ...state,
             comments: normalizedComments,
           }));
-          projectStore.markAsSaved();
+
+          const loadedCount = wallsToLoad.length + shapesToLoad.length + assetsToLoad.length + dimensionsToLoad.length + arrowsToLoad.length + annotationsToLoad.length;
+          console.log(`[Editor] ✅ Loaded ${loadedCount} items from DATABASE into workspace (batch)`, {
+            walls: wallsToLoad.length,
+            shapes: shapesToLoad.length,
+            assets: assetsToLoad.length,
+            dimensions: dimensionsToLoad.length,
+            arrows: arrowsToLoad.length,
+            annotations: annotationsToLoad.length,
+          });
           projectStore.markAsSaved();
         }
       } else {

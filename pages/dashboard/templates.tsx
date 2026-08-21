@@ -3,17 +3,16 @@ import React, { useState } from "react";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import { motion } from "framer-motion";
 import { TEMPLATES } from "@/lib/templates";
-import { apiRequest } from "@/helpers/Config";
 import { useRouter } from "next/router";
-import toast from "react-hot-toast";
 import TemplatePreview from "@/components/dashboard/TemplatePreview";
 import { BsSearch } from "react-icons/bs";
+import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
 
 const Templates = () => {
     const router = useRouter();
-    const [creating, setCreating] = useState<string | null>(null);
     const [hoveredTemplate, setHoveredTemplate] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
+    const [selectedTemplate, setSelectedTemplate] = useState<typeof TEMPLATES[0] | null>(null);
 
     const filteredTemplates = TEMPLATES.filter(t => t.canvasAssets).filter(t => {
         if (!searchQuery) return true;
@@ -23,49 +22,6 @@ const Templates = () => {
             t.category?.toLowerCase().includes(q) ||
             t.tags?.some(tag => tag.toLowerCase().includes(q));
     });
-
-    const handleUseTemplate = async (template: typeof TEMPLATES[0]) => {
-        setCreating(template.id);
-        try {
-            const projectsRes = await apiRequest('/projects', 'GET');
-            const list = Array.isArray(projectsRes) ? projectsRes : (projectsRes as any)?.data || [];
-            const HIDDEN_PROJECT_NAME = "Personal Drafts";
-            let target = list.find((p: any) => p.name === HIDDEN_PROJECT_NAME);
-            let projectSlug: string;
-
-            if (target) {
-                projectSlug = target.slug;
-            } else {
-                const res = await apiRequest("/projects", "POST", { name: HIDDEN_PROJECT_NAME, description: "Your private workspace for drafts" }, true);
-                projectSlug = res.data.slug;
-            }
-
-            const createRes = await apiRequest(`/projects/${projectSlug}/events`, "POST", {
-                name: "Untitled Event",
-                type: "Custom venue",
-                canvases: template.canvases,
-            }, true);
-
-            const eventId = createRes.data._id;
-
-            await apiRequest(`/projects/${projectSlug}/events/${eventId}`, "PUT", {
-                canvasAssets: template.canvasAssets,
-                canvases: template.canvases,
-            }, true);
-
-            router.push({
-                pathname: `/dashboard/editor/${projectSlug}/${eventId}`,
-                query: { fromTemplate: 'true' },
-            });
-
-            toast.success("Template loaded! Name your event when you save.");
-        } catch (e: any) {
-            console.error("Failed to create event from template", e);
-            toast.error(e?.message || "Failed to load template");
-        } finally {
-            setCreating(null);
-        }
-    };
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -122,21 +78,10 @@ const Templates = () => {
                                         <motion.button
                                             initial={{ scale: 0.8 }}
                                             animate={{ scale: hoveredTemplate === template.id ? 1 : 0.8 }}
-                    onClick={() => handleUseTemplate(template)}
-                    disabled={creating === template.id}
-                                            className="bg-white text-gray-900 font-semibold px-6 py-3 rounded-xl shadow-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                            onClick={() => setSelectedTemplate(template)}
+                                            className="bg-white text-gray-900 font-semibold px-6 py-3 rounded-xl shadow-lg hover:bg-gray-50 transition-colors"
                                         >
-                                            {creating === template.id ? (
-                                                <span className="flex items-center gap-2">
-                                                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                                    </svg>
-                                                    Creating...
-                                                </span>
-                                            ) : (
-                                                "Use template"
-                                            )}
+                                            Use template
                                         </motion.button>
                                     </motion.div>
                                     {/* Category badge */}
@@ -187,6 +132,17 @@ const Templates = () => {
                     )}
                 </div>
             </div>
+
+            {/* Template event creation modal — asks for event name before creating */}
+            {selectedTemplate && (
+                <CreateEventModal
+                    onClose={() => setSelectedTemplate(null)}
+                    initialTemplateData={{
+                        canvasAssets: selectedTemplate.canvasAssets,
+                        canvases: selectedTemplate.canvases,
+                    }}
+                />
+            )}
         </div>
     );
 };
