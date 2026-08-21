@@ -321,17 +321,20 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             definition.path.toLowerCase().includes('10 seater round table 02.svg') ||
             definition.path.toLowerCase().includes('6 seater l shaped sofa.svg')
         );
-    const prefersLiveSvgAtDefaultStroke =
-        !isPreview &&
-        ((asset.strokeWidth !== undefined && Math.abs(asset.strokeWidth - DEFAULT_ASSET_STROKE_WIDTH) <= 0.001) ||
-            asset.strokeWidth === undefined);
     const hasCustomSubColors = Boolean((asset as any).tableColor || (asset as any).chairColor);
+    const hasCustomColors = hasCustomSubColors || !canRenderAssetAsImage(asset, isPreview);
+    // Only use SVG processing when the asset has custom fill/stroke colors that
+    // need CSS variable overrides. Default-styled assets use the fast raster
+    // path so their original SVG appearance (fills, strokes) is preserved.
+    // Previously, prefersLiveSvgAtDefaultStroke blocked the fast path for ALL
+    // assets with default strokeWidth, forcing them through SVG processing that
+    // stripped original fills and replaced them with CSS vars resolving to
+    // "transparent" — making assets invisible until save.
     const canUseFastImage =
         !!assetPath &&
         !asset.isExploded &&
         !disableFastImageForAsset &&
-        !prefersLiveSvgAtDefaultStroke &&
-        !hasCustomSubColors &&
+        !hasCustomColors &&
         canRenderAssetAsImage(asset, isPreview);
     const fastImageHref = canUseFastImage && rasterAssetPath && !rasterImageFailed ? rasterAssetPath : assetPath;
 

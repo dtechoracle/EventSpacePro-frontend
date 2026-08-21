@@ -258,7 +258,7 @@ const Dashboard = () => {
 
           {/* Recent Events Section */}
           <section className="mb-16">
-            {!isLoading && (filteredProjects.length === 0) && recentEvents.length === 0 && !searchQuery ? (
+            {!isLoading && !isLoadingEvents && (filteredProjects.length === 0) && recentEvents.length === 0 && !searchQuery ? (
               <div className="w-full bg-white rounded-xl border border-gray-200 p-8 my-4">
                 <div className="max-w-2xl">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-blue-50 text-blue-600 text-xs font-semibold mb-4 border border-blue-100">
