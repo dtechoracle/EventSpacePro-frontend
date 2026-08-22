@@ -688,25 +688,29 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                 strokeDasharray={overlayDash}
                 vectorEffect="non-scaling-stroke" 
                 onMouseDown={allowOverlayMove ? (e) => {
-                    if (e.shiftKey) return; // Ignore on shift to allow selecting elements beneath
+                    // Check if there is an unselected item directly underneath the click point
+                    const { x: worldX, y: worldY } = screenToWorld(e.clientX, e.clientY);
+                    const store = useProjectStore.getState();
+                    const selectedSet = new Set(selectedIds);
+                    
+                    // Hit test shapes, assets, text, walls that are NOT currently selected
+                    const hitUnselectedShape = store.shapes.find(s => !selectedSet.has(s.id) && Math.abs(worldX - s.x) <= s.width/2 && Math.abs(worldY - s.y) <= s.height/2);
+                    const hitUnselectedAsset = store.assets.find(a => !a.isExploded && !selectedSet.has(a.id) && Math.abs(worldX - a.x) <= (a.width * (a.scale || 1))/2 && Math.abs(worldY - a.y) <= (a.height * (a.scale || 1))/2);
+                    const hitUnselectedText = store.textAnnotations.find(t => !selectedSet.has(t.id) && Math.abs(worldX - t.x) <= (t.text.length * (t.fontSize || 250) * 0.3) && Math.abs(worldY - t.y) <= (t.fontSize || 250) * 0.6);
+
+                    if (hitUnselectedShape || hitUnselectedAsset || hitUnselectedText) {
+                      // Do not capture drag on overlay — let event pass to underlying item selection
+                      return;
+                    }
+
+                    if (e.shiftKey) return;
                     handleMouseDown(e, 'move');
                 } : undefined} 
                 style={{ 
                     cursor: allowOverlayMove ? 'move' : 'default', 
-                    pointerEvents: (allowOverlayMove) ? 'auto' : 'none' 
+                    pointerEvents: allowOverlayMove ? 'auto' : 'none' 
                 }}
                 className="select-overlay-polygon"
-                onPointerDown={(e) => {
-                    if (e.shiftKey) {
-                        // Pass pointer-events dynamically on shift click
-                        const target = e.currentTarget;
-                        target.style.pointerEvents = 'none';
-                        // Re-enable after click loop ends to keep draggable behavior intact
-                        setTimeout(() => {
-                            target.style.pointerEvents = 'auto';
-                        }, 50);
-                    }
-                }}
             />
             
             {!selectedItems.some(it => (it.type === 'shape' || it.type === 'asset') && (it.object as any).fixedSize) && ['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w'].map(h => {

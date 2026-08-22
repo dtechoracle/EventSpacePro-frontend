@@ -2282,17 +2282,11 @@ export default function Workspace2D({
           };
 
           const topAssetHit = findTopAssetAtPoint(worldX, worldY);
-          const assetHitRenderable = topAssetHit
-            ? { ...topAssetHit.item, _renderType: 'asset' as const }
-            : null;
-          const hitRenderables = assetHitRenderable
-            ? [
-                ...visibleRenderables.filter((item) => item.id !== assetHitRenderable.id),
-                assetHitRenderable,
-              ].sort((a, b) => ((a as any).zIndex || 0) - ((b as any).zIndex || 0))
-            : visibleRenderables;
+
+          const hitRenderables = visibleRenderables;
 
           // Check visible/spatially indexed items from front to back.
+          let pendingAlreadySelected: { item: any; idsToSelect: string[] } | null = null;
           for (let i = hitRenderables.length - 1; i >= 0; i--) {
             const item = hitRenderables[i];
             
@@ -2371,8 +2365,8 @@ export default function Workspace2D({
                   }
                 }
               } else {
-                const halfW = shape.width / 2, halfH = shape.height / 2;
-                if (worldX >= shape.x - halfW && worldX <= shape.x + halfW && worldY >= shape.y - halfH && worldY <= shape.y + halfH) isHit = true;
+                const halfW = (shape.width || 0) / 2, halfH = (shape.height || 0) / 2;
+                if (worldX >= (shape.x || 0) - halfW && worldX <= (shape.x || 0) + halfW && worldY >= (shape.y || 0) - halfH && worldY <= (shape.y || 0) + halfH) isHit = true;
               }
             } else if (item._renderType === 'asset') {
               const asset = item;
@@ -2397,8 +2391,9 @@ export default function Workspace2D({
                     isHit = true;
                   }
                 } else {
-                  const halfW = (asset.width * asset.scale) / 2, halfH = (asset.height * asset.scale) / 2;
-                  if (worldX >= asset.x - halfW && worldX <= asset.x + halfW && worldY >= asset.y - halfH && worldY <= asset.y + halfH) isHit = true;
+                  const halfW = ((asset.width || 0) * (asset.scale || 1)) / 2;
+                  const halfH = ((asset.height || 0) * (asset.scale || 1)) / 2;
+                  if (worldX >= (asset.x || 0) - halfW && worldX <= (asset.x || 0) + halfW && worldY >= (asset.y || 0) - halfH && worldY <= (asset.y || 0) + halfH) isHit = true;
                 }
               }
             } else if (item._renderType === 'wall') {
@@ -2444,17 +2439,9 @@ export default function Workspace2D({
               const idsToSelect = resolveIdsWithGroups([item.id]);
               if (activeTool !== 'trim-to-blend' && !e.shiftKey) {
                 if (idsToSelect.some(id => selectedIds.includes(id))) {
-                  saveToHistory();
-                  setIsDraggingItem(true);
-                  setDragging(true);
-                  const dragPoint = { x: worldX, y: worldY };
-                  draggedItemStartRef.current = dragPoint;
-                  setDraggedItemStart(dragPoint);
-                  if (shouldUseDragPreviewForIds(selectedIds)) {
-                    const preview = { ids: [...selectedIds], dx: 0, dy: 0 };
-                    dragPreviewRef.current = preview;
-                    setDragPreview(preview);
-                  }
+                  // Already selected — save it but keep looking for unselected items on top.
+                  // Do NOT return here; continue the loop to find an unselected item underneath.
+                  pendingAlreadySelected = { item, idsToSelect };
                 } else {
                   handleItemSelection([item.id], e.shiftKey, { x: worldX, y: worldY });
                   // Allow immediate drag on first click if not shifting
@@ -2470,34 +2457,59 @@ export default function Workspace2D({
                       setDragPreview(preview);
                     }
                   }
+                  itemSelected = true;
+                  return;
                 }
               } else {
                 handleItemSelection([item.id], e.shiftKey, { x: worldX, y: worldY });
+                itemSelected = true;
+                return;
               }
-              itemSelected = true;
-              return;
             }
           }
 
 
 
           if (!itemSelected) {
-            // Clear selection and any auto-generated wall dimensions when clicking empty space
-            clearSelection();
-            setPendingBlend(null);
-            setSelectedEdgeId(null);
+            // Fallback: if a top asset is under the cursor (spatial index), select it.
+            // Mirrors the hover fallback so click always matches highlight.
+            if (topAssetHit && activeTool !== 'trim-to-blend') {
+              const asset = topAssetHit.item;
+              const halfW = ((asset.width || 0) * (asset.scale || 1)) / 2;
+              const halfH = ((asset.height || 0) * (asset.scale || 1)) / 2;
+              if (worldX >= (asset.x || 0) - halfW && worldX <= (asset.x || 0) + halfW && worldY >= (asset.y || 0) - halfH && worldY <= (asset.y || 0) + halfH) {
+                handleItemSelection([asset.id], e.shiftKey, { x: worldX, y: worldY });
+                itemSelected = true;
+                return;
+              }
+            }
+            // If we found an already-selected item but nothing unselected on top, start dragging it
+            if (pendingAlreadySelected) {
+              const { item, idsToSelect } = pendingAlreadySelected;
+              saveToHistory();
+              setIsDraggingItem(true);
+              setDragging(true);
+              const dragPoint = { x: worldX, y: worldY };
+              draggedItemStartRef.current = dragPoint;
+              setDraggedItemStart(dragPoint);
+              if (shouldUseDragPreviewForIds(idsToSelect)) {
+                const preview = { ids: [...idsToSelect], dx: 0, dy: 0 };
+                dragPreviewRef.current = preview;
+                setDragPreview(preview);
+              }
+            } else {
+              // Clear selection and any auto-generated wall dimensions when clicking empty space
+              clearSelection();
+              setPendingBlend(null);
+              setSelectedEdgeId(null);
 
-            // If we are in wall mode but clicked empty space (and not drawing), we might want to ensure we are not stuck
-            // But usually wall mode allows drawing.
-            // The user issue "cant be unselected" suggests they want to clear selection.
-            // We just called clearSelection().
-
-            dimensions
-              .filter((d) => (d as any).type === 'wall')
-              .forEach((d) => removeDimension(d.id));
-            // Don't start selectionRect immediately to avoid 1x1 blue dots on simple clicks
-            if (activeTool === 'select') {
-              setDragStart({ x: e.clientX, y: e.clientY }); // Flag that we might start a selection
+              dimensions
+                .filter((d) => (d as any).type === 'wall')
+                .forEach((d) => removeDimension(d.id));
+              // Don't start selectionRect immediately to avoid 1x1 blue dots on simple clicks
+              if (activeTool === 'select') {
+                setDragStart({ x: e.clientX, y: e.clientY }); // Flag that we might start a selection
+              }
             }
           }
         } else if (activeTool === 'pan') {

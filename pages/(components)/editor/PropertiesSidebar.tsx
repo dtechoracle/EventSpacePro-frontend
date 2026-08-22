@@ -2768,6 +2768,18 @@ export default function PropertiesSidebar(): React.JSX.Element {
                         </select>
                       </div>
                     </div>
+
+                    <div className="mt-2">
+                      <label className="block text-xs text-gray-500 mb-1">Head Size</label>
+                      <input
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={(selectedLabelArrow as any).arrowHeadSize || 1}
+                        onChange={(e) => updateLabelArrow(selectedLabelArrow.id, { arrowHeadSize: Number(e.target.value) })}
+                        className="sidebar-input w-full text-xs"
+                      />
+                    </div>
                   </div>
                 )}
 
