@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+﻿import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import AuthLayout from "../layouts/AuthLayout";
@@ -15,26 +15,53 @@ const OtpVerification = () => {
   const router = useRouter();
   const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const hasAutoResent = useRef(false);
 
   const buttonColor = "var(--accent)";
+
+  useEffect(() => {
+    const stored = localStorage.getItem("email");
+    if (stored) setEmail(stored);
+  }, []);
+
+  // Auto-resend OTP on mount
+  useEffect(() => {
+    if (!email || hasAutoResent.current) return;
+    hasAutoResent.current = true;
+    setSending(true);
+    apiRequest("/auth/request-otp", "POST", { email }, false)
+      .then(() => toast.success("Verification code sent!", { duration: 2000 }))
+      .catch((err) => toast.error(err.message || "Failed to send code"))
+      .finally(() => setSending(false));
+  }, [email]);
+
+  const handleResend = async () => {
+    if (!email) {
+      toast.error("No email found. Please sign up again.");
+      return;
+    }
+    try {
+      await apiRequest("/auth/request-otp", "POST", { email }, false);
+      toast.success("Verification code sent!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to resend code");
+    }
+  };
 
   const handleChange = (value: string, index: number) => {
     if (/^[0-9]?$/.test(value)) {
       const newOtp = [...otp];
       newOtp[index] = value;
       setOtp(newOtp);
-
-      // move to next box
       if (value && index < 5) {
         inputRefs.current[index + 1]?.focus();
       }
     }
   };
 
-  const handleKeyDown = (
-    e: React.KeyboardEvent<HTMLInputElement>,
-    index: number
-  ) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
     if (e.key === "Backspace" && !otp[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
@@ -49,8 +76,6 @@ const OtpVerification = () => {
         if (i < 6) newOtp[i] = char;
       });
       setOtp(newOtp);
-
-      // focus last filled input
       const lastIndex = pasted.length - 1;
       if (inputRefs.current[lastIndex]) {
         inputRefs.current[lastIndex]?.focus();
@@ -64,22 +89,22 @@ const OtpVerification = () => {
     mutationKey: ["auth-verify-otp"],
     mutationFn: async () => {
       const code = otp.join("");
-      const email = localStorage.getItem("email")
-      if (!email) router.push("/auth/signup")
+      if (!email) {
+        toast.error("No email found. Please sign up again.");
+        router.push("/auth/signup");
+        return;
+      }
       const res = await apiRequest("/auth/verify-otp", "POST", { email, otp: code }, false);
       return res;
     },
     onSuccess: async (data) => {
       toast.success("OTP verified successfully!");
       Cookies.set("authToken", data.token, { path: "/" });
-      
-      // Pre-fetch user state now that we have a valid authToken
       try {
         await useUserStore.getState().fetchUser();
       } catch (e) {
         console.error("Failed to pre-fetch user info on verify", e);
       }
-
       localStorage.removeItem("email");
       const verifyType = localStorage.getItem("verifyType");
       if (verifyType == "reset") {
@@ -100,25 +125,27 @@ const OtpVerification = () => {
       <div className="w-full h-full flex items-center justify-center">
         <div className="w-full max-w-md bg-white p-8 flex flex-col items-center">
           <div className="mb-12 lg:hidden">
-            <Image
-              alt=""
-              src={"/assets/mainLogo.svg"}
-              width={200}
-              height={200}
-            />
+            <Image alt="" src={"/assets/mainLogo.svg"} width={200} height={200} />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">OTP Verification</h1>
           <p className="text-black/75 font-medium text-sm mt-1">
-            Enter the 6-digit code sent to your email
+            Enter the 6-digit code sent to
           </p>
+          {email ? (
+            <p className="text-sm font-semibold text-gray-900 mt-0.5">{email}</p>
+          ) : (
+            <p className="text-sm text-red-500 mt-0.5">No email found. Please go back to sign up.</p>
+          )}
+
+          {sending && (
+            <p className="text-xs text-gray-400 mt-2">Sending verification code...</p>
+          )}
 
           <div className="flex gap-3 mt-8">
             {otp.map((digit, i) => (
               <motion.input
                 key={i}
-                ref={(el) => {
-                  inputRefs.current[i] = el;
-                }}
+                ref={(el) => { inputRefs.current[i] = el; }}
                 type="text"
                 maxLength={1}
                 value={digit}
@@ -126,14 +153,8 @@ const OtpVerification = () => {
                 onKeyDown={(e) => handleKeyDown(e, i)}
                 onPaste={handlePaste}
                 className="w-12 h-12 text-center text-lg rounded-lg border-2 focus:outline-none"
-                style={{
-                  borderColor: allFilled ? buttonColor : "#d1d5db", // gray-300
-                }}
-                animate={
-                  allFilled
-                    ? { scale: 1.1, borderColor: buttonColor }
-                    : { scale: 1 }
-                }
+                style={{ borderColor: allFilled ? buttonColor : "#d1d5db" }}
+                animate={allFilled ? { scale: 1.1, borderColor: buttonColor } : { scale: 1 }}
                 transition={{ type: "spring", stiffness: 300 }}
               />
             ))}
@@ -141,10 +162,18 @@ const OtpVerification = () => {
 
           <button
             onClick={() => mutation.mutate()}
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || !allFilled || !email}
             className="w-full mt-5 bg-[var(--accent)] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[var(--accent)] border-2 border-[var(--accent)] transition disabled:opacity-50"
           >
-            {mutation.isPending ? "Verifying" : "Verify OTP"}
+            {mutation.isPending ? "Verifying..." : "Verify OTP"}
+          </button>
+
+          <button
+            onClick={handleResend}
+            disabled={!email}
+            className="mt-4 text-sm text-[var(--accent)] font-medium hover:underline disabled:opacity-50"
+          >
+            Resend code
           </button>
         </div>
       </div>
@@ -153,4 +182,3 @@ const OtpVerification = () => {
 };
 
 export default OtpVerification;
-

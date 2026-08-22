@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import AuthLayout from "../layouts/AuthLayout";
 import { useRouter } from "next/router";
@@ -7,16 +7,6 @@ import toast from "react-hot-toast";
 import Cookies from "js-cookie";
 import { apiRequest } from "@/helpers/Config";
 import { AiOutlineEye, AiOutlineEyeInvisible } from "react-icons/ai";
-
-interface LoginResponse {
-  token: string;
-  data: {
-    _id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-  };
-}
 
 interface ApiError {
   message: string;
@@ -27,34 +17,78 @@ const Login = () => {
   const router = useRouter();
   const [form, setForm] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (lockoutSeconds > 0) {
+      timerRef.current = setInterval(() => {
+        setLockoutSeconds((prev) => {
+          if (prev <= 1) {
+            if (timerRef.current) clearInterval(timerRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [lockoutSeconds > 0]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const mutation = useMutation<LoginResponse, ApiError>({
+  const mutation = useMutation({
     mutationKey: ["auth-login"],
     mutationFn: () => apiRequest("/login", "POST", {
       email: form.email,
       password: form.password,
     }, false),
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
+      if (data?.code === "EMAIL_NOT_VERIFIED" || data?.data?.code === "EMAIL_NOT_VERIFIED") {
+        localStorage.setItem("email", form.email);
+        toast.error("Please verify your email first");
+        router.push("/auth/verify-email");
+        return;
+      }
+
+      if (!data?.token) {
+        toast.error("Login failed. No token received.");
+        return;
+      }
+
       toast.success("Logged in successfully!");
       Cookies.set("authToken", data.token, { path: "/" });
-      
-      // Redirect to the intended page or default to dashboard
       const redirectTo = router.query.redirect as string || "/dashboard";
       router.push(redirectTo);
     },
-    onError: (err) => {
-      const message =
-        err?.errors?.[0]?.message || err.message || "Login failed";
+    onError: (err: any) => {
+      const message = err?.errors?.[0]?.message || err.message || "Login failed";
+
+      if (message.includes("locked") || message.includes("Too many")) {
+        const retryAfter = err?.retryAfter || 875;
+        setLockoutSeconds(retryAfter);
+        toast.error("Account locked. Try again later.");
+        return;
+      }
+
+      if (message.includes("EMAIL_NOT_VERIFIED") || message.includes("verify your email")) {
+        localStorage.setItem("email", form.email);
+        toast.error("Please verify your email first");
+        router.push("/auth/verify-email");
+        return;
+      }
+
       toast.error(message);
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    localStorage.setItem("email", form.email);
     mutation.mutate();
   };
 
@@ -74,6 +108,17 @@ const Login = () => {
           <p className="text-black/75 font-medium text-sm mt-1">
             Log in to continue with us
           </p>
+
+          {lockoutSeconds > 0 && (
+            <div className="w-full mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-center">
+              <p className="text-sm text-red-600 font-medium">
+                Account temporarily locked
+              </p>
+              <p className="text-xs text-red-500 mt-1">
+                Try again in <span className="font-mono font-bold">{Math.floor(lockoutSeconds / 60)}:{(lockoutSeconds % 60).toString().padStart(2, "0")}</span>
+              </p>
+            </div>
+          )}
 
           <button className="mt-6 w-full flex items-center justify-center gap-2 border rounded-lg py-2 hover:bg-gray-50">
             <Image
@@ -128,7 +173,7 @@ const Login = () => {
 
             <button
               type="submit"
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || lockoutSeconds > 0}
               className="w-full bg-[var(--accent)] text-white py-2 rounded-lg font-medium hover:bg-white hover:text-[var(--accent)] border-2 border-[var(--accent)] transition disabled:opacity-50"
             >
               {mutation.isPending ? "Logging In..." : "Log In"}
@@ -153,7 +198,6 @@ const Login = () => {
               Reset here
             </p>
           </span>
-
         </div>
       </div>
     </AuthLayout>
@@ -161,4 +205,3 @@ const Login = () => {
 };
 
 export default Login;
-

@@ -33,8 +33,9 @@ const Signup = () => {
       return res.data;
     },
     onSuccess: () => {
+      const email = localStorage.getItem("email");
       toast.success("Account created successfully! OTP sent to your email");
-      router.push("/auth/verify-otp");
+      router.push(`/auth/verify-email${email ? `?email=${encodeURIComponent(email)}` : ""}`);
     },
     onError: (err: ApiError) => {
       toast.error(err.message || "Signup failed");
