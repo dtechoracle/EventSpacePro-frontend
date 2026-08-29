@@ -62,6 +62,8 @@ import { TEXT_STYLE_FONTS, ensureGoogleFontsLoaded } from '@/utils/googleFonts';
 interface Workspace2DProps {
   width?: number;
   height?: number;
+  projectId?: string;
+  eventId?: string;
 }
 
 const getWallRenderKey = (wall: Wall | (Wall & { _renderType?: 'wall' })) => {
@@ -681,7 +683,9 @@ RenderLayer.displayName = 'RenderLayer';
 
 export default function Workspace2D({
   width = 1200,
-  height = 800
+  height = 800,
+  projectId,
+  eventId,
 }: Workspace2DProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
@@ -843,7 +847,7 @@ export default function Workspace2D({
 
 
   
-  const { activeUsers, updateCursor, updateTyping } = useCollaboration(undefined, undefined);
+  const { activeUsers, updateCursor, updateTyping, roomId, isConnected, hasJoined } = useCollaboration(projectId, eventId);
 
 
   const activeTool = useEditorStore(s => s.activeTool);
@@ -2854,6 +2858,9 @@ export default function Workspace2D({
     setDraggedItemStart(null);
     setDraggedPoint(null);
     setSnapGuides([]); // Clear snap guides
+
+    // Trigger state change notification so Yjs CRDT room syncs the item's final drag position
+    useProjectStore.setState((s) => ({ ...s }));
   }, [setPanning, setDragging, selectionRect, shapes, assetSpatialIndex, walls, textAnnotations, labelArrows, dimensions, batchUpdateItems, clearDragPreview, setSelectedIds, selectMultipleAssets, setSnapGuides, draggedPoint, clearSelection, setPan, zoom, placementMode, addWall, addAsset, addShape, setPlacementMode, resolveIdsWithGroups, updateTyping, pendingImportShape, setPendingImportShape]);
 
   const handleAssetDrop = useCallback(
@@ -4360,6 +4367,22 @@ export default function Workspace2D({
         </div>
       )}
 
+      {/* Floating Debug Panel */}
+      <div className="absolute top-16 left-4 z-50 bg-slate-900/90 text-white rounded-lg p-3 text-xs border border-white/20 shadow-lg pointer-events-auto flex flex-col gap-1.5 font-mono select-none">
+        <div className="font-semibold text-slate-300 border-b border-white/10 pb-1">Collab Status</div>
+        <div>Socket: <span className={isConnected ? "text-green-400 font-bold" : "text-red-400 font-bold"}>{isConnected ? "Connected" : "Disconnected"}</span></div>
+        <div>Joined Room: <span className={hasJoined ? "text-green-400 font-bold" : "text-yellow-400 font-bold"}>{hasJoined ? "Yes" : "No"}</span></div>
+        <div className="max-w-[200px] truncate" title={roomId || "None"}>Room ID: {roomId || "None"}</div>
+        <div>Shapes count: {shapes.length}</div>
+        <div>Assets count: {assets.length}</div>
+        <div>Active Users: {activeUsers.length}</div>
+      </div>
+
+      {/* Remote Cursors Overlay */}
+      <div className="absolute inset-0 pointer-events-none z-[1000]">
+        <CursorOverlay cursors={activeUsers} />
+      </div>
+
       <svg
         width={viewportSize.width}
         height={viewportSize.height}
@@ -4367,8 +4390,6 @@ export default function Workspace2D({
         data-workspace-root="true"
       >
         <TexturePatternDefs />
-        {/* Remote Cursors and User Awareness */}
-        <CursorOverlay cursors={activeUsers} />
         <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>
           <SnapMarkersRenderer />
 

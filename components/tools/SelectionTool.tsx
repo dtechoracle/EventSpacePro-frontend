@@ -466,6 +466,15 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
                 const sX = (nMaxX - nMinX) / iW, sY = (nMaxY - nMinY) / iH;
                 const newNodes = initialWall.nodes.map(n => ({ ...n, x: nMinX + (n.x - minX) * sX, y: nMinY + (n.y - minY) * sY }));
             store.updateWall(item.id, { nodes: newNodes }, true);
+            } else if (item.type === 'dimension') {
+                const initialDim = item.object as Dimension;
+                if (dragHandle === 'w') {
+                    const newStart = { x: initialDim.startPoint.x + finalDx, y: initialDim.startPoint.y + finalDy };
+                    store.updateDimension(item.id, { startPoint: newStart }, true);
+                } else if (dragHandle === 'e') {
+                    const newEnd = { x: initialDim.endPoint.x + finalDx, y: initialDim.endPoint.y + finalDy };
+                    store.updateDimension(item.id, { endPoint: newEnd }, true);
+                }
             }
         });
     }, [dragHandle, initialState, screenToWorld, selectedIds, zoom, assetSpatialIndex]);

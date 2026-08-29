@@ -21,13 +21,18 @@ import { downloadDxf } from "@/lib/dxfExport";
 
 type ExportFormat = "pdf" | "png" | "jpg" | "jpeg" | "dxf";
 
+import { PRELOADED_VENUES } from "@/lib/preloadedVenues";
+
 const svgCache: Record<string, string> = {};
 const typeIconCache: Record<string, HTMLImageElement> = {};
-const assetTypesWithSvgPaths = new Set(
-  ASSET_LIBRARY
+const assetTypesWithSvgPaths = new Set([
+  ...ASSET_LIBRARY
+    .filter(item => !!item.path)
+    .flatMap(item => [item.id, item.name].filter(Boolean) as string[]),
+  ...PRELOADED_VENUES
     .filter(item => !!item.path)
     .flatMap(item => [item.id, item.name].filter(Boolean) as string[])
-);
+]);
 
 const EXPORT_DPI = 300; 
 
@@ -145,7 +150,9 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
     const isFreehand = asset.type === 'freehand';
     if (isShape || isWall || isFreehand) return;
 
-    const definition = ASSET_LIBRARY.find(item => item.id === asset.type || item.name === asset.type);
+    const libItem = ASSET_LIBRARY.find(item => item.id === asset.type || item.name === asset.type);
+    const venueItem = !libItem ? PRELOADED_VENUES.find(item => item.id === asset.type || item.name === asset.type) : null;
+    const definition: any = libItem || (venueItem ? { ...venueItem, category: 'Venue', label: venueItem.name } : null);
     if (!definition) {
       console.warn(`Definition not found for type: ${asset.type}`);
       return;
@@ -182,12 +189,29 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
         }
       }
 
-      if (!svg) return;
-
       let processedSvg = svg;
+      const isVenue = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
       const fill = asset.fillColor || 'transparent';
-      const stroke = asset.strokeColor || '#000000';
-      const exportStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : 0.5;
+      const stroke = asset.strokeColor || (isVenue ? 'inherit' : '#000000');
+      const exportStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : (isVenue ? 'inherit' : 0.5);
+
+      if (isVenue) {
+        // Venue SVGs contain essential structural lines and colored open paths (e.g., red dome walls).
+        // Preserve their original SVG strokes and fills so they render perfectly in exports.
+        const blob = new Blob([processedSvg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        const isOk = await new Promise<boolean>((resolve) => {
+          const timeout = setTimeout(() => resolve(false), 5000);
+          img.onload = () => { clearTimeout(timeout); resolve(img.naturalWidth > 0 || img.width > 0); };
+          img.onerror = () => { clearTimeout(timeout); resolve(false); };
+          img.src = url;
+        });
+        if (isOk) {
+          loadedImages.set(asset.id, img);
+          return;
+        }
+      }
 
       // ROBUST DOM-BASED PROCESSING (Matches AssetRenderer.tsx logic)
       try {
@@ -1310,23 +1334,21 @@ const renderAssetToCanvas = (
           )
           .map(asset => asset.id)
       );
-      const canvasBackedAssetsToDraw = assetsToExport
-        .filter(asset => canvasBackedAssetIds.has(asset.id))
-        .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+      const loadedImages = await loadSvgAssets(assetsToExport);
       const wallSegmentsToDraw = assetsToExport
         .filter(asset => asset.type === 'wall-segments')
         .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
       if (workspaceSnapshot) {
         wallSegmentsToDraw.forEach(a => renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, new Map(), { wallFillOnly: true }));
-        if (canvasBackedAssetsToDraw.length > 0) {
-          const loadedImages = await loadSvgAssets(canvasBackedAssetsToDraw);
-          canvasBackedAssetsToDraw.forEach(a => renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages));
-        }
         ctx.drawImage(workspaceSnapshot, 0, 0, sourceCanvas.width, sourceCanvas.height);
+        // Overlay assets (including preloaded venues) to guarantee crisp SVG/image rendering
+        assetsToExport.forEach(a => {
+          if (a.type !== 'wall-segments') {
+            renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages);
+          }
+        });
       } else {
-        const loadedImages = await loadSvgAssets(assetsToExport);
-
         // Fallback: redraw items manually if the live workspace snapshot is unavailable
         assetsToExport.forEach(a => renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages));
       }

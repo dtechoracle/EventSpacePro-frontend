@@ -9,14 +9,11 @@ import { apiRequest } from "@/helpers/Config";
 import {
   CollaborationHttpUser,
   CollaborationStatusPayload,
-  forceSyncCollaborationRoom,
-  getCollaborationStatus,
-  getCollaborationUsers,
   initCollaborationSession,
 } from "@/lib/collaborationApi";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API || "http://localhost:3001";
-const SOCKET_BASE_URL = process.env.NEXT_PUBLIC_WS_BASE_URL || API_BASE_URL || "http://localhost:3001";
+const SOCKET_BASE_URL = process.env.NEXT_PUBLIC_WS_BASE_URL || API_BASE_URL?.replace(/\/api\/?$/, '') || "http://localhost:3001";
 
 export type UserPresence = {
   userId: string;
@@ -27,6 +24,7 @@ export type UserPresence = {
   color: string;
   lastSeen: string;
   role?: string;
+  sessionId?: string;
 };
 
 const resolveProjectRecord = async (slug: string) => {
@@ -46,6 +44,14 @@ const normalizeUpdatePayload = (payload: any): Uint8Array | null => {
   if (source instanceof Uint8Array) return source;
   if (Array.isArray(source)) return Uint8Array.from(source);
   if (typeof source === "object" && Array.isArray(source.data)) return Uint8Array.from(source.data);
+  if (typeof source === "string") {
+    try {
+      const binary = atob(source);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes;
+    } catch { return null; }
+  }
   return null;
 };
 
@@ -69,11 +75,15 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
   const socketRef = useRef<Socket | null>(null);
   const roomIdRef = useRef<string | null>(null);
   const cursorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const statusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeUsersSignatureRef = useRef("");
   const lastCursorSentAtRef = useRef(0);
   const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
+  const userInfoCacheRef = useRef<Map<string, { userName?: string; userAvatar?: string }>>(new Map());
+  const resolvedProjectIdRef = useRef<string | null>(projectId || null);
+  const hasJoinedRef = useRef(false);
+  const isInitializedRef = useRef(false);
+  const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
+  const isRemoteUpdatingRef = useRef(false);
 
   const user = useUserStore((s) => s.user);
   const router = useRouter();
@@ -81,37 +91,35 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
   const effectiveProjectSlug = router.query.slug as string | undefined;
   const effectiveEventId = eventId || (router.query.id as string | undefined);
 
-  const getUserColor = useCallback((userId: string) => {
-    let hash = 0;
-    for (let i = 0; i < userId.length; i++) {
-      hash = userId.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const h = Math.abs(hash) % 360;
-    return `hsl(${h}, 70%, 50%)`;
-  }, []);
-
   const mapPresenceUser = useCallback((rawUser: CollaborationHttpUser): UserPresence | null => {
     const userId = rawUser.userId || rawUser._id || rawUser.id || rawUser.email;
     if (!userId) return null;
 
-    const userName =
+    const cached = userInfoCacheRef.current.get(userId);
+
+    const rawName =
       rawUser.userName ||
       rawUser.name ||
       [rawUser?.user?.firstName, rawUser?.user?.lastName].filter(Boolean).join(" ").trim() ||
       rawUser.email ||
+      cached?.userName ||
       "Unknown User";
+    const userName = rawName.split(" ")[0] || rawName;
+
+    const userAvatar = rawUser.userAvatar || rawUser.avatar || rawUser?.user?.avatar || cached?.userAvatar;
 
     return {
       userId,
       userName,
-      userAvatar: rawUser.userAvatar || rawUser.avatar || rawUser?.user?.avatar,
+      userAvatar,
       cursor: rawUser.cursor,
       isTyping: rawUser.isTyping,
-      color: rawUser.color || getUserColor(userId),
+      color: rawUser.color || "#999999",
       lastSeen: rawUser.lastSeen || new Date().toISOString(),
       role: rawUser.role,
+      sessionId: (rawUser as any).sessionId || (rawUser as any).socketId,
     };
-  }, [getUserColor]);
+  }, []);
 
   const setPresenceUsers = useCallback((users: CollaborationHttpUser[]) => {
     const mapped = users
@@ -121,14 +129,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       .sort((a, b) => a.userId.localeCompare(b.userId));
 
     const signature = JSON.stringify(
-      mapped.map((activeUser) => [
-        activeUser.userId,
-        activeUser.cursor?.x ?? null,
-        activeUser.cursor?.y ?? null,
-        activeUser.isTyping ?? false,
-        activeUser.lastSeen,
-        activeUser.role ?? null,
-      ])
+      mapped.map((u) => [u.userId, u.cursor?.x ?? null, u.cursor?.y ?? null, u.isTyping ?? false, u.lastSeen])
     );
 
     if (signature !== activeUsersSignatureRef.current) {
@@ -149,14 +150,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       next.sort((a, b) => a.userId.localeCompare(b.userId));
 
       const signature = JSON.stringify(
-        next.map((activeUser) => [
-          activeUser.userId,
-          activeUser.cursor?.x ?? null,
-          activeUser.cursor?.y ?? null,
-          activeUser.isTyping ?? false,
-          activeUser.lastSeen,
-          activeUser.role ?? null,
-        ])
+        next.map((u) => [u.userId, u.cursor?.x ?? null, u.cursor?.y ?? null, u.isTyping ?? false, u.lastSeen])
       );
       activeUsersSignatureRef.current = signature;
       return next;
@@ -168,63 +162,28 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     setActiveUsers((prev) => {
       const next = prev.filter((entry) => entry.userId !== userId);
       const signature = JSON.stringify(
-        next.map((activeUser) => [
-          activeUser.userId,
-          activeUser.cursor?.x ?? null,
-          activeUser.cursor?.y ?? null,
-          activeUser.isTyping ?? false,
-          activeUser.lastSeen,
-          activeUser.role ?? null,
-        ])
+        next.map((u) => [u.userId, u.cursor?.x ?? null, u.cursor?.y ?? null, u.isTyping ?? false, u.lastSeen])
       );
       activeUsersSignatureRef.current = signature;
       return next;
     });
   }, []);
 
-  const refreshStatus = useCallback(async (explicitProjectId?: string) => {
-    const activeProjectId = explicitProjectId || resolvedProjectId;
-    if (!activeProjectId || !effectiveEventId) return null;
-    const status = await getCollaborationStatus(activeProjectId, effectiveEventId);
-    setCollaborationStatus(status);
-    if (status?.roomId) {
-      setRoomId(status.roomId);
-      roomIdRef.current = status.roomId;
-    }
-    const statusUsers = extractUserArray(status);
-    if (statusUsers.length > 0) setPresenceUsers(statusUsers);
-    return status;
-  }, [effectiveEventId, resolvedProjectId, setPresenceUsers]);
-
-  const refreshUsers = useCallback(async (explicitProjectId?: string) => {
-    const activeProjectId = explicitProjectId || resolvedProjectId;
-    if (!activeProjectId || !effectiveEventId) return [];
-    const usersPayload = await getCollaborationUsers(activeProjectId, effectiveEventId);
-    const users = extractUserArray(usersPayload);
-    if (users.length > 0) setPresenceUsers(users);
-    return users;
-  }, [effectiveEventId, resolvedProjectId, setPresenceUsers]);
-
-  const forceSync = useCallback(async () => {
-    if (!resolvedProjectId || !effectiveEventId) return null;
-    return forceSyncCollaborationRoom(resolvedProjectId, effectiveEventId);
-  }, [effectiveEventId, resolvedProjectId]);
-
   useEffect(() => {
     let isCancelled = false;
 
     const hydrateProjectId = async () => {
-      if (projectId) {
-        setResolvedProjectId(projectId);
-        return;
-      }
-
-      if (!effectiveProjectSlug) return;
+      const slug = projectId || effectiveProjectSlug;
+      if (!slug) return;
 
       try {
-        const project = await resolveProjectRecord(effectiveProjectSlug);
+        const project = await resolveProjectRecord(slug);
         const nextProjectId = project?._id || project?.id || null;
-        if (!isCancelled) setResolvedProjectId(nextProjectId);
+        console.log("[Collaboration] Resolved project:", slug, "->", nextProjectId);
+        if (!isCancelled && nextProjectId) {
+          resolvedProjectIdRef.current = nextProjectId;
+          setResolvedProjectId(nextProjectId);
+        }
       } catch (error) {
         console.error("[Collaboration] Failed to resolve project ID from slug:", error);
       }
@@ -243,7 +202,9 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     const token = Cookies.get("authToken");
     const ydoc = new Y.Doc();
     ydocRef.current = ydoc;
-    const isRemoteUpdating = { current: false };
+    hasJoinedRef.current = false;
+    isInitializedRef.current = false;
+    const isRemoteUpdating = isRemoteUpdatingRef;
 
     const yAssets = ydoc.getMap<any>("assets");
     const yWalls = ydoc.getMap<any>("walls");
@@ -256,6 +217,8 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     const yWallSegments = ydoc.getMap<any>("wallSegments");
     const yComments = ydoc.getMap<any>("comments");
 
+    // ─── Step 1: Connect socket with auth token ───
+    console.log("[Collaboration] Step 1: Connecting socket...");
     const socket = io(SOCKET_BASE_URL, {
       transports: ["websocket", "polling"],
       reconnection: true,
@@ -264,10 +227,128 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     });
     socketRef.current = socket;
 
+    // ─── Step 4 (inbound): Listen for yjs-sync / yjs-update ───
+    const hasAppliedInitialSync = { current: false };
+
+    const applyRemoteYUpdate = (payload: any, isInitialSync = false) => {
+      const update = normalizeUpdatePayload(payload);
+      if (!update) {
+        console.warn("[Collaboration] Received empty yjs update, payload:", Object.keys(payload || {}));
+        return;
+      }
+
+      if (isInitialSync && !hasAppliedInitialSync.current) {
+        hasAppliedInitialSync.current = true;
+        const store = useProjectStore.getState();
+        const storeItems = store.shapes.length + store.assets.length + store.walls.length +
+          store.textAnnotations.length + store.dimensions.length + store.labelArrows.length +
+          store.groups.length + store.wallSegments.length;
+        console.log("[Collaboration] Step 4: Initial yjs-sync check. Zustand state:", {
+          shapes: store.shapes.length,
+          assets: store.assets.length,
+          walls: store.walls.length,
+          totalItems: storeItems,
+          ydocShapes: yShapes.size,
+          ydocAssets: yAssets.size,
+          ydocWalls: yWalls.size,
+        });
+
+        if (storeItems > 0 && yShapes.size === 0 && yAssets.size === 0 && yWalls.size === 0) {
+          // Zustand has DB data but server Yjs is empty — push store into Ydoc
+          console.log("[Collaboration] Step 4: Server Yjs empty, pushing store → Ydoc");
+          ydoc.transact(() => {
+            store.shapes.forEach(s => yShapes.set(s.id, JSON.parse(JSON.stringify(s))));
+            store.assets.forEach(a => yAssets.set(a.id, JSON.parse(JSON.stringify(a))));
+            store.walls.forEach(w => yWalls.set(w.id, JSON.parse(JSON.stringify(w))));
+            store.textAnnotations.forEach(t => yAnnotations.set(t.id, JSON.parse(JSON.stringify(t))));
+            store.dimensions.forEach(d => yDimensions.set(d.id, JSON.parse(JSON.stringify(d))));
+            store.labelArrows.forEach(l => yArrows.set(l.id, JSON.parse(JSON.stringify(l))));
+            store.groups.forEach(g => yGroups.set(g.id, JSON.parse(JSON.stringify(g))));
+            store.wallSegments.forEach(s => yWallSegments.set(s.id, JSON.parse(JSON.stringify(s))));
+          }, "local-sync");
+          console.log("[Collaboration] Step 4: Pushed store → Ydoc. Ydoc shapes:", yShapes.size, "assets:", yAssets.size, "walls:", yWalls.size);
+          return;
+        }
+
+        if (storeItems === 0 && (yShapes.size > 0 || yAssets.size > 0 || yWalls.size > 0)) {
+          console.log("[Collaboration] Step 4: Zustand empty, server has data — applying yjs-sync");
+        } else if (storeItems > 0) {
+          console.log("[Collaboration] Step 4: Both store and server have data — applying yjs-sync (server wins)");
+        }
+      }
+
+      const storeBefore = useProjectStore.getState();
+      console.log("[Collaboration] DEBUG BEFORE Y.applyUpdate:", {
+        zustandShapes: storeBefore.shapes.length,
+        zustandAssets: storeBefore.assets.length,
+        zustandWalls: storeBefore.walls.length,
+        yShapesCount: yShapes.size,
+        yAssetsCount: yAssets.size,
+        yWallsCount: yWalls.size,
+        isInitialSync,
+      });
+
+      isRemoteUpdating.current = true;
+      Y.applyUpdate(ydoc, update, "remote-sync");
+      isRemoteUpdating.current = false;
+
+      const storeAfter = useProjectStore.getState();
+      console.log("[Collaboration] DEBUG AFTER Y.applyUpdate:", {
+        zustandShapes: storeAfter.shapes.length,
+        zustandAssets: storeAfter.assets.length,
+        zustandWalls: storeAfter.walls.length,
+        yShapesCount: yShapes.size,
+        yAssetsCount: yAssets.size,
+        yWallsCount: yWalls.size,
+        shapeDelta: storeAfter.shapes.length - storeBefore.shapes.length,
+        assetDelta: storeAfter.assets.length - storeBefore.assets.length,
+        wallDelta: storeAfter.walls.length - storeBefore.walls.length,
+      });
+    };
+
+    socket.on("yjs-sync", (payload) => {
+      console.log("[Collaboration] Step 4: Received yjs-sync — server confirms join");
+      applyRemoteYUpdate(payload, true);
+
+      // yjs-sync confirms we've joined the room. NOW safe to emit.
+      hasJoinedRef.current = true;
+      console.log("[Collaboration] Step 4: hasJoined = true — safe to emit");
+
+      // Push any store data that isn't in the Ydoc yet
+      if (!isInitializedRef.current) {
+        isInitializedRef.current = true;
+        const store = useProjectStore.getState();
+        const storeItems = store.shapes.length + store.assets.length + store.walls.length +
+          store.textAnnotations.length + store.dimensions.length + store.labelArrows.length +
+          store.groups.length + store.wallSegments.length;
+        if (storeItems > 0 && yShapes.size === 0 && yAssets.size === 0 && yWalls.size === 0) {
+          console.log("[Collaboration] Step 4: Post-join sync: pushing store → Ydoc (store has", storeItems, "items)");
+          ydoc.transact(() => {
+            store.shapes.forEach(s => yShapes.set(s.id, JSON.parse(JSON.stringify(s))));
+            store.assets.forEach(a => yAssets.set(a.id, JSON.parse(JSON.stringify(a))));
+            store.walls.forEach(w => yWalls.set(w.id, JSON.parse(JSON.stringify(w))));
+            store.textAnnotations.forEach(t => yAnnotations.set(t.id, JSON.parse(JSON.stringify(t))));
+            store.dimensions.forEach(d => yDimensions.set(d.id, JSON.parse(JSON.stringify(d))));
+            store.labelArrows.forEach(l => yArrows.set(l.id, JSON.parse(JSON.stringify(l))));
+            store.groups.forEach(g => yGroups.set(g.id, JSON.parse(JSON.stringify(g))));
+            store.wallSegments.forEach(s => yWallSegments.set(s.id, JSON.parse(JSON.stringify(s))));
+          }, "local-sync");
+        }
+      }
+    });
+
+    socket.on("yjs-update", (payload) => {
+      const updateSize = payload?.update?.length || payload?.data?.update?.length || 0;
+      console.log("[Collaboration] Step 6: Received yjs-update,", updateSize, "bytes");
+      applyRemoteYUpdate(payload, false);
+    });
+
+    // Yjs observers → Zustand (apply remote changes to local store)
     const applyYChangeToStore = (
       event: Y.YMapEvent<any>,
       storeAction: (id: string, data: any) => void,
-      removeAction: (id: string) => void
+      removeAction: (id: string) => void,
+      collectionName?: string
     ) => {
       if (event.transaction.origin === "local-sync") return;
 
@@ -280,97 +361,98 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
           removeAction(key);
         }
       });
+      useProjectStore.setState((s) => ({ ...s }));
       isRemoteUpdating.current = false;
     };
 
-    yAssets.observe((event) => applyYChangeToStore(
-      event,
+    yAssets.observe((event) => applyYChangeToStore(event,
       (id, data) => {
-        const existing = useProjectStore.getState().assets.find((asset) => asset.id === id);
+        const existing = useProjectStore.getState().assets.find((a) => a.id === id);
         if (existing) useProjectStore.getState().updateAsset(id, data, true);
         else useProjectStore.getState().addAsset(data, true);
       },
-      (id) => useProjectStore.getState().removeAsset(id, true)
+      (id) => useProjectStore.getState().removeAsset(id, true),
+      "assets"
     ));
 
-    yWalls.observe((event) => applyYChangeToStore(
-      event,
+    yWalls.observe((event) => applyYChangeToStore(event,
       (id, data) => {
-        const existing = useProjectStore.getState().walls.find((wall) => wall.id === id);
+        const existing = useProjectStore.getState().walls.find((w) => w.id === id);
         if (existing) useProjectStore.getState().updateWall(id, data, true);
         else useProjectStore.getState().addWall(data, true);
       },
-      (id) => useProjectStore.getState().removeWall(id, true)
+      (id) => useProjectStore.getState().removeWall(id, true),
+      "walls"
     ));
 
-    yShapes.observe((event) => applyYChangeToStore(
-      event,
+    yShapes.observe((event) => applyYChangeToStore(event,
       (id, data) => {
-        const existing = useProjectStore.getState().shapes.find((shape) => shape.id === id);
+        const existing = useProjectStore.getState().shapes.find((s) => s.id === id);
         if (existing) useProjectStore.getState().updateShape(id, data, true);
         else useProjectStore.getState().addShape(data, true);
       },
-      (id) => useProjectStore.getState().removeShape(id, true)
+      (id) => useProjectStore.getState().removeShape(id, true),
+      "shapes"
     ));
 
-    yAnnotations.observe((event) => applyYChangeToStore(
-      event,
+    yAnnotations.observe((event) => applyYChangeToStore(event,
       (id, data) => {
-        const existing = useProjectStore.getState().textAnnotations.find((annotation) => annotation.id === id);
+        const existing = useProjectStore.getState().textAnnotations.find((a) => a.id === id);
         if (existing) useProjectStore.getState().updateTextAnnotation(id, data, true);
         else useProjectStore.getState().addTextAnnotation(data, true);
       },
-      (id) => useProjectStore.getState().removeTextAnnotation(id, true)
+      (id) => useProjectStore.getState().removeTextAnnotation(id, true),
+      "textAnnotations"
     ));
 
-    yArrows.observe((event) => applyYChangeToStore(
-      event,
+    yArrows.observe((event) => applyYChangeToStore(event,
       (id, data) => {
-        const existing = useProjectStore.getState().labelArrows.find((arrow) => arrow.id === id);
+        const existing = useProjectStore.getState().labelArrows.find((a) => a.id === id);
         if (existing) useProjectStore.getState().updateLabelArrow(id, data, true);
         else useProjectStore.getState().addLabelArrow(data, true);
       },
-      (id) => useProjectStore.getState().removeLabelArrow(id, true)
+      (id) => useProjectStore.getState().removeLabelArrow(id, true),
+      "labelArrows"
     ));
 
-    yDimensions.observe((event) => applyYChangeToStore(
-      event,
+    yDimensions.observe((event) => applyYChangeToStore(event,
       (id, data) => {
-        const existing = useProjectStore.getState().dimensions.find((dimension) => dimension.id === id);
+        const existing = useProjectStore.getState().dimensions.find((d) => d.id === id);
         if (existing) useProjectStore.getState().updateDimension(id, data, true);
         else useProjectStore.getState().addDimension(data, true);
       },
-      (id) => useProjectStore.getState().removeDimension(id, true)
+      (id) => useProjectStore.getState().removeDimension(id, true),
+      "dimensions"
     ));
 
-    yGroups.observe((event) => applyYChangeToStore(
-      event,
+    yGroups.observe((event) => applyYChangeToStore(event,
       (id, data) => {
-        const existing = useProjectStore.getState().groups.find((group) => group.id === id);
+        const existing = useProjectStore.getState().groups.find((g) => g.id === id);
         if (existing) useProjectStore.getState().updateGroup(id, data);
         else useProjectStore.getState().addGroup(data, true);
       },
-      (id) => useProjectStore.getState().removeGroup(id)
+      (id) => useProjectStore.getState().removeGroup(id),
+      "groups"
     ));
 
-    yWallSegments.observe((event) => applyYChangeToStore(
-      event,
+    yWallSegments.observe((event) => applyYChangeToStore(event,
       (id, data) => {
-        const existing = useProjectStore.getState().wallSegments.find((segment) => segment.id === id);
+        const existing = useProjectStore.getState().wallSegments.find((s) => s.id === id);
         if (existing) useProjectStore.getState().updateWallSegment(id, data);
         else useProjectStore.getState().addWallSegment(data);
       },
-      (id) => useProjectStore.getState().removeWallSegment(id)
+      (id) => useProjectStore.getState().removeWallSegment(id),
+      "wallSegments"
     ));
 
-    yComments.observe((event) => applyYChangeToStore(
-      event,
+    yComments.observe((event) => applyYChangeToStore(event,
       (id, data) => {
-        const existing = useProjectStore.getState().comments.find((comment) => comment.id === id);
+        const existing = useProjectStore.getState().comments.find((c) => c.id === id);
         if (existing) useProjectStore.getState().updateComment(id, data);
         else useProjectStore.getState().addComment(data, true);
       },
-      (id) => useProjectStore.getState().removeComment(id, true)
+      (id) => useProjectStore.getState().removeComment(id, true),
+      "comments"
     ));
 
     yCanvas.observe((event) => {
@@ -381,24 +463,35 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       isRemoteUpdating.current = false;
     });
 
+    // ─── Step 5 (outbound): Local edits → Yjs → socket ───
     const syncCollection = <T extends { id: string }>(
       currentItems: T[],
       previousItems: T[],
-      targetMap: Y.Map<any>
+      targetMap: Y.Map<any>,
+      collectionName?: string
     ) => {
       const previousById = new Map(previousItems.map((item) => [item.id, item]));
+      let added = 0, updated = 0, deleted = 0;
 
       currentItems.forEach((item) => {
         const previousItem = previousById.get(item.id);
-        if (item !== previousItem) {
-          targetMap.set(item.id, item);
+        const hasChanged = !previousItem || JSON.stringify(item) !== JSON.stringify(previousItem);
+        if (hasChanged) {
+          targetMap.set(item.id, JSON.parse(JSON.stringify(item)));
+          if (previousItem) updated++;
+          else added++;
         }
         previousById.delete(item.id);
       });
 
       previousById.forEach((_, id) => {
         targetMap.delete(id);
+        deleted++;
       });
+
+      if (added > 0 || updated > 0 || deleted > 0) {
+        console.log(`[Collaboration] syncCollection → ${collectionName}: +${added} add, ~${updated} update, -${deleted} delete`);
+      }
     };
 
     let lastKnownState = useProjectStore.getState();
@@ -411,110 +504,213 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       const previousState = lastKnownState;
       lastKnownState = state;
 
+      const hasChanges =
+        state.assets !== previousState.assets ||
+        state.walls !== previousState.walls ||
+        state.shapes !== previousState.shapes ||
+        state.textAnnotations !== previousState.textAnnotations ||
+        state.labelArrows !== previousState.labelArrows ||
+        state.dimensions !== previousState.dimensions ||
+        state.groups !== previousState.groups ||
+        state.wallSegments !== previousState.wallSegments ||
+        state.comments !== previousState.comments ||
+        state.canvas !== previousState.canvas;
+
+      if (!hasChanges) return;
+
+      // BroadcastChannel: always broadcast (doesn't need backend join)
+      const bc = broadcastChannelRef.current;
+      if (bc) {
+        try {
+          const payload = JSON.stringify({
+            type: "state-update",
+            shapes: state.shapes,
+            assets: state.assets,
+            walls: state.walls,
+            wallSegments: state.wallSegments,
+            textAnnotations: state.textAnnotations,
+            labelArrows: state.labelArrows,
+            dimensions: state.dimensions,
+            groups: state.groups,
+            comments: state.comments,
+            canvas: state.canvas,
+          });
+          bc.postMessage(payload);
+          console.log("[BroadcastChannel] Broadcast state-update:", {
+            shapes: state.shapes.length,
+            assets: state.assets.length,
+            walls: state.walls.length,
+          });
+        } catch (err) {
+          console.error("[BroadcastChannel] Failed to broadcast:", err);
+        }
+      } else {
+        console.log("[BroadcastChannel] No channel available — cannot broadcast");
+      }
+
+      // Yjs sync: only after backend join
+      if (!hasJoinedRef.current) return;
+
+      console.log("[Collaboration] Subscriber: detected store changes, syncing to Ydoc", {
+        shapes: state.shapes.length !== previousState.shapes.length ? `${previousState.shapes.length}→${state.shapes.length}` : state.shapes.length,
+        assets: state.assets.length !== previousState.assets.length ? `${previousState.assets.length}→${state.assets.length}` : state.assets.length,
+        walls: state.walls.length !== previousState.walls.length ? `${previousState.walls.length}→${state.walls.length}` : state.walls.length,
+        socketConnected: socket.connected,
+        roomId: roomIdRef.current,
+      });
+
       ydoc.transact(() => {
-        if (state.assets !== previousState.assets) syncCollection(state.assets, previousState.assets, yAssets);
-        if (state.walls !== previousState.walls) syncCollection(state.walls, previousState.walls, yWalls);
-        if (state.shapes !== previousState.shapes) syncCollection(state.shapes, previousState.shapes, yShapes);
-        if (state.textAnnotations !== previousState.textAnnotations) syncCollection(state.textAnnotations, previousState.textAnnotations, yAnnotations);
-        if (state.labelArrows !== previousState.labelArrows) syncCollection(state.labelArrows, previousState.labelArrows, yArrows);
-        if (state.dimensions !== previousState.dimensions) syncCollection(state.dimensions, previousState.dimensions, yDimensions);
-        if (state.groups !== previousState.groups) syncCollection(state.groups, previousState.groups, yGroups);
-        if (state.wallSegments !== previousState.wallSegments) syncCollection(state.wallSegments, previousState.wallSegments, yWallSegments);
-        if (state.comments !== previousState.comments) syncCollection(state.comments, previousState.comments, yComments);
+        if (state.assets !== previousState.assets) syncCollection(state.assets, previousState.assets, yAssets, "assets");
+        if (state.walls !== previousState.walls) syncCollection(state.walls, previousState.walls, yWalls, "walls");
+        if (state.shapes !== previousState.shapes) syncCollection(state.shapes, previousState.shapes, yShapes, "shapes");
+        if (state.textAnnotations !== previousState.textAnnotations) syncCollection(state.textAnnotations, previousState.textAnnotations, yAnnotations, "textAnnotations");
+        if (state.labelArrows !== previousState.labelArrows) syncCollection(state.labelArrows, previousState.labelArrows, yArrows, "labelArrows");
+        if (state.dimensions !== previousState.dimensions) syncCollection(state.dimensions, previousState.dimensions, yDimensions, "dimensions");
+        if (state.groups !== previousState.groups) syncCollection(state.groups, previousState.groups, yGroups, "groups");
+        if (state.wallSegments !== previousState.wallSegments) syncCollection(state.wallSegments, previousState.wallSegments, yWallSegments, "wallSegments");
+        if (state.comments !== previousState.comments) syncCollection(state.comments, previousState.comments, yComments, "comments");
         if (state.canvas !== previousState.canvas) yCanvas.set("config", state.canvas);
       }, "local-sync");
     });
 
+    // Yjs doc update → socket emit
     ydoc.on("update", (update, origin) => {
-      if (origin === "remote-sync" || !socket.connected || !roomIdRef.current) return;
+      if (origin === "remote-sync") return;
+      if (!hasJoinedRef.current) {
+        console.log("[Collaboration] ydoc.update BLOCKED: hasJoinedRef is false");
+        return;
+      }
+      if (!socket.connected) {
+        console.log("[Collaboration] ydoc.update BLOCKED: socket not connected");
+        return;
+      }
+      const targetRoomId = roomIdRef.current;
+      if (!targetRoomId) {
+        console.log("[Collaboration] ydoc.update BLOCKED: no roomId");
+        return;
+      }
+
+      let base64Update: string;
+      try {
+        let binary = '';
+        const bytes = new Uint8Array(update);
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        base64Update = btoa(binary);
+      } catch (err) {
+        console.error("[Collaboration] Failed to encode update as base64:", err);
+        return;
+      }
+
+      console.log("[Collaboration] yjs-update → emitting (base64), rawSize:", update.length, "base64Size:", base64Update.length, "roomId:", targetRoomId);
       socket.emit("yjs-update", {
-        roomId: roomIdRef.current,
-        update: Array.from(update),
+        roomId: targetRoomId,
+        update: base64Update,
+        userId: user?._id,
       });
     });
 
-    const refreshAllStatus = async () => {
-      try {
-        const status = await refreshStatus(resolvedProjectId);
-        if (status?.roomId) {
-          setRoomId(status.roomId);
-          roomIdRef.current = status.roomId;
-        } else if (!roomIdRef.current) {
-          const fallbackRoomId = `${resolvedProjectId}-${effectiveEventId}`;
-          setRoomId(fallbackRoomId);
-          roomIdRef.current = fallbackRoomId;
+    // ─── Step 2 & 3: Init → join → wait for yjs-sync ───
+    // Per contract: /init first → get roomId → emit join-collaboration → wait for yjs-sync
+    socket.on("connect", () => {
+      console.log("[Collaboration] Step 3: Socket connected");
+      setIsConnected(true);
+
+      // Emit join-collaboration — but only after /init has resolved the roomId
+      const doJoin = () => {
+        const currentRoomId = roomIdRef.current;
+        if (!currentRoomId) {
+          console.warn("[Collaboration] Step 3: No roomId yet, waiting for /init...");
+          return;
         }
-      } catch (error) {
-        console.warn("[Collaboration] Failed to refresh collaboration status:", error);
-      }
+        console.log("[Collaboration] Step 3: Emitting join-collaboration with roomId:", currentRoomId);
+        socket.emit("join-collaboration", {
+          projectId: resolvedProjectId,
+          eventId: effectiveEventId,
+        });
+      };
 
-      try {
-        await refreshUsers(resolvedProjectId);
-      } catch (error) {
-        console.warn("[Collaboration] Failed to refresh collaboration users:", error);
-      }
-    };
+      // Try immediately (roomId may already be set by /init), or retry shortly
+      doJoin();
+      const retryTimer = setTimeout(doJoin, 500);
+      const retryTimer2 = setTimeout(doJoin, 2000);
+    });
 
+    socket.on("disconnect", () => {
+      console.log("[Collaboration] Socket disconnected");
+      setIsConnected(false);
+      hasJoinedRef.current = false;
+    });
+
+    // ─── Step 2: HTTP init to get the canonical roomId ───
     initCollaborationSession(resolvedProjectId, effectiveEventId)
       .then((status) => {
         setCollaborationStatus(status);
         const nextRoomId = status?.roomId || `${resolvedProjectId}-${effectiveEventId}`;
         setRoomId(nextRoomId);
         roomIdRef.current = nextRoomId;
+        console.log("[Collaboration] Step 2: /init succeeded. roomId:", nextRoomId);
+
         const statusUsers = extractUserArray(status);
         if (statusUsers.length > 0) setPresenceUsers(statusUsers);
+
+        // If socket is already connected, emit join-collaboration now
+        if (socket.connected) {
+          console.log("[Collaboration] Step 2: Socket already connected, emitting join-collaboration");
+          socket.emit("join-collaboration", {
+            projectId: resolvedProjectId,
+            eventId: effectiveEventId,
+          });
+        }
       })
       .catch((error) => {
-        console.warn("[Collaboration] Failed to initialize collaboration session:", error);
+        console.warn("[Collaboration] Step 2: /init failed:", error);
         const fallbackRoomId = `${resolvedProjectId}-${effectiveEventId}`;
         setRoomId(fallbackRoomId);
         roomIdRef.current = fallbackRoomId;
-      })
-      .finally(() => {
-        refreshAllStatus();
+        console.log("[Collaboration] Step 2: Fallback roomId:", fallbackRoomId);
+
+        // Try joining with fallback roomId
+        if (socket.connected) {
+          socket.emit("join-collaboration", {
+            projectId: resolvedProjectId,
+            eventId: effectiveEventId,
+          });
+        }
       });
 
-    const pushInitialStoreState = () => {
-      const state = useProjectStore.getState();
-      ydoc.transact(() => {
-        state.assets.forEach((asset) => { if (!yAssets.has(asset.id)) yAssets.set(asset.id, asset); });
-        state.walls.forEach((wall) => { if (!yWalls.has(wall.id)) yWalls.set(wall.id, wall); });
-        state.shapes.forEach((shape) => { if (!yShapes.has(shape.id)) yShapes.set(shape.id, shape); });
-        state.textAnnotations.forEach((annotation) => { if (!yAnnotations.has(annotation.id)) yAnnotations.set(annotation.id, annotation); });
-        state.labelArrows.forEach((arrow) => { if (!yArrows.has(arrow.id)) yArrows.set(arrow.id, arrow); });
-        state.dimensions.forEach((dimension) => { if (!yDimensions.has(dimension.id)) yDimensions.set(dimension.id, dimension); });
-        state.groups.forEach((group) => { if (!yGroups.has(group.id)) yGroups.set(group.id, group); });
-        state.wallSegments.forEach((segment) => { if (!yWallSegments.has(segment.id)) yWallSegments.set(segment.id, segment); });
-        state.comments.forEach((comment) => { if (!yComments.has(comment.id)) yComments.set(comment.id, comment); });
-        if (!yCanvas.has("config")) yCanvas.set("config", state.canvas);
-      }, "local-sync");
-    };
-
-    pushInitialStoreState();
-
-    socket.on("connect", () => {
-      setIsConnected(true);
-      socket.emit("join-collaboration", {
-        projectId: resolvedProjectId,
-        eventId: effectiveEventId,
-      });
-    });
-
-    socket.on("disconnect", () => {
-      setIsConnected(false);
-    });
-
+    // ─── Presence events ───
     socket.on("users-list", (payload: any) => {
       const users = extractUserArray(payload);
-      if (users.length > 0) setPresenceUsers(users);
+      if (users.length > 0) {
+        users.forEach((u: any) => {
+          const uid = u.userId || u._id || u.id;
+          if (uid) {
+            const name = u.userName || u.name || [u?.user?.firstName, u?.user?.lastName].filter(Boolean).join(" ").trim() || u.email;
+            const avatar = u.userAvatar || u.avatar || u?.user?.avatar;
+            if (name || avatar) userInfoCacheRef.current.set(uid, { userName: name || undefined, userAvatar: avatar || undefined });
+          }
+        });
+        setPresenceUsers(users);
+      }
     });
 
     socket.on("user-joined", (payload: any) => {
-      mergePresenceUser(payload?.user || payload);
+      const raw = payload?.user || payload;
+      const uid = raw?.userId || raw?._id || raw?.id;
+      if (uid) {
+        const name = raw?.userName || raw?.name || [raw?.user?.firstName, raw?.user?.lastName].filter(Boolean).join(" ").trim() || raw?.email;
+        const avatar = raw?.userAvatar || raw?.avatar || raw?.user?.avatar;
+        if (name || avatar) userInfoCacheRef.current.set(uid, { userName: name || undefined, userAvatar: avatar || undefined });
+      }
+      mergePresenceUser(raw);
     });
 
     socket.on("user-left", (payload: any) => {
-      removePresenceUser(payload?.userId || payload?.id || payload);
+      const uid = payload?.userId || payload?.id || payload;
+      // user-left only fires when that user's LAST tab leaves — safe to remove
+      removePresenceUser(uid);
     });
 
     socket.on("cursor-move", (payload: any) => {
@@ -526,18 +722,26 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     });
 
     socket.on("typing-start", (payload: any) => {
-      mergePresenceUser({
-        ...payload,
-        userId: payload?.userId || payload?.id,
-        isTyping: true,
-      });
+      mergePresenceUser({ ...payload, userId: payload?.userId || payload?.id, isTyping: true });
     });
 
     socket.on("typing-stop", (payload: any) => {
-      mergePresenceUser({
-        ...payload,
-        userId: payload?.userId || payload?.id,
-        isTyping: false,
+      mergePresenceUser({ ...payload, userId: payload?.userId || payload?.id, isTyping: false });
+    });
+
+    // Per-session awareness (new event from backend)
+    socket.on("awareness-sync", (payload: any) => {
+      const states = payload?.states || payload;
+      if (typeof states !== "object") return;
+      Object.entries(states).forEach(([sessionId, state]: [string, any]) => {
+        if (!state) return;
+        mergePresenceUser({
+          ...state,
+          sessionId,
+          userId: state.userId,
+          cursor: state.cursor,
+          isTyping: state.isTyping,
+        });
       });
     });
 
@@ -545,6 +749,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       mergePresenceUser({
         ...payload,
         userId: payload?.userId || payload?.id,
+        sessionId: (payload as any).sessionId,
         cursor: payload?.cursor || payload?.awareness?.cursor,
         isTyping: payload?.isTyping ?? payload?.awareness?.isTyping,
       });
@@ -554,53 +759,24 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       console.error("[Collaboration] collaboration-error:", payload);
     });
 
-    const applyRemoteYUpdate = (payload: any) => {
-      const update = normalizeUpdatePayload(payload);
-      if (!update) return;
-      Y.applyUpdate(ydoc, update, "remote-sync");
-    };
-
-    socket.on("yjs-sync", applyRemoteYUpdate);
-    socket.on("yjs-update", applyRemoteYUpdate);
-
-    statusIntervalRef.current = setInterval(() => {
-      refreshAllStatus();
-    }, 15000);
-
-    syncIntervalRef.current = setInterval(() => {
-      forceSyncCollaborationRoom(resolvedProjectId, effectiveEventId).catch((error) => {
-        console.warn("[Collaboration] Periodic sync failed:", error);
-      });
-    }, 30000);
-
+    // ─── Cleanup ───
     return () => {
-      if (statusIntervalRef.current) {
-        clearInterval(statusIntervalRef.current);
-        statusIntervalRef.current = null;
-      }
-      if (syncIntervalRef.current) {
-        clearInterval(syncIntervalRef.current);
-        syncIntervalRef.current = null;
-      }
       if (cursorTimerRef.current) {
         clearTimeout(cursorTimerRef.current);
         cursorTimerRef.current = null;
       }
-      forceSyncCollaborationRoom(resolvedProjectId, effectiveEventId).catch((error) => {
-        console.warn("[Collaboration] Final sync on cleanup failed:", error);
-      });
       unsubscribe();
       socket.disconnect();
       socketRef.current = null;
       roomIdRef.current = null;
+      hasJoinedRef.current = false;
+      isInitializedRef.current = false;
       ydoc.destroy();
       ydocRef.current = null;
       setIsConnected(false);
     };
   }, [
     effectiveEventId,
-    refreshStatus,
-    refreshUsers,
     resolvedProjectId,
     setPresenceUsers,
     mergePresenceUser,
@@ -608,16 +784,103 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     user,
   ]);
 
+  // ─── BroadcastChannel: instant sync between same-browser tabs ───
+  // Runs independently of socket/ydoc — works even when backend is down
+  useEffect(() => {
+    if (!effectiveEventId) return;
+
+    const channelName = `collab-${effectiveEventId}`;
+    console.log("[BroadcastChannel] Opening channel:", channelName);
+    const channel = new BroadcastChannel(channelName);
+    broadcastChannelRef.current = channel;
+
+    channel.onmessage = (event) => {
+      const raw = event.data;
+      if (!raw) return;
+
+      let msg: any;
+      if (typeof raw === "string") {
+        try { msg = JSON.parse(raw); } catch { console.warn("[BroadcastChannel] Failed to parse message"); return; }
+      } else if (typeof raw === "object" && raw !== null) {
+        msg = raw;
+      } else {
+        return;
+      }
+
+      if (!msg.type) return;
+
+      if (msg.type === "request-state") {
+        console.log("[BroadcastChannel] Received request-state — sending current state");
+        const store = useProjectStore.getState();
+        try {
+          const payload = JSON.stringify({
+            type: "state-sync",
+            shapes: store.shapes,
+            assets: store.assets,
+            walls: store.walls,
+            wallSegments: store.wallSegments,
+            textAnnotations: store.textAnnotations,
+            labelArrows: store.labelArrows,
+            dimensions: store.dimensions,
+            groups: store.groups,
+            comments: store.comments,
+            canvas: store.canvas,
+          });
+          channel.postMessage(payload);
+        } catch (err) {
+          console.error("[BroadcastChannel] Failed to send state-sync:", err);
+        }
+        return;
+      }
+
+      if (msg.type === "state-sync" || msg.type === "state-update") {
+        const prev = useProjectStore.getState();
+        console.log(`[BroadcastChannel] Received ${msg.type}:`, {
+          shapes: msg.shapes?.length,
+          prevShapes: prev.shapes.length,
+          assets: msg.assets?.length,
+          walls: msg.walls?.length,
+        });
+        isRemoteUpdatingRef.current = true;
+        useProjectStore.setState({
+          ...(msg.shapes != null ? { shapes: msg.shapes } : {}),
+          ...(msg.assets != null ? { assets: msg.assets } : {}),
+          ...(msg.walls != null ? { walls: msg.walls } : {}),
+          ...(msg.wallSegments != null ? { wallSegments: msg.wallSegments } : {}),
+          ...(msg.textAnnotations != null ? { textAnnotations: msg.textAnnotations } : {}),
+          ...(msg.labelArrows != null ? { labelArrows: msg.labelArrows } : {}),
+          ...(msg.dimensions != null ? { dimensions: msg.dimensions } : {}),
+          ...(msg.groups != null ? { groups: msg.groups } : {}),
+          ...(msg.comments != null ? { comments: msg.comments } : {}),
+          ...(msg.canvas != null ? { canvas: msg.canvas } : {}),
+        });
+        isRemoteUpdatingRef.current = false;
+        const after = useProjectStore.getState();
+        console.log("[BroadcastChannel] Applied state from other tab. Shapes:", after.shapes.length);
+      }
+    };
+
+    channel.postMessage(JSON.stringify({ type: "request-state" }));
+
+    return () => {
+      console.log("[BroadcastChannel] Closing channel:", channelName);
+      channel.close();
+      broadcastChannelRef.current = null;
+    };
+  }, [effectiveEventId]);
+
   const updateCursor = useCallback((x: number, y: number) => {
     const emitCursor = (nextCursor: { x: number; y: number }) => {
-      if (!socketRef.current || !roomIdRef.current) return;
+      if (!socketRef.current || !roomIdRef.current || !hasJoinedRef.current) return;
       socketRef.current.emit("cursor-move", {
         roomId: roomIdRef.current,
         cursor: nextCursor,
+        userId: user?._id,
       });
       socketRef.current.emit("awareness-update", {
         roomId: roomIdRef.current,
         awareness: { cursor: nextCursor },
+        userId: user?._id,
       });
     };
 
@@ -647,27 +910,27 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
   }, []);
 
   const updateTyping = useCallback((isTyping: boolean) => {
-    if (!socketRef.current || !roomIdRef.current) return;
+    if (!socketRef.current || !roomIdRef.current || !hasJoinedRef.current) return;
     socketRef.current.emit(isTyping ? "typing-start" : "typing-stop", {
       roomId: roomIdRef.current,
+      userId: user?._id,
     });
     socketRef.current.emit("awareness-update", {
       roomId: roomIdRef.current,
       awareness: { isTyping },
+      userId: user?._id,
     });
-  }, []);
+  }, [user?._id]);
 
   return {
     activeUsers,
     isConnected,
     updateCursor,
     updateTyping,
-    refreshStatus,
-    refreshUsers,
-    forceSync,
     collaborationStatus,
     resolvedProjectId,
     roomId,
     ydoc: ydocRef.current,
+    hasJoined: hasJoinedRef.current,
   };
 };

@@ -40,17 +40,17 @@ export const RemoteCursor = ({ userName, x, y, color, userAvatar }: RemoteCursor
 
         {/* User Badge */}
         <div 
-          className="absolute left-4 top-4 px-2 py-1 rounded-full text-white text-[10px] font-bold whitespace-nowrap shadow-sm border border-white/20 flex items-center gap-1"
+          className="absolute left-4 top-4 px-2.5 py-1 rounded-full text-white text-[10px] font-bold whitespace-nowrap shadow-sm border border-white/20 flex items-center gap-1.5"
           style={{ backgroundColor: color }}
         >
           {userAvatar && (
             <img 
               src={userAvatar} 
               alt={userName} 
-              className="w-3 h-3 rounded-full object-cover" 
+              className="w-3.5 h-3.5 rounded-full object-cover shrink-0" 
             />
           )}
-          {userName}
+          <span className="leading-none">{userName}</span>
         </div>
       </div>
     </div>

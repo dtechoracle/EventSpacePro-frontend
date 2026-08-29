@@ -1568,20 +1568,31 @@ export default function Editor() {
 
 
   // Reset currentEventData when route changes to ensure new event loads
+  const prevEventIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (isRouterReady && id && slug) {
       const eventId = id as string;
       const eventSlug = slug as string;
-      console.log(`[Editor] Route changed to: ${eventSlug}/${eventId}, clearing ALL data`);
 
-      // Clear current event data
+      // If navigating to a DIFFERENT event, full clear
+      if (prevEventIdRef.current && prevEventIdRef.current !== eventId) {
+        console.log(`[Editor] Navigating from ${prevEventIdRef.current} to ${eventId}, clearing workspace`);
+        const projectStore = useProjectStore.getState();
+        projectStore.reset();
+        projectStore.clearWorkspace();
+      } else if (!prevEventIdRef.current) {
+        // First load / page refresh — clear stale persisted data but don't clearWorkspace
+        // (clearWorkspace is slow and unnecessary on first load since data loading effect handles it)
+        console.log(`[Editor] First load for ${eventId}, resetting project store`);
+        const projectStore = useProjectStore.getState();
+        projectStore.reset();
+      }
+      prevEventIdRef.current = eventId;
+
+      console.log(`[Editor] Route changed to: ${eventSlug}/${eventId}`);
+
+      // Clear current event data so the data loading effect triggers
       setCurrentEventData(null);
-
-      // CRITICAL: Reset project store to clear localStorage data
-      // This prevents loading old event data from localStorage
-      const projectStore = useProjectStore.getState();
-      projectStore.reset();
-      projectStore.clearWorkspace();
 
       // Clear the query cache for this specific event to force fresh fetch
       queryClient.removeQueries({ queryKey: ["event", eventSlug, eventId] });
@@ -1700,6 +1711,14 @@ export default function Editor() {
               ...state,
               comments: normalizedComments,
             }));
+            // DEBUG: Verify store state immediately after canvasData load
+            const verifyAfterCanvasData = useProjectStore.getState();
+            console.log('[Editor] DEBUG verify-after-canvasData-load:', {
+              shapes: verifyAfterCanvasData.shapes.length,
+              assets: verifyAfterCanvasData.assets.length,
+              walls: verifyAfterCanvasData.walls.length,
+              shapeIds: verifyAfterCanvasData.shapes.map(s => s.id),
+            });
             projectStore.markAsSaved();
 
             // DEFAULT OUTDOOR LAYOUT if empty
@@ -2004,7 +2023,89 @@ export default function Editor() {
             arrows: arrowsToLoad.length,
             annotations: annotationsToLoad.length,
           });
+          // DEBUG: Verify store state immediately after batch load
+          const verifyAfterLoad = useProjectStore.getState();
+          console.log('[Editor] DEBUG verify-after-load:', {
+            shapes: verifyAfterLoad.shapes.length,
+            assets: verifyAfterLoad.assets.length,
+            walls: verifyAfterLoad.walls.length,
+            shapeIds: verifyAfterLoad.shapes.map(s => s.id),
+          });
           projectStore.markAsSaved();
+        }
+        // PRIORITY 3: Fall back to localStorage backup if both canvasData and canvasAssets are empty
+        else {
+          try {
+            const raw = localStorage.getItem(`event-canvas-${eventId}`);
+            if (raw) {
+              const backup = JSON.parse(raw);
+              const backupCanvasData = backup.canvasData;
+              const backupCanvasAssets = backup.canvasAssets;
+              const hasBackupData = (backupCanvasData && [
+                backupCanvasData.walls, backupCanvasData.shapes, backupCanvasData.assets,
+                backupCanvasData.textAnnotations, backupCanvasData.dimensions, backupCanvasData.labelArrows,
+              ].some((c: any) => Array.isArray(c) && c.length > 0)) || (Array.isArray(backupCanvasAssets) && backupCanvasAssets.length > 0);
+
+              if (hasBackupData) {
+                console.log(`[Editor] ⚠️ Backend returned empty data, restoring from localStorage backup for event ${eventId}`);
+
+                if (backupCanvasData) {
+                  const { walls = [], shapes = [], assets = [], textAnnotations = [], dimensions = [], labelArrows = [] } = backupCanvasData;
+                  walls.forEach((wall: any) => projectStore.addWall({ ...wall, stroke: normalizeLegacyWallStroke(wall.stroke, wall.strokeColor), strokeWidth: wall.strokeWidth ?? 2 }, true));
+                  shapes.forEach((shape: any) => projectStore.addShape(shape, true));
+                  assets.forEach((asset: any) => projectStore.addAsset(asset, true));
+                  textAnnotations.forEach((a: any) => projectStore.addTextAnnotation(a, true));
+                  dimensions.forEach((d: any) => projectStore.addDimension(d, true));
+                  labelArrows.forEach((a: any) => projectStore.addLabelArrow(a, true));
+                } else if (Array.isArray(backupCanvasAssets)) {
+                  const wallsToLoad: any[] = [];
+                  const shapesToLoad: any[] = [];
+                  const assetsToLoad: any[] = [];
+                  const dimensionsToLoad: any[] = [];
+                  const arrowsToLoad: any[] = [];
+                  const annotationsToLoad: any[] = [];
+
+                  backupCanvasAssets.forEach((asset: any) => {
+                    if ((asset.itemType === 'dimension' || asset.type === 'dimension') && asset.startPoint && asset.endPoint) {
+                      dimensionsToLoad.push({ ...asset, id: asset.id, type: asset.dimensionType || 'linear', startPoint: asset.startPoint, endPoint: asset.endPoint, offset: asset.offset || 0, zIndex: asset.zIndex || 0 });
+                    } else if ((asset.itemType === 'label-arrow' || asset.type === 'label-arrow') && asset.startPoint && asset.endPoint) {
+                      arrowsToLoad.push({ ...asset, id: asset.id, startPoint: asset.startPoint, endPoint: asset.endPoint, label: asset.label || '', zIndex: asset.zIndex || 0 });
+                    } else if ((asset.itemType === 'text-annotation' || asset.type === 'text-annotation') && asset.text !== undefined) {
+                      annotationsToLoad.push({ ...asset, id: asset.id, x: asset.x || 0, y: asset.y || 0, text: asset.text || '', zIndex: asset.zIndex || 0 });
+                    } else if (asset.type === 'wall-polygon') {
+                      const savedWall = asset.wallData || asset;
+                      if (savedWall?.nodes?.length && savedWall?.edges?.length) {
+                        wallsToLoad.push({ ...savedWall, id: asset.id, name: savedWall.name || asset.name, nodes: savedWall.nodes, edges: savedWall.edges, fill: savedWall.fill ?? asset.backgroundColor, stroke: normalizeLegacyWallStroke(savedWall.stroke, asset.strokeColor), strokeWidth: savedWall.strokeWidth ?? asset.strokeWidth ?? 2, fillType: savedWall.fillType, fillTexture: savedWall.fillTexture, fillTextureScale: savedWall.fillTextureScale, fillTextureThickness: savedWall.fillTextureThickness, zIndex: savedWall.zIndex ?? asset.zIndex ?? 0 });
+                      } else if (asset.wallPolygon && Array.isArray(asset.wallPolygon)) {
+                        const origin = { x: asset.x || 0, y: asset.y || 0 };
+                        const wallNodes = asset.wallPolygon.map((p: any, i: number) => ({ id: `node-${asset.id}-${i}`, x: origin.x + (p.x || 0), y: origin.y + (p.y || 0) }));
+                        const wallEdges = (asset.wallEdges || []).map((e: any, i: number) => ({ id: `edge-${asset.id}-${i}`, nodeA: wallNodes[e.a]?.id || '', nodeB: wallNodes[e.b]?.id || '', thickness: e.thickness ?? asset.wallThickness ?? 75 })).filter((e: any) => e.nodeA && e.nodeB);
+                        if (wallNodes.length > 0 && wallEdges.length > 0) {
+                          wallsToLoad.push({ id: asset.id, name: asset.name, nodes: wallNodes, edges: wallEdges, fill: asset.fill ?? asset.backgroundColor, stroke: normalizeLegacyWallStroke(asset.stroke, asset.strokeColor), strokeWidth: asset.strokeWidth ?? 2, fillType: asset.fillType, fillTexture: asset.fillTexture, fillTextureScale: asset.fillTextureScale, fillTextureThickness: asset.fillTextureThickness, zIndex: asset.zIndex || 0 });
+                        }
+                      }
+                    } else if (['rectangle', 'ellipse', 'line', 'arrow', 'freehand'].includes(asset.type)) {
+                      shapesToLoad.push({ ...asset, id: asset.id, name: asset.name, type: asset.type, x: asset.x || 0, y: asset.y || 0, width: asset.width || 100, height: asset.height || 100, rotation: asset.rotation || 0, fill: asset.fillColor || asset.backgroundColor || asset.fill || '#3B82F6', stroke: asset.strokeColor || asset.stroke || '#1E40AF', strokeWidth: asset.strokeWidth ?? 2, points: asset.points, zIndex: asset.zIndex || 0 });
+                    } else if (asset.type) {
+                      assetsToLoad.push({ ...asset, id: asset.id, name: asset.name, type: asset.type, x: asset.x || 0, y: asset.y || 0, width: asset.width || 100, height: asset.height || 100, rotation: asset.rotation || 0, scale: asset.scale || 1, strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : 0.6, zIndex: asset.zIndex || 0 });
+                    }
+                  });
+
+                  if (wallsToLoad.length > 0) projectStore.addWallBatch(wallsToLoad, true);
+                  if (shapesToLoad.length > 0) projectStore.addShapeBatch(shapesToLoad, true);
+                  if (assetsToLoad.length > 0) projectStore.addAssetBatch(assetsToLoad, true);
+                  dimensionsToLoad.forEach(d => projectStore.addDimension(d, true));
+                  arrowsToLoad.forEach(a => projectStore.addLabelArrow(a, true));
+                  annotationsToLoad.forEach(t => projectStore.addTextAnnotation(t, true));
+                }
+
+                projectStore.markAsSaved();
+                console.log(`[Editor] ✅ Restored event from localStorage backup`);
+              }
+            }
+          } catch (e) {
+            console.warn('[Editor] Failed to restore from localStorage backup:', e);
+          }
         }
       } else {
         console.log(`[Editor] Skipping load - same event and we have current data`);
@@ -2065,6 +2166,54 @@ export default function Editor() {
       return () => clearTimeout(timeoutId);
     }
   }, [router.query.focus, eventData, walls, shapes, projectAssets]);
+
+  // Auto-fit content on first load in normal edit mode (not preview, not focus query)
+  // Shapes from the DB may have huge coordinates (millions of mm) that are off-screen.
+  // This zooms/pans the viewport to fit all content so the user can see it immediately.
+  const hasAutoFittedRef = useRef(false);
+  useEffect(() => {
+    if (preview === 'true' || router.query.focus === 'true') return;
+    if (!currentEventData) return;
+    if (hasAutoFittedRef.current) return;
+
+    const routeId = id as string;
+    const currentId = currentEventData._id || (currentEventData as any)?.id;
+    if (currentId !== routeId) return;
+
+    const hasContent = walls.length > 0 || shapes.length > 0 || projectAssets.length > 0;
+    if (!hasContent) return;
+
+    hasAutoFittedRef.current = true;
+
+    const timeoutId = setTimeout(() => {
+      const bounds = calculateWorkspaceBounds(walls, shapes, projectAssets);
+      if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
+
+      const viewportWidth = window.innerWidth - 300;
+      const viewportHeight = window.innerHeight - 150;
+
+      const zoomX = viewportWidth / bounds.width;
+      const zoomY = viewportHeight / bounds.height;
+      const finalZoom = Math.max(0.001, Math.min(zoomX, zoomY, 1));
+
+      setZoom(finalZoom);
+
+      const centerX = (bounds.minX + bounds.maxX) / 2;
+      const centerY = (bounds.minY + bounds.maxY) / 2;
+      const panX = (window.innerWidth / 2) - (centerX * finalZoom);
+      const panY = (window.innerHeight / 2) - (centerY * finalZoom);
+      setPan(panX, panY);
+
+      console.log(`[Editor] Auto-fit: zoom=${finalZoom.toFixed(4)}, center=(${centerX.toFixed(0)}, ${centerY.toFixed(0)})`);
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [currentEventData, id, walls.length, shapes.length, projectAssets.length, preview, router.query.focus, setZoom, setPan]);
+
+  // Reset auto-fit flag when event changes
+  useEffect(() => {
+    hasAutoFittedRef.current = false;
+  }, [id]);
 
   // Auto-fit content when in preview mode
   useEffect(() => {
@@ -2442,7 +2591,7 @@ export default function Editor() {
               <div className="flex-1 relative overflow-hidden">
                 {!show3D && (
                   <div className="absolute inset-0">
-                    <Workspace2D />
+                    <Workspace2D projectId={Array.isArray(slug) ? slug[0] : slug} eventId={Array.isArray(id) ? id[0] : id} />
                   </div>
                 )}
 

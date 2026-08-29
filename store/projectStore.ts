@@ -1463,6 +1463,7 @@ export const useProjectStore = create<ProjectState>()(
                     let eventName = projectName || 'Untitled Event';
                     let eventType = 'custom venue';
                     let canvases: any[] = [];
+                    let backendCanvasAssets: any[] = [];
 
                     try {
                         const currentEvent = await apiRequest(`/projects/${slug}/events/${eventId}`, 'GET', null, true);
@@ -1470,6 +1471,7 @@ export const useProjectStore = create<ProjectState>()(
                         // Only use backend type/canvases, NOT name (use store projectName instead)
                         eventType = event.type || eventType;
                         canvases = event.canvases || [];
+                        backendCanvasAssets = event.canvasAssets || [];
                     } catch (e) {
                         console.warn('[projectStore] Could not fetch current event, using defaults');
                     }
@@ -1494,7 +1496,7 @@ export const useProjectStore = create<ProjectState>()(
 
                     // CRITICAL: Save complete asset data, not just id/type/x/y
                     // Convert shapes, assets, and walls to canvasAssets format with ALL properties
-                    const canvasAssets: any[] = [];
+                    let canvasAssets: any[] = [];
 
                     // Convert shapes to canvasAssets
                     shapes.forEach(shape => {
@@ -1606,6 +1608,23 @@ export const useProjectStore = create<ProjectState>()(
                         });
                     });
 
+                    // MERGE with backend canvasAssets to prevent overwriting another browser's changes.
+                    // Start with backend items (preserves additions from other browsers),
+                    // then overlay our local items on top (our changes take precedence).
+                    if (backendCanvasAssets.length > 0) {
+                        const merged = [...backendCanvasAssets];
+                        for (const item of canvasAssets) {
+                            const idx = merged.findIndex((m: any) => m.id === item.id);
+                            if (idx >= 0) {
+                                merged[idx] = item;
+                            } else {
+                                merged.push(item);
+                            }
+                        }
+                        console.log(`[projectStore] Merged canvasAssets: ${backendCanvasAssets.length} backend + ${canvasAssets.length} local → ${merged.length} total`);
+                        canvasAssets = merged;
+                    }
+
                     // PUT /projects/{slug}/events/{eventId}
                     // Include all required fields: name, type, canvases, canvasData, canvasAssets
                     const payload = {
@@ -1636,6 +1655,14 @@ export const useProjectStore = create<ProjectState>()(
                     });
 
                     const response = await apiRequest(`/projects/${slug}/events/${eventId}`, 'PUT', payload, true);
+
+                    try {
+                        localStorage.setItem(`event-canvas-${eventId}`, JSON.stringify({
+                            canvasData,
+                            canvasAssets,
+                            savedAt: Date.now(),
+                        }));
+                    } catch (_) {}
 
                     set({ hasUnsavedChanges: false, lastSaved: new Date() });
                     console.log(`[projectStore] ✅ Event saved successfully to DATABASE: ${eventId}`);

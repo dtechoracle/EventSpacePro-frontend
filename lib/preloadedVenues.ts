@@ -103,5 +103,18 @@ export const PRELOADED_VENUES: PreloadedVenueDef[] = [
     capacity: "Up to 1,200 guests",
     description: "A state-of-the-art luxury pavilion featuring stunning crystal chandeliers, digital screens, and elite decor capabilities. Designed for high-society events and weddings.",
     features: ["Crystal Chandeliers", "LED Screen Walls", "Luxury Bridal Suite", "Gourmet Kitchen Space"]
+  },
+  {
+    id: "la-madison-dome",
+    name: "La Madison Dome",
+    path: "/assets/preloaded-venues/La Madison Dome.svg",
+    width: 25000,
+    height: 50000,
+    latitude: 6.4370,
+    longitude: 3.4300,
+    address: "Block 2, Plot 1, Okunade Bluewaters Scheme, Lekki, Lagos, Nigeria",
+    capacity: "Up to 1,000 guests",
+    description: "A stunning dome-shaped event space within La Madison Place, a one-stop hospitality centre in Lekki. Features a functionally aesthetic dome with 4 access doors, full-service kitchen, and ample parking for over 150 vehicles. Ideal for weddings, corporate events, exhibitions, and social gatherings.",
+    features: ["Dome Architecture", "4 Access Doors", "Loading Shutter", "Full-Service Kitchen", "Ample Parking", "Air-Conditioned"]
   }
 ];
