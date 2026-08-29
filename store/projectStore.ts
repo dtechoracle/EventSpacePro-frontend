@@ -418,7 +418,7 @@ export type ProjectState = {
     saveEvent: (eventId: string, slug: string) => Promise<void>;
 
     // Shape Actions
-    setCanvas: (canvas: Canvas) => void;
+    setCanvas: (canvas: Canvas, skipHistory?: boolean) => void;
 
     // Methods - Walls (Legacy)
     addWall: (wall: Wall, skipHistory?: boolean) => void;
@@ -430,9 +430,9 @@ export type ProjectState = {
     getWall: (id: string) => Wall | undefined;
 
     // Methods - Wall Segments (New Engine)
-    addWallSegment: (segment: WallSegment) => void;
-    updateWallSegment: (id: string, updates: Partial<WallSegment>) => void;
-    removeWallSegment: (id: string) => void;
+    addWallSegment: (segment: WallSegment, skipHistory?: boolean) => void;
+    updateWallSegment: (id: string, updates: Partial<WallSegment>, skipHistory?: boolean) => void;
+    removeWallSegment: (id: string, skipHistory?: boolean) => void;
     getWallSegment: (id: string) => WallSegment | undefined;
     setWallSegments: (segments: WallSegment[]) => void;
 
@@ -510,13 +510,13 @@ export type ProjectState = {
 
     // Methods - Comments
     addComment: (comment: Comment, skipHistory?: boolean) => void;
-    updateComment: (id: string, updates: Partial<Comment>) => void;
+    updateComment: (id: string, updates: Partial<Comment>, skipHistory?: boolean) => void;
     removeComment: (id: string, skipHistory?: boolean) => void;
     resolveComment: (id: string) => void;
 
     // Methods - Groups
     addGroup: (group: Group, skipHistory?: boolean) => void;
-    updateGroup: (id: string, updates: Partial<Group>) => void;
+    updateGroup: (id: string, updates: Partial<Group>, skipHistory?: boolean) => void;
     removeGroup: (id: string, skipHistory?: boolean) => void;
 
     // Methods - Wall Junctions
@@ -759,8 +759,8 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             // Canvas methods
-            setCanvas: (canvas) => {
-                set({ canvas, hasUnsavedChanges: true });
+            setCanvas: (canvas, skipHistory = false) => {
+                set((state) => ({ canvas, hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges }));
             },
 
             setCanvasSize: (width, height, unit) => {
@@ -1835,29 +1835,29 @@ export const useProjectStore = create<ProjectState>()(
             },
 
             // Wall Segment methods (New Engine)
-            addWallSegment: (segment) => {
-                get().saveToHistory();
+            addWallSegment: (segment, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     wallSegments: [...state.wallSegments, segment],
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
-            updateWallSegment: (id, updates) => {
-                get().saveToHistory();
+            updateWallSegment: (id, updates, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     wallSegments: state.wallSegments.map((w) =>
                         w.id === id ? { ...w, ...updates } : w
                     ),
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
-            removeWallSegment: (id) => {
-                get().saveToHistory();
+            removeWallSegment: (id, skipHistory = false) => {
+                if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     wallSegments: state.wallSegments.filter((w) => w.id !== id),
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -2018,7 +2018,7 @@ export const useProjectStore = create<ProjectState>()(
                 set((state) => {
                     return {
                         groups: [...state.groups, group],
-                        hasUnsavedChanges: true
+                        hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges
                     };
                 });
             },
@@ -2026,14 +2026,14 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     groups: state.groups.map((g) => (g.id === id ? { ...g, ...updates } : g)),
-                    hasUnsavedChanges: true
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges
                 }));
             },
             removeGroup: (id, skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     groups: state.groups.filter((g) => g.id !== id),
-                    hasUnsavedChanges: true
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges
                 }));
             },
 
@@ -2810,7 +2810,7 @@ export const useProjectStore = create<ProjectState>()(
                 const newComment = { ...comment };
                 set((state) => ({
                     comments: [...state.comments, newComment],
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -2818,7 +2818,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     comments: state.comments.map((c) => (c.id === id ? { ...c, ...updates } : c)),
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 
@@ -2826,7 +2826,7 @@ export const useProjectStore = create<ProjectState>()(
                 if (!skipHistory) get().saveToHistory();
                 set((state) => ({
                     comments: state.comments.filter((c) => c.id !== id),
-                    hasUnsavedChanges: true,
+                    hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
                 }));
             },
 

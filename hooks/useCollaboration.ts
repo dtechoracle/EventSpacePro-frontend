@@ -70,6 +70,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
   const [resolvedProjectId, setResolvedProjectId] = useState<string | null>(projectId || null);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [collaborationStatus, setCollaborationStatus] = useState<CollaborationStatusPayload | null>(null);
+  const [collaborationError, setCollaborationError] = useState<string | null>(null);
 
   const ydocRef = useRef<Y.Doc | null>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -80,7 +81,9 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
   const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
   const userInfoCacheRef = useRef<Map<string, { userName?: string; userAvatar?: string }>>(new Map());
   const resolvedProjectIdRef = useRef<string | null>(projectId || null);
+  const [hasJoined, setHasJoined] = useState(false);
   const hasJoinedRef = useRef(false);
+  const joinRequestedRef = useRef(false);
   const isInitializedRef = useRef(false);
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
   const isRemoteUpdatingRef = useRef(false);
@@ -203,19 +206,22 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     const ydoc = new Y.Doc();
     ydocRef.current = ydoc;
     hasJoinedRef.current = false;
+    joinRequestedRef.current = false;
+    setHasJoined(false);
+    setCollaborationError(null);
     isInitializedRef.current = false;
     const isRemoteUpdating = isRemoteUpdatingRef;
 
-    const yAssets = ydoc.getMap<any>("assets");
-    const yWalls = ydoc.getMap<any>("walls");
-    const yShapes = ydoc.getMap<any>("shapes");
-    const yAnnotations = ydoc.getMap<any>("annotations");
-    const yArrows = ydoc.getMap<any>("arrows");
-    const yDimensions = ydoc.getMap<any>("dimensions");
-    const yGroups = ydoc.getMap<any>("groups");
-    const yCanvas = ydoc.getMap<any>("canvas");
-    const yWallSegments = ydoc.getMap<any>("wallSegments");
-    const yComments = ydoc.getMap<any>("comments");
+    const yAssets = ydoc.getMap<any>("yAssets");
+    const yWalls = ydoc.getMap<any>("yWalls");
+    const yShapes = ydoc.getMap<any>("yShapes");
+    const yAnnotations = ydoc.getMap<any>("yAnnotations");
+    const yArrows = ydoc.getMap<any>("yArrows");
+    const yDimensions = ydoc.getMap<any>("yDimensions");
+    const yGroups = ydoc.getMap<any>("yGroups");
+    const yCanvas = ydoc.getMap<any>("yCanvas");
+    const yWallSegments = ydoc.getMap<any>("yWallSegments");
+    const yComments = ydoc.getMap<any>("yComments");
 
     // ─── Step 1: Connect socket with auth token ───
     console.log("[Collaboration] Step 1: Connecting socket...");
@@ -237,46 +243,6 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         return;
       }
 
-      if (isInitialSync && !hasAppliedInitialSync.current) {
-        hasAppliedInitialSync.current = true;
-        const store = useProjectStore.getState();
-        const storeItems = store.shapes.length + store.assets.length + store.walls.length +
-          store.textAnnotations.length + store.dimensions.length + store.labelArrows.length +
-          store.groups.length + store.wallSegments.length;
-        console.log("[Collaboration] Step 4: Initial yjs-sync check. Zustand state:", {
-          shapes: store.shapes.length,
-          assets: store.assets.length,
-          walls: store.walls.length,
-          totalItems: storeItems,
-          ydocShapes: yShapes.size,
-          ydocAssets: yAssets.size,
-          ydocWalls: yWalls.size,
-        });
-
-        if (storeItems > 0 && yShapes.size === 0 && yAssets.size === 0 && yWalls.size === 0) {
-          // Zustand has DB data but server Yjs is empty — push store into Ydoc
-          console.log("[Collaboration] Step 4: Server Yjs empty, pushing store → Ydoc");
-          ydoc.transact(() => {
-            store.shapes.forEach(s => yShapes.set(s.id, JSON.parse(JSON.stringify(s))));
-            store.assets.forEach(a => yAssets.set(a.id, JSON.parse(JSON.stringify(a))));
-            store.walls.forEach(w => yWalls.set(w.id, JSON.parse(JSON.stringify(w))));
-            store.textAnnotations.forEach(t => yAnnotations.set(t.id, JSON.parse(JSON.stringify(t))));
-            store.dimensions.forEach(d => yDimensions.set(d.id, JSON.parse(JSON.stringify(d))));
-            store.labelArrows.forEach(l => yArrows.set(l.id, JSON.parse(JSON.stringify(l))));
-            store.groups.forEach(g => yGroups.set(g.id, JSON.parse(JSON.stringify(g))));
-            store.wallSegments.forEach(s => yWallSegments.set(s.id, JSON.parse(JSON.stringify(s))));
-          }, "local-sync");
-          console.log("[Collaboration] Step 4: Pushed store → Ydoc. Ydoc shapes:", yShapes.size, "assets:", yAssets.size, "walls:", yWalls.size);
-          return;
-        }
-
-        if (storeItems === 0 && (yShapes.size > 0 || yAssets.size > 0 || yWalls.size > 0)) {
-          console.log("[Collaboration] Step 4: Zustand empty, server has data — applying yjs-sync");
-        } else if (storeItems > 0) {
-          console.log("[Collaboration] Step 4: Both store and server have data — applying yjs-sync (server wins)");
-        }
-      }
-
       const storeBefore = useProjectStore.getState();
       console.log("[Collaboration] DEBUG BEFORE Y.applyUpdate:", {
         zustandShapes: storeBefore.shapes.length,
@@ -289,8 +255,11 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       });
 
       isRemoteUpdating.current = true;
-      Y.applyUpdate(ydoc, update, "remote-sync");
-      isRemoteUpdating.current = false;
+      try {
+        Y.applyUpdate(ydoc, update, "remote-sync");
+      } finally {
+        isRemoteUpdating.current = false;
+      }
 
       const storeAfter = useProjectStore.getState();
       console.log("[Collaboration] DEBUG AFTER Y.applyUpdate:", {
@@ -304,15 +273,57 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         assetDelta: storeAfter.assets.length - storeBefore.assets.length,
         wallDelta: storeAfter.walls.length - storeBefore.walls.length,
       });
+
+      if (isInitialSync && !hasAppliedInitialSync.current) {
+        hasAppliedInitialSync.current = true;
+        const storeItems = storeBefore.shapes.length + storeBefore.assets.length + storeBefore.walls.length +
+          storeBefore.textAnnotations.length + storeBefore.dimensions.length + storeBefore.labelArrows.length +
+          storeBefore.groups.length + storeBefore.wallSegments.length + storeBefore.comments.length;
+        console.log("[Collaboration] Step 4: Initial yjs-sync check. Zustand state:", {
+          shapes: storeBefore.shapes.length,
+          assets: storeBefore.assets.length,
+          walls: storeBefore.walls.length,
+          totalItems: storeItems,
+          ydocShapes: yShapes.size,
+          ydocAssets: yAssets.size,
+          ydocWalls: yWalls.size,
+        });
+
+        if (storeItems > 0 && yShapes.size === 0 && yAssets.size === 0 && yWalls.size === 0) {
+          console.log("[Collaboration] Step 4: Server Yjs empty, pushing store → Ydoc");
+          ydoc.transact(() => {
+            storeBefore.shapes.forEach(s => yShapes.set(s.id, JSON.parse(JSON.stringify(s))));
+            storeBefore.assets.forEach(a => yAssets.set(a.id, JSON.parse(JSON.stringify(a))));
+            storeBefore.walls.forEach(w => yWalls.set(w.id, JSON.parse(JSON.stringify(w))));
+            storeBefore.textAnnotations.forEach(t => yAnnotations.set(t.id, JSON.parse(JSON.stringify(t))));
+            storeBefore.dimensions.forEach(d => yDimensions.set(d.id, JSON.parse(JSON.stringify(d))));
+            storeBefore.labelArrows.forEach(l => yArrows.set(l.id, JSON.parse(JSON.stringify(l))));
+            storeBefore.groups.forEach(g => yGroups.set(g.id, JSON.parse(JSON.stringify(g))));
+            storeBefore.wallSegments.forEach(s => yWallSegments.set(s.id, JSON.parse(JSON.stringify(s))));
+            storeBefore.comments.forEach(c => yComments.set(c.id, JSON.parse(JSON.stringify(c))));
+            if (storeBefore.canvas) yCanvas.set("config", JSON.parse(JSON.stringify(storeBefore.canvas)));
+          }, "local-sync");
+          console.log("[Collaboration] Step 4: Pushed store → Ydoc. Ydoc shapes:", yShapes.size, "assets:", yAssets.size, "walls:", yWalls.size);
+          return;
+        }
+
+        if (storeItems === 0 && (yShapes.size > 0 || yAssets.size > 0 || yWalls.size > 0)) {
+          console.log("[Collaboration] Step 4: Zustand empty, server has data — applied yjs-sync");
+        } else if (storeItems > 0) {
+          console.log("[Collaboration] Step 4: Both store and server have data — applied yjs-sync (server wins)");
+        }
+      }
     };
 
     socket.on("yjs-sync", (payload) => {
       console.log("[Collaboration] Step 4: Received yjs-sync — server confirms join");
-      applyRemoteYUpdate(payload, true);
 
       // yjs-sync confirms we've joined the room. NOW safe to emit.
       hasJoinedRef.current = true;
+      setHasJoined(true);
+      setCollaborationError(null);
       console.log("[Collaboration] Step 4: hasJoined = true — safe to emit");
+      applyRemoteYUpdate(payload, true);
 
       // Push any store data that isn't in the Ydoc yet
       if (!isInitializedRef.current) {
@@ -428,27 +439,27 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     yGroups.observe((event) => applyYChangeToStore(event,
       (id, data) => {
         const existing = useProjectStore.getState().groups.find((g) => g.id === id);
-        if (existing) useProjectStore.getState().updateGroup(id, data);
+        if (existing) useProjectStore.getState().updateGroup(id, data, true);
         else useProjectStore.getState().addGroup(data, true);
       },
-      (id) => useProjectStore.getState().removeGroup(id),
+      (id) => useProjectStore.getState().removeGroup(id, true),
       "groups"
     ));
 
     yWallSegments.observe((event) => applyYChangeToStore(event,
       (id, data) => {
         const existing = useProjectStore.getState().wallSegments.find((s) => s.id === id);
-        if (existing) useProjectStore.getState().updateWallSegment(id, data);
-        else useProjectStore.getState().addWallSegment(data);
+        if (existing) useProjectStore.getState().updateWallSegment(id, data, true);
+        else useProjectStore.getState().addWallSegment(data, true);
       },
-      (id) => useProjectStore.getState().removeWallSegment(id),
+      (id) => useProjectStore.getState().removeWallSegment(id, true),
       "wallSegments"
     ));
 
     yComments.observe((event) => applyYChangeToStore(event,
       (id, data) => {
         const existing = useProjectStore.getState().comments.find((c) => c.id === id);
-        if (existing) useProjectStore.getState().updateComment(id, data);
+        if (existing) useProjectStore.getState().updateComment(id, data, true);
         else useProjectStore.getState().addComment(data, true);
       },
       (id) => useProjectStore.getState().removeComment(id, true),
@@ -459,7 +470,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       if (event.transaction.origin === "local-sync") return;
       isRemoteUpdating.current = true;
       const canvas = yCanvas.get("config");
-      if (canvas) useProjectStore.getState().setCanvas(canvas);
+      if (canvas) useProjectStore.getState().setCanvas(canvas, true);
       isRemoteUpdating.current = false;
     });
 
@@ -590,23 +601,10 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         return;
       }
 
-      let base64Update: string;
-      try {
-        let binary = '';
-        const bytes = new Uint8Array(update);
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        base64Update = btoa(binary);
-      } catch (err) {
-        console.error("[Collaboration] Failed to encode update as base64:", err);
-        return;
-      }
-
-      console.log("[Collaboration] yjs-update → emitting (base64), rawSize:", update.length, "base64Size:", base64Update.length, "roomId:", targetRoomId);
+      console.log("[Collaboration] yjs-update → emitting, rawSize:", update.length, "roomId:", targetRoomId);
       socket.emit("yjs-update", {
         roomId: targetRoomId,
-        update: base64Update,
+        update: Array.from(update),
         userId: user?._id,
       });
     });
@@ -616,6 +614,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     socket.on("connect", () => {
       console.log("[Collaboration] Step 3: Socket connected");
       setIsConnected(true);
+      setCollaborationError(null);
 
       // Emit join-collaboration — but only after /init has resolved the roomId
       const doJoin = () => {
@@ -624,6 +623,8 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
           console.warn("[Collaboration] Step 3: No roomId yet, waiting for /init...");
           return;
         }
+        if (joinRequestedRef.current) return;
+        joinRequestedRef.current = true;
         console.log("[Collaboration] Step 3: Emitting join-collaboration with roomId:", currentRoomId);
         socket.emit("join-collaboration", {
           projectId: resolvedProjectId,
@@ -641,6 +642,8 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       console.log("[Collaboration] Socket disconnected");
       setIsConnected(false);
       hasJoinedRef.current = false;
+      joinRequestedRef.current = false;
+      setHasJoined(false);
     });
 
     // ─── Step 2: HTTP init to get the canonical roomId ───
@@ -757,6 +760,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
 
     socket.on("collaboration-error", (payload: any) => {
       console.error("[Collaboration] collaboration-error:", payload);
+      setCollaborationError(payload?.message || payload?.error || "Collaboration sync failed");
     });
 
     // ─── Cleanup ───
@@ -770,6 +774,8 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       socketRef.current = null;
       roomIdRef.current = null;
       hasJoinedRef.current = false;
+      joinRequestedRef.current = false;
+      setHasJoined(false);
       isInitializedRef.current = false;
       ydoc.destroy();
       ydocRef.current = null;
@@ -928,9 +934,10 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     updateCursor,
     updateTyping,
     collaborationStatus,
+    collaborationError,
     resolvedProjectId,
     roomId,
     ydoc: ydocRef.current,
-    hasJoined: hasJoinedRef.current,
+    hasJoined,
   };
 };

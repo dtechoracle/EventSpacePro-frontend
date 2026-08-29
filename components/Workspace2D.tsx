@@ -847,7 +847,7 @@ export default function Workspace2D({
 
 
   
-  const { activeUsers, updateCursor, updateTyping, roomId, isConnected, hasJoined } = useCollaboration(projectId, eventId);
+  const { activeUsers, updateCursor, updateTyping, roomId, isConnected, hasJoined, collaborationError } = useCollaboration(projectId, eventId);
 
 
   const activeTool = useEditorStore(s => s.activeTool);
@@ -4373,6 +4373,7 @@ export default function Workspace2D({
         <div>Socket: <span className={isConnected ? "text-green-400 font-bold" : "text-red-400 font-bold"}>{isConnected ? "Connected" : "Disconnected"}</span></div>
         <div>Joined Room: <span className={hasJoined ? "text-green-400 font-bold" : "text-yellow-400 font-bold"}>{hasJoined ? "Yes" : "No"}</span></div>
         <div className="max-w-[200px] truncate" title={roomId || "None"}>Room ID: {roomId || "None"}</div>
+        {collaborationError && <div className="max-w-[220px] truncate text-red-300" title={collaborationError}>Error: {collaborationError}</div>}
         <div>Shapes count: {shapes.length}</div>
         <div>Assets count: {assets.length}</div>
         <div>Active Users: {activeUsers.length}</div>
