@@ -542,6 +542,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
   };
 
   const userName = getUserName();
+  const projectOwnerLabel = useEditorStore(s => s.projectOwnerLabel);
 
 
 
@@ -941,7 +942,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
             </div>
             <div className="flex justify-between items-center">
               <span className="w-full">Owner</span>
-              <span className="font-medium w-full">{userName || "Not logged in"}</span>
+              <span className="font-medium w-full truncate" title={projectOwnerLabel || undefined}>
+                {projectOwnerLabel || "—"}
+              </span>
             </div>
 
             {/* Alignment & Distribution - Only when multiple items selected OR single group selected */}

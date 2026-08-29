@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { findContainingObjects, findNearestObject, getAnchorsForObject, AnchorType } from '@/utils/snapAnchors';
 import { apiRequest } from "@/helpers/Config";
+import { isCollabAuthoritative } from "@/lib/collabAuthority";
 // Temporary type until wallEngine is implemented
 export type WallSegment = {
     id: string;
@@ -1626,15 +1627,35 @@ export const useProjectStore = create<ProjectState>()(
                     }
 
                     // PUT /projects/{slug}/events/{eventId}
-                    // Include all required fields: name, type, canvases, canvasData, canvasAssets
-                    const payload = {
+                    //
+                    // `canvasAssets` is deliberately conditional. While a
+                    // collaboration room is joined and synced, the room's Yjs
+                    // document owns that field and the backend flush persists
+                    // it; sending this client's full local copy as well meant
+                    // whichever writer ran last silently erased the other's
+                    // work. The backend only assigns fields present in the
+                    // body, so omitting it leaves the collaborative value
+                    // intact. See lib/collabAuthority.ts.
+                    //
+                    // (The merge below this comment only ever guarded the
+                    // array shape — when the backend held the collaboration
+                    // object shape, `backendCanvasAssets.length` was undefined
+                    // and the merge was skipped entirely.)
+                    const collabOwnsCanvas = isCollabAuthoritative(eventId);
+                    const payload: Record<string, unknown> = {
                         name: eventName,
                         type: eventType,
                         canvases: canvases,
                         canvasData,
-                        canvasAssets,
                         comments: eventComments,
                     };
+                    if (!collabOwnsCanvas) {
+                        payload.canvasAssets = canvasAssets;
+                    } else {
+                        console.log(
+                            `[projectStore] Collaboration owns canvasAssets for ${eventId} — omitting it from the save`
+                        );
+                    }
 
                     console.log(`[projectStore] Saving to DATABASE via PUT /projects/${slug}/events/${eventId}:`, {
                         eventId,

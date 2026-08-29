@@ -36,6 +36,21 @@ export type EditorState = {
   // Tool state
   activeTool: Tool;
 
+  /**
+   * True when the current user only has view access to this project.
+   * Set from the collaboration session (`canEdit` on /collaboration/.../init)
+   * so the toolbar and canvas can present a real read-only state instead of
+   * letting a viewer draw into a document the server will always refuse.
+   */
+  isReadOnly: boolean;
+
+  /**
+   * Display name (or email) of the project's actual owner, resolved from the
+   * project record. The Properties sidebar used to label the *signed-in* user
+   * as "Owner", which is simply wrong for anyone who is not the owner.
+   */
+  projectOwnerLabel: string | null;
+
   // Selection state
   selectedIds: string[];
   hoveredId: string | null;
@@ -83,6 +98,8 @@ export type EditorState = {
   setCanvasOffset: (offset: { left: number; top: number }) => void;
 
   setActiveTool: (tool: Tool) => void;
+  setIsReadOnly: (readOnly: boolean) => void;
+  setProjectOwnerLabel: (label: string | null) => void;
 
   setSelectedIds: (ids: string[]) => void;
   addToSelection: (id: string) => void;
@@ -144,6 +161,8 @@ export const useEditorStore = create<EditorState>()(
       canvasOffset: { left: 0, top: 0 },
 
       activeTool: 'select',
+      isReadOnly: false,
+      projectOwnerLabel: null,
 
       selectedIds: [],
       hoveredId: null,
@@ -209,6 +228,8 @@ export const useEditorStore = create<EditorState>()(
 
       // Tool methods
       setActiveTool: (tool) => set({ activeTool: tool }),
+      setIsReadOnly: (readOnly) => set({ isReadOnly: readOnly }),
+      setProjectOwnerLabel: (label) => set({ projectOwnerLabel: label }),
 
       // Selection methods
       setSelectedIds: (ids) => set({ selectedIds: ids }),

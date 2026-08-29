@@ -36,19 +36,12 @@ export const useUserStore = create<UserState>()(
                 try {
                     const response = await apiRequest("/user", "GET", null, true);
                     const userData = response.data;
-                    let avatarFromApi: string | null = null;
 
-                    try {
-                        const avatarResponse = await apiRequest("/user/avatar", "GET", null, true);
-                        const avatarPayload = avatarResponse?.data || avatarResponse;
-                        avatarFromApi =
-                            avatarPayload?.avatar ||
-                            avatarPayload?.data?.avatar ||
-                            avatarPayload?.url ||
-                            null;
-                    } catch (e) {
-                        console.warn("[userStore] Failed to fetch avatar from /user/avatar", e);
-                    }
+                    // The avatar is part of the user profile. There is no
+                    // GET /user/avatar endpoint — only POST for uploads — so the
+                    // extra request this used to make 404'd on every page load
+                    // for every user and was caught and discarded anyway.
+                    const avatarFromApi: string | null = userData?.avatar || null;
 
                     set((state) => {
                         // If we don't have a user in state yet, try to see if it's in localStorage 

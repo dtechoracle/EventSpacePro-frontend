@@ -5,7 +5,9 @@ import Cookies from "js-cookie";
 import { useRouter } from "next/router";
 import { useUserStore } from "@/store/userStore";
 import { useProjectStore } from "@/store/projectStore";
+import { useEditorStore } from "@/store/editorStore";
 import { apiRequest } from "@/helpers/Config";
+import { setCollabAuthority, clearCollabAuthority } from "@/lib/collabAuthority";
 import {
   CollaborationHttpUser,
   CollaborationStatusPayload,
@@ -38,12 +40,30 @@ const resolveProjectRecord = async (slug: string) => {
   }
 };
 
-const normalizeUpdatePayload = (payload: any): Uint8Array | null => {
-  const source = payload?.update ?? payload?.data?.update ?? payload?.data ?? payload;
-  if (!source) return null;
+/**
+ * Coerce whatever the transport handed us into the byte array Yjs expects.
+ *
+ * The backend emits `update` as a `Uint8Array`. socket.io serialises that as a
+ * binary attachment, and socket.io-client hands binary attachments to browser
+ * code as an **ArrayBuffer** — not a Uint8Array. Without an ArrayBuffer branch
+ * every inbound `yjs-update` and `yjs-sync` decoded to `null` and was silently
+ * dropped, which is what stopped collaborative edits from ever crossing between
+ * sessions. Keep every branch below: node/test callers send Buffers, older
+ * clients send plain arrays, and the redis relay path sends base64.
+ */
+const toUint8Array = (source: unknown): Uint8Array | null => {
+  if (source === null || source === undefined) return null;
   if (source instanceof Uint8Array) return source;
+  // Any other typed array or DataView (also covers Node Buffers structurally).
+  if (ArrayBuffer.isView(source)) {
+    const view = source as ArrayBufferView;
+    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+  }
+  if (source instanceof ArrayBuffer) return new Uint8Array(source);
   if (Array.isArray(source)) return Uint8Array.from(source);
-  if (typeof source === "object" && Array.isArray(source.data)) return Uint8Array.from(source.data);
+  if (typeof source === "object" && Array.isArray((source as any).data)) {
+    return Uint8Array.from((source as any).data);
+  }
   if (typeof source === "string") {
     try {
       const binary = atob(source);
@@ -54,6 +74,37 @@ const normalizeUpdatePayload = (payload: any): Uint8Array | null => {
   }
   return null;
 };
+
+const normalizeUpdatePayload = (payload: any): Uint8Array | null => {
+  const source = payload?.update ?? payload?.data?.update ?? payload?.data ?? payload;
+  const bytes = toUint8Array(source);
+  // A zero-length update carries nothing and makes Y.applyUpdate throw.
+  return bytes && bytes.byteLength > 0 ? bytes : null;
+};
+
+/** Byte length of a payload regardless of which shape the transport used. */
+const updateByteLength = (payload: any): number =>
+  normalizeUpdatePayload(payload)?.byteLength ?? 0;
+
+/** Describes an undecodable payload well enough to debug it from a log line. */
+const describePayload = (payload: any): string => {
+  const source = payload?.update ?? payload?.data?.update ?? payload?.data ?? payload;
+  const type = source === null || source === undefined
+    ? String(source)
+    : (source as any)?.constructor?.name || typeof source;
+  const size = (source as any)?.byteLength ?? (source as any)?.length ?? "unknown";
+  return `${type} (size: ${size}), payload keys: [${Object.keys(payload || {}).join(", ")}]`;
+};
+
+/**
+ * Rooms are keyed by the project's mongo `_id`, never its slug — see
+ * docs/frontend-collaboration-contract.md. The editor passes the slug in as
+ * `projectId`, so treating that value as already-resolved made the hook open a
+ * socket and call /init against the slug, then tear the whole session down and
+ * redo it once the real id arrived. Wait for the id.
+ */
+const isProjectObjectId = (value?: string | null): value is string =>
+  !!value && /^[a-f0-9]{24}$/i.test(value);
 
 const extractUserArray = (payload: any): CollaborationHttpUser[] => {
   if (Array.isArray(payload)) return payload;
@@ -67,10 +118,17 @@ const extractUserArray = (payload: any): CollaborationHttpUser[] => {
 export const useCollaboration = (projectId: string | undefined, eventId: string | undefined) => {
   const [activeUsers, setActiveUsers] = useState<UserPresence[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [resolvedProjectId, setResolvedProjectId] = useState<string | null>(projectId || null);
+  const [resolvedProjectId, setResolvedProjectId] = useState<string | null>(
+    isProjectObjectId(projectId) ? projectId : null
+  );
   const [roomId, setRoomId] = useState<string | null>(null);
   const [collaborationStatus, setCollaborationStatus] = useState<CollaborationStatusPayload | null>(null);
   const [collaborationError, setCollaborationError] = useState<string | null>(null);
+  // Optimistic by default: a user whose collaboration status we cannot read is
+  // still allowed to edit locally, exactly as before. We only drop to read-only
+  // when the server positively tells us this account is a viewer.
+  const [canEdit, setCanEdit] = useState(true);
+  const [projectRole, setProjectRole] = useState<string | null>(null);
 
   const ydocRef = useRef<Y.Doc | null>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -80,7 +138,9 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
   const lastCursorSentAtRef = useRef(0);
   const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
   const userInfoCacheRef = useRef<Map<string, { userName?: string; userAvatar?: string }>>(new Map());
-  const resolvedProjectIdRef = useRef<string | null>(projectId || null);
+  const resolvedProjectIdRef = useRef<string | null>(
+    isProjectObjectId(projectId) ? projectId : null
+  );
   const [hasJoined, setHasJoined] = useState(false);
   const hasJoinedRef = useRef(false);
   const joinRequestedRef = useRef(false);
@@ -90,6 +150,18 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
 
   const user = useUserStore((s) => s.user);
   const router = useRouter();
+
+  // The presence callbacks and the main socket effect only ever need the
+  // current user's id, but they used to close over the whole `user` object.
+  // userStore replaces that object at least twice per page load (initial read,
+  // then the profile fetch), which re-created every callback and tore the
+  // socket effect down and back up mid-handshake — three connects, three
+  // /init calls and four yjs-sync events for a single page load. Reading the id
+  // through a ref keeps the callbacks stable, and the effect below keys off the
+  // id string instead of the object identity.
+  const currentUserId = user?._id;
+  const currentUserIdRef = useRef<string | undefined>(currentUserId);
+  currentUserIdRef.current = currentUserId;
 
   const effectiveProjectSlug = router.query.slug as string | undefined;
   const effectiveEventId = eventId || (router.query.id as string | undefined);
@@ -128,7 +200,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     const mapped = users
       .map(mapPresenceUser)
       .filter((entry): entry is UserPresence => !!entry)
-      .filter((entry) => entry.userId !== user?._id)
+      .filter((entry) => entry.userId !== currentUserIdRef.current)
       .sort((a, b) => a.userId.localeCompare(b.userId));
 
     const signature = JSON.stringify(
@@ -139,11 +211,11 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       activeUsersSignatureRef.current = signature;
       setActiveUsers(mapped);
     }
-  }, [mapPresenceUser, user?._id]);
+  }, [mapPresenceUser]);
 
   const mergePresenceUser = useCallback((rawUser: CollaborationHttpUser) => {
     const mapped = mapPresenceUser(rawUser);
-    if (!mapped || mapped.userId === user?._id) return;
+    if (!mapped || mapped.userId === currentUserIdRef.current) return;
 
     setActiveUsers((prev) => {
       const next = [...prev];
@@ -158,7 +230,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       activeUsersSignatureRef.current = signature;
       return next;
     });
-  }, [mapPresenceUser, user?._id]);
+  }, [mapPresenceUser]);
 
   const removePresenceUser = useCallback((userId?: string) => {
     if (!userId) return;
@@ -182,6 +254,22 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       try {
         const project = await resolveProjectRecord(slug);
         const nextProjectId = project?._id || project?.id || null;
+
+        // Surface the project's real owner so the editor stops labelling the
+        // signed-in user as the owner regardless of their actual role.
+        const owner = Array.isArray(project?.users)
+          ? project.users.find((member: any) => member?.role === "owner")
+          : null;
+        if (owner) {
+          const ownerUser = owner.user && typeof owner.user === "object" ? owner.user : null;
+          const ownerName = [ownerUser?.firstName, ownerUser?.lastName]
+            .filter(Boolean)
+            .join(" ")
+            .trim();
+          useEditorStore
+            .getState()
+            .setProjectOwnerLabel(ownerName || owner.email || null);
+        }
         console.log("[Collaboration] Resolved project:", slug, "->", nextProjectId);
         if (!isCancelled && nextProjectId) {
           resolvedProjectIdRef.current = nextProjectId;
@@ -200,7 +288,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
   }, [effectiveProjectSlug, projectId]);
 
   useEffect(() => {
-    if (!resolvedProjectId || !effectiveEventId || !user) return;
+    if (!isProjectObjectId(resolvedProjectId) || !effectiveEventId || !currentUserId) return;
 
     const token = Cookies.get("authToken");
     const ydoc = new Y.Doc();
@@ -239,7 +327,13 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     const applyRemoteYUpdate = (payload: any, isInitialSync = false) => {
       const update = normalizeUpdatePayload(payload);
       if (!update) {
-        console.warn("[Collaboration] Received empty yjs update, payload:", Object.keys(payload || {}));
+        // Never downgrade this to a warning: an undecodable update means this
+        // client is now silently diverging from every other session.
+        console.error(
+          "[Collaboration] Could not decode inbound yjs update — dropping it.",
+          describePayload(payload)
+        );
+        setCollaborationError("Could not read an update from the server. Reload to resync.");
         return;
       }
 
@@ -276,6 +370,10 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
 
       if (isInitialSync && !hasAppliedInitialSync.current) {
         hasAppliedInitialSync.current = true;
+        resendAttempts = 0;
+        // We have read the room, so the Yjs document — not this client's REST
+        // autosave — now owns `Event.canvasAssets`. See lib/collabAuthority.ts.
+        setCollabAuthority(effectiveEventId || null);
         const storeItems = storeBefore.shapes.length + storeBefore.assets.length + storeBefore.walls.length +
           storeBefore.textAnnotations.length + storeBefore.dimensions.length + storeBefore.labelArrows.length +
           storeBefore.groups.length + storeBefore.wallSegments.length + storeBefore.comments.length;
@@ -349,12 +447,23 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     });
 
     socket.on("yjs-update", (payload) => {
-      const updateSize = payload?.update?.length || payload?.data?.update?.length || 0;
-      console.log("[Collaboration] Step 6: Received yjs-update,", updateSize, "bytes");
+      console.log("[Collaboration] Step 6: Received yjs-update,", updateByteLength(payload), "bytes");
       applyRemoteYUpdate(payload, false);
     });
 
     // Yjs observers → Zustand (apply remote changes to local store)
+    //
+    // Values read out of a Y.Map are not always plain objects. A live client
+    // writes plain JSON, but when the backend rebuilds a room from persisted
+    // Mongo data it reconstructs every nested object as a `Y.Map`, so
+    // `target.get(key)` hands back a Y type. Storing that directly gave zustand
+    // an object with no `id`, `type`, `x` or `y` — the item counted towards the
+    // store totals but rendered as `translate(undefined, undefined)` and
+    // collided with other malformed entries on React's `key`. Always take a
+    // plain snapshot before it reaches the store.
+    const toPlainValue = (value: any) =>
+      value && typeof value.toJSON === "function" ? value.toJSON() : value;
+
     const applyYChangeToStore = (
       event: Y.YMapEvent<any>,
       storeAction: (id: string, data: any) => void,
@@ -366,7 +475,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       isRemoteUpdating.current = true;
       event.changes.keys.forEach((change, key) => {
         if (change.action === "add" || change.action === "update") {
-          const value = event.target.get(key);
+          const value = toPlainValue(event.target.get(key));
           storeAction(key, value);
         } else if (change.action === "delete") {
           removeAction(key);
@@ -469,7 +578,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     yCanvas.observe((event) => {
       if (event.transaction.origin === "local-sync") return;
       isRemoteUpdating.current = true;
-      const canvas = yCanvas.get("config");
+      const canvas = toPlainValue(yCanvas.get("config"));
       if (canvas) useProjectStore.getState().setCanvas(canvas, true);
       isRemoteUpdating.current = false;
     });
@@ -559,8 +668,20 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         console.log("[BroadcastChannel] No channel available — cannot broadcast");
       }
 
-      // Yjs sync: only after backend join
+      // Yjs sync: only after the backend join AND after we have successfully
+      // applied the server's initial state.
+      //
+      // The second condition is the important one. `syncCollection` below turns
+      // "present in my previous local snapshot, absent now" into a hard
+      // `targetMap.delete()`. If we were to write before reading the room, a
+      // client whose local store is a subset of the room would delete every
+      // object it has simply never seen — which is exactly how collaborators'
+      // work went missing. If we could not read the room, we do not write to it.
       if (!hasJoinedRef.current) return;
+      if (!hasAppliedInitialSync.current) {
+        console.warn("[Collaboration] Holding local changes: initial server sync not applied yet");
+        return;
+      }
 
       console.log("[Collaboration] Subscriber: detected store changes, syncing to Ydoc", {
         shapes: state.shapes.length !== previousState.shapes.length ? `${previousState.shapes.length}→${state.shapes.length}` : state.shapes.length,
@@ -584,6 +705,35 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       }, "local-sync");
     });
 
+    // ─── Recovery: replay the full document after a rejected update ───
+    // Bounded and backed off so a server that keeps refusing (a revoked role,
+    // a room that no longer exists) cannot turn into a resend loop.
+    let resendAttempts = 0;
+    let resendTimer: ReturnType<typeof setTimeout> | null = null;
+    const MAX_RESEND_ATTEMPTS = 5;
+
+    const scheduleFullStateResend = () => {
+      if (resendTimer) return;
+      if (resendAttempts >= MAX_RESEND_ATTEMPTS) {
+        console.error("[Collaboration] Giving up resending state after", resendAttempts, "attempts");
+        setCollaborationError("Your changes could not be synced. Reload the page to resync.");
+        return;
+      }
+      const delay = 500 * 2 ** resendAttempts;
+      resendAttempts += 1;
+      resendTimer = setTimeout(() => {
+        resendTimer = null;
+        if (!socket.connected || !hasJoinedRef.current || !roomIdRef.current) return;
+        const fullState = Y.encodeStateAsUpdate(ydoc);
+        console.log("[Collaboration] Resending full document state,", fullState.byteLength, "bytes");
+        socket.emit("yjs-update", {
+          roomId: roomIdRef.current,
+          update: Array.from(fullState),
+          userId: currentUserIdRef.current,
+        });
+      }, delay);
+    };
+
     // Yjs doc update → socket emit
     ydoc.on("update", (update, origin) => {
       if (origin === "remote-sync") return;
@@ -605,37 +755,44 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       socket.emit("yjs-update", {
         roomId: targetRoomId,
         update: Array.from(update),
-        userId: user?._id,
+        userId: currentUserIdRef.current,
       });
     });
 
     // ─── Step 2 & 3: Init → join → wait for yjs-sync ───
     // Per contract: /init first → get roomId → emit join-collaboration → wait for yjs-sync
+    // A single join path, shared by the socket "connect" handler and the /init
+    // response — whichever completes second is the one that actually joins.
+    // Previously each had its own emit and the connect handler also queued two
+    // unclearable retry timers, so one page load could join the room several
+    // times over. `joinRequestedRef` is the only gate, and it is reset on
+    // disconnect so a reconnect rejoins exactly once.
+    const joinRetryTimers: ReturnType<typeof setTimeout>[] = [];
+
+    const doJoin = (reason: string) => {
+      if (joinRequestedRef.current) return;
+      if (!socket.connected) return;
+      const currentRoomId = roomIdRef.current;
+      if (!currentRoomId) {
+        console.log(`[Collaboration] Step 3: roomId not resolved yet (${reason}), waiting for /init`);
+        return;
+      }
+      joinRequestedRef.current = true;
+      console.log(`[Collaboration] Step 3: Emitting join-collaboration (${reason}), roomId:`, currentRoomId);
+      socket.emit("join-collaboration", {
+        projectId: resolvedProjectId,
+        eventId: effectiveEventId,
+      });
+    };
+
     socket.on("connect", () => {
       console.log("[Collaboration] Step 3: Socket connected");
       setIsConnected(true);
       setCollaborationError(null);
-
-      // Emit join-collaboration — but only after /init has resolved the roomId
-      const doJoin = () => {
-        const currentRoomId = roomIdRef.current;
-        if (!currentRoomId) {
-          console.warn("[Collaboration] Step 3: No roomId yet, waiting for /init...");
-          return;
-        }
-        if (joinRequestedRef.current) return;
-        joinRequestedRef.current = true;
-        console.log("[Collaboration] Step 3: Emitting join-collaboration with roomId:", currentRoomId);
-        socket.emit("join-collaboration", {
-          projectId: resolvedProjectId,
-          eventId: effectiveEventId,
-        });
-      };
-
-      // Try immediately (roomId may already be set by /init), or retry shortly
-      doJoin();
-      const retryTimer = setTimeout(doJoin, 500);
-      const retryTimer2 = setTimeout(doJoin, 2000);
+      doJoin("socket connected");
+      // One bounded retry covers the case where /init is still in flight and
+      // its own callback races with this handler.
+      joinRetryTimers.push(setTimeout(() => doJoin("retry after connect"), 1000));
     });
 
     socket.on("disconnect", () => {
@@ -643,13 +800,22 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       setIsConnected(false);
       hasJoinedRef.current = false;
       joinRequestedRef.current = false;
+      hasAppliedInitialSync.current = false;
       setHasJoined(false);
+      // Hand canvas ownership back to the REST save so a user who drops off the
+      // socket keeps saving their work instead of silently losing it.
+      clearCollabAuthority(effectiveEventId || null);
     });
 
     // ─── Step 2: HTTP init to get the canonical roomId ───
     initCollaborationSession(resolvedProjectId, effectiveEventId)
       .then((status) => {
         setCollaborationStatus(status);
+        const role = (status?.userRole || status?.role) as string | undefined;
+        if (role) setProjectRole(role);
+        setCanEdit(
+          typeof status?.canEdit === "boolean" ? status.canEdit : role !== "viewer"
+        );
         const nextRoomId = status?.roomId || `${resolvedProjectId}-${effectiveEventId}`;
         setRoomId(nextRoomId);
         roomIdRef.current = nextRoomId;
@@ -658,14 +824,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         const statusUsers = extractUserArray(status);
         if (statusUsers.length > 0) setPresenceUsers(statusUsers);
 
-        // If socket is already connected, emit join-collaboration now
-        if (socket.connected) {
-          console.log("[Collaboration] Step 2: Socket already connected, emitting join-collaboration");
-          socket.emit("join-collaboration", {
-            projectId: resolvedProjectId,
-            eventId: effectiveEventId,
-          });
-        }
+        doJoin("/init resolved");
       })
       .catch((error) => {
         console.warn("[Collaboration] Step 2: /init failed:", error);
@@ -674,13 +833,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         roomIdRef.current = fallbackRoomId;
         console.log("[Collaboration] Step 2: Fallback roomId:", fallbackRoomId);
 
-        // Try joining with fallback roomId
-        if (socket.connected) {
-          socket.emit("join-collaboration", {
-            projectId: resolvedProjectId,
-            eventId: effectiveEventId,
-          });
-        }
+        doJoin("/init failed, using fallback roomId");
       });
 
     // ─── Presence events ───
@@ -760,7 +913,26 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
 
     socket.on("collaboration-error", (payload: any) => {
       console.error("[Collaboration] collaboration-error:", payload);
-      setCollaborationError(payload?.message || payload?.error || "Collaboration sync failed");
+      const message = String(payload?.message || payload?.error || "Collaboration sync failed");
+      setCollaborationError(message);
+
+      // The server is the authority on roles. If it refuses an edit because we
+      // are a viewer, reflect that in the UI immediately rather than letting the
+      // user keep drawing into a document that will never be saved.
+      if (/viewer/i.test(message)) {
+        setCanEdit(false);
+        setProjectRole("viewer");
+        return;
+      }
+
+      // A rejected update is worse than it looks: we have already applied it to
+      // our local document, so the room is now permanently missing that edit and
+      // no later delta will reintroduce it. Resend the whole document state —
+      // Yjs updates are idempotent, so replaying everything is safe and is the
+      // only thing that actually repairs the divergence.
+      if (payload?.code === "UPDATE_FAILED" || /update failed/i.test(message)) {
+        scheduleFullStateResend();
+      }
     });
 
     // ─── Cleanup ───
@@ -769,12 +941,21 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         clearTimeout(cursorTimerRef.current);
         cursorTimerRef.current = null;
       }
+      joinRetryTimers.forEach(clearTimeout);
+      joinRetryTimers.length = 0;
+      if (resendTimer) {
+        clearTimeout(resendTimer);
+        resendTimer = null;
+      }
       unsubscribe();
+      socket.removeAllListeners();
       socket.disconnect();
+      clearCollabAuthority(effectiveEventId || null);
       socketRef.current = null;
       roomIdRef.current = null;
       hasJoinedRef.current = false;
       joinRequestedRef.current = false;
+      hasAppliedInitialSync.current = false;
       setHasJoined(false);
       isInitializedRef.current = false;
       ydoc.destroy();
@@ -787,7 +968,10 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     setPresenceUsers,
     mergePresenceUser,
     removePresenceUser,
-    user,
+    // Key off the id, never the user object: userStore hands back a fresh
+    // object on every profile read, and depending on it restarted the whole
+    // socket handshake mid-flight.
+    currentUserId,
   ]);
 
   // ─── BroadcastChannel: instant sync between same-browser tabs ───
@@ -881,12 +1065,12 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       socketRef.current.emit("cursor-move", {
         roomId: roomIdRef.current,
         cursor: nextCursor,
-        userId: user?._id,
+        userId: currentUserIdRef.current,
       });
       socketRef.current.emit("awareness-update", {
         roomId: roomIdRef.current,
         awareness: { cursor: nextCursor },
-        userId: user?._id,
+        userId: currentUserIdRef.current,
       });
     };
 
@@ -919,14 +1103,14 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     if (!socketRef.current || !roomIdRef.current || !hasJoinedRef.current) return;
     socketRef.current.emit(isTyping ? "typing-start" : "typing-stop", {
       roomId: roomIdRef.current,
-      userId: user?._id,
+      userId: currentUserIdRef.current,
     });
     socketRef.current.emit("awareness-update", {
       roomId: roomIdRef.current,
       awareness: { isTyping },
-      userId: user?._id,
+      userId: currentUserIdRef.current,
     });
-  }, [user?._id]);
+  }, []);
 
   return {
     activeUsers,
@@ -939,5 +1123,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     roomId,
     ydoc: ydocRef.current,
     hasJoined,
+    canEdit,
+    projectRole,
   };
 };

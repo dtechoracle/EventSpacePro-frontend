@@ -847,7 +847,45 @@ export default function Workspace2D({
 
 
   
-  const { activeUsers, updateCursor, updateTyping, roomId, isConnected, hasJoined, collaborationError } = useCollaboration(projectId, eventId);
+  const {
+    activeUsers,
+    updateCursor,
+    updateTyping,
+    roomId,
+    isConnected,
+    hasJoined,
+    collaborationError,
+    canEdit,
+    projectRole,
+  } = useCollaboration(projectId, eventId);
+
+  // The server already refuses a viewer's edits on both the socket and REST.
+  // The editor used to ignore that entirely: the toolbar stayed live, shapes
+  // appeared normally, and the refusal was only visible in a developer overlay,
+  // so viewers accumulated work that could never be saved. `canEdit` comes from
+  // POST /collaboration/:projectId/:eventId/init and from any "Viewers cannot
+  // edit" socket error, and gates every mutating interaction below.
+  const canEditRef = useRef(true);
+  canEditRef.current = canEdit;
+  const readOnlyToastAtRef = useRef(0);
+
+  const notifyReadOnly = useCallback(() => {
+    const now = Date.now();
+    if (now - readOnlyToastAtRef.current < 4000) return;
+    readOnlyToastAtRef.current = now;
+    toast("You have view-only access to this project", { icon: "👁️", duration: 3000 });
+  }, []);
+
+  // Publish read-only state to the editor store so the toolbar can disable its
+  // creation tools without opening a second collaboration socket of its own.
+  const setIsReadOnly = useEditorStore(s => s.setIsReadOnly);
+  useEffect(() => {
+    setIsReadOnly(!canEdit);
+    if (!canEdit) {
+      // Leave a viewer on a tool that cannot mutate anything.
+      useEditorStore.getState().setActiveTool('select');
+    }
+  }, [canEdit, setIsReadOnly]);
 
 
   const activeTool = useEditorStore(s => s.activeTool);
@@ -2049,6 +2087,13 @@ export default function Workspace2D({
         return;
       }
 
+      // View-only access: panning above and selection below stay available so a
+      // viewer can still read the plan, but no creation tool may run.
+      if (!canEditRef.current && activeTool !== 'select' && activeTool !== 'rectangular-select') {
+        notifyReadOnly();
+        return;
+      }
+
       if (e.button === 0) {
         // Check for control point hit on selected shapes
         for (const id of selectedIds) {
@@ -2448,8 +2493,9 @@ export default function Workspace2D({
                   pendingAlreadySelected = { item, idsToSelect };
                 } else {
                   handleItemSelection([item.id], e.shiftKey, { x: worldX, y: worldY });
-                  // Allow immediate drag on first click if not shifting
-                  if (!e.shiftKey) {
+                  // Allow immediate drag on first click if not shifting.
+                  // Viewers may select to inspect, but never drag.
+                  if (!e.shiftKey && canEditRef.current) {
                     setIsDraggingItem(true);
                     setDragging(true);
                     const dragPoint = { x: worldX, y: worldY };
@@ -2488,7 +2534,7 @@ export default function Workspace2D({
               }
             }
             // If we found an already-selected item but nothing unselected on top, start dragging it
-            if (pendingAlreadySelected) {
+            if (pendingAlreadySelected && canEditRef.current) {
               const { item, idsToSelect } = pendingAlreadySelected;
               saveToHistory();
               setIsDraggingItem(true);
@@ -2868,6 +2914,10 @@ export default function Workspace2D({
       e.preventDefault();
       const type = e.dataTransfer.getData('assetType');
       if (!type || !canvasRef.current) return;
+      if (!canEditRef.current) {
+        notifyReadOnly();
+        return;
+      }
 
       const { x: worldX, y: worldY } = screenToWorld(e.clientX, e.clientY);
 
@@ -4367,17 +4417,46 @@ export default function Workspace2D({
         </div>
       )}
 
-      {/* Floating Debug Panel */}
-      <div className="absolute top-16 left-4 z-50 bg-slate-900/90 text-white rounded-lg p-3 text-xs border border-white/20 shadow-lg pointer-events-auto flex flex-col gap-1.5 font-mono select-none">
-        <div className="font-semibold text-slate-300 border-b border-white/10 pb-1">Collab Status</div>
-        <div>Socket: <span className={isConnected ? "text-green-400 font-bold" : "text-red-400 font-bold"}>{isConnected ? "Connected" : "Disconnected"}</span></div>
-        <div>Joined Room: <span className={hasJoined ? "text-green-400 font-bold" : "text-yellow-400 font-bold"}>{hasJoined ? "Yes" : "No"}</span></div>
-        <div className="max-w-[200px] truncate" title={roomId || "None"}>Room ID: {roomId || "None"}</div>
-        {collaborationError && <div className="max-w-[220px] truncate text-red-300" title={collaborationError}>Error: {collaborationError}</div>}
-        <div>Shapes count: {shapes.length}</div>
-        <div>Assets count: {assets.length}</div>
-        <div>Active Users: {activeUsers.length}</div>
-      </div>
+      {/* View-only banner. Viewers previously got no signal at all that their
+          edits were being refused by the server. */}
+      {!canEdit && (
+        <div
+          role="status"
+          className="absolute top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-slate-900/90 px-4 py-2 text-xs font-medium text-white shadow-lg ring-1 ring-white/15 pointer-events-none select-none"
+        >
+          <span aria-hidden="true">👁️</span>
+          <span>View only{projectRole ? ` — you have ${projectRole} access` : ""}. Ask an owner for edit access to make changes.</span>
+        </div>
+      )}
+
+      {/* Collaboration problems that affect the user's work, shown to the user
+          rather than buried in the console. */}
+      {canEdit && collaborationError && (
+        <div
+          role="alert"
+          className="absolute top-16 left-1/2 -translate-x-1/2 z-50 flex max-w-[26rem] items-center gap-2 rounded-full bg-red-600/95 px-4 py-2 text-xs font-medium text-white shadow-lg ring-1 ring-white/15 pointer-events-none select-none"
+        >
+          <span aria-hidden="true">⚠️</span>
+          <span className="truncate" title={collaborationError}>{collaborationError}</span>
+        </div>
+      )}
+
+      {/* Collaboration diagnostics — development builds only. This panel used to
+          ship to production, where it was also the only place a collaboration
+          error was ever rendered. */}
+      {process.env.NODE_ENV !== "production" && (
+        <div className="absolute top-16 left-4 z-50 bg-slate-900/90 text-white rounded-lg p-3 text-xs border border-white/20 shadow-lg pointer-events-auto flex flex-col gap-1.5 font-mono select-none">
+          <div className="font-semibold text-slate-300 border-b border-white/10 pb-1">Collab Status</div>
+          <div>Socket: <span className={isConnected ? "text-green-400 font-bold" : "text-red-400 font-bold"}>{isConnected ? "Connected" : "Disconnected"}</span></div>
+          <div>Joined Room: <span className={hasJoined ? "text-green-400 font-bold" : "text-yellow-400 font-bold"}>{hasJoined ? "Yes" : "No"}</span></div>
+          <div className="max-w-[200px] truncate" title={roomId || "None"}>Room ID: {roomId || "None"}</div>
+          <div>Can Edit: <span className={canEdit ? "text-green-400 font-bold" : "text-yellow-400 font-bold"}>{canEdit ? "Yes" : "No"}</span></div>
+          {collaborationError && <div className="max-w-[220px] truncate text-red-300" title={collaborationError}>Error: {collaborationError}</div>}
+          <div>Shapes count: {shapes.length}</div>
+          <div>Assets count: {assets.length}</div>
+          <div>Active Users: {activeUsers.length}</div>
+        </div>
+      )}
 
       {/* Remote Cursors Overlay */}
       <div className="absolute inset-0 pointer-events-none z-[1000]">

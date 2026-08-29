@@ -9,6 +9,12 @@ import { toast } from "react-hot-toast";
 import { mergeAllWallIntersections } from "@/utils/mergeWalls";
 import { trimToBlendShapes } from "@/utils/shapeBoolean";
 import PdfPagePicker, { type PageData, type SvgPageData, loadPdfJs } from "@/components/PdfPagePicker";
+
+/**
+ * Tool groups that remain usable with view-only access: navigating the plan and
+ * exporting it are not edits. Everything else is disabled for viewers.
+ */
+const READ_ONLY_TOOLS = new Set(["Selection", "File"]);
 // import AssetsModal from "./AssetsModal";
 
 // Tooltip Component
@@ -62,6 +68,9 @@ interface BarProps {
 
 export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     const tools = useToolbarTools();
+    // Viewers get a genuinely inert toolbar. The server already refuses their
+    // edits; without this the buttons stayed live and the refusal was invisible.
+    const isReadOnly = useEditorStore(s => s.isReadOnly);
     const [openIndex, setOpenIndex] = useState<number | null>(null);
     const [showWallTypeSubmenu, setShowWallTypeSubmenu] = useState(false);
     const [activeTool, setActiveTool] = useState<string | null>(null);
@@ -976,10 +985,19 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                             >
                                 {/* Main Button */}
                                 <div
-                                    onMouseEnter={() => setOpenIndex(index)}
+                                    onMouseEnter={() => {
+                                        if (isReadOnly && !READ_ONLY_TOOLS.has(tool.label)) return;
+                                        setOpenIndex(index);
+                                    }}
                                     className="flex items-center"
                                 >
                                     <motion.button
+                                        disabled={isReadOnly && !READ_ONLY_TOOLS.has(tool.label)}
+                                        title={
+                                            isReadOnly && !READ_ONLY_TOOLS.has(tool.label)
+                                                ? "View-only access — you cannot edit this project"
+                                                : tool.label
+                                        }
                                         onClick={() => {
                                             const primary = tool.options[0];
                                             if (primary) {
@@ -1001,7 +1019,11 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                                         }}
                                         whileTap={{ scale: 0.95 }}
                                         whileHover={{ scale: 1.03 }}
-                                        className={`w-8 h-8 border-2 flex items-center justify-center rounded-md focus:outline-none outline-none ${tool.options.some(opt => {
+                                        className={`w-8 h-8 border-2 flex items-center justify-center rounded-md focus:outline-none outline-none ${
+                                            isReadOnly && !READ_ONLY_TOOLS.has(tool.label)
+                                                ? "opacity-40 cursor-not-allowed "
+                                                : ""
+                                        }${tool.options.some(opt => {
                                             if (opt.id === "draw-line") return isPenMode;
                                             if (opt.id === "draw-wall") return isWallMode || wallDrawingMode;
                                             return activeTool === opt.id;
