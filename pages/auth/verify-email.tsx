@@ -16,9 +16,15 @@ const VerifyEmail = () => {
   const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
+    if (!router.isReady) return;
+    const queryEmail = typeof router.query.email === "string" ? router.query.email : "";
     const stored = localStorage.getItem("email");
-    if (stored) setEmail(stored);
-  }, []);
+    const nextEmail = queryEmail || stored || "";
+    if (nextEmail) {
+      setEmail(nextEmail);
+      localStorage.setItem("email", nextEmail);
+    }
+  }, [router.isReady, router.query.email]);
 
   const handleSendOtp = async () => {
     if (!email) {
@@ -27,7 +33,7 @@ const VerifyEmail = () => {
     }
     setSending(true);
     try {
-      await apiRequest("/auth/request-otp", "POST", { email }, false);
+      await apiRequest("/auth/resend-verification", "POST", { email }, false);
       setOtpSent(true);
       toast.success("Verification code sent!");
     } catch (err: any) {
@@ -64,11 +70,13 @@ const VerifyEmail = () => {
     }
     setVerifying(true);
     try {
-      const res = await apiRequest("/auth/verify-otp", "POST", { email, otp: code }, false);
+      const res = await apiRequest("/auth/verify-email", "POST", { email, otp: code }, false);
       toast.success("Email verified!");
       Cookies.set("authToken", res.token, { path: "/" });
+      if (res.data) useUserStore.getState().setUser(res.data);
       try { await useUserStore.getState().fetchUser(); } catch (e) {}
       localStorage.removeItem("email");
+      localStorage.removeItem("verifyType");
       router.push("/dashboard");
     } catch (err: any) {
       toast.error(err.message || "Verification failed");
