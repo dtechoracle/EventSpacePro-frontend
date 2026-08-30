@@ -1,6 +1,26 @@
 import banquetData from './template-banquet.json';
 
-export const TEMPLATES = [
+export type TemplateDef = {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    canvasData?: {
+        walls: { id: string; start: { x: number; y: number }; end: { x: number; y: number }; thickness: number }[];
+        assets: { id: string; type: string; x: number; y: number; width: number; height: number; rotation: number }[];
+        shapes: any[];
+    };
+    canvasAssets?: any[];
+    canvases?: { size: string; width: number; height: number }[];
+    category?: string;
+    tags?: string[];
+    author?: string;
+    authorAvatar?: string;
+    rating?: number;
+    usageCount?: number;
+};
+
+export const TEMPLATES: TemplateDef[] = [
     {
         id: "bedroom",
         name: "Outdoor Event",
@@ -25,16 +45,8 @@ export const TEMPLATES = [
         name: "Indoor Event",
         description: "Indoor event layout with walls and seating",
         icon: "🏠",
-        canvasData: {
-            walls: [
-                { id: "w1", start: { x: 100, y: 100 }, end: { x: 600, y: 100 }, thickness: 10 },
-                { id: "w2", start: { x: 600, y: 100 }, end: { x: 600, y: 500 }, thickness: 10 },
-                { id: "w3", start: { x: 600, y: 500 }, end: { x: 100, y: 500 }, thickness: 10 },
-                { id: "w4", start: { x: 100, y: 500 }, end: { x: 100, y: 100 }, thickness: 10 }
-            ],
-            assets: [],
-            shapes: []
-        }
+        canvasAssets: banquetData,
+        canvases: [{ size: "layout", width: 80000, height: 32000 }],
     },
     {
         id: "office",
@@ -62,19 +74,5 @@ export const TEMPLATES = [
             assets: [],
             shapes: []
         }
-    },
-    {
-        id: "banquet-hall",
-        name: "Banquet Hall Layout",
-        description: "Pre-configured banquet hall with round tables, sofa sets, and venue",
-        icon: "🏛️",
-        author: "EventSpace Pro",
-        authorAvatar: "EP",
-        category: "Banquet",
-        tags: ["Banquet", "Round Tables", "Sofa Sets", "Large Venue"],
-        usageCount: 1240,
-        rating: 4.8,
-        canvasAssets: banquetData,
-        canvases: [{ size: "layout", width: 80000, height: 32000 }],
     }
 ];

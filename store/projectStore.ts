@@ -1641,21 +1641,14 @@ export const useProjectStore = create<ProjectState>()(
                     // array shape — when the backend held the collaboration
                     // object shape, `backendCanvasAssets.length` was undefined
                     // and the merge was skipped entirely.)
-                    const collabOwnsCanvas = isCollabAuthoritative(eventId);
                     const payload: Record<string, unknown> = {
                         name: eventName,
                         type: eventType,
                         canvases: canvases,
                         canvasData,
+                        canvasAssets,
                         comments: eventComments,
                     };
-                    if (!collabOwnsCanvas) {
-                        payload.canvasAssets = canvasAssets;
-                    } else {
-                        console.log(
-                            `[projectStore] Collaboration owns canvasAssets for ${eventId} — omitting it from the save`
-                        );
-                    }
 
                     console.log(`[projectStore] Saving to DATABASE via PUT /projects/${slug}/events/${eventId}:`, {
                         eventId,

@@ -1394,9 +1394,10 @@ export default function Workspace2D({
       }
       }
 
-      // Broadcast cursor position to other users
+      // Broadcast cursor position to other users (world coordinates so cursor stays on same element across zoom levels)
       if (updateCursor) {
-        updateCursor(e.clientX - canvasOffset.left, e.clientY - canvasOffset.top);
+        const worldPos = screenToWorld(e.clientX, e.clientY);
+        updateCursor(worldPos.x, worldPos.y);
       }
 
       const dragOrigin = draggedItemStartRef.current || draggedItemStart;
@@ -3064,65 +3065,48 @@ export default function Workspace2D({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    let zoomToastTimeout: NodeJS.Timeout | null = null;
-
     const handleWheel = (e: WheelEvent) => {
-      // Mouse wheel behavior:
-      // - Shift + Wheel -> Pan
-      // - Standard Wheel / Pinch (Ctrl) -> Zoom
+      // Mouse wheel behavior (Figma-like):
+      // - Standard Wheel -> Pan
+      // - Ctrl + Wheel -> Zoom
 
       e.preventDefault();
       e.stopPropagation();
 
-      const isPanAction = e.shiftKey;
+      const isZoomAction = e.ctrlKey || e.metaKey;
 
-      if (isPanAction) {
+      if (isZoomAction) {
+        // Zoom Handling
         const current = wheelTransformRef.current;
-        const nextPanX = current.panX - e.deltaX;
-        const nextPanY = current.panY - e.deltaY;
-        wheelTransformRef.current = { ...current, panX: nextPanX, panY: nextPanY };
-        scheduleViewportTransform({ zoom: current.zoom, panX: nextPanX, panY: nextPanY });
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        const newZoom = Math.max(0.000001, Math.min(1000000, current.zoom * delta));
+
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const worldX = (mouseX - current.panX) / current.zoom;
+        const worldY = (mouseY - current.panY) / current.zoom;
+
+        const newPanX = mouseX - worldX * newZoom;
+        const newPanY = mouseY - worldY * newZoom;
+
+        wheelTransformRef.current = { zoom: newZoom, panX: newPanX, panY: newPanY };
+        scheduleViewportTransform({ zoom: newZoom, panX: newPanX, panY: newPanY });
         return;
       }
 
-      // Zoom Handling
+      // Pan (standard wheel / shift+wheel)
       const current = wheelTransformRef.current;
-      const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      const newZoom = Math.max(0.000001, Math.min(1000000, current.zoom * delta));
-
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const worldX = (mouseX - current.panX) / current.zoom;
-      const worldY = (mouseY - current.panY) / current.zoom;
-
-      // Calculate new pan to keep mouse over same world point
-      const newPanX = mouseX - worldX * newZoom;
-      const newPanY = mouseY - worldY * newZoom;
-
-      wheelTransformRef.current = { zoom: newZoom, panX: newPanX, panY: newPanY };
-      scheduleViewportTransform({ zoom: newZoom, panX: newPanX, panY: newPanY });
-
-      // Show toast notification about grid size
-      if (zoomToastTimeout) clearTimeout(zoomToastTimeout);
-      zoomToastTimeout = setTimeout(() => {
-        const zoomPercent = Math.round(newZoom * 100);
-        toast(`Zoom: ${zoomPercent}%`, {
-          duration: 1500,
-          icon: '🔍',
-          style: {
-            fontSize: '12px',
-            padding: '8px 12px',
-          },
-        });
-      }, 100);
+      const nextPanX = current.panX - e.deltaX;
+      const nextPanY = current.panY - e.deltaY;
+      wheelTransformRef.current = { ...current, panX: nextPanX, panY: nextPanY };
+      scheduleViewportTransform({ zoom: current.zoom, panX: nextPanX, panY: nextPanY });
     };
 
     canvas.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
       canvas.removeEventListener('wheel', handleWheel);
-      if (zoomToastTimeout) clearTimeout(zoomToastTimeout);
     };
   }, [scheduleViewportTransform]);
 
@@ -4444,19 +4428,7 @@ export default function Workspace2D({
       {/* Collaboration diagnostics — development builds only. This panel used to
           ship to production, where it was also the only place a collaboration
           error was ever rendered. */}
-      {process.env.NODE_ENV !== "production" && (
-        <div className="absolute top-16 left-4 z-50 bg-slate-900/90 text-white rounded-lg p-3 text-xs border border-white/20 shadow-lg pointer-events-auto flex flex-col gap-1.5 font-mono select-none">
-          <div className="font-semibold text-slate-300 border-b border-white/10 pb-1">Collab Status</div>
-          <div>Socket: <span className={isConnected ? "text-green-400 font-bold" : "text-red-400 font-bold"}>{isConnected ? "Connected" : "Disconnected"}</span></div>
-          <div>Joined Room: <span className={hasJoined ? "text-green-400 font-bold" : "text-yellow-400 font-bold"}>{hasJoined ? "Yes" : "No"}</span></div>
-          <div className="max-w-[200px] truncate" title={roomId || "None"}>Room ID: {roomId || "None"}</div>
-          <div>Can Edit: <span className={canEdit ? "text-green-400 font-bold" : "text-yellow-400 font-bold"}>{canEdit ? "Yes" : "No"}</span></div>
-          {collaborationError && <div className="max-w-[220px] truncate text-red-300" title={collaborationError}>Error: {collaborationError}</div>}
-          <div>Shapes count: {shapes.length}</div>
-          <div>Assets count: {assets.length}</div>
-          <div>Active Users: {activeUsers.length}</div>
-        </div>
-      )}
+
 
       {/* Remote Cursors Overlay */}
       <div className="absolute inset-0 pointer-events-none z-[1000]">

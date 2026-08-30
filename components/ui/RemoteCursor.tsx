@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import { useEditorStore } from '@/store/editorStore';
 
 interface RemoteCursorProps {
   userId: string;
@@ -12,12 +13,19 @@ interface RemoteCursorProps {
 }
 
 export const RemoteCursor = ({ userName, x, y, color, userAvatar }: RemoteCursorProps) => {
+  const zoom = useEditorStore(s => s.zoom);
+  const panX = useEditorStore(s => s.panX);
+  const panY = useEditorStore(s => s.panY);
+
+  const screenX = x * zoom + panX;
+  const screenY = y * zoom + panY;
+
   return (
     <div
       className="absolute pointer-events-none z-[1000] flex flex-col items-center transition-all duration-75 ease-out"
       style={{
-        left: x,
-        top: y,
+        left: screenX,
+        top: screenY,
       }}
     >
       <div className="relative">

@@ -14,6 +14,7 @@ import QuickCreateEventModal from "@/pages/(components)/projects/QuickCreateEven
 import CreateProjectModal from "@/pages/(components)/projects/CreateProjectModal";
 import EventCard from "@/components/dashboard/EventCard"; // Switch to EventCard
 import { TEMPLATES } from "@/lib/templates";
+import TemplatePreview from "@/components/dashboard/TemplatePreview";
 
 interface EventData {
   _id: string;
@@ -61,6 +62,7 @@ const Dashboard = () => {
   const [showQuickCreateModal, setShowQuickCreateModal] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const [hoveredTemplate, setHoveredTemplate] = useState<string | null>(null);
 
   useEffect(() => {
     // Fetch user on mount and check periodically
@@ -256,7 +258,10 @@ const Dashboard = () => {
           {selectedTemplate && (
             <CreateEventModal
               onClose={() => setSelectedTemplate(null)}
-              initialTemplateData={selectedTemplate.canvasData}
+              initialTemplateData={selectedTemplate.canvasData || {
+                canvasAssets: selectedTemplate.canvasAssets,
+                canvases: selectedTemplate.canvases,
+              }}
             />
           )}
 
@@ -402,21 +407,40 @@ const Dashboard = () => {
               </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {TEMPLATES.filter(t => t.canvasData).slice(0, 4).map((template) => (
+              {TEMPLATES.filter(t => t.canvasData || t.canvasAssets).slice(0, 4).map((template) => (
                 <motion.div
                   key={template.id}
-                  whileHover={{ scale: 1.03, y: -4 }}
-                  onClick={() => setSelectedTemplate(template)}
-                  className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300"
+                  onHoverStart={() => setHoveredTemplate(template.id)}
+                  onHoverEnd={() => setHoveredTemplate(null)}
+                  className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300 group"
                 >
-                  <div className={`h-40 flex items-center justify-center ${template.id === 'bedroom' ? 'bg-gradient-to-br from-orange-400 to-orange-600' :
-                    template.id === 'indoor' ? 'bg-gradient-to-br from-purple-400 to-purple-600' :
-                    template.id === 'office' ? 'bg-gradient-to-br from-blue-400 to-blue-600' :
-                      'bg-gradient-to-br from-green-400 to-green-600'
-                    }`}>
-                    <div className={`${template.id === 'starter' ? 'text-gray-500' : 'text-white'} text-5xl`}>
-                      {template.icon}
-                    </div>
+                  <div className="h-40 relative overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
+                    {template.canvasAssets ? (
+                      <TemplatePreview items={template.canvasAssets} />
+                    ) : (
+                      <div className={`w-full h-full flex items-center justify-center ${template.id === 'bedroom' ? 'bg-gradient-to-br from-orange-400 to-orange-600' :
+                        template.id === 'office' ? 'bg-gradient-to-br from-blue-400 to-blue-600' :
+                          'bg-gradient-to-br from-green-400 to-green-600'
+                        }`}>
+                        <div className={`${template.id === 'starter' ? 'text-gray-500' : 'text-white'} text-5xl`}>
+                          {template.icon}
+                        </div>
+                      </div>
+                    )}
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: hoveredTemplate === template.id ? 1 : 0 }}
+                      className="absolute inset-0 bg-black/20 flex items-center justify-center"
+                    >
+                      <motion.button
+                        initial={{ scale: 0.8 }}
+                        animate={{ scale: hoveredTemplate === template.id ? 1 : 0.8 }}
+                        onClick={(e) => { e.stopPropagation(); setSelectedTemplate(template); }}
+                        className="bg-white text-gray-900 font-semibold px-6 py-3 rounded-xl shadow-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Use template
+                      </motion.button>
+                    </motion.div>
                   </div>
                   <div className="p-4">
                     <h3 className="font-semibold text-sm text-gray-800">{template.name}</h3>
