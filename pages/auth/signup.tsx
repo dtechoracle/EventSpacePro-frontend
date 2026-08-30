@@ -27,7 +27,6 @@ const Signup = () => {
       if (!email) throw new Error("No email returned from register response");
 
       localStorage.setItem("email", email)
-      await apiRequest("/auth/request-otp", "POST", { email }, false);
       localStorage.setItem("verifyType", "register")
 
       return res.data;
@@ -159,4 +158,3 @@ const Signup = () => {
 }
 
 export default Signup
-
