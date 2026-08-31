@@ -11,7 +11,7 @@ interface EventCardProps {
     event: any;
     user: any;
     previewData?: { walls: any[]; shapes: any[]; assets: any[]; textAnnotations?: any[] };
-    onFavoriteToggle?: () => void; // Optional callback to refresh parent list
+    onFavoriteToggle?: () => void;
     onDelete?: () => void;
 }
 
@@ -19,7 +19,6 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
     const router = useRouter();
     const menuRef = useRef<HTMLDivElement>(null);
 
-    // Use local state for immediate feedback, initialized from props
     const [isFavorited, setIsFavorited] = useState<boolean>(() => {
         if (!event) return false;
         const favs = event.favorites || event.favourites || [];
@@ -33,7 +32,6 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
 
     const { walls, shapes, assets, textAnnotations } = previewData || (event ? buildPreviewData(event) : { walls: [], shapes: [], assets: [], textAnnotations: [] });
 
-    // Close menu when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -56,7 +54,6 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
         if (isLoading) return;
 
         const previousState = isFavorited;
-        // Optimistic update
         setIsFavorited(!previousState);
         setIsLoading(true);
         setShowMenu(false);
@@ -67,13 +64,11 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
 
             await apiRequest(url, method, null, true);
 
-            // Notify parent if needed (e.g. to remove from list)
             if (onFavoriteToggle) {
                 onFavoriteToggle();
             }
         } catch (error) {
             console.error("Failed to toggle favorite:", error);
-            // Revert optimistic update
             setIsFavorited(previousState);
             toast.error("Failed to update favorite");
         } finally {
@@ -107,11 +102,9 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
         const loadingToast = toast.loading("Duplicating event...");
 
         try {
-            // 1. Get full event data
             const fullRes = await apiRequest(`/projects/${event.projectSlug}/events/${event._id}`, "GET", null, true);
             const eventData = fullRes.data || fullRes;
 
-            // 2. Prepare duplicate data
             const duplicateData = {
                 name: `${eventData.name} (Copy)`,
                 type: eventData.type,
@@ -119,14 +112,12 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
                 canvasData: eventData.canvasData
             };
 
-            // 3. Create new event
             await apiRequest(`/projects/${event.projectSlug}/events`, "POST", duplicateData, true);
             
             toast.success(`"${eventData.name}" duplicated!`, { id: loadingToast });
             
-            // Refresh the page or list
             if (onDelete) {
-                onDelete(); // Triggers refetch in the parent component
+                onDelete();
             } else {
                 window.location.reload();
             }
@@ -154,21 +145,18 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
 
     return (
         <div className="flex flex-col relative">
-            {/* Card with Preview Only */}
             <div
                 onClick={() => {
                     router.push(`/dashboard/editor/${event.projectSlug}/${event._id}`);
                 }}
                 className="bg-white rounded-xl border border-gray-200 cursor-pointer hover:border-blue-500 transition-colors group relative shadow-none"
             >
-                {/* Visual Favorited Indicator (Small heart/star) */}
                 {isFavorited && (
                     <div className="absolute top-2 left-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur-sm shadow-sm">
                         <BsStarFill className="w-2.5 h-2.5 text-yellow-500" />
                     </div>
                 )}
 
-                {/* Options Menu Button - Top Right Corner */}
                 <div className="absolute top-2 right-2 z-30" ref={menuRef}>
                     <button
                         onClick={(e) => {
@@ -183,9 +171,8 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
                         <BsThreeDotsVertical className="w-4 h-4" />
                     </button>
 
-                    {/* Dropdown Menu */}
                     {showMenu && (
-                        <div className="absolute left-0 mt-2 w-44 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in duration-200 origin-top-left z-50">
+                        <div className="absolute right-0 mt-2 w-44 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in duration-200 origin-top-right z-50">
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -233,7 +220,6 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
                     )}
                 </div>
 
-                {/* Workspace Preview */}
                 <div className="bg-white w-full relative overflow-hidden rounded-xl" style={{ height: '160px' }}>
                     <WorkspacePreview
                         walls={walls}
@@ -247,7 +233,6 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
                 </div>
             </div>
 
-            {/* Event Info - Outside the card, below */}
             <div className="mt-2">
                 <h3 className="font-semibold text-sm mb-1 truncate text-gray-800 hover:text-blue-600 transition-colors cursor-pointer" onClick={() => router.push(`/dashboard/editor/${event.projectSlug}/${event._id}`)}>
                     {eventName}

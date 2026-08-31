@@ -1232,6 +1232,7 @@ export default function Editor() {
   // New stores
   const setZoom = useEditorStore(s => s.setZoom);
   const setPan = useEditorStore(s => s.setPan);
+  const isReadOnly = useEditorStore(s => s.isReadOnly);
   const projectAssets = useProjectStore(s => s.assets);
   const walls = useProjectStore(s => s.walls);
   const shapes = useProjectStore(s => s.shapes);
@@ -2559,6 +2560,9 @@ export default function Editor() {
   // Render content based on iframe/preview status
   const renderContent = () => {
     const isPreviewMode = preview === 'true' || isInIframe;
+    // Viewers (read-only collaborators) get a clean canvas: no element or
+    // property sidebar, but they can still zoom, pan and read the plan.
+    const isViewerMode = isReadOnly;
 
     return (
       <div className={`${isPreviewMode ? 'h-full w-full' : 'h-screen'} flex overflow-hidden bg-gray-50`}>
@@ -2566,15 +2570,15 @@ export default function Editor() {
         {!isPreviewMode && <DashboardSidebar />}
 
         <div className="flex-1 flex overflow-hidden">
-          {/* Elements Pane - only show if not in preview mode */}
-          {!isPreviewMode && (
+          {/* Elements Pane - only show if not in preview mode and not a viewer */}
+          {!isPreviewMode && !isViewerMode && (
             <div className="w-40 bg-white border-r border-gray-200 flex-shrink-0 shadow-sm">
               <ElementsPane />
             </div>
           )}
 
           <div className="flex-1 flex flex-col overflow-hidden">
-            {!isPreviewMode && (
+            {!isPreviewMode && !isViewerMode && (
               <>
                 <AssetsModal
                   isOpen={showAssetsModal}
@@ -2598,8 +2602,8 @@ export default function Editor() {
                 {/* 3D Preview / toggle removed per request */}
               </div>
 
-              {/* Properties Sidebar - only show if not in preview mode */}
-              {!isPreviewMode && (
+              {/* Properties Sidebar - only show if not in preview mode and not a viewer */}
+              {!isPreviewMode && !isViewerMode && (
                 <div className="flex-shrink-0 w-64 bg-white border-l border-gray-200">
                   <PropertiesSidebar />
                 </div>

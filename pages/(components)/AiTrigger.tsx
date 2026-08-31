@@ -584,7 +584,6 @@ export default function AiTrigger() {
 
   const buildFallbackMarqueePreview = (source: string) => {
     const joinedHistory = messages
-      .filter((m: any) => m.role === 'user')
       .map((m: any) => m.content || '')
       .join('\n');
     const text = `${joinedHistory}\n${source || ''}`.toLowerCase();
@@ -803,10 +802,13 @@ export default function AiTrigger() {
     const WALL_MARGIN = 700; // min clearance from inner wall face to any asset
     const primaryMarqueePlanAsset = planAssetList.find((asset: any) =>
       (asset?.assetType || asset?.assetName || '').toLowerCase().includes('marquee')
-    );
+    ) || workspaceAssets.find((a: any) => {
+      const def = ASSET_LIBRARY.find(d => d.id === a.type);
+      return def?.category === 'Marquee' || (a.name || '').toLowerCase().includes('marquee') || (a.type || '').toLowerCase().includes('marquee');
+    });
     const primaryMarqueeLibraryDef = primaryMarqueePlanAsset
       ? ASSET_LIBRARY.find((def) => {
-          const raw = String(primaryMarqueePlanAsset.assetType || primaryMarqueePlanAsset.assetName || '').toLowerCase();
+          const raw = String(primaryMarqueePlanAsset.assetType || primaryMarqueePlanAsset.assetName || primaryMarqueePlanAsset.type || primaryMarqueePlanAsset.name || '').toLowerCase();
           return (
             def.id.toLowerCase() === raw ||
             def.label.toLowerCase() === raw ||
@@ -827,8 +829,8 @@ export default function AiTrigger() {
     }
 
     if (!(Array.isArray(plan.walls) && plan.walls[0]) && primaryMarqueePlanAsset) {
-      let marqueeW = Number(primaryMarqueePlanAsset.widthMm || primaryMarqueeLibraryDef?.width || roomW);
-      let marqueeH = Number(primaryMarqueePlanAsset.heightMm || primaryMarqueeLibraryDef?.height || roomH);
+      let marqueeW = Number(primaryMarqueePlanAsset.widthMm || primaryMarqueePlanAsset.width || primaryMarqueeLibraryDef?.width || roomW);
+      let marqueeH = Number(primaryMarqueePlanAsset.heightMm || primaryMarqueePlanAsset.height || primaryMarqueeLibraryDef?.height || roomH);
       if (marqueeW < 200) marqueeW *= 1000;
       if (marqueeH < 200) marqueeH *= 1000;
       roomW = marqueeW;
@@ -868,41 +870,52 @@ export default function AiTrigger() {
 
     // Generate wall
     if (Array.isArray(plan.walls) && plan.walls.length > 0) {
-      plan.walls.forEach((wallDef: any, wIndex: number) => {
-        // If the AI explicitly provided nodes and edges, use them!
-        if (wallDef.nodes && wallDef.edges) {
-          const shiftX = roomCX - wallDef.centerX || 0;
-          const shiftY = roomCY - wallDef.centerY || 0;
-          generatedWalls.push({
-            id: `wall-room-${wIndex}`,
-            nodes: wallDef.nodes.map((n: any, i: number) => ({
-              id: `rn-${wIndex}-${i}`,
-              x: wallMinX + (n.xMm ?? n.x ?? 0),
-              y: wallMinY + (n.yMm ?? n.y ?? 0)
-            })),
-            edges: wallDef.edges.map((e: any, i: number) => ({
-              id: `re-${wIndex}-${i}`,
-              nodeA: `rn-${wIndex}-${e.a ?? e.nodeA}`,
-              nodeB: `rn-${wIndex}-${e.b ?? e.nodeB}`,
-              thickness: e.thickness || wallDef.thicknessPx || WALL_THICKNESS
-            })),
-            zIndex: 0, 
-            isClosed: wallDef.isClosed !== false
-          });
-        }
-        // Otherwise, generate a bounding rectangle
-        else if (wIndex === 0) {
-          // Check if we already have a marquee in the plan assets - if so, skip the room walls
-          const assets = Array.isArray(plan.assets) ? plan.assets : [];
-          const hasMarquee = assets.some((a: any) => 
-            (a.assetType || a.assetName || '').toLowerCase().includes('marquee')
-          );
-          
-          if (!hasMarquee) {
+      // Check if we already have a marquee in the plan assets, workspace, or chat preview history - if so, skip the room walls
+      const assets = Array.isArray(plan.assets) ? plan.assets : [];
+      const hasMarqueeInHistory = messages.some((m: any) => {
+        const p = m.planData || m.previewPlanData;
+        if (!p) return false;
+        const ass = Array.isArray(p.assets) ? p.assets : [];
+        return ass.some((a: any) =>
+          (a.assetType || a.assetName || a.type || a.id || '').toLowerCase().includes('marquee')
+        );
+      });
+      const hasMarquee = assets.some((a: any) => 
+        (a.assetType || a.assetName || '').toLowerCase().includes('marquee')
+      ) || workspaceAssets.some((a: any) => {
+        const def = ASSET_LIBRARY.find(d => d.id === a.type);
+        return def?.category === 'Marquee' || (a.name || '').toLowerCase().includes('marquee') || (a.type || '').toLowerCase().includes('marquee');
+      }) || hasMarqueeInHistory;
+
+      if (!hasMarquee) {
+        plan.walls.forEach((wallDef: any, wIndex: number) => {
+          // If the AI explicitly provided nodes and edges, use them!
+          if (wallDef.nodes && wallDef.edges) {
+            const shiftX = roomCX - wallDef.centerX || 0;
+            const shiftY = roomCY - wallDef.centerY || 0;
+            generatedWalls.push({
+              id: `wall-room-${wIndex}`,
+              nodes: wallDef.nodes.map((n: any, i: number) => ({
+                id: `rn-${wIndex}-${i}`,
+                x: wallMinX + (n.xMm ?? n.x ?? 0),
+                y: wallMinY + (n.yMm ?? n.y ?? 0)
+              })),
+              edges: wallDef.edges.map((e: any, i: number) => ({
+                id: `re-${wIndex}-${i}`,
+                nodeA: `rn-${wIndex}-${e.a ?? e.nodeA}`,
+                nodeB: `rn-${wIndex}-${e.b ?? e.nodeB}`,
+                thickness: e.thickness || wallDef.thicknessPx || WALL_THICKNESS
+              })),
+              zIndex: 0, 
+              isClosed: wallDef.isClosed !== false
+            });
+          }
+          // Otherwise, generate a bounding rectangle
+          else if (wIndex === 0) {
             generatedWalls.push(createRoomEnclosureWall('wall-room'));
           }
-        }
-      });
+        });
+      }
     }
 
     // ─── 2. Define Usable Rect (shrinks as we place fixed elements) ───────────
@@ -3191,7 +3204,6 @@ export default function AiTrigger() {
     if (marqueePreview) return marqueePreview;
 
     const joinedHistory = messages
-      .filter((m: any) => m.role === 'user')
       .map((m: any) => m.content || '')
       .join('\n');
     const text = `${joinedHistory}\n${source || ''}`;
@@ -3259,8 +3271,25 @@ export default function AiTrigger() {
         ? Math.max(1, Math.ceil(guestCount / seatCount))
         : 0;
 
+    const hasMarqueeInHistory = messages.some((m: any) => {
+      const p = m.planData || m.previewPlanData;
+      if (!p) return false;
+      const ass = Array.isArray(p.assets) ? p.assets : [];
+      return ass.some((a: any) =>
+        (a.assetType || a.assetName || a.type || a.id || '').toLowerCase().includes('marquee')
+      );
+    });
+
+    const hasMarqueeInWorkspaceOrText =
+      lower.includes('marquee') ||
+      lower.includes('tent') ||
+      workspaceAssets.some((a: any) => {
+        const def = ASSET_LIBRARY.find(d => d.id === a.type);
+        return def?.category === 'Marquee' || (a.name || '').toLowerCase().includes('marquee') || (a.type || '').toLowerCase().includes('marquee');
+      }) || hasMarqueeInHistory;
+
     const previewPlan: any = {
-      walls: [{ widthMm, heightMm, wallType: 'enclosure-150' }],
+      walls: hasMarqueeInWorkspaceOrText ? [] : [{ widthMm, heightMm, wallType: 'enclosure-150' }],
     };
 
     if (lower.includes('grassy field') || lower.includes('grass')) {
@@ -3497,6 +3526,13 @@ export default function AiTrigger() {
         } catch (e) {
           console.error("Preview processing failed", e);
         }
+      }
+
+      // When the API returns a plan (not a preview), use the plan data as the
+      // preview too so we don't fall back to a generated wall from the prompt.
+      if (data?.plan && !previewPlanData) {
+        previewPlanData = planData;
+        previewData = planData?.combined;
       }
 
         // Handle followUp (AI asking a clarifying question)

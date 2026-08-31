@@ -481,7 +481,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
           removeAction(key);
         }
       });
-      useProjectStore.setState((s) => ({ ...s }));
+      useProjectStore.setState((s) => ({ ...s, hasUnsavedChanges: true }));
       isRemoteUpdating.current = false;
     };
 

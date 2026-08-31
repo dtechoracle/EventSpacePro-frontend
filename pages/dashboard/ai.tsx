@@ -14,6 +14,11 @@ interface Message {
   canvasData?: any;
   choices?: string[];
   followUp?: string;
+  assetSelection?: {
+    category: string;
+    message: string;
+    options: { id: string; name: string; category: string; path: string; width?: number; height?: number }[];
+  };
 }
 
 const AiAssistant = () => {
@@ -59,13 +64,18 @@ const AiAssistant = () => {
       const data = await res.json();
 
       if (data.plan) {
-        // Convert plan to canvas data immediately
         const canvasData = convertPlanToCanvasData(data.plan);
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: data.message || "I've generated a layout plan for you. Would you like to create an event with this layout?",
           plan: data.plan,
           canvasData
+        }]);
+      } else if (data.assetSelection) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: data.assetSelection.message || "Which option would you like to use?",
+          assetSelection: data.assetSelection
         }]);
       } else if (data.followUp) {
         setMessages(prev => [...prev, { 
@@ -144,6 +154,26 @@ const AiAssistant = () => {
                           className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-full text-xs font-semibold border border-blue-100 transition-all flex items-center gap-1.5"
                         >
                           {choice}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Asset Selection (Marquee sizes, etc.) */}
+                  {msg.assetSelection && msg.assetSelection.options.length > 0 && (
+                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {msg.assetSelection.options.map((option) => (
+                        <button
+                          key={option.id}
+                          onClick={() => handleChoiceClick(`I want to use the ${option.name}`)}
+                          className="px-3 py-2.5 bg-gray-50 hover:bg-blue-50 text-gray-700 hover:text-blue-600 rounded-lg text-xs font-medium border border-gray-200 hover:border-blue-200 transition-all text-left"
+                        >
+                          {option.name}
+                          {option.width && option.height && (
+                            <span className="block text-[10px] text-gray-400 mt-0.5">
+                              {(option.width / 1000).toFixed(0)}m × {(option.height / 1000).toFixed(0)}m
+                            </span>
+                          )}
                         </button>
                       ))}
                     </div>

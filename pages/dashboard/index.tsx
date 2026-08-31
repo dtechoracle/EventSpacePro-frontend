@@ -12,7 +12,7 @@ import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
 import QuickCreateEventModal from "@/pages/(components)/projects/QuickCreateEventModal";
 import CreateProjectModal from "@/pages/(components)/projects/CreateProjectModal";
-import EventCard from "@/components/dashboard/EventCard"; // Switch to EventCard
+import EventCard from "@/components/dashboard/EventCard";
 import { TEMPLATES } from "@/lib/templates";
 import TemplatePreview from "@/components/dashboard/TemplatePreview";
 
@@ -43,7 +43,6 @@ interface ProjectData {
   events: EventData[];
   createdAt: string;
   updatedAt: string;
-  // Add optional fields to match ProjectCard interface if needed
   users?: any[];
   invites?: any[];
   assets?: any[];
@@ -65,14 +64,10 @@ const Dashboard = () => {
   const [hoveredTemplate, setHoveredTemplate] = useState<string | null>(null);
 
   useEffect(() => {
-    // Fetch user on mount and check periodically
     fetchUser();
-
-    // Set up interval to check user status every 30 seconds
     const interval = setInterval(() => {
       fetchUser();
     }, 30000);
-
     return () => clearInterval(interval);
   }, [fetchUser]);
 
@@ -82,11 +77,10 @@ const Dashboard = () => {
       console.log('[Dashboard] Fetching projects from DATABASE');
       return apiRequest("/projects", "GET", null, true);
     },
-    staleTime: 0, // Always refetch
-    gcTime: 0, // Don't cache
+    staleTime: 0,
+    gcTime: 0,
   });
 
-  // Fetch events for all projects separately to get full event data (needed for thumbnails)
   const { data: allProjectEvents, isLoading: isLoadingEvents, error: eventsError } = useQuery({
     queryKey: ["all-events", data?.data?.map(p => p.slug)],
     queryFn: async () => {
@@ -96,7 +90,6 @@ const Dashboard = () => {
 
       const failedProjects: string[] = [];
 
-      // Fetch events for each project
       const eventPromises = data.data.map(async (project) => {
         try {
           console.log(`[Dashboard] Fetching events from DATABASE for project: ${project.slug}`);
@@ -105,7 +98,6 @@ const Dashboard = () => {
 
           console.log(`[Dashboard] ✅ Fetched ${events.length} events from DATABASE for project ${project.slug}`);
 
-          // CRITICAL: Fetch full event data for each event to get canvasData
           const fullEventPromises = events.map(async (event: any) => {
             try {
               const fullEventRes = await apiRequest(`/projects/${project.slug}/events/${event._id}`, "GET", null, true);
@@ -139,7 +131,6 @@ const Dashboard = () => {
 
       const results = await Promise.all(eventPromises);
 
-      // If ALL projects failed, throw so react-query sets isError
       if (failedProjects.length === data.data.length && data.data.length > 0) {
         throw new Error("Failed to load events from server");
       }
@@ -152,7 +143,6 @@ const Dashboard = () => {
     refetchOnMount: true,
   });
 
-  // Merge projects with their fetched events
   const projectsWithEvents = useMemo(() => {
     if (!data?.data) return [];
     if (!allProjectEvents) return data.data;
@@ -166,7 +156,6 @@ const Dashboard = () => {
     });
   }, [data?.data, allProjectEvents]);
 
-  // Filter projects by search query
   const filteredProjects = useMemo(() => {
     const HIDDEN_PROJECT_NAME = "Personal Drafts";
     const baseProjects = projectsWithEvents.filter(p => p.name !== HIDDEN_PROJECT_NAME);
@@ -177,7 +166,6 @@ const Dashboard = () => {
     );
   }, [projectsWithEvents, searchQuery]);
 
-  // Flatten events and take 6 most recent
   const recentEvents = useMemo(() => {
     if (!allProjectEvents) return [];
 
@@ -203,12 +191,9 @@ const Dashboard = () => {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Left Sidebar */}
       <DashboardSidebar />
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
         <div className="bg-white border-b border-gray-200 px-8 py-5">
           <div className="flex items-center justify-between">
             <div>
@@ -241,7 +226,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-8 pb-32">
           {showQuickCreateModal && (
             <QuickCreateEventModal onClose={() => setShowQuickCreateModal(false)} />
@@ -265,7 +249,6 @@ const Dashboard = () => {
             />
           )}
 
-          {/* Recent Events Section */}
           <section className="mb-16">
             {!isLoading && !isLoadingEvents && (filteredProjects.length === 0) && recentEvents.length === 0 && !searchQuery ? (
               <div className="w-full bg-white rounded-xl border border-gray-200 p-8 my-4">
@@ -395,7 +378,6 @@ const Dashboard = () => {
             )}
           </section>
 
-          {/* Templates Section */}
           <section>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-800">Templates</h2>

@@ -41,6 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const normalizedCommand = String(commandText || '').trim().toLowerCase();
     const exactCommandText = String(commandText || '').trim();
+    console.log('[AI-DEBUG] plan.ts entry. prompt:', JSON.stringify(prompt), 'commandText:', JSON.stringify(commandText), 'normalizedCommand:', normalizedCommand);
     const normalizeIntentText = (value: string) =>
       String(value || '')
         .toLowerCase()
@@ -186,11 +187,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         coreName.includes(token.replace(/s$/, ''));
       return userTokens.every(t => tokenInAsset(t));
     };
-    const selectedExactAsset = findAssetByName(exactCommandText) || (
-      /^i want to use the\s+/i.test(exactCommandText)
-        ? findAssetByName(exactCommandText.replace(/^i want to use the\s+/i, ''))
-        : null
-    );
+    const isBareNumericReply = /^\d+(?:\.\d+)?$/.test(exactCommandText);
+    const selectedExactAsset = !isBareNumericReply
+      ? findAssetByName(exactCommandText) || (
+          /^i want to use the\s+/i.test(exactCommandText)
+            ? findAssetByName(exactCommandText.replace(/^i want to use the\s+/i, ''))
+            : null
+        )
+      : null;
     const matchingTableCandidates = (() => {
       const hasExactVariant = assetList.some(a =>
         / \d{2}$/.test(a.name) && normalizedCommand.includes(a.name.toLowerCase())
@@ -411,17 +415,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       return '';
     })();
+    const fallbackMarquee = selectedMarqueeForFlow || (selectedSpaceChoice === 'marquee' && marqueeAssets.length > 0 ? marqueeAssets[0] : null);
+    // The marquee definition's dims are authoritative. When a marquee is active we
+    // must NOT use roomWidthMm/roomHeightMm, because those may have been parsed from
+    // the marquee's own name (e.g. "20m X 25m") which swaps width/height. Keep dims
+    // in the order the marquee def declares them so the room is not mirrored.
+    const marqueeW = fallbackMarquee ? Number(fallbackMarquee.width || 0) : null;
+    const marqueeH = fallbackMarquee ? Number(fallbackMarquee.height || 0) : null;
+    const hasMarqueeDims = Boolean(marqueeW && marqueeH);
     const activeSpaceWidthMm =
-      roomWidthMm ||
-      (selectedMarqueeForFlow ? Number(selectedMarqueeForFlow.width || 0) : null) ||
+      (hasMarqueeDims ? marqueeW : roomWidthMm) ||
+      (fallbackMarquee ? marqueeW : null) ||
       null;
     const activeSpaceHeightMm =
-      roomHeightMm ||
-      (selectedMarqueeForFlow ? Number(selectedMarqueeForFlow.height || 0) : null) ||
+      (hasMarqueeDims ? marqueeH : roomHeightMm) ||
+      (fallbackMarquee ? marqueeH : null) ||
       null;
+    console.log('[AI-DEBUG] Variables:', JSON.stringify({ selectedSpaceChoice, selectedMarqueeForFlow: selectedMarqueeForFlow?.name, fallbackMarquee: fallbackMarquee?.name, marqueeW, marqueeH, roomWidthMm, roomHeightMm, activeSpaceWidthMm, activeSpaceHeightMm, normalizedCommand: normalizedCommand.substring(0, 50), userHistoryText: userHistoryText.substring(0, 200) }));
     const structuredSpaceConversation =
       roomBasedConversation ||
-      (selectedSpaceChoice === 'marquee' && Boolean(selectedMarqueeForFlow)) ||
+      (selectedSpaceChoice === 'marquee' && Boolean(fallbackMarquee)) ||
       Boolean(activeSpaceWidthMm && activeSpaceHeightMm);
     const draftedSpaceLabel =
       selectedSpaceChoice === 'marquee'
@@ -451,13 +464,54 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       extractGuestCount(exactCommandText) ||
       /\bseater\b|\btable\b|\bchairs?\b/.test(exactCommandText)
     );
-    const layoutBriefText = /in plain language, tell me what you want for this event layout|describe what you want for this event layout|describe the event layout you want/i.test(latestAssistantPromptContent) && exactCommandText && !currentPromptIsDimensionPair
-      ? exactCommandText
-      : (storedLayoutBriefFromHistory || userRepliesAfterDimensions[0] || (currentMessageHasLayoutContent ? exactCommandText : '') || '');
+    // Detect if assistant just asked for seating type and user chose
+    const assistantJustAskedSeatingType = conversationHistory
+      .slice(-4)
+      .some((m) =>
+        m.role === 'assistant' &&
+        /how would you like to set up seating/i.test(m.content || '')
+      );
+    const userChoseSingleSeater = assistantJustAskedSeatingType && /single\s*seater/i.test(exactCommandText);
+    const userChoseTableChairs = assistantJustAskedSeatingType && /table\s*(?:and|&|\+)\s*chair/i.test(exactCommandText);
+    const chairOnlySeatingSelectedFromHistory = conversationHistory.some((current, index) => {
+      const next = conversationHistory[index + 1];
+      return Boolean(
+        current?.role === 'assistant' &&
+          /how would you like to set up seating/i.test(current.content || '') &&
+          next?.role === 'user' &&
+          /single\s*seater/i.test(next.content || '')
+      );
+    });
+
+    const layoutBriefText = userChoseSingleSeater || chairOnlySeatingSelectedFromHistory
+      ? `chairs only`
+      : /in plain language, tell me what you want for this event layout|describe what you want for this event layout|describe the event layout you want/i.test(latestAssistantPromptContent) && exactCommandText && !currentPromptIsDimensionPair
+        ? exactCommandText
+        : (storedLayoutBriefFromHistory || userRepliesAfterDimensions[0] || (currentMessageHasLayoutContent ? exactCommandText : '') || '');
     const normalizedLayoutBriefText = normalizeIntentText(layoutBriefText);
     const hasLayoutBrief = normalizedLayoutBriefText.length > 0;
     const parsePlanShare = (text: string) => {
-      const fraction = String(text || '').match(/(\d+)\s*\/\s*(\d+)\s+of (?:the )?(?:entire )?(?:plan|space|room|layout)/i);
+      const lower = String(text || '').toLowerCase();
+      // Colon ratio format: "ratio of 4:2", "4:2 ratio", "divide into 4:2"
+      const colonRatio = lower.match(/(?:ratio\s+of\s+)?(\d+)\s*:\s*(\d+)/);
+      if (colonRatio) {
+        const a = Number(colonRatio[1]);
+        const b = Number(colonRatio[2]);
+        if (Number.isFinite(a) && Number.isFinite(b) && (a + b) > 0) {
+          return Math.max(0.2, Math.min(0.95, a / (a + b)));
+        }
+      }
+      // "X to Y" format: "4 to 2", "ratio of 4 to 2"
+      const toRatio = lower.match(/(?:ratio\s+of\s+)?(\d+)\s+to\s+(\d+)/);
+      if (toRatio) {
+        const a = Number(toRatio[1]);
+        const b = Number(toRatio[2]);
+        if (Number.isFinite(a) && Number.isFinite(b) && (a + b) > 0) {
+          return Math.max(0.2, Math.min(0.95, a / (a + b)));
+        }
+      }
+      // Fraction format: "2/3 of the space"
+      const fraction = lower.match(/(\d+)\s*\/\s*(\d+)\s+of (?:the )?(?:entire )?(?:plan|space|room|layout)/i);
       if (fraction) {
         const numerator = Number(fraction[1]);
         const denominator = Number(fraction[2]);
@@ -499,19 +553,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         /\bjust\s+(?:chairs?|seats?|stools?)\b/i.test(layoutBriefText) ||
         /\b(?:chairs?|seats?|stools?)\s+(?:and\s+)?no\s+tables?\b/i.test(layoutBriefText) ||
         /\bno\s+tables?\b.{0,30}\b(?:chairs?|seats?|stools?)\b/i.test(layoutBriefText);
-      const direct = layoutBriefText.match(/(\d+)\s*(?:guests?|people|attendees?).{0,50}?\b(left|right|top|bottom|center|centre|middle)\b/i);
+      const direct = layoutBriefText.match(/(\d+)\s*(?:guests?|people|attendees?).{0,150}?\b(left|right|top|bottom|center|centre|middle)\b/i);
       if (direct) {
         return { count: Number(direct[1]), side: detectBriefSide(direct[0]), share, onlyChairs };
       }
-      const reverse = layoutBriefText.match(/\b(left|right|top|bottom|center|centre|middle)\b.{0,50}?(\d+)\s*(?:guests?|people|attendees?)/i);
+      const reverse = layoutBriefText.match(/\b(left|right|top|bottom|center|centre|middle)\b.{0,150}?(\d+)\s*(?:guests?|people|attendees?)/i);
       if (reverse) {
         return { count: Number(reverse[2]), side: detectBriefSide(reverse[0]), share, onlyChairs };
       }
-      const chairsOnlyDirect = layoutBriefText.match(/(\d+)\s*(?:chairs?\b|seats?\b|stools?\b).{0,50}?\b(left|right|top|bottom|center|centre|middle)\b/i);
+      const chairsOnlyDirect = layoutBriefText.match(/(\d+)\s*(?:chairs?\b|seats?\b|stools?\b).{0,150}?\b(left|right|top|bottom|center|centre|middle)\b/i);
       if (chairsOnlyDirect) {
         return { count: Number(chairsOnlyDirect[1]), side: detectBriefSide(chairsOnlyDirect[0]), share, onlyChairs: true };
       }
-      const chairsOnlyReverse = layoutBriefText.match(/\b(left|right|top|bottom|center|centre|middle)\b.{0,50}?(\d+)\s*(?:chairs?\b|seats?\b|stools?\b)/i);
+      const chairsOnlyReverse = layoutBriefText.match(/\b(left|right|top|bottom|center|centre|middle)\b.{0,150}?(\d+)\s*(?:chairs?\b|seats?\b|stools?\b)/i);
       if (chairsOnlyReverse) {
         return { count: Number(chairsOnlyReverse[2]), side: detectBriefSide(chairsOnlyReverse[0]), share, onlyChairs: true };
       }
@@ -890,6 +944,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     };
     const resolveStageChoiceFromText = (text: string) => {
       const lower = String(text || '').toLowerCase();
+      // Marquee/tent selection messages often carry dimensions (e.g. "20m X 25m Marquee").
+      // Those are NOT stage sizes, so never interpret them as a stage choice.
+      if (lower.includes('marquee') || lower.includes('tent')) return null;
       const exactStage = findAssetByName(text);
       if (exactStage && exactStage.name.toLowerCase().includes('stage')) {
         return buildStageSpec(Number((exactStage as any).width || 1000), Number((exactStage as any).height || 1000), exactStage.name);
@@ -1125,12 +1182,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         selectedMentionedAsset &&
         selectedMentionedAsset.category === 'Furniture' &&
         selectedMentionedAsset.name.toLowerCase().includes('table') &&
-        !(guestZoneFromBrief?.onlyChairs && secondaryTableZoneFromBrief)
+        !(guestZoneFromBrief?.onlyChairs && secondaryTableZoneFromBrief) &&
+        !(userChoseSingleSeater || chairOnlySeatingSelectedFromHistory)
           ? selectedMentionedAsset
           : null
       ) ||
-      mainGuestTableFromHistory ||
-      (!guestZoneFromBrief?.onlyChairs ? selectedTableFromHistory : null) ||
+      (!(userChoseSingleSeater || chairOnlySeatingSelectedFromHistory) ? mainGuestTableFromHistory : null) ||
+      (!guestZoneFromBrief?.onlyChairs && !(userChoseSingleSeater || chairOnlySeatingSelectedFromHistory) ? selectedTableFromHistory : null) ||
       null;
     const tableChoiceKnown = Boolean(selectedTableForFlow);
     const comprehensiveBrief = hasLayoutBrief && stageMentioned && !!selectedTableForFlow;
@@ -1204,17 +1262,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     };
     const buildRoomShellPreview = () => {
       const lShape = parseLShapeDimensions(lowerUserHistoryText);
+      const effectiveMarquee = selectedMarqueeForFlow || (selectedSpaceChoice === 'marquee' && marqueeAssets.length > 0 ? marqueeAssets[0] : null);
       const preview: any =
-        selectedSpaceChoice === 'marquee' && selectedMarqueeForFlow
+        selectedSpaceChoice === 'marquee' && effectiveMarquee
           ? {
               walls: [],
               assets: [
                 {
-                  assetName: selectedMarqueeForFlow.name,
-                  xMm: (activeSpaceWidthMm || Number(selectedMarqueeForFlow.width || 1000)) / 2,
-                  yMm: (activeSpaceHeightMm || Number(selectedMarqueeForFlow.height || 1000)) / 2,
-                  widthMm: Number(selectedMarqueeForFlow.width || 1000),
-                  heightMm: Number(selectedMarqueeForFlow.height || 1000),
+                  assetName: effectiveMarquee.name,
+                  xMm: (activeSpaceWidthMm || Number(effectiveMarquee.width || 1000)) / 2,
+                  yMm: (activeSpaceHeightMm || Number(effectiveMarquee.height || 1000)) / 2,
+                  widthMm: Number(effectiveMarquee.width || 1000),
+                  heightMm: Number(effectiveMarquee.height || 1000),
                   strokeWidth: 0.6,
                 },
               ],
@@ -1381,9 +1440,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const seatCount = chairCountOverride || (seatCountMatch ? Number(seatCountMatch[1]) : null);
       const inferredTableCount = explicitTableCount || (effectiveGuestCount && seatCount ? Math.max(1, Math.ceil(effectiveGuestCount / seatCount)) : 1);
       const mainZoneAnchor = getZoneCenter(guestZoneFromBrief?.side);
+      const shellPreview = buildRoomShellPreview();
       const preview: any = {
-        ...buildRoomShellPreview(),
+        ...shellPreview,
         assets: [
+          ...(Array.isArray(shellPreview.assets) ? shellPreview.assets : []),
           {
             assetName,
             count: inferredTableCount,
@@ -1463,18 +1524,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       );
     };
     const buildContextualRecovery = () => {
-      if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && !hasLayoutBrief) {
+      const isMarqueeFlowRecovery = selectedSpaceChoice === 'marquee' && Boolean(fallbackMarquee);
+      if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && !hasLayoutBrief && !isMarqueeFlowRecovery) {
         return {
           followUp: roomSummaryPrompt,
           preview: buildRoomShellPreview(),
         };
       }
 
-      if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && hasLayoutBrief) {
+      if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && (hasLayoutBrief || isMarqueeFlowRecovery)) {
         return (
           buildStructuredFlowResponse() || {
             preview: buildStructuredZonePreview(),
-            followUp: 'I’m with you. What would you like to set up next inside this layout?',
+            followUp: 'I\u2019m with you. What would you like to set up next inside this layout?',
           }
         );
       }
@@ -1835,14 +1897,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    if (normalizedCommand === 'marquee' || normalizedCommand === 'tent') {
+      const marqueeOptions = assetList.filter((a) => a.category === 'Marquee');
+      return res.status(200).json({
+        assetSelection: {
+          category: 'marquee',
+          message: 'Excellent! Which marquee would you like to use for your event?',
+          options: marqueeOptions,
+        },
+      });
+    }
+
+    // Handle seating type choice after space is drafted
+    const assistantAskedForSeatingType = conversationHistory
+      .slice(-4)
+      .some((m) =>
+        m.role === 'assistant' &&
+        /how would you like to set up seating|single seater chairs|table and chairs/i.test(m.content || '')
+      );
+    if (assistantAskedForSeatingType && /table\s*(?:and|&|\+)\s*chair/i.test(exactCommandText)) {
+      // User chose "Table and chairs" — ask for layout description
+      return res.status(200).json({
+        followUp: roomSummaryPrompt,
+        preview: buildRoomShellPreview(),
+      });
+    }
+    // "Single seater chairs" flows through — replyWantsChairOnly detection will catch it below
+
+    // Detect if user just picked "Single seater chairs" from seating type choice
+    const userPickedSingleSeater = assistantAskedForSeatingType && /single\s*seater/i.test(exactCommandText);
+    const userPickedTableChairs = assistantAskedForSeatingType && /table\s*(?:and|&|\+)\s*chair/i.test(exactCommandText);
+
     if (
       activeSpaceWidthMm &&
       activeSpaceHeightMm &&
       structuredSpaceConversation &&
-      !hasLayoutBrief
+      !hasLayoutBrief &&
+      !userPickedSingleSeater &&
+      !userPickedTableChairs
     ) {
       return res.status(200).json({
-        followUp: roomSummaryPrompt,
+        followUp: `I've drafted a ${roomDraftLabel} for you. How would you like to set up seating?`,
+        choices: ['Single seater chairs', 'Table and chairs'],
         preview: buildRoomShellPreview(),
       });
     }
@@ -1880,7 +1976,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     function buildStructuredFlowResponse(previewOverride?: any) {
-      if (!(activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && hasLayoutBrief)) {
+      const isMarqueeFlow = selectedSpaceChoice === 'marquee' && Boolean(fallbackMarquee);
+      if (!(activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && (hasLayoutBrief || isMarqueeFlow))) {
         return null;
       }
 
@@ -1948,7 +2045,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return { plan: structuredPreview };
       }
       // ─────────────────────────────────────────────────────────────────────────
-      const mainZoneIsChairOnly = Boolean(guestZoneFromBrief?.onlyChairs);
+      // Detect chair-only intent from conversational replies (not just layout brief)
+      // When the assistant asks for a table/seating setup and the user responds with
+      // phrases like "single seater", "no table", "just chairs", treat as chair-only.
+      const assistantAskedForTableOrSeating = conversationHistory
+        .slice(-6)
+        .some((m) =>
+          m.role === 'assistant' &&
+          /what table|what type of seating|what type of tables|select a table|select seating|table or seating|set up seating|single seater chairs|table and chairs/i.test(m.content || '')
+        );
+      const replyWantsChairOnly = assistantAskedForTableOrSeating && (
+        /\bsingle\s*seater\b/i.test(exactCommandText) ||
+        /\bjust\s+chairs?\b/i.test(exactCommandText) ||
+        /\bonly\s+chairs?\b/i.test(exactCommandText) ||
+        /\bchairs?\s+only\b/i.test(exactCommandText) ||
+        /\bno\s+tables?\b/i.test(exactCommandText) ||
+        /\bwithout\s+tables?\b/i.test(exactCommandText) ||
+        /\bchair[- ]?only\b/i.test(exactCommandText) ||
+        /\bchairs?\b.{0,20}\bno\b.{0,10}\btable\b/i.test(exactCommandText) ||
+        /\bno\b.{0,10}\btable\b.{0,20}\bchairs?\b/i.test(exactCommandText) ||
+        /\bsingle\s*seater\s*chairs?\b/i.test(exactCommandText)
+      );
+
+      const mainZoneIsChairOnly =
+        Boolean(guestZoneFromBrief?.onlyChairs) ||
+        userChoseSingleSeater ||
+        chairOnlySeatingSelectedFromHistory ||
+        replyWantsChairOnly;
       const mainZoneNeedsSetup = !mainZoneIsChairOnly && !selectedTableForFlow;
       const mainZoneNeedsChairChoice =
         mainZoneIsChairOnly
@@ -2179,22 +2302,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return null;
     }
 
-    if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && hasLayoutBrief) {
+    const isMarqueeFlow = selectedSpaceChoice === 'marquee' && Boolean(fallbackMarquee);
+    if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && (hasLayoutBrief || isMarqueeFlow)) {
       const structuredResponse = buildStructuredFlowResponse();
       if (structuredResponse) {
         return res.status(200).json(structuredResponse);
       }
-    }
-
-    if (normalizedCommand === 'marquee') {
-      const marqueeOptions = assetList.filter((a) => a.category === 'Marquee');
-      return res.status(200).json({
-        assetSelection: {
-          category: 'marquee',
-          message: 'Excellent! Which marquee would you like to use for your event?',
-          options: marqueeOptions,
-        },
-      });
     }
 
     const tableAssetSelected =
@@ -2227,19 +2340,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const seatCount = chairsPerTableForFlow || (seatCountMatch ? Number(seatCountMatch[1]) : null);
       const inferredTableCount = explicitTableCount || (effectiveGuestCount && seatCount ? Math.max(1, Math.ceil(effectiveGuestCount / seatCount)) : null);
       const preview: any = activeSpaceWidthMm && activeSpaceHeightMm
-        ? {
-            ...buildRoomShellPreview(),
-            assets: [
-              {
-                assetName: selectedMentionedAsset.name,
-                count: inferredTableCount || 1,
-                chairCount: seatCount || undefined,
-                chairAsset: selectedChairForFlow?.name || undefined,
-                guestCount: effectiveGuestCount || undefined,
-                strokeWidth: 0.6,
-              },
-            ],
-          }
+        ? (() => {
+            const shellPreview = buildRoomShellPreview();
+            return {
+              ...shellPreview,
+              assets: [
+                ...(Array.isArray(shellPreview.assets) ? shellPreview.assets : []),
+                {
+                  assetName: selectedMentionedAsset.name,
+                  count: inferredTableCount || 1,
+                  chairCount: seatCount || undefined,
+                  chairAsset: selectedChairForFlow?.name || undefined,
+                  guestCount: effectiveGuestCount || undefined,
+                  strokeWidth: 0.6,
+                },
+              ],
+            };
+          })()
         : {
             assets: [
               {
@@ -2289,19 +2406,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json({
           followUp: `How many chairs should I place around each table? I can suggest ${suggestedChairCount} for the ${selectedMentionedAsset.name} unless you want a different number.`,
           preview: activeSpaceWidthMm && activeSpaceHeightMm
-            ? {
-                ...buildRoomShellPreview(),
-                assets: [
-                  {
-                    assetName: selectedMentionedAsset.name,
-                    count: Math.max(1, Math.ceil(effectiveGuestCount / suggestedChairCount)),
-                    chairCount: suggestedChairCount,
-                    chairAsset: selectedChairForFlow?.name || undefined,
-                    guestCount: effectiveGuestCount || undefined,
-                    strokeWidth: 0.6,
-                  },
-                ],
-              }
+            ? (() => {
+                const shellPreview = buildRoomShellPreview();
+                return {
+                  ...shellPreview,
+                  assets: [
+                    ...(Array.isArray(shellPreview.assets) ? shellPreview.assets : []),
+                    {
+                      assetName: selectedMentionedAsset.name,
+                      count: Math.max(1, Math.ceil(effectiveGuestCount / suggestedChairCount)),
+                      chairCount: suggestedChairCount,
+                      chairAsset: selectedChairForFlow?.name || undefined,
+                      guestCount: effectiveGuestCount || undefined,
+                      strokeWidth: 0.6,
+                    },
+                  ],
+                };
+              })()
             : preview,
         });
       }

@@ -793,7 +793,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 .replace(/\s+fill\s*=\s*["'][^"']*["']/gi, '')
                 .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '');
 
-            return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="${displayWidth}" height="${displayHeight}" x="${-displayWidth / 2}" y="${-displayHeight / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none; width:100%; height:100%;">`;
+            return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="${displayWidth}" height="${displayHeight}" x="${-displayWidth / 2}" y="${-displayHeight / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none;">`;
         });
     }, [baseSvg, canUseFastImage, currentFill, currentStroke, currentStrokeWidth, displayWidth, displayHeight]);
 

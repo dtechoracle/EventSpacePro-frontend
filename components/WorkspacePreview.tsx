@@ -5,6 +5,7 @@ import { Wall, Shape, Asset, TextAnnotation } from '@/store/projectStore';
 import { calculateWorkspaceBounds } from '@/utils/workspaceBounds';
 import AssetRenderer from './renderers/AssetRenderer';
 import { texturePatterns } from '@/utils/texturePatterns';
+import { PRELOADED_VENUES } from '@/lib/preloadedVenues';
 
 interface WorkspacePreviewProps {
     walls: Wall[];
@@ -480,7 +481,12 @@ export default function WorkspacePreview({
                             return (
                                 <AssetRenderer
                                     key={asset.id}
-                                    asset={assetWithPath as any}
+                                    asset={{
+                                        ...assetWithPath,
+                                        strokeWidth: PRELOADED_VENUES.some(v => v.id === asset.type)
+                                            ? 0.4
+                                            : (assetWithPath as any).strokeWidth,
+                                    } as any}
                                     isSelected={false}
                                     isHovered={false}
                                     isPreview={true}

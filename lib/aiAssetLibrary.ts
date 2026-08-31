@@ -93,12 +93,14 @@ export const AI_ASSET_KNOWLEDGE: AIAssetKnowledge[] = ASSET_LIBRARY.map((asset) 
 // Asset search function for AI
 export function findAssetByName(query: string): AssetDef | null {
     const q = query.toLowerCase().trim();
+    const isBareNumericQuery = /^\d+(?:\.\d+)?$/.test(q);
 
     // Exact match on ID or label
     let match = ASSET_LIBRARY.find(
         (a) => a.id.toLowerCase() === q || a.label.toLowerCase() === q
     );
     if (match) return match;
+    if (isBareNumericQuery) return null;
 
     // Check AI knowledge base for aliases and tags
     const knowledge = AI_ASSET_KNOWLEDGE.find((k) => {
