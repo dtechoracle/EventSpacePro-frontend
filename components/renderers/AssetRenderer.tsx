@@ -332,6 +332,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // "transparent" — making assets invisible until save.
     const canUseFastImage =
         !!assetPath &&
+        !!rasterAssetPath && // Requires an actual raster; SVG-backed items (e.g. venues) then use the SVG-processing path which applies non-scaling-stroke so thin outlines stay visible when zoomed out.
         !asset.isExploded &&
         !disableFastImageForAsset &&
         !hasCustomColors &&

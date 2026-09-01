@@ -58,6 +58,17 @@ export function calculateWorkspaceBounds(
             });
         }
 
+        // Legacy start/end segment wall (template format)
+        if ((wall as any).start && (wall as any).end) {
+            const s = (wall as any).start;
+            const e = (wall as any).end;
+            minX = Math.min(minX, s.x, e.x);
+            minY = Math.min(minY, s.y, e.y);
+            maxX = Math.max(maxX, s.x, e.x);
+            maxY = Math.max(maxY, s.y, e.y);
+            wallHasPoints = true;
+        }
+
         if (wallHasPoints) {
             hasActualContent = true;
         }

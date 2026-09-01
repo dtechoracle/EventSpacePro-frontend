@@ -30,6 +30,16 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
     const [showMenu, setShowMenu] = useState(false);
     const [showRenameModal, setShowRenameModal] = useState(false);
 
+    // Keep displayed name in sync when the event prop updates after async fetch
+    useEffect(() => {
+        if (event?.name && event.name !== eventName) setEventName(event.name);
+    }, [event?.name]);
+
+    // Never show the hidden project's name as the event title — stale template
+    // events were saved with name:"Personal Drafts" before the fix. Show the
+    // real event name or a neutral fallback instead.
+    const displayName = eventName === "Personal Drafts" ? (event?.type ? `${event.type} — ${new Date(event.createdAt || event.updatedAt || Date.now()).toLocaleDateString()}` : "Untitled Event") : eventName;
+
     const { walls, shapes, assets, textAnnotations } = previewData || (event ? buildPreviewData(event) : { walls: [], shapes: [], assets: [], textAnnotations: [] });
 
     useEffect(() => {
@@ -235,7 +245,7 @@ export default function EventCard({ event, user, previewData, onFavoriteToggle, 
 
             <div className="mt-2">
                 <h3 className="font-semibold text-sm mb-1 truncate text-gray-800 hover:text-blue-600 transition-colors cursor-pointer" onClick={() => router.push(`/dashboard/editor/${event.projectSlug}/${event._id}`)}>
-                    {eventName}
+                    {displayName}
                 </h3>
                 <p className="text-xs text-gray-500 flex items-center gap-1.5">
                     <BsClock className="w-3 h-3" />

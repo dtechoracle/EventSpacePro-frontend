@@ -563,9 +563,19 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const { id, slug } = router.query;
 
   const { data: projectData } = useQuery({
-    queryKey: ["project-collaborators", slug],
+    queryKey: id ? ["event-collaborators", slug, id] : ["project-collaborators", slug],
     queryFn: async () => {
       if (!slug) return null;
+      // Prefer event-scoped collaborators when inside an event
+      if (id) {
+        try {
+          const res = await apiRequest(`/projects/${slug}/events/${id}`, "GET", null, true);
+          const evt = res.data || res;
+          if (evt.users || evt.invites) return evt;
+        } catch (err) {
+          console.error("Failed to fetch event for collaborators:", err);
+        }
+      }
       try {
         const res = await apiRequest(`/projects/${slug}`, "GET", null, true).catch(async () => {
           const allRes = await apiRequest("/projects", "GET", null, true);
@@ -582,6 +592,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
   const collaborators = useMemo(() => {
     if (!projectData) return [];
+    // Event responses include users/invites separate from project.users
     const active = (projectData.users || []).map((u: any) => ({
       email: u.email,
       name: u.user?.firstName || u.email.split('@')[0],
@@ -640,7 +651,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
   return (
     <aside className="h-screen flex flex-col border-l border-slate-200 bg-[#fcfcfd] text-sm text-slate-900">
       {showShareModal && (
-        <ShareModal onClose={() => setShowShareModal(false)} slug={slug as string} />
+        <ShareModal onClose={() => setShowShareModal(false)} slug={slug as string} eventId={id as string} />
       )}
 
       {/* Rename Modal - shown on first save for template-created events */}

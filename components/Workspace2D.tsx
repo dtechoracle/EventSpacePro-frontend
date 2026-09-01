@@ -33,7 +33,7 @@ import SnapMarkersRenderer from './renderers/SnapMarkersRenderer';
 import { AutoDimensionRenderer } from './renderers/AutoDimensionRenderer';
 import ContextMenu from './ui/ContextMenu';
 import DuplicateDistributeModal from './ui/DuplicateDistributeModal';
-import { AnchorType, getAnchorsForObject, snapToObjects } from '@/utils/snapAnchors';
+import { AnchorType, getAnchorsForObject, snapToObjects, calculateShapeAnchors, calculateAssetAnchors, calculateWallAnchors } from '@/utils/snapAnchors';
 import { findClosestSnapPointFromList, findSnapPointInShapes, getSnapPoints } from '@/utils/snapToDrawing';
 import { getMarqueeVertices } from '@/utils/assetUtils';
 
@@ -587,7 +587,18 @@ const SelectionHighlightLayer = React.memo(({
       {highlights.map(item => {
         const isSelected = selectionSet.has(item.id);
         const isHovered = hoveredId === item.id;
-        const vertices = verticesMap[item.id] || [];
+        // Marquee bay-markers come from verticesMap (richer). For every other
+        // element (shape/wall/asset) compute the matching anchor/vertex points
+        // so the green snap dots appear on selection/hover everywhere.
+        const marqueeVertices = verticesMap[item.id] || [];
+        const vertices = marqueeVertices.length > 0
+          ? marqueeVertices
+          : (() => {
+              if (item._renderType === 'shape') return calculateShapeAnchors(item, zoom).map((a: any) => ({ x: a.x, y: a.y }));
+              if (item._renderType === 'asset') return calculateAssetAnchors(item).map((a: any) => ({ x: a.x, y: a.y }));
+              if (item._renderType === 'wall') return calculateWallAnchors(item).map((a: any) => ({ x: a.x, y: a.y }));
+              return [];
+            })();
         
         return (
           <React.Fragment key={`highlight-group-${item.id}`}>
@@ -601,19 +612,19 @@ const SelectionHighlightLayer = React.memo(({
               <WallRenderer key={`highlight-${getWallRenderKey(item)}`} wall={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
             )}
             
-            {/* Premium Vertex Visualization — zoom-compensated to stay fixed on screen */}
+            {/* Premium Vertex Visualization */}
             {(isSelected || isHovered) && vertices.length > 0 && (
               <g className="vertex-anchors pointer-events-none">
-                {vertices.map((v, i) => (
+                {vertices.filter((v: any) => Number.isFinite(v?.x) && Number.isFinite(v?.y)).map((v, i) => (
                   <circle
                     key={`v-${item.id}-${i}`}
                     cx={v.x}
                     cy={v.y}
-                    r={i % 5 === 0 ? 4 : 2}
+                    r={i % 5 === 0 ? 8 : 6}
                     fill={i % 5 === 0 ? "#3b82f6" : "#22c55e"}
                     stroke="white"
-                    strokeWidth={1}
-                    style={{ filter: 'drop-shadow(0 0 2px rgba(0, 0, 0, 0.3))' }}
+                    strokeWidth={1.4}
+                    style={{ filter: 'drop-shadow(0 0 2px rgba(0, 0, 0, 0.35))' }}
                   />
                 ))}
               </g>
@@ -796,7 +807,10 @@ export default function Workspace2D({
 
     assets.forEach((asset) => {
       const assetDef = assetDefinitionById.get(asset.type);
-      if (assetDef?.category === 'Marquee') {
+      const isMarquee =
+        assetDef?.category === 'Marquee' ||
+        String(asset.type || asset.name || '').toLowerCase().includes('marquee');
+      if (isMarquee) {
         map[asset.id] = getMarqueeVertices(asset);
       }
     });
@@ -2489,9 +2503,30 @@ export default function Workspace2D({
               const idsToSelect = resolveIdsWithGroups([item.id]);
               if (activeTool !== 'trim-to-blend' && !e.shiftKey) {
                 if (idsToSelect.some(id => selectedIds.includes(id))) {
-                  // Already selected — save it but keep looking for unselected items on top.
-                  // Do NOT return here; continue the loop to find an unselected item underneath.
-                  pendingAlreadySelected = { item, idsToSelect };
+                  // Already selected — drag the current selection instead of
+                  // cycling to an item underneath. This fixes the bug where
+                  // clicking a small selected circle on top of a big rectangle
+                  // would select and drag the big rectangle underneath.
+                  // To select an unselected item underneath a selected one,
+                  // click a non-overlapping part of it or use Shift.
+                  if (canEditRef.current) {
+                    saveToHistory();
+                    setIsDraggingItem(true);
+                    setDragging(true);
+                    const dragPoint = { x: worldX, y: worldY };
+                    draggedItemStartRef.current = dragPoint;
+                    setDraggedItemStart(dragPoint);
+                    const toDrag = selectedIds.filter(id => resolveIdsWithGroups([id]).some(rid => selectedIds.includes(rid)));
+                    // Use current selection for drag preview if applicable
+                    const dragIds = selectedIds;
+                    if (shouldUseDragPreviewForIds(dragIds)) {
+                      const preview = { ids: [...dragIds], dx: 0, dy: 0 };
+                      dragPreviewRef.current = preview;
+                      setDragPreview(preview);
+                    }
+                  }
+                  itemSelected = true;
+                  return;
                 } else {
                   handleItemSelection([item.id], e.shiftKey, { x: worldX, y: worldY });
                   // Allow immediate drag on first click if not shifting.

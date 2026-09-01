@@ -19,6 +19,8 @@ const marqueeAssetTypes = new Set(
         .filter((asset) => asset.category === 'Marquee')
         .map((asset) => asset.id)
 );
+const isMarqueeType = (type: string, name?: string) =>
+    marqueeAssetTypes.has(type) || String(type || name || '').toLowerCase().includes('marquee');
 
 export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
     const { screenToWorld, setSelectedIds, setActiveTool, zoom } = useEditorStore();
@@ -29,7 +31,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
     const walls = useProjectStore(s => s.walls);
     const assets = useProjectStore(s => s.assets);
     const marqueeAssets = useMemo(
-        () => assets.filter(asset => marqueeAssetTypes.has(asset.type)),
+        () => assets.filter(asset => isMarqueeType(asset.type, asset.name)),
         [assets]
     );
 

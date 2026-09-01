@@ -13,27 +13,38 @@ export function getCachedAssetVertices(assetId: string): { x: number; y: number 
 }
 
 export function getMarqueeVertices(asset: Asset): { x: number; y: number }[] {
-    const def = ASSET_LIBRARY.find(a => a.id === asset.type);
-    const baseWidth = asset.width || def?.width || 0;
-    const baseHeight = asset.height || def?.height || 0;
-    const scale = asset.scale || 1;
+    const typeLower = String(asset.type || '').toLowerCase();
+    const nameLower = String((asset as any).name || '').toLowerCase();
+    const def =
+        ASSET_LIBRARY.find(a => a.id === asset.type) ||
+        ASSET_LIBRARY.find(a => a.id.toLowerCase() === typeLower) ||
+        ASSET_LIBRARY.find(a => a.name && a.name.toLowerCase() === nameLower) ||
+        ASSET_LIBRARY.find(a => a.label && a.label.toLowerCase() === typeLower) ||
+        ASSET_LIBRARY.find(a => (a.id.toLowerCase() + ' ' + (a.name || '').toLowerCase()).includes(typeLower)) ||
+        null;
+    const baseWidth = Number(asset.width) || Number((asset as any).widthMm) || def?.width || 0;
+    const baseHeight = Number(asset.height) || Number((asset as any).heightMm) || def?.height || 0;
+    const scale = Number(asset.scale) || 1;
     const width = baseWidth * scale;
     const height = baseHeight * scale;
+    if (!width || !height) return [];
     const geometry = getMarqueeGeometry(
         width,
         height,
         asset.wallThickness || asset.metadata?.wallThickness
     );
-    const rad = (asset.rotation * Math.PI) / 180;
+    const rad = ((Number(asset.rotation) || 0) * Math.PI) / 180;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);
+    const ax = Number(asset.x) || 0;
+    const ay = Number(asset.y) || 0;
 
     return geometry.markerCenters.map((marker) => {
         const ox = marker.x - width / 2;
         const oy = marker.y - height / 2;
         return {
-            x: asset.x + (ox * cos - oy * sin),
-            y: asset.y + (ox * sin + oy * cos)
+            x: ax + (ox * cos - oy * sin),
+            y: ay + (ox * sin + oy * cos)
         };
     });
 }

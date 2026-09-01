@@ -161,7 +161,8 @@ export function getSnapPoints(element: SnapTarget, vertices: { x: number; y: num
     else if ('type' in element && !('nodes' in element)) { // Asset check
         const asset = element as Asset;
         const assetDef = ASSET_LIBRARY.find((def) => def.id === asset.type);
-        const liveVertices = assetDef?.category === 'Marquee' ? getMarqueeVertices(asset) : [];
+        const isMarqueeType = assetDef?.category === 'Marquee' || String(asset.type || (asset as any).name || '').toLowerCase().includes('marquee');
+        const liveVertices = isMarqueeType ? getMarqueeVertices(asset) : [];
         const cachedVertices = liveVertices.length > 0
             ? liveVertices
             : (vertices.length > 0 ? vertices : getCachedAssetVertices(asset.id));

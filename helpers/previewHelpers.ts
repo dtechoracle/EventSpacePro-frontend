@@ -73,13 +73,33 @@ export const buildPreviewData = (event: EventData | any) => {
     }
 
     // PRIORITY 2: Fallback to canvasAssets (most events use this format)
-    // Fallback: derive preview data from canvasAssets (new editor format)
+    // Handles both array format and Yjs map format {yAssets:{}, yShapes:{}, ...}
     const fallbackWalls: any[] = [];
     const fallbackShapes: any[] = [];
     const fallbackAssets: any[] = [];
 
-    if (event.canvasAssets && Array.isArray(event.canvasAssets)) {
-        event.canvasAssets.forEach((asset: any) => {
+    // Normalize canvasAssets to a flat array regardless of storage shape
+    let flatCanvasAssets: any[] = [];
+    if (event.canvasAssets) {
+        if (Array.isArray(event.canvasAssets)) {
+            flatCanvasAssets = event.canvasAssets;
+        } else if (typeof event.canvasAssets === 'object') {
+            // Yjs collaboration shape: {yAssets:{}, yShapes:{}, yAnnotations:{}, yDimensions:{}, yCanvas:{}}
+            const ca: any = event.canvasAssets;
+            const yAssets = ca.yAssets ? Object.values(ca.yAssets) : [];
+            const yShapes = ca.yShapes ? Object.values(ca.yShapes) : [];
+            const yAnnotations = ca.yAnnotations ? Object.values(ca.yAnnotations) : [];
+            const yDimensions = ca.yDimensions ? Object.values(ca.yDimensions) : [];
+            // yCanvas is a single config object, not an array
+            flatCanvasAssets = [...(yAssets as any[]), ...(yShapes as any[]), ...(yAnnotations as any[]), ...(yDimensions as any[])];
+            // Also include yWalls / yWallSegments if present
+            if (ca.yWalls) flatCanvasAssets.push(...Object.values(ca.yWalls as any));
+            if (ca.yWallSegments) flatCanvasAssets.push(...Object.values(ca.yWallSegments as any));
+        }
+    }
+
+    if (flatCanvasAssets.length > 0) {
+        flatCanvasAssets.forEach((asset: any) => {
             // Handle wall-polygon type (new format)
             if (asset.type === "wall-polygon" && asset.wallPolygon && Array.isArray(asset.wallPolygon)) {
                 // Convert wall-polygon to wall format with nodes and edges

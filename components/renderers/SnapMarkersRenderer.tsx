@@ -10,7 +10,7 @@ const marqueeAssetTypes = new Set(
         .map((def) => def.id)
 );
 
-const snapDrawingTools = new Set(['wall', 'shape-line', 'shape-arrow', 'dimension', 'arch']);
+const snapDrawingTools = new Set(['wall', 'shape-line', 'shape-arrow', 'dimension', 'arch', 'shape-rectangle', 'shape-ellipse', 'shape-polygon', 'freehand']);
 
 export default function SnapMarkersRenderer() {
     const hoveredId = useEditorStore(s => s.hoveredId);
@@ -20,7 +20,7 @@ export default function SnapMarkersRenderer() {
     const shapes = useProjectStore(s => s.shapes);
     const allAssets = useProjectStore(s => s.assets);
     const marqueeAssets = useMemo(
-        () => allAssets.filter(asset => marqueeAssetTypes.has(asset.type)),
+        () => allAssets.filter(asset => marqueeAssetTypes.has(asset.type) || String(asset.type || asset.name || '').toLowerCase().includes('marquee')),
         [allAssets]
     );
     const walls = useProjectStore(s => s.walls);
@@ -85,7 +85,7 @@ export default function SnapMarkersRenderer() {
 
     if (!markerSourceId || snapPoints.length === 0) return null;
 
-    const markerRadius = 10;
+    const markerRadius = 14;
     const strokeWidth = 2.5;
 
     return (

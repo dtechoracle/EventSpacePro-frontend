@@ -49,6 +49,7 @@ export default function QuickCreateEventModal({ onClose }: { onClose: () => void
       // 2. Create the event inside this project
       const response = await apiRequest(`/projects/${targetProject.slug}/events`, "POST", {
         name: eventName,
+        eventName: eventName,
         type: "Custom venue",
         canvases: [{ size: "layout", width: 10000, height: 10000 }]
       }, true);

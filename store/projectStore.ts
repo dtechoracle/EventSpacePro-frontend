@@ -1643,6 +1643,7 @@ export const useProjectStore = create<ProjectState>()(
                     // and the merge was skipped entirely.)
                     const payload: Record<string, unknown> = {
                         name: eventName,
+                        eventName: eventName,
                         type: eventType,
                         canvases: canvases,
                         canvasData,

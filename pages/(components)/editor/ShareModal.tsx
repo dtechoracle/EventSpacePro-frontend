@@ -16,7 +16,7 @@ interface ProjectCollaborator {
   avatar?: string;
 }
 
-export default function ShareModal({ onClose, slug: propSlug }: { onClose: () => void; slug?: string }) {
+export default function ShareModal({ onClose, slug: propSlug, eventId: propEventId }: { onClose: () => void; slug?: string; eventId?: string }) {
   const user = useUserStore((s) => s.user);
   const { projectName } = useProjectStore();
   const [email, setEmail] = useState("");
@@ -27,12 +27,25 @@ export default function ShareModal({ onClose, slug: propSlug }: { onClose: () =>
 
   // Fallback to router slug if not provided via props
   const slug = propSlug;
+  const eventId = propEventId;
 
-  // Fetch project data to get collaborators and invites
+  // Fetch project or event data to get collaborators and invites
+  // Use event-scoped endpoint when eventId is available
   const { data: projectData, isLoading: isLoadingProject, refetch: refetchProject } = useQuery({
-    queryKey: ["project-collaborators", slug],
+    queryKey: eventId ? ["event-collaborators", slug, eventId] : ["project-collaborators", slug],
     queryFn: async () => {
       if (!slug) return null;
+      // Prefer event-scoped collaborators when inside an event
+      if (eventId) {
+        try {
+          const res = await apiRequest(`/projects/${slug}/events/${eventId}`, "GET", null, true);
+          const evt = res.data || res;
+          // Event responses include users/invites separate from project
+          if (evt.users || evt.invites) return evt;
+        } catch (err) {
+          console.error("Failed to fetch event for collaborators:", err);
+        }
+      }
       try {
         // First try to get single project, fallback to list if needed
         const res = await apiRequest(`/projects/${slug}`, "GET", null, true).catch(async () => {
@@ -61,11 +74,15 @@ export default function ShareModal({ onClose, slug: propSlug }: { onClose: () =>
 
     setIsInviting(true);
     try {
-      await apiRequest(`/projects/${slug}/users`, "POST", {
+      const recipientName = email.split('@')[0];
+      // Use event-scoped endpoint when inside an event
+      const endpoint = eventId ? `/projects/${slug}/events/${eventId}/users` : `/projects/${slug}/users`;
+      await apiRequest(endpoint, "POST", {
         users: [
           {
             email,
             role: role as any,
+            recipientName,
           },
         ],
       }, true);
@@ -85,7 +102,8 @@ export default function ShareModal({ onClose, slug: propSlug }: { onClose: () =>
     if (!slug) return;
     setRemovingEmail(inviteEmail);
     try {
-      await apiRequest(`/projects/${slug}/users`, "DELETE", { email: inviteEmail }, true);
+      const endpoint = eventId ? `/projects/${slug}/events/${eventId}/users` : `/projects/${slug}/users`;
+      await apiRequest(endpoint, "DELETE", { email: inviteEmail }, true);
       toast.success(`Invitation for ${inviteEmail} cancelled`);
       refetchProject();
     } catch (err: any) {
@@ -100,7 +118,8 @@ export default function ShareModal({ onClose, slug: propSlug }: { onClose: () =>
     if (!slug) return;
     setRoleUpdatingEmail(targetEmail);
     try {
-      await apiRequest(`/projects/${slug}/users/role`, "PUT", {
+      const endpoint = eventId ? `/projects/${slug}/events/${eventId}/users/role` : `/projects/${slug}/users/role`;
+      await apiRequest(endpoint, "PUT", {
         email: targetEmail,
         role: nextRole,
       }, true);

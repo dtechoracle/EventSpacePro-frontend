@@ -246,7 +246,7 @@ export default function WorkspacePreview({
                     <rect width="100%" height="100%" fill={`url(#grid_${uid})`} opacity="0.3" />
 
                     <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
-                        {/* Render walls (support wall-polygon) */}
+                        {/* Render walls (support wall-polygon + start/end segments) */}
                         {walls.map((wall) => {
                             const hasPolygon = (wall as any).wallPolygon && Array.isArray((wall as any).wallPolygon);
                             const strokeColor = "#334155"; // Darker slate gray
@@ -271,7 +271,8 @@ export default function WorkspacePreview({
 
                             return (
                                 <g key={wall.id}>
-                                    {wall.edges.map((edge) => {
+                                    {/* Node/edge walls (new editor format) */}
+                                    {Array.isArray(wall.edges) && wall.nodes && wall.edges.map((edge) => {
                                         const nodeA = wall.nodes.find(n => n.id === edge.nodeA);
                                         const nodeB = wall.nodes.find(n => n.id === edge.nodeB);
                                         if (!nodeA || !nodeB) return null;
@@ -291,6 +292,20 @@ export default function WorkspacePreview({
                                             />
                                         );
                                     })}
+                                    {/* Legacy start/end segment wall (template format) */}
+                                    {(!wall.nodes || !Array.isArray(wall.edges)) && (wall as any).start && (wall as any).end && (
+                                        <line
+                                            x1={(wall as any).start.x}
+                                            y1={(wall as any).start.y}
+                                            x2={(wall as any).end.x}
+                                            y2={(wall as any).end.y}
+                                            stroke={strokeColor}
+                                            strokeWidth={1.5}
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            vectorEffect="non-scaling-stroke"
+                                        />
+                                    )}
                                 </g>
                             );
                         })}
@@ -483,8 +498,12 @@ export default function WorkspacePreview({
                                     key={asset.id}
                                     asset={{
                                         ...assetWithPath,
+                                        // Venue outline must be clearly visible even at thumbnail zoom.
+                                        // The venue SVG uses 0.72pt strokes; with non-scaling-stroke that
+                                        // stays ~0.7px. Force 1.2px so the harbour-point boundary reads
+                                        // as a clean perimeter around the tables — visible but not heavy.
                                         strokeWidth: PRELOADED_VENUES.some(v => v.id === asset.type)
-                                            ? 0.4
+                                            ? 1.2
                                             : (assetWithPath as any).strokeWidth,
                                     } as any}
                                     isSelected={false}

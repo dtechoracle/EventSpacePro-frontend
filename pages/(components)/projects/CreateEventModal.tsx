@@ -148,9 +148,31 @@ export default function CreateEventModal({
       };
 
       // Determine canvas data (assets, shapes, etc)
-      let canvasData = undefined;
-      
-      if (venueType === 'outdoor') {
+      // If a template is being used, include its data in the initial POST so the
+      // event is never created empty — this prevents the dashboard thumbnail from
+      // showing "empty workspace" if the second PUT is delayed or the user navigates back quickly.
+      let canvasData: any = undefined;
+      let initialCanvasAssets: any[] | undefined = undefined;
+      if (initialTemplateData) {
+        if (initialTemplateData.canvasAssets && Array.isArray(initialTemplateData.canvasAssets)) {
+          initialCanvasAssets = initialTemplateData.canvasAssets;
+        } else {
+          canvasData = initialTemplateData;
+          // Also handle {canvasData: {...}} wrapper if present
+          if ((initialTemplateData as any).canvasData) canvasData = (initialTemplateData as any).canvasData;
+        }
+        // Use the template's own canvas size when present (e.g. Indoor 80000x32000) —
+        // otherwise the venue (74885 wide) is larger than the default 10000 canvas and gets clipped.
+        const tplCanvases = (initialTemplateData as any).canvases as any[] | undefined;
+        if (tplCanvases && Array.isArray(tplCanvases) && tplCanvases[0]?.width) {
+          canvases[0].width = tplCanvases[0].width;
+          canvases[0].height = tplCanvases[0].height;
+          width = tplCanvases[0].width;
+          height = tplCanvases[0].height;
+        }
+      }
+
+      if (!canvasData && venueType === 'outdoor') {
         const textureId = outdoorType === 'beach' ? 'sand-01' : (outdoorType === 'parking-lot' ? 'parking-lot' : 'grass-01');
         const backgroundName = outdoorType === 'beach' ? 'Beach Layout' : (outdoorType === 'parking-lot' ? 'Parking Lot' : 'Grass Layout');
         canvasData = {
@@ -240,12 +262,16 @@ export default function CreateEventModal({
       lastCanvasDataRef.current = canvasData;
       lastCanvasesRef.current = canvases;
 
-      return apiRequest(`/projects/${selectedProjectId}/events`, "POST", {
+      const createPayload: any = {
         name: eventName,
+        eventName: eventName,
         type: eventTypeMap[venueType],
         canvases,
-        canvasData
-      }, true);
+        canvasData,
+      };
+      if (initialCanvasAssets) createPayload.canvasAssets = initialCanvasAssets;
+
+      return apiRequest(`/projects/${selectedProjectId}/events`, "POST", createPayload, true);
     },
     onSuccess: async (response) => {
       const eventId = response.data._id;
@@ -256,11 +282,12 @@ export default function CreateEventModal({
       const inviteRole = collabPermissionRef.current;
       if (inviteEmail && inviteEmail.includes("@")) {
         try {
-          await apiRequest(`/projects/${selectedProjectId}/users`, "POST", {
+          await apiRequest(`/projects/${selectedProjectId}/events/${eventId}/users`, "POST", {
             users: [
               {
                 email: inviteEmail,
-                role: inviteRole
+                role: inviteRole,
+                recipientName: inviteEmail.split('@')[0]
               }
             ]
           }, true);
