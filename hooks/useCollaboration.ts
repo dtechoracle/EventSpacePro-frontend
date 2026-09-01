@@ -124,6 +124,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
   const [roomId, setRoomId] = useState<string | null>(null);
   const [collaborationStatus, setCollaborationStatus] = useState<CollaborationStatusPayload | null>(null);
   const [collaborationError, setCollaborationError] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   // Optimistic by default: a user whose collaboration status we cannot read is
   // still allowed to edit locally, exactly as before. We only drop to read-only
   // when the server positively tells us this account is a viewer.
@@ -930,6 +931,21 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       // no later delta will reintroduce it. Resend the whole document state —
       // Yjs updates are idempotent, so replaying everything is safe and is the
       // only thing that actually repairs the divergence.
+      if (/reload the room|reload to resync|changed in storage|snapshot is stale/i.test(message)) {
+        console.warn("[Collaboration] Server requested room reload; rebuilding collaboration session");
+        setCollaborationError("Canvas changed on the server. Resyncing...");
+        hasJoinedRef.current = false;
+        joinRequestedRef.current = false;
+        hasAppliedInitialSync.current = false;
+        setHasJoined(false);
+        clearCollabAuthority(effectiveEventId || null);
+        socket.disconnect();
+        setReloadNonce((value) => value + 1);
+        setRoomId(null);
+        roomIdRef.current = null;
+        return;
+      }
+
       if (payload?.code === "UPDATE_FAILED" || /update failed/i.test(message)) {
         scheduleFullStateResend();
       }
@@ -972,6 +988,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     // object on every profile read, and depending on it restarted the whole
     // socket handshake mid-flight.
     currentUserId,
+    reloadNonce,
   ]);
 
   // ─── BroadcastChannel: instant sync between same-browser tabs ───
