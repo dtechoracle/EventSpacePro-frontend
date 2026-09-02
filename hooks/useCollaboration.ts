@@ -8,6 +8,7 @@ import { useProjectStore } from "@/store/projectStore";
 import { useEditorStore } from "@/store/editorStore";
 import { apiRequest } from "@/helpers/Config";
 import { setCollabAuthority, clearCollabAuthority } from "@/lib/collabAuthority";
+import { isStandaloneSlug } from "@/lib/standaloneEvent";
 import {
   CollaborationHttpUser,
   CollaborationStatusPayload,
@@ -263,6 +264,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     const hydrateProjectId = async () => {
       const slug = projectId || effectiveProjectSlug;
       if (!slug) return;
+      if (isStandaloneSlug(slug)) return;
 
       try {
         const project = await resolveProjectRecord(slug);
