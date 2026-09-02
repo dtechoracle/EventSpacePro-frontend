@@ -29,6 +29,7 @@ import { calculateWorkspaceBounds } from "@/utils/workspaceBounds";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { useRouteParams } from "@/hooks/useRouteParams";
 import { PRELOADED_VENUES } from "@/lib/preloadedVenues";
+import { isStandaloneSlug } from "@/lib/standaloneEvent";
 import {
   canvasDataFromCollaborationAssets,
   flattenCanvasAssets,
@@ -1277,8 +1278,12 @@ export default function Editor() {
     queryFn: async () => {
       const eventSlug = slug as string;
       const eventId = id as string;
-      console.log(`[Editor] Fetching event from DATABASE: ${eventSlug}/${eventId}`);
-      const response = await apiRequest(`/projects/${eventSlug}/events/${eventId}`, "GET", null, true);
+      const standalone = isStandaloneSlug(eventSlug);
+      console.log(`[Editor] Fetching event from DATABASE: ${standalone ? `standalone/${eventId}` : `${eventSlug}/${eventId}`}`);
+      const response = await apiRequest(
+        standalone ? `/api/events/${eventId}` : `/projects/${eventSlug}/events/${eventId}`,
+        "GET", null, true
+      );
       // apiRequest may return data directly or wrapped in response.data
       const data = (response.data || response) as EventData;
       const receivedId = data._id || (data as any).id;

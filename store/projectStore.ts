@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 import { findContainingObjects, findNearestObject, getAnchorsForObject, AnchorType } from '@/utils/snapAnchors';
 import { apiRequest } from "@/helpers/Config";
 import { isCollabAuthoritative } from "@/lib/collabAuthority";
+import { isStandaloneSlug } from "@/lib/standaloneEvent";
 import {
   canvasDataFromCollaborationAssets,
   isCollaborationCanvasShape,
@@ -1507,6 +1508,11 @@ export const useProjectStore = create<ProjectState>()(
                     activeLayerId, comments, projectName
                 } = get();
                 set({ isSaving: true });
+                // Standalone events (no project) use the /api/events endpoints
+                const standalone = isStandaloneSlug(slug);
+                const eventUrl = standalone
+                  ? `/api/events/${eventId}`
+                  : `/projects/${slug}/events/${eventId}`;
                 try {
                     // Use projectName from store (local changes) instead of fetching stale backend name
                     let eventName = projectName || 'Untitled Event';
@@ -1515,7 +1521,7 @@ export const useProjectStore = create<ProjectState>()(
                     let backendCanvasAssets: any[] = [];
 
                     try {
-                        const currentEvent = await apiRequest(`/projects/${slug}/events/${eventId}`, 'GET', null, true);
+                        const currentEvent = await apiRequest(eventUrl, 'GET', null, true);
                         const event = currentEvent.data || currentEvent;
                         // Only use backend type/canvases, NOT name (use store projectName instead)
                         eventType = event.type || eventType;
@@ -1720,7 +1726,7 @@ export const useProjectStore = create<ProjectState>()(
                         payload
                     });
 
-                    const response = await apiRequest(`/projects/${slug}/events/${eventId}`, 'PUT', payload, true);
+                    const response = await apiRequest(eventUrl, 'PUT', payload, true);
 
                     try {
                         localStorage.setItem(`event-canvas-${eventId}`, JSON.stringify({

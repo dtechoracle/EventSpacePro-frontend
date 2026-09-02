@@ -338,16 +338,10 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         return;
       }
 
+      // Snapshot the local store BEFORE applying the remote update. The initial
+      // sync branch below uses it to decide whether to push local content into
+      // the (empty) server room.
       const storeBefore = useProjectStore.getState();
-      console.log("[Collaboration] DEBUG BEFORE Y.applyUpdate:", {
-        zustandShapes: storeBefore.shapes.length,
-        zustandAssets: storeBefore.assets.length,
-        zustandWalls: storeBefore.walls.length,
-        yShapesCount: yShapes.size,
-        yAssetsCount: yAssets.size,
-        yWallsCount: yWalls.size,
-        isInitialSync,
-      });
 
       isRemoteUpdating.current = true;
       try {
@@ -355,19 +349,6 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       } finally {
         isRemoteUpdating.current = false;
       }
-
-      const storeAfter = useProjectStore.getState();
-      console.log("[Collaboration] DEBUG AFTER Y.applyUpdate:", {
-        zustandShapes: storeAfter.shapes.length,
-        zustandAssets: storeAfter.assets.length,
-        zustandWalls: storeAfter.walls.length,
-        yShapesCount: yShapes.size,
-        yAssetsCount: yAssets.size,
-        yWallsCount: yWalls.size,
-        shapeDelta: storeAfter.shapes.length - storeBefore.shapes.length,
-        assetDelta: storeAfter.assets.length - storeBefore.assets.length,
-        wallDelta: storeAfter.walls.length - storeBefore.walls.length,
-      });
 
       if (isInitialSync && !hasAppliedInitialSync.current) {
         hasAppliedInitialSync.current = true;
@@ -378,15 +359,6 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         const storeItems = storeBefore.shapes.length + storeBefore.assets.length + storeBefore.walls.length +
           storeBefore.textAnnotations.length + storeBefore.dimensions.length + storeBefore.labelArrows.length +
           storeBefore.groups.length + storeBefore.wallSegments.length + storeBefore.comments.length;
-        console.log("[Collaboration] Step 4: Initial yjs-sync check. Zustand state:", {
-          shapes: storeBefore.shapes.length,
-          assets: storeBefore.assets.length,
-          walls: storeBefore.walls.length,
-          totalItems: storeItems,
-          ydocShapes: yShapes.size,
-          ydocAssets: yAssets.size,
-          ydocWalls: yWalls.size,
-        });
 
         if (storeItems > 0 && yShapes.size === 0 && yAssets.size === 0 && yWalls.size === 0) {
           console.log("[Collaboration] Step 4: Server Yjs empty, pushing store → Ydoc");
@@ -462,17 +434,18 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       const localState = Y.encodeStateAsUpdate(ydoc);
       const targetRoomId = roomIdRef.current;
       if (targetRoomId && socket.connected && localState.byteLength > 2) {
-        console.log("[Collaboration] Step 4: Replaying local state to room,", localState.byteLength, "bytes");
         socket.emit("yjs-update", {
           roomId: targetRoomId,
           update: Array.from(localState),
           userId: currentUserIdRef.current,
         });
       }
+
+      // Flush any updates that were buffered while waiting for join
+      flushPendingUpdates();
     });
 
     socket.on("yjs-update", (payload) => {
-      console.log("[Collaboration] Step 6: Received yjs-update,", updateByteLength(payload), "bytes");
       applyRemoteYUpdate(payload, false);
     });
 
@@ -616,27 +589,21 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       collectionName?: string
     ) => {
       const previousById = new Map(previousItems.map((item) => [item.id, item]));
-      let added = 0, updated = 0, deleted = 0;
 
       currentItems.forEach((item) => {
         const previousItem = previousById.get(item.id);
-        const hasChanged = !previousItem || JSON.stringify(item) !== JSON.stringify(previousItem);
-        if (hasChanged) {
-          targetMap.set(item.id, JSON.parse(JSON.stringify(item)));
-          if (previousItem) updated++;
-          else added++;
+        // Reference equality: if the object is the exact same reference,
+        // nothing changed — skip the expensive write. Zustand always produces
+        // new references for mutated items.
+        if (previousItem !== item) {
+          targetMap.set(item.id, { ...item });
         }
         previousById.delete(item.id);
       });
 
       previousById.forEach((_, id) => {
         targetMap.delete(id);
-        deleted++;
       });
-
-      if (added > 0 || updated > 0 || deleted > 0) {
-        console.log(`[Collaboration] syncCollection → ${collectionName}: +${added} add, ~${updated} update, -${deleted} delete`);
-      }
     };
 
     let lastKnownState = useProjectStore.getState();
@@ -681,16 +648,9 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
             canvas: state.canvas,
           });
           bc.postMessage(payload);
-          console.log("[BroadcastChannel] Broadcast state-update:", {
-            shapes: state.shapes.length,
-            assets: state.assets.length,
-            walls: state.walls.length,
-          });
         } catch (err) {
           console.error("[BroadcastChannel] Failed to broadcast:", err);
         }
-      } else {
-        console.log("[BroadcastChannel] No channel available — cannot broadcast");
       }
 
       // Yjs sync: only after the backend join AND after we have successfully
@@ -708,14 +668,6 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         return;
       }
 
-      console.log("[Collaboration] Subscriber: detected store changes, syncing to Ydoc", {
-        shapes: state.shapes.length !== previousState.shapes.length ? `${previousState.shapes.length}→${state.shapes.length}` : state.shapes.length,
-        assets: state.assets.length !== previousState.assets.length ? `${previousState.assets.length}→${state.assets.length}` : state.assets.length,
-        walls: state.walls.length !== previousState.walls.length ? `${previousState.walls.length}→${state.walls.length}` : state.walls.length,
-        socketConnected: socket.connected,
-        roomId: roomIdRef.current,
-      });
-
       ydoc.transact(() => {
         if (state.assets !== previousState.assets) syncCollection(state.assets, previousState.assets, yAssets, "assets");
         if (state.walls !== previousState.walls) syncCollection(state.walls, previousState.walls, yWalls, "walls");
@@ -729,6 +681,65 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         if (state.canvas !== previousState.canvas) yCanvas.set("config", state.canvas);
       }, "local-sync");
     });
+
+    // ─── Pending updates buffer ───
+    // Updates produced before join are buffered and flushed once the socket
+    // confirms join (yjs-sync). This prevents losing edits made while the
+    // socket is still connecting.
+    const pendingUpdates: Uint8Array[] = [];
+    let outboundDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let pendingOutbound: Uint8Array[] = [];
+
+    const flushOutbound = () => {
+      outboundDebounceTimer = null;
+      if (pendingOutbound.length === 0) return;
+      if (!socket.connected || !hasJoinedRef.current || !roomIdRef.current) {
+        // Can't send yet — move them to the pending buffer for later
+        pendingUpdates.push(...pendingOutbound);
+        pendingOutbound = [];
+        return;
+      }
+      // Merge all pending updates into one Yjs update for fewer network packets
+      const merged = Y.mergeUpdates(pendingOutbound);
+      pendingOutbound = [];
+      if (merged.byteLength === 0) return;
+      socket.emit("yjs-update", {
+        roomId: roomIdRef.current,
+        update: Array.from(merged),
+        userId: currentUserIdRef.current,
+      });
+    };
+
+    // Yjs doc update → socket emit (debounced)
+    ydoc.on("update", (update: Uint8Array, origin: any) => {
+      if (origin === "remote-sync") return;
+      if (!update || update.byteLength === 0) return;
+
+      if (!hasJoinedRef.current || !socket.connected) {
+        // Buffer for later flush
+        pendingUpdates.push(update);
+        return;
+      }
+
+      pendingOutbound.push(update);
+      if (!outboundDebounceTimer) {
+        outboundDebounceTimer = setTimeout(flushOutbound, 50);
+      }
+    });
+
+    // Flush any buffered updates once the socket joins
+    const flushPendingUpdates = () => {
+      if (pendingUpdates.length === 0) return;
+      if (!socket.connected || !hasJoinedRef.current || !roomIdRef.current) return;
+      const merged = Y.mergeUpdates(pendingUpdates);
+      pendingUpdates.length = 0;
+      if (merged.byteLength === 0) return;
+      socket.emit("yjs-update", {
+        roomId: roomIdRef.current,
+        update: Array.from(merged),
+        userId: currentUserIdRef.current,
+      });
+    };
 
     // ─── Recovery: replay the full document after a rejected update ───
     // Bounded and backed off so a server that keeps refusing (a revoked role,
@@ -750,7 +761,6 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         resendTimer = null;
         if (!socket.connected || !hasJoinedRef.current || !roomIdRef.current) return;
         const fullState = Y.encodeStateAsUpdate(ydoc);
-        console.log("[Collaboration] Resending full document state,", fullState.byteLength, "bytes");
         socket.emit("yjs-update", {
           roomId: roomIdRef.current,
           update: Array.from(fullState),
@@ -759,51 +769,15 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       }, delay);
     };
 
-    // Yjs doc update → socket emit
-    ydoc.on("update", (update, origin) => {
-      if (origin === "remote-sync") return;
-      if (!hasJoinedRef.current) {
-        console.log("[Collaboration] ydoc.update BLOCKED: hasJoinedRef is false");
-        return;
-      }
-      if (!socket.connected) {
-        console.log("[Collaboration] ydoc.update BLOCKED: socket not connected");
-        return;
-      }
-      const targetRoomId = roomIdRef.current;
-      if (!targetRoomId) {
-        console.log("[Collaboration] ydoc.update BLOCKED: no roomId");
-        return;
-      }
-
-      console.log("[Collaboration] yjs-update → emitting, rawSize:", update.length, "roomId:", targetRoomId);
-      socket.emit("yjs-update", {
-        roomId: targetRoomId,
-        update: Array.from(update),
-        userId: currentUserIdRef.current,
-      });
-    });
-
     // ─── Step 2 & 3: Init → join → wait for yjs-sync ───
-    // Per contract: /init first → get roomId → emit join-collaboration → wait for yjs-sync
-    // A single join path, shared by the socket "connect" handler and the /init
-    // response — whichever completes second is the one that actually joins.
-    // Previously each had its own emit and the connect handler also queued two
-    // unclearable retry timers, so one page load could join the room several
-    // times over. `joinRequestedRef` is the only gate, and it is reset on
-    // disconnect so a reconnect rejoins exactly once.
     const joinRetryTimers: ReturnType<typeof setTimeout>[] = [];
 
     const doJoin = (reason: string) => {
       if (joinRequestedRef.current) return;
       if (!socket.connected) return;
       const currentRoomId = roomIdRef.current;
-      if (!currentRoomId) {
-        console.log(`[Collaboration] Step 3: roomId not resolved yet (${reason}), waiting for /init`);
-        return;
-      }
+      if (!currentRoomId) return;
       joinRequestedRef.current = true;
-      console.log(`[Collaboration] Step 3: Emitting join-collaboration (${reason}), roomId:`, currentRoomId);
       socket.emit("join-collaboration", {
         projectId: resolvedProjectId,
         eventId: effectiveEventId,
@@ -827,9 +801,13 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       joinRequestedRef.current = false;
       hasAppliedInitialSync.current = false;
       setHasJoined(false);
-      // Hand canvas ownership back to the REST save so a user who drops off the
-      // socket keeps saving their work instead of silently losing it.
-      clearCollabAuthority(effectiveEventId || null);
+      // NOTE: we intentionally do NOT clear collab authority here. A disconnect
+      // is usually transient (socket.io reconnects and re-syncs within moments).
+      // If we dropped authority, the next 30s autosave would send this client's
+      // full local canvasAssets over REST and overwrite the collaboration room's
+      // state — resurrecting deleted items and erasing collaborators' edits.
+      // Authority is only released on a real teardown (collab error that tears
+      // the session down, or the effect cleanup when leaving the editor).
     });
 
     // ─── Step 2: HTTP init to get the canonical roomId ───
@@ -987,6 +965,12 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         clearTimeout(resendTimer);
         resendTimer = null;
       }
+      // Flush any remaining outbound updates before disconnecting
+      if (outboundDebounceTimer) {
+        clearTimeout(outboundDebounceTimer);
+        outboundDebounceTimer = null;
+      }
+      flushOutbound();
       unsubscribe();
       socket.removeAllListeners();
       socket.disconnect();
@@ -1031,7 +1015,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
 
       let msg: any;
       if (typeof raw === "string") {
-        try { msg = JSON.parse(raw); } catch { console.warn("[BroadcastChannel] Failed to parse message"); return; }
+        try { msg = JSON.parse(raw); } catch { return; }
       } else if (typeof raw === "object" && raw !== null) {
         msg = raw;
       } else {
@@ -1041,7 +1025,6 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       if (!msg.type) return;
 
       if (msg.type === "request-state") {
-        console.log("[BroadcastChannel] Received request-state — sending current state");
         const store = useProjectStore.getState();
         try {
           const payload = JSON.stringify({
@@ -1065,13 +1048,6 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       }
 
       if (msg.type === "state-sync" || msg.type === "state-update") {
-        const prev = useProjectStore.getState();
-        console.log(`[BroadcastChannel] Received ${msg.type}:`, {
-          shapes: msg.shapes?.length,
-          prevShapes: prev.shapes.length,
-          assets: msg.assets?.length,
-          walls: msg.walls?.length,
-        });
         isRemoteUpdatingRef.current = true;
         useProjectStore.setState({
           ...(msg.shapes != null ? { shapes: msg.shapes } : {}),

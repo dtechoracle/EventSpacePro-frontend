@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import toast from "react-hot-toast";
 import { FaPlus, FaChevronDown } from "react-icons/fa";
+import { STANDALONE_SLUG } from "@/lib/standaloneEvent";
 
 interface ApiError {
   message: string;
@@ -26,41 +27,27 @@ export default function QuickCreateEventModal({ onClose }: { onClose: () => void
   const projectsList = (Array.isArray(projects) ? projects : (projects as any)?.data || []);
   const [selectedProjectId, setSelectedProjectId] = useState("");
 
-  const mutation = useMutation<{ message: string; data: { _id: string }; projectSlug: string }, ApiError>({
+  const mutation = useMutation<{ message: string; data: { _id: string } }, ApiError>({
     mutationKey: ["quick-create-event"],
     mutationFn: async () => {
       if (!eventName) throw new Error("Please entered an event name");
 
-      // 1. Find or create the silent "Personal Drafts" project
-      const projectsRes = await apiRequest('/projects', 'GET', null, true);
-      const projectsList = (Array.isArray(projectsRes) ? projectsRes : (projectsRes as any)?.data || []);
-
-      const HIDDEN_PROJECT_NAME = "Personal Drafts";
-      let targetProject = projectsList.find((p: any) => p.name === HIDDEN_PROJECT_NAME);
-
-      if (!targetProject) {
-        // Create the hidden project if it doesn't exist
-        const newProjectRes = await apiRequest("/projects", "POST", { name: HIDDEN_PROJECT_NAME }, true);
-        targetProject = newProjectRes.data;
-      }
-
-      if (!targetProject) throw new Error("Could not create space for event");
-
-      // 2. Create the event inside this project
-      const response = await apiRequest(`/projects/${targetProject.slug}/events`, "POST", {
+      // Create a standalone event (no project chosen). The backend adds the
+      // current user as the event owner. It can be attached to a project later.
+      const response = await apiRequest("/api/events", "POST", {
         name: eventName,
         eventName: eventName,
         type: "Custom venue",
         canvases: [{ size: "layout", width: 10000, height: 10000 }]
       }, true);
 
-      return { ...response, projectSlug: targetProject.slug };
+      return response;
     },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["all-events"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      const eventId = response.data._id;
-      router.push(`/dashboard/editor/${response.projectSlug}/${eventId}`);
+      const eventId = response.data?._id || (response as any).data?.id;
+      router.push(`/dashboard/editor/${STANDALONE_SLUG}/${eventId}`);
       toast.success("Event created successfully!");
       onClose();
     },
