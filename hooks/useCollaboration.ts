@@ -515,8 +515,32 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       flushPendingUpdates();
     });
 
+    // Inbound yjs updates are coalesced per animation frame. A remote drag
+    // bursts many small deltas; applying each one synchronously made the local
+    // canvas re-render the whole workspace N times per frame, which is what
+    // felt like lag when a collaborator moved something. Buffering and merging
+    // them into one apply per frame keeps the remote motion smooth.
+    const pendingRemoteUpdates: { payload: any; isInitial: boolean }[] = [];
+    let remoteApplyRaf = 0;
+
+    const flushRemoteUpdates = () => {
+      remoteApplyRaf = 0;
+      if (pendingRemoteUpdates.length === 0) return;
+      const batch = pendingRemoteUpdates.splice(0, pendingRemoteUpdates.length);
+      for (const { payload, isInitial } of batch) {
+        applyRemoteYUpdate(payload, isInitial);
+      }
+    };
+
+    const scheduleRemoteFlush = () => {
+      if (remoteApplyRaf === 0) {
+        remoteApplyRaf = requestAnimationFrame(flushRemoteUpdates);
+      }
+    };
+
     socket.on("yjs-update", (payload) => {
-      applyRemoteYUpdate(payload, false);
+      pendingRemoteUpdates.push({ payload, isInitial: false });
+      scheduleRemoteFlush();
     });
 
     // Yjs observers → Zustand (apply remote changes to local store)
@@ -674,12 +698,21 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     };
 
     let lastKnownState = useProjectStore.getState();
-    const unsubscribe = useProjectStore.subscribe((state) => {
+    // Coalesce local edits: store writes happen on every mouse-move / change,
+    // and running a full ydoc.transact + BroadcastChannel full-state post on
+    // each one made two-person sessions lag badly. Batch changes per animation
+    // frame so a drag frame collapses to ONE ydoc diff + ONE broadcast.
+    let pendingLocalState = useProjectStore.getState();
+    let localSyncRaf = 0;
+
+    const flushLocalChanges = () => {
+      localSyncRaf = 0;
+      const state = pendingLocalState;
+
       if (isRemoteUpdating.current) {
         lastKnownState = state;
         return;
       }
-
       const previousState = lastKnownState;
       lastKnownState = state;
 
@@ -747,6 +780,36 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         if (state.comments !== previousState.comments) syncCollection(state.comments, previousState.comments, yComments, "comments");
         if (state.canvas !== previousState.canvas) yCanvas.set("config", state.canvas);
       }, "local-sync");
+    };
+
+    const scheduleLocalFlush = () => {
+      if (localSyncRaf === 0) {
+        localSyncRaf = requestAnimationFrame(flushLocalChanges);
+      }
+    };
+
+    const unsubscribe = useProjectStore.subscribe((state) => {
+      if (isRemoteUpdating.current) {
+        lastKnownState = state;
+        return;
+      }
+      // Only coalesce when the store actually changed relative to what we last
+      // flushed (reference inequality), otherwise skip the rAF entirely.
+      const prev = lastKnownState;
+      const changed =
+        state.assets !== prev.assets ||
+        state.walls !== prev.walls ||
+        state.shapes !== prev.shapes ||
+        state.textAnnotations !== prev.textAnnotations ||
+        state.labelArrows !== prev.labelArrows ||
+        state.dimensions !== prev.dimensions ||
+        state.groups !== prev.groups ||
+        state.wallSegments !== prev.wallSegments ||
+        state.comments !== prev.comments ||
+        state.canvas !== prev.canvas;
+      if (!changed) return;
+      pendingLocalState = state;
+      scheduleLocalFlush();
     });
 
     // ─── Pending updates buffer ───
@@ -1050,6 +1113,15 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         clearTimeout(outboundDebounceTimer);
         outboundDebounceTimer = null;
       }
+      if (localSyncRaf !== 0) {
+        cancelAnimationFrame(localSyncRaf);
+        localSyncRaf = 0;
+      }
+      if (remoteApplyRaf !== 0) {
+        cancelAnimationFrame(remoteApplyRaf);
+        remoteApplyRaf = 0;
+      }
+      pendingRemoteUpdates.length = 0;
       flushOutbound();
       unsubscribe();
       socket.removeAllListeners();
