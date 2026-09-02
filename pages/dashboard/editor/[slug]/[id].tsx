@@ -30,6 +30,7 @@ import { useAutoSave } from "@/hooks/useAutoSave";
 import { useRouteParams } from "@/hooks/useRouteParams";
 import { PRELOADED_VENUES } from "@/lib/preloadedVenues";
 import { isStandaloneSlug } from "@/lib/standaloneEvent";
+import { isCollabAuthoritative } from "@/lib/collabAuthority";
 import {
   canvasDataFromCollaborationAssets,
   flattenCanvasAssets,
@@ -54,6 +55,11 @@ type EventData = BaseEventData & {
     layers?: any[];
     canvas?: any;
     comments?: any[];
+  };
+  collaborationState?: {
+    version?: string;
+    flushedAt?: string;
+    source?: "redis-worker" | "force-sync" | "direct-mongo" | "rest";
   };
 };
 
@@ -1306,8 +1312,8 @@ export default function Editor() {
       // on a canvas mongo was holding perfectly well.
       //
       // Normalise it into `canvasData` here, so PRIORITY 1 loads it with the
-      // code that already exists. A real `canvasData` from the server always
-      // wins; this only fills the gap.
+      // code that already exists. When Mongo says a collaboration flush wrote
+      // this canvas, the collaboration snapshot wins over stale REST canvasData.
       if (isCollaborationCanvasShape(data.canvasAssets)) {
         const normalized = canvasDataFromCollaborationAssets(data.canvasAssets);
         const serverCanvasData = data.canvasData as any;
@@ -1321,12 +1327,17 @@ export default function Editor() {
             serverCanvasData.dimensions,
             serverCanvasData.labelArrows,
           ].some((collection) => Array.isArray(collection) && collection.length > 0);
+        const collaborationOwnsStoredCanvas =
+          data.collaborationState?.source === "redis-worker" ||
+          data.collaborationState?.source === "force-sync" ||
+          data.collaborationState?.source === "direct-mongo";
 
-        if (!serverHasContent && hasCanvasContent(normalized)) {
+        if ((collaborationOwnsStoredCanvas || !serverHasContent) && hasCanvasContent(normalized)) {
           console.log("[Editor] Rebuilt canvasData from collaboration canvasAssets:", {
             walls: normalized.walls.length,
             shapes: normalized.shapes.length,
             assets: normalized.assets.length,
+            authoritative: collaborationOwnsStoredCanvas,
           });
           (data as any).canvasData = {
             ...(serverCanvasData || {}),
@@ -1359,6 +1370,7 @@ export default function Editor() {
 
   const writeLocalWorkspaceDraft = useCallback(() => {
     if (typeof window === "undefined" || !id || !slug || typeof id !== "string" || typeof slug !== "string") return;
+    if (isCollabAuthoritative(id)) return;
 
     try {
       const projectState = useProjectStore.getState();
@@ -2096,7 +2108,7 @@ export default function Editor() {
           projectStore.markAsSaved();
         }
         // PRIORITY 3: Fall back to localStorage backup if both canvasData and canvasAssets are empty
-        else {
+        else if (!eventData.collaborationState?.version) {
           try {
             const raw = localStorage.getItem(`event-canvas-${eventId}`);
             if (raw) {
@@ -2505,6 +2517,10 @@ export default function Editor() {
 
     const draftKey = getLocalDraftKey(slug, id);
     if (restoredLocalDraftRef.current === draftKey) return;
+    if (isCollabAuthoritative(id)) {
+      restoredLocalDraftRef.current = draftKey;
+      return;
+    }
 
     try {
       const raw = window.localStorage.getItem(draftKey);
@@ -2565,6 +2581,10 @@ export default function Editor() {
   // Fast local draft checkpoint for crash / shutdown recovery
   useEffect(() => {
     if (!currentEventData || !id || !slug || typeof id !== "string" || typeof slug !== "string") return;
+    if (isCollabAuthoritative(id)) {
+      clearLocalWorkspaceDraft();
+      return;
+    }
 
     const hasAnyUnsavedChanges = projectHasUnsavedChanges || hasUnsavedChanges;
     if (!hasAnyUnsavedChanges) {

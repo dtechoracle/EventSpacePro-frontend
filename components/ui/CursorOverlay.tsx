@@ -13,7 +13,7 @@ export const CursorOverlay: React.FC<CursorOverlayProps> = ({ cursors }) => {
                 if (!user.cursor) return null;
                 return (
                     <RemoteCursor
-                        key={user.userId}
+                        key={user.sessionId || user.userId}
                         userId={user.userId}
                         userName={user.userName}
                         userAvatar={user.userAvatar}

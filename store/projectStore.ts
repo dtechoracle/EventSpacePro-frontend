@@ -1695,22 +1695,23 @@ export const useProjectStore = create<ProjectState>()(
                     // array shape — when the backend held the collaboration
                     // object shape, `backendCanvasAssets.length` was undefined
                     // and the merge was skipped entirely.)
+                    const collabOwnsCanvas = isCollabAuthoritative(eventId);
                     const payload: Record<string, unknown> = {
                         name: eventName,
                         eventName: eventName,
                         type: eventType,
                         canvases: canvases,
-                        canvasData,
                         comments: eventComments,
                     };
-                    if (!isCollabAuthoritative(eventId)) {
+                    if (!collabOwnsCanvas) {
                         payload.canvasAssets = canvasAssets;
+                        payload.canvasData = canvasData;
                     }
 
                     console.log(`[projectStore] Saving to DATABASE via PUT /projects/${slug}/events/${eventId}:`, {
                         eventId,
                         slug,
-                        collabAuthoritative: isCollabAuthoritative(eventId),
+                        collabAuthoritative: collabOwnsCanvas,
                         name: eventName,
                         type: eventType,
                         canvasData: { walls: walls.length, shapes: shapes.length, assets: assets.length },
@@ -1728,13 +1729,15 @@ export const useProjectStore = create<ProjectState>()(
 
                     const response = await apiRequest(eventUrl, 'PUT', payload, true);
 
-                    try {
-                        localStorage.setItem(`event-canvas-${eventId}`, JSON.stringify({
-                            canvasData,
-                            canvasAssets,
-                            savedAt: Date.now(),
-                        }));
-                    } catch (_) {}
+                    if (!collabOwnsCanvas) {
+                        try {
+                            localStorage.setItem(`event-canvas-${eventId}`, JSON.stringify({
+                                canvasData,
+                                canvasAssets,
+                                savedAt: Date.now(),
+                            }));
+                        } catch (_) {}
+                    }
 
                     set({ hasUnsavedChanges: false, lastSaved: new Date() });
                     console.log(`[projectStore] ✅ Event saved successfully to DATABASE: ${eventId}`);
