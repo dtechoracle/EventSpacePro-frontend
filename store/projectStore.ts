@@ -1412,13 +1412,71 @@ export const useProjectStore = create<ProjectState>()(
                         });
                         console.log(`✓ Loaded event ${eventId} from backend with ${loadedShapes.length} shapes, ${loadedAssets.length} assets, ${finalGroups.length} groups`);
                     } else if (data.canvasAssets) {
-                        // Fallback to legacy canvasAssets
-                        set({
-                            comments: normalizeLoadedComments(data.comments || []),
-                            hasUnsavedChanges: false,
-                            lastSaved: new Date(),
-                        });
-                        console.log(`✓ Loaded event ${eventId} from backend (legacy format)`);
+                        // Hydrate from `canvasAssets`.
+                        //
+                        // This branch used to restore comments and nothing else,
+                        // which meant an event whose only durable copy is the
+                        // collaboration flush opened as a blank canvas while mongo
+                        // held the real document. That blank store then either got
+                        // pushed into the room ("server Yjs empty, pushing store")
+                        // or written back over the flush by the REST autosave.
+                        //
+                        // Two shapes have to be understood here. The collaboration
+                        // flush writes the keyed collection object
+                        // ({ yShapes: { id: shape }, yAssets: {...}, ... }); the
+                        // older REST save wrote a flat array of asset instances.
+                        const raw = data.canvasAssets;
+                        const collectionValues = (key: string): any[] => {
+                            const value = raw?.[key];
+                            if (Array.isArray(value)) return value.filter(Boolean);
+                            if (value && typeof value === 'object') return Object.values(value).filter(Boolean) as any[];
+                            return [];
+                        };
+
+                        const isCollectionShape = !Array.isArray(raw)
+                            && !!raw
+                            && typeof raw === 'object'
+                            && ['yShapes', 'yAssets', 'yWalls', 'yAnnotations', 'yArrows', 'yDimensions', 'yGroups', 'yWallSegments', 'yComments', 'yCanvas']
+                                .some((key) => key in raw);
+
+                        if (isCollectionShape) {
+                            const loadedWalls = collectionValues('yWalls').map((wall: any) => ({
+                                ...wall,
+                                stroke: normalizeLegacyWallStroke(wall.stroke, wall.strokeColor),
+                                strokeWidth: wall.strokeWidth ?? 2,
+                            }));
+                            const canvasConfig = raw.yCanvas?.config || raw.yCanvas?.canvas;
+
+                            set({
+                                shapes: collectionValues('yShapes'),
+                                assets: collectionValues('yAssets'),
+                                walls: loadedWalls,
+                                wallSegments: collectionValues('yWallSegments'),
+                                textAnnotations: collectionValues('yAnnotations'),
+                                dimensions: collectionValues('yDimensions'),
+                                labelArrows: collectionValues('yArrows'),
+                                groups: collectionValues('yGroups'),
+                                layers: [DEFAULT_LAYER],
+                                activeLayerId: DEFAULT_LAYER.id,
+                                canvas: canvasConfig || DEFAULT_CANVAS,
+                                comments: normalizeLoadedComments(
+                                    collectionValues('yComments').length
+                                        ? collectionValues('yComments')
+                                        : (data.comments || [])
+                                ),
+                                hasUnsavedChanges: false,
+                                lastSaved: new Date(),
+                            });
+                            console.log(`✓ Loaded event ${eventId} from backend (collaboration canvasAssets)`);
+                        } else {
+                            set({
+                                assets: Array.isArray(raw) ? raw.filter(Boolean) : [],
+                                comments: normalizeLoadedComments(data.comments || []),
+                                hasUnsavedChanges: false,
+                                lastSaved: new Date(),
+                            });
+                            console.log(`✓ Loaded event ${eventId} from backend (legacy format)`);
+                        }
                     }
                 } catch (error: any) {
                     // Check if it's a 404 (new event that doesn't exist yet)

@@ -445,6 +445,30 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
           }, "local-sync");
         }
       }
+
+      // ─── Replay this client's whole document into the room ───
+      //
+      // `ydoc.on("update")` drops every update produced while the socket was
+      // down (`hasJoinedRef` is false), and nothing re-sent them on rejoin, so
+      // a wifi blip, a Render cold start or a redeploy silently cost the room
+      // every edit made in that window. The tab kept those edits in its own
+      // Y.Doc and no later delta reintroduced them, leaving two tabs showing
+      // permanently different canvases.
+      //
+      // Yjs updates are idempotent and the server merges by state vector, so
+      // replaying the full state on every join is safe — it is the same call
+      // `scheduleFullStateResend` already makes — and it is the only thing
+      // that repairs a document the room never saw.
+      const localState = Y.encodeStateAsUpdate(ydoc);
+      const targetRoomId = roomIdRef.current;
+      if (targetRoomId && socket.connected && localState.byteLength > 2) {
+        console.log("[Collaboration] Step 4: Replaying local state to room,", localState.byteLength, "bytes");
+        socket.emit("yjs-update", {
+          roomId: targetRoomId,
+          update: Array.from(localState),
+          userId: currentUserIdRef.current,
+        });
+      }
     });
 
     socket.on("yjs-update", (payload) => {
