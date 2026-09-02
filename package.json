@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && for f in scripts/verify*.mjs; do node \"$f\" || exit 1; done",
     "assets:repair-gaps": "node scripts/repair-asset-fill-gaps.js",
     "assets:webp": "node scripts/generate-asset-webp.js",
     "start": "next start",
