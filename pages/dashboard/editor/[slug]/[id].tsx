@@ -1287,7 +1287,7 @@ export default function Editor() {
       const standalone = isStandaloneSlug(eventSlug);
       console.log(`[Editor] Fetching event from DATABASE: ${standalone ? `standalone/${eventId}` : `${eventSlug}/${eventId}`}`);
       const response = await apiRequest(
-        standalone ? `/api/events/${eventId}` : `/projects/${eventSlug}/events/${eventId}`,
+        standalone ? `/events/${eventId}` : `/projects/${eventSlug}/events/${eventId}`,
         "GET", null, true
       );
       // apiRequest may return data directly or wrapped in response.data

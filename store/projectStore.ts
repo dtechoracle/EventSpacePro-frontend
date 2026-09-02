@@ -1511,7 +1511,7 @@ export const useProjectStore = create<ProjectState>()(
                 // Standalone events (no project) use the /api/events endpoints
                 const standalone = isStandaloneSlug(slug);
                 const eventUrl = standalone
-                  ? `/api/events/${eventId}`
+                  ? `/events/${eventId}`
                   : `/projects/${slug}/events/${eventId}`;
                 try {
                     // Use projectName from store (local changes) instead of fetching stale backend name

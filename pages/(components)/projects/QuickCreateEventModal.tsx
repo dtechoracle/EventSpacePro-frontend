@@ -34,7 +34,7 @@ export default function QuickCreateEventModal({ onClose }: { onClose: () => void
 
       // Create a standalone event (no project chosen). The backend adds the
       // current user as the event owner. It can be attached to a project later.
-      const response = await apiRequest("/api/events", "POST", {
+      const response = await apiRequest("/events", "POST", {
         name: eventName,
         eventName: eventName,
         type: "Custom venue",

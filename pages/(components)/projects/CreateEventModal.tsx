@@ -11,6 +11,7 @@ import { apiRequest } from "@/helpers/Config";
 import toast from "react-hot-toast";
 import { MARQUEES } from "@/lib/marquees";
 import { PRELOADED_VENUES, PreloadedVenueDef } from "@/lib/preloadedVenues";
+import { STANDALONE_SLUG } from "@/lib/standaloneEvent";
 import InlineSvg from "@/components/tools/InlineSvg";
 import { FaUserPlus, FaChevronDown, FaPlus, FaMapMarkerAlt } from "react-icons/fa";
 import { BsStars } from "react-icons/bs";
@@ -84,44 +85,30 @@ export default function CreateEventModal({
 
   const [selectedProjectId, setSelectedProjectId] = useState((slug as string) || "");
 
-  // Update selectedProjectId when projects load if not already set
+  // When a project is chosen inside the modal, that's a project-scoped event.
+  // When no slug/project is chosen (dashboard create), the event is STANDALONE
+  // and goes through the /api/events endpoints (no hidden "Personal Drafts").
+  const standalone = !selectedProjectId;
+  // For routing: standalone events use the sentinel slug.
+  const routeSlug = standalone ? STANDALONE_SLUG : selectedProjectId;
+  // URL used for loading/saving/attaching the event once created.
+  const eventEndpointFor = (eventId: string) =>
+    standalone ? `/events/${eventId}` : `/projects/${selectedProjectId}/events/${eventId}`;
+
+  // Update selectedProjectId when a project slug is present in the route
   useEffect(() => {
-    const initProject = async () => {
-      if (slug) {
-        setSelectedProjectId(slug as string);
-        return;
-      }
-      
-      // If no slug (dashboard mode), find or create "Personal Drafts"
-      if (projects) {
-        const list = Array.isArray(projects) ? projects : (projects as any)?.data || [];
-        const HIDDEN_PROJECT_NAME = "Personal Drafts";
-        let target = list.find((p: any) => p.name === HIDDEN_PROJECT_NAME);
-        
-        if (target) {
-          setSelectedProjectId(target.slug);
-        } else {
-          try {
-            // Include isHidden: true if the backend supports it, otherwise just use the name
-            const res = await apiRequest("/projects", "POST", { name: HIDDEN_PROJECT_NAME, description: "Your private workspace for drafts" }, true);
-            setSelectedProjectId(res.data.slug);
-          } catch (e) {
-            console.error("Failed to create default project", e);
-            // Fallback to the first available project if creation fails
-            if (list.length > 0) setSelectedProjectId(list[0].slug);
-          }
-        }
-      }
-    };
-    
-    initProject();
+    if (slug) {
+      setSelectedProjectId(slug as string);
+    }
+    // If no slug (dashboard mode / no project chosen), selectedProjectId stays
+    // empty => the event is created as a STANDALONE event (POST /api/events).
   }, [slug, projects]);
 
   const mutation = useMutation<{ message: string; data: { _id: string } }, ApiError>({
     mutationKey: ["create-event"],
     mutationFn: () => {
-      if (!selectedProjectId) {
-        throw new Error("Please select a project");
+      if (!eventName) {
+        throw new Error("Please enter an event name");
       }
 
       // Determine canvas size
@@ -271,7 +258,10 @@ export default function CreateEventModal({
       };
       if (initialCanvasAssets) createPayload.canvasAssets = initialCanvasAssets;
 
-      return apiRequest(`/projects/${selectedProjectId}/events`, "POST", createPayload, true);
+      // Standalone (no project) => POST /api/events; else project-scoped POST.
+      return standalone
+        ? apiRequest("/events", "POST", createPayload, true)
+        : apiRequest(`/projects/${selectedProjectId}/events`, "POST", createPayload, true);
     },
     onSuccess: async (response) => {
       const eventId = response.data._id;
@@ -280,7 +270,7 @@ export default function CreateEventModal({
       // Use refs to avoid stale-closure capturing an empty string
       const inviteEmail = collabEmailRef.current;
       const inviteRole = collabPermissionRef.current;
-      if (inviteEmail && inviteEmail.includes("@")) {
+      if (!standalone && inviteEmail && inviteEmail.includes("@")) {
         try {
           await apiRequest(`/projects/${selectedProjectId}/events/${eventId}/users`, "POST", {
             users: [
@@ -311,7 +301,7 @@ export default function CreateEventModal({
           } else {
             putBody.canvasData = dataToApply;
           }
-          await apiRequest(`/projects/${selectedProjectId}/events/${eventId}`, "PUT", putBody, true);
+          await apiRequest(eventEndpointFor(eventId), "PUT", putBody, true);
         } catch (e) {
           console.error("Failed to apply marquee/template/venue data", e);
           toast.error("Created event but failed to apply initial layout");
@@ -321,7 +311,7 @@ export default function CreateEventModal({
       // If AI mode, navigate with aiMode flag
       if (creationType === 'ai') {
         router.push({
-          pathname: `/dashboard/editor/${selectedProjectId}/${eventId}`,
+          pathname: `/dashboard/editor/${routeSlug}/${eventId}`,
           query: { 
             aiMode: 'true',
             marqueeId: venueType === 'marquee' ? selectedMarquee?.id : undefined,
@@ -356,14 +346,14 @@ export default function CreateEventModal({
 
           // Navigate to editor with layout data
           router.push({
-            pathname: `/dashboard/editor/${selectedProjectId}/${eventId}`,
+            pathname: `/dashboard/editor/${routeSlug}/${eventId}`,
             query: { venueLayout: JSON.stringify(layout) }
           });
         } catch (error) {
           console.error('Venue analysis failed:', error);
           toast.error('Failed to analyze venue image. Opening blank editor.');
           router.push({
-          pathname: `/dashboard/editor/${selectedProjectId}/${eventId}`,
+          pathname: `/dashboard/editor/${routeSlug}/${eventId}`,
           query: {
             ...(venueType === 'preloaded' && selectedPreloadedVenue ? { preloadedVenue: selectedPreloadedVenue.id } : {}),
           },
@@ -383,7 +373,7 @@ export default function CreateEventModal({
         }
 
         router.push({
-          pathname: `/dashboard/editor/${selectedProjectId}/${eventId}`,
+          pathname: `/dashboard/editor/${routeSlug}/${eventId}`,
           query: {
             ...query,
             ...(venueType === 'preloaded' && selectedPreloadedVenue ? { preloadedVenue: selectedPreloadedVenue.id } : {}),
@@ -959,7 +949,7 @@ export default function CreateEventModal({
 
                 <button
                   onClick={handleCreateEvent}
-                  disabled={!eventName || !selectedProjectId || mutation.isPending || (venueType === 'outdoor' && (!outdoorWidth || !outdoorDepth)) || (venueType === 'preloaded' && !selectedPreloadedVenue)}
+                  disabled={!eventName || mutation.isPending || (venueType === 'outdoor' && (!outdoorWidth || !outdoorDepth)) || (venueType === 'preloaded' && !selectedPreloadedVenue)}
                   className="w-full h-14 rounded-2xl text-white text-base font-bold bg-[#3b82f6] hover:bg-blue-600 disabled:bg-gray-100 disabled:text-gray-400 disabled:opacity-100 transition-all flex items-center justify-center gap-2"
                 >
                   {mutation.isPending ? (

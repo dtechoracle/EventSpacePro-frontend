@@ -3101,17 +3101,18 @@ export default function Workspace2D({
     if (!canvas) return;
 
     const handleWheel = (e: WheelEvent) => {
-      // Mouse wheel behavior:
-      // - Standard Wheel -> Zoom (toward cursor)
-      // - Shift / Ctrl + Wheel -> Pan
+      // Mouse wheel / trackpad behavior:
+      // - Standard wheel -> Zoom (toward cursor)
+      // - Trackpad pinch (Ctrl+wheel) -> Zoom
+      // - Shift + wheel -> Pan (horizontal scroll)
 
       e.preventDefault();
       e.stopPropagation();
 
-      const isPanAction = e.shiftKey || e.ctrlKey || e.metaKey;
+      const isPanAction = e.shiftKey;
 
       if (isPanAction) {
-        // Pan (shift/ctrl+wheel)
+        // Pan (shift+wheel)
         const current = wheelTransformRef.current;
         const nextPanX = current.panX - e.deltaX;
         const nextPanY = current.panY - e.deltaY;
@@ -3120,7 +3121,7 @@ export default function Workspace2D({
         return;
       }
 
-      // Zoom Handling (plain wheel zooms in/out around the cursor)
+      // Zoom Handling (plain wheel + trackpad pinch both zoom around cursor)
       const current = wheelTransformRef.current;
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
       const newZoom = Math.max(0.000001, Math.min(1000000, current.zoom * delta));
