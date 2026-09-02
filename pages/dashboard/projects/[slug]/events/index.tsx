@@ -40,8 +40,8 @@ const EventCardShimmer = () => (
 
 const Events = () => {
   const router = useRouter();
-  // See hooks/useRouteParams: on a cold load this route's params never arrive
-  // through the router, which left the page rendering an empty event list.
+  // See hooks/useRouteParams: a cold load of this route was seen never
+  // delivering its params through the router, leaving an empty event list.
   const { params: routeParams } = useRouteParams();
   const { slug } = routeParams as { slug?: string };
   const { user } = useUserStore(); // Needed for EventCard

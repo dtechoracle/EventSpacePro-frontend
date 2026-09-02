@@ -1188,10 +1188,11 @@ export default function Editor() {
   const [show3D, setShow3D] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
   const router = useRouter();
-  // Not `router.query`: on a cold load of this dynamic route the router never
-  // becomes ready on this deployment, so the query stays empty and the event
-  // fetch below never fires — a refresh or a shared link rendered
-  // "No event data found" over a perfectly good event. See hooks/useRouteParams.
+  // Not `router.query`: a cold load of this dynamic route was seen leaving the
+  // router permanently un-ready in production, so the query stayed empty, the
+  // event fetch below never fired, and a refresh or a shared link rendered
+  // "No event data found" over a perfectly good event. See hooks/useRouteParams
+  // for what was measured and why this fallback is kept.
   const { params: routeParams, isReady: isRouterReady } = useRouteParams();
   const { slug, id, preview, aiMode } = routeParams as {
     slug?: string; id?: string; preview?: string; aiMode?: string;

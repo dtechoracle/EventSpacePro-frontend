@@ -8,16 +8,26 @@ import { useEffect, useMemo, useState } from "react";
  * hit — a refresh, a bookmark, a link someone shared — Next serves the static
  * shell and the client router starts with the raw pattern
  * (`asPath === "/dashboard/editor/[slug]/[id]"`, `query === {}`) until it
- * reconciles the real URL and flips `isReady`. On this deployment that
- * reconciliation never happens: `router.isReady` stays false forever and
- * `router.query` stays empty, so anything gated on it never runs. The editor
- * gates its event fetch on exactly that and rendered "No event data found" on
- * every refresh and every shared link, while the same page reached by clicking
- * through the dashboard worked fine.
+ * reconciles the real URL and flips `isReady`. Anything gated on `isReady` or
+ * on `router.query` does not run until then, and the editor gates its event
+ * fetch on exactly that.
  *
+ * That reconciliation was observed failing outright on the production
+ * deployment `FFU2dp2nXsVJBKgIrSJvE`: on a cold load of both dynamic routes
+ * `router.isReady` stayed false and `router.query` stayed empty indefinitely,
+ * and the editor rendered "No event data found" over a perfectly good event,
+ * while the same URL reached by clicking through the dashboard worked. On the
+ * following deployment the same cold loads resolved normally, and this hook
+ * cannot be the reason — it does not touch `isReady`. So the most likely cause
+ * was that deployment hydrating against a mismatched asset set rather than
+ * anything structural here.
+ *
+ * It is kept as a defensive fallback because the failure is silent, indefinite
+ * and lands on the recovery path — a user whose canvas looks wrong refreshes,
+ * and the refresh is what leaves them on a dead page.
  * `window.location.pathname` is right from the first paint, so parse the params
  * out of it against the route pattern and use those until the router catches
- * up. When the router does become ready it wins — this only fills the gap.
+ * up. When the router is ready it wins — this only fills the gap.
  */
 export const paramsFromPathname = (
   pattern: string,

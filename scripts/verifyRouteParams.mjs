@@ -1,13 +1,13 @@
 /**
  * Verification for hooks/useRouteParams.ts.
  *
- * Every page here is auto-statically-optimized, and on this deployment the
- * client router never reconciles a dynamic route on a cold load:
- * `router.isReady` stays false and `router.query` stays empty forever, so the
- * editor's event fetch never fired and a refresh or a shared link rendered
- * "No event data found". `paramsFromPathname` is the fallback that reads the
- * params straight off `window.location.pathname`, so it needs to agree with
- * Next's own matching for the routes this app actually has.
+ * Every page here is auto-statically-optimized, and one production deployment
+ * was observed never reconciling a dynamic route on a cold load: `router.isReady`
+ * stayed false and `router.query` stayed empty indefinitely, so the editor's
+ * event fetch never fired and a refresh or a shared link rendered "No event
+ * data found". `paramsFromPathname` is the fallback that reads the params
+ * straight off `window.location.pathname`, so it needs to agree with Next's own
+ * matching for the routes this app actually has.
  *
  *   node scripts/verifyRouteParams.mjs
  */
