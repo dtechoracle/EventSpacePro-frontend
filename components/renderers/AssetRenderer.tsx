@@ -330,13 +330,19 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // assets with default strokeWidth, forcing them through SVG processing that
     // stripped original fills and replaced them with CSS vars resolving to
     // "transparent" — making assets invisible until save.
+    // In the workspace (not preview), an SVG asset without a raster renders as a
+    // plain <image> so its internal strokes scale proportionally with the asset
+    // size — preloaded venues/marquees keep a visible outline. Only the small
+    // thumbnail/preview must avoid a broken/missing raster (otherwise it falls to
+    // the SVG-processing path with non-scaling-stroke, which is what keeps a thin
+    // outline legible at tiny zoom).
     const canUseFastImage =
         !!assetPath &&
-        !!rasterAssetPath && // Requires an actual raster; SVG-backed items (e.g. venues) then use the SVG-processing path which applies non-scaling-stroke so thin outlines stay visible when zoomed out.
         !asset.isExploded &&
         !disableFastImageForAsset &&
         !hasCustomColors &&
-        canRenderAssetAsImage(asset, isPreview);
+        canRenderAssetAsImage(asset, isPreview) &&
+        (isPreview ? !!rasterAssetPath : true);
     const fastImageHref = canUseFastImage && rasterAssetPath && !rasterImageFailed ? rasterAssetPath : assetPath;
 
     useEffect(() => {

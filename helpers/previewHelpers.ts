@@ -187,7 +187,9 @@ export const buildPreviewData = (event: EventData | any) => {
                 const defaultWidth = asset.width || 100;
                 const defaultHeight = asset.height || 100;
 
+                // Spread source first to keep texture/hatch/gradient fill metadata
                 fallbackShapes.push({
+                    ...asset,
                     id: asset.id,
                     type: asset.type,
                     x: asset.x || 0,
@@ -217,6 +219,7 @@ export const buildPreviewData = (event: EventData | any) => {
                 }
 
                 fallbackAssets.push({
+                    ...asset,
                     id: asset.id,
                     type: asset.type, // Preserve the original type so ASSET_LIBRARY lookup works
                     x: asset.x || 0,

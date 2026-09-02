@@ -102,8 +102,8 @@ const Projects = () => {
   }, [data?.data, allProjectEvents]);
 
   const filteredProjects = useMemo(() => {
-    const HIDDEN_PROJECT_NAME = "Personal Drafts";
-    const baseProjects = projectsWithEvents.filter(p => p.name !== HIDDEN_PROJECT_NAME);
+    // Personal Drafts is now shown so users can access their draft events.
+    const baseProjects = projectsWithEvents;
     if (!searchQuery) return baseProjects;
     const query = searchQuery.toLowerCase();
     return baseProjects.filter(project =>

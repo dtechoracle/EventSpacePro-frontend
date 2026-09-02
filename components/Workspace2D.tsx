@@ -3101,42 +3101,42 @@ export default function Workspace2D({
     if (!canvas) return;
 
     const handleWheel = (e: WheelEvent) => {
-      // Mouse wheel behavior (Figma-like):
-      // - Standard Wheel -> Pan
-      // - Ctrl + Wheel -> Zoom
+      // Mouse wheel behavior:
+      // - Standard Wheel -> Zoom (toward cursor)
+      // - Shift / Ctrl + Wheel -> Pan
 
       e.preventDefault();
       e.stopPropagation();
 
-      const isZoomAction = e.ctrlKey || e.metaKey;
+      const isPanAction = e.shiftKey || e.ctrlKey || e.metaKey;
 
-      if (isZoomAction) {
-        // Zoom Handling
+      if (isPanAction) {
+        // Pan (shift/ctrl+wheel)
         const current = wheelTransformRef.current;
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        const newZoom = Math.max(0.000001, Math.min(1000000, current.zoom * delta));
-
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        const worldX = (mouseX - current.panX) / current.zoom;
-        const worldY = (mouseY - current.panY) / current.zoom;
-
-        const newPanX = mouseX - worldX * newZoom;
-        const newPanY = mouseY - worldY * newZoom;
-
-        wheelTransformRef.current = { zoom: newZoom, panX: newPanX, panY: newPanY };
-        scheduleViewportTransform({ zoom: newZoom, panX: newPanX, panY: newPanY });
+        const nextPanX = current.panX - e.deltaX;
+        const nextPanY = current.panY - e.deltaY;
+        wheelTransformRef.current = { ...current, panX: nextPanX, panY: nextPanY };
+        scheduleViewportTransform({ zoom: current.zoom, panX: nextPanX, panY: nextPanY });
         return;
       }
 
-      // Pan (standard wheel / shift+wheel)
+      // Zoom Handling (plain wheel zooms in/out around the cursor)
       const current = wheelTransformRef.current;
-      const nextPanX = current.panX - e.deltaX;
-      const nextPanY = current.panY - e.deltaY;
-      wheelTransformRef.current = { ...current, panX: nextPanX, panY: nextPanY };
-      scheduleViewportTransform({ zoom: current.zoom, panX: nextPanX, panY: nextPanY });
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      const newZoom = Math.max(0.000001, Math.min(1000000, current.zoom * delta));
+
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const worldX = (mouseX - current.panX) / current.zoom;
+      const worldY = (mouseY - current.panY) / current.zoom;
+
+      const newPanX = mouseX - worldX * newZoom;
+      const newPanY = mouseY - worldY * newZoom;
+
+      wheelTransformRef.current = { zoom: newZoom, panX: newPanX, panY: newPanY };
+      scheduleViewportTransform({ zoom: newZoom, panX: newPanX, panY: newPanY });
     };
 
     canvas.addEventListener('wheel', handleWheel, { passive: false });

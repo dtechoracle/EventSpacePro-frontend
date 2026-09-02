@@ -1,0 +1,2414 @@
+{
+    "data": {
+        "collaborationState": {
+            "version": "rest-1788332614362-9777456d-b657-43bf-8741-51d007241885",
+            "flushedAt": "2026-09-02T07:03:34.362Z",
+            "source": "rest"
+        },
+        "_id": "6a80a813d8885088783bb3cb",
+        "name": "ADE & JOYCE Beach Wedding",
+        "type": "custom venue",
+        "canvases": [],
+        "canvasAssets": [
+            {
+                "id": "cb9a26fe-513e-49d3-a7f2-29eca7f9e8a2",
+                "type": "rectangle",
+                "x": 11068.754558882027,
+                "y": 5668.046217094566,
+                "width": 20000,
+                "height": 15798.105429568575,
+                "rotation": 0,
+                "fill": "transparent",
+                "fillType": "texture",
+                "stroke": "#ffffff",
+                "strokeWidth": 1,
+                "zIndex": -1,
+                "fillTexture": "sand-01",
+                "fillTextureScale": 1,
+                "fillColor": "transparent",
+                "strokeColor": "#ffffff",
+                "backgroundColor": "transparent"
+            },
+            {
+                "id": "6213282e-6694-4c9f-9643-aef7ac9bcc0d",
+                "type": "ellipse",
+                "x": 10998.611213971517,
+                "y": 973.0008672495826,
+                "width": 3000,
+                "height": 3000,
+                "rotation": 0,
+                "fill": "#ffffff",
+                "fillType": "solid",
+                "stroke": "#000000",
+                "strokeWidth": 1,
+                "zIndex": 2,
+                "fillColor": "#ffffff",
+                "strokeColor": "#000000",
+                "backgroundColor": "#ffffff"
+            },
+            {
+                "id": "62be9e37-4be9-40a6-b488-69bedda32cf7",
+                "type": "rectangle",
+                "x": 10997.238634470203,
+                "y": 957.285023575153,
+                "width": 4116.68179795506,
+                "height": 586.6524429518267,
+                "rotation": 0,
+                "fill": "#ffffff",
+                "fillType": "solid",
+                "stroke": "#000000",
+                "strokeWidth": 2,
+                "zIndex": 3,
+                "fillColor": "#ffffff",
+                "strokeColor": "#000000",
+                "backgroundColor": "#ffffff"
+            },
+            {
+                "id": "573666df-ddeb-4e02-a8be-881442c98ab3",
+                "type": "rectangle",
+                "x": 10998.611213971517,
+                "y": 6728.539220407817,
+                "width": 1500,
+                "height": 9390.78626105229,
+                "rotation": 0,
+                "fill": "#ffffff",
+                "fillType": "solid",
+                "stroke": "#000000",
+                "strokeWidth": 1,
+                "zIndex": 0,
+                "fillColor": "#ffffff",
+                "strokeColor": "#000000",
+                "backgroundColor": "#ffffff"
+            },
+            {
+                "id": "cc5d6ea7-825d-441f-a7ba-83853f2fcbae",
+                "type": "rectangle",
+                "x": 11030.424384018123,
+                "y": 10474.151104921966,
+                "width": 2755.4454166673313,
+                "height": 586.6524429518267,
+                "rotation": 0,
+                "fill": "#ffffff",
+                "fillType": "solid",
+                "stroke": "#000000",
+                "strokeWidth": 1,
+                "zIndex": 3,
+                "fillColor": "#ffffff",
+                "strokeColor": "#000000",
+                "backgroundColor": "#ffffff"
+            },
+            {
+                "id": "event-chair-1-1786820090936",
+                "type": "event-chair-1",
+                "x": 3363.0834850405927,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 4,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "194d36eb-b2a6-4581-b64b-ebcdb627174f",
+                "type": "event-chair-1",
+                "x": 4013.0834850405927,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 5,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "73d81f0a-475c-43f2-afd6-6991712004c2",
+                "type": "event-chair-1",
+                "x": 4663.083485040593,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 6,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "b3d3e500-191f-43a7-a7b9-ed0607214e1a",
+                "type": "event-chair-1",
+                "x": 5313.083485040593,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 7,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "f4f0468c-a42c-4cec-bb29-aeb788dc6fe7",
+                "type": "event-chair-1",
+                "x": 5963.083485040593,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 8,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "71034736-54ab-4356-866a-d3998f0bdf1e",
+                "type": "event-chair-1",
+                "x": 6613.083485040593,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 9,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "001b20a7-2637-429e-8908-4e48c21b9fd9",
+                "type": "event-chair-1",
+                "x": 7263.083485040593,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 10,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "ef62d213-27e7-44db-bf37-fc77487f4103",
+                "type": "event-chair-1",
+                "x": 7913.083485040593,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 11,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "60e7953d-d29d-4948-9f59-70a47505381b",
+                "type": "event-chair-1",
+                "x": 8563.083485040592,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 12,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "454cacdd-17cc-4049-9c62-3a4a03eddf3d",
+                "type": "event-chair-1",
+                "x": 9213.083485040592,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 13,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "3185394f-bdeb-427f-850b-1ec0ef6eb66a",
+                "type": "event-chair-1",
+                "x": 9863.083485040592,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 14,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "ce2be3d1-76ff-4769-a531-e15f83d9bb04",
+                "type": "event-chair-1",
+                "x": 3363.083485040593,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 4,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "c620db24-cc92-4933-b5f1-4401fb3a4586",
+                "type": "event-chair-1",
+                "x": 4013.083485040593,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 5,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "c26ad123-0a0b-4e91-97a5-875d3caf5945",
+                "type": "event-chair-1",
+                "x": 4663.083485040593,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 6,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "528bbb4a-d3a9-4f4a-984d-fa0aafa629f0",
+                "type": "event-chair-1",
+                "x": 5313.083485040593,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 7,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "7ad82adf-f410-4ece-96f1-15a28325f9c5",
+                "type": "event-chair-1",
+                "x": 5963.083485040593,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 8,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "c9683547-2fbc-4375-a0e1-a61ea5bd6ff7",
+                "type": "event-chair-1",
+                "x": 6613.0834850405945,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 9,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "44c88028-646b-47be-986b-7183172e9069",
+                "type": "event-chair-1",
+                "x": 7263.0834850405945,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 10,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "c994816a-f87f-408a-ad1c-5433503bd42f",
+                "type": "event-chair-1",
+                "x": 7913.0834850405945,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 11,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "7bed37fd-5927-42e8-a825-2b0849e7a461",
+                "type": "event-chair-1",
+                "x": 8563.083485040595,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 12,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "41fcaa1a-d2b9-4978-a9d9-118fc1e40d19",
+                "type": "event-chair-1",
+                "x": 9213.083485040595,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 13,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "23ebdad7-8638-4388-b2b8-f4fa4d893ad1",
+                "type": "event-chair-1",
+                "x": 9863.083485040595,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 14,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "338ded8d-3337-4c50-ad39-bc167e155116",
+                "type": "event-chair-1",
+                "x": 12145.767584977348,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 4,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "1ed6374d-9144-4773-b6da-ee5fccb33a4b",
+                "type": "event-chair-1",
+                "x": 12795.767584977348,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 5,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "5c78e5ed-236b-45e8-90dd-9136ac762f8b",
+                "type": "event-chair-1",
+                "x": 13445.767584977348,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 6,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "6a377620-783f-42e1-afba-371b54e67b10",
+                "type": "event-chair-1",
+                "x": 14095.767584977348,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 7,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "62238244-67ce-41c7-a525-1d9b91dc4a86",
+                "type": "event-chair-1",
+                "x": 14745.767584977348,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 8,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "aa8eabc8-0089-4e3d-92da-27c8c8c77441",
+                "type": "event-chair-1",
+                "x": 15395.767584977348,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 9,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "c6fc1027-dddf-4a64-bf88-77e8d99f45b3",
+                "type": "event-chair-1",
+                "x": 16045.767584977344,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 10,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "57775ab5-0fe6-44e8-a87b-2ba2032d4ddb",
+                "type": "event-chair-1",
+                "x": 16695.767584977344,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 11,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "a2add6e1-1043-48ef-bfd4-ba19633be00e",
+                "type": "event-chair-1",
+                "x": 17345.767584977344,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 12,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "a354f2b0-7c16-48ad-8180-8e6d9183d6a8",
+                "type": "event-chair-1",
+                "x": 17995.767584977344,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 13,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "63acb663-4ede-45cd-8c10-f5be51822c0e",
+                "type": "event-chair-1",
+                "x": 18645.767584977344,
+                "y": 5668.046217094566,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 14,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "17302702-9853-466a-a9eb-ae92c348c866",
+                "type": "event-chair-1",
+                "x": 12145.76758497735,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 4,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "5f7cc54d-59ee-4ecf-b2cd-b695c5d21d30",
+                "type": "event-chair-1",
+                "x": 12795.76758497735,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 5,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "a044ad86-aa2b-44d0-84ca-7ca5cabbc465",
+                "type": "event-chair-1",
+                "x": 13445.76758497735,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 6,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "68a37dd8-bb1f-489d-a0c7-c4cc452ff088",
+                "type": "event-chair-1",
+                "x": 14095.76758497735,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 7,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "3ac96dfb-c39c-48e6-8781-c48cbccfff58",
+                "type": "event-chair-1",
+                "x": 14745.76758497735,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 8,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "177b4a0a-bb66-4ec2-9907-67058dc82571",
+                "type": "event-chair-1",
+                "x": 15395.76758497735,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 9,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "b668c911-a146-4bfd-8fe9-b19545ca987d",
+                "type": "event-chair-1",
+                "x": 16045.767584977346,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 10,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "587f0fa6-cdc3-42e5-80d2-1dd9b7e2b250",
+                "type": "event-chair-1",
+                "x": 16695.767584977344,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 11,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "7246a0ce-d540-4231-8b15-ea84e7ce5a75",
+                "type": "event-chair-1",
+                "x": 17345.767584977344,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 12,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "dde9f9b2-6b5e-404a-abce-814d86cca31b",
+                "type": "event-chair-1",
+                "x": 17995.767584977344,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 13,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "3a6ee8c5-fc14-427f-9b24-79fa33f2d5d4",
+                "type": "event-chair-1",
+                "x": 18645.767584977344,
+                "y": 4640.297396280079,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 14,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "399449e2-b5fb-44bb-89bd-635b5a0788b1",
+                "type": "event-chair-1",
+                "x": 3363.0834850405936,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 4,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "884e591a-d32d-4aa7-90e2-b3bab48f88df",
+                "type": "event-chair-1",
+                "x": 4013.0834850405936,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 5,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "bb25fbff-05aa-4393-87ac-2983384bf04d",
+                "type": "event-chair-1",
+                "x": 4663.083485040594,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 6,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "cb215a48-0680-4dad-941f-b24471580d0c",
+                "type": "event-chair-1",
+                "x": 5313.083485040594,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 7,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "7c10c133-5968-4e1d-bdbd-aa3b5256a04f",
+                "type": "event-chair-1",
+                "x": 5963.083485040594,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 8,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "b1559c70-ed6b-412e-8989-5ba162daf651",
+                "type": "event-chair-1",
+                "x": 6613.083485040594,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 9,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "b79807b6-40ac-4211-b619-8dbfd065c20c",
+                "type": "event-chair-1",
+                "x": 7263.083485040594,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 10,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "c304d4f3-81af-4682-ab23-e0c6b256c2b1",
+                "type": "event-chair-1",
+                "x": 7913.083485040594,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 11,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "45607875-1a25-44e0-b8af-2d5d61a26cbe",
+                "type": "event-chair-1",
+                "x": 8563.083485040592,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 12,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "f9d6092f-2d87-4097-bcea-bdbbe17ea8db",
+                "type": "event-chair-1",
+                "x": 9213.083485040592,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 13,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "6fb5127c-5cda-424c-8d83-7788bb085b20",
+                "type": "event-chair-1",
+                "x": 9863.083485040592,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 14,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "0de7805d-cb06-44ca-8bf6-0f168be6d01a",
+                "type": "event-chair-1",
+                "x": 3363.083485040594,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 4,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "48aa9340-5d90-4816-85dd-4bf4ecf2f4f3",
+                "type": "event-chair-1",
+                "x": 4013.083485040594,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 5,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "2650d94c-8834-4f1a-823e-2f073dd51568",
+                "type": "event-chair-1",
+                "x": 4663.083485040594,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 6,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "cf1d1282-61a1-4f7d-ba55-8c7ea3c49495",
+                "type": "event-chair-1",
+                "x": 5313.083485040594,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 7,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "3fba91f0-dc69-4b34-9ca6-2bdf5da55c79",
+                "type": "event-chair-1",
+                "x": 5963.083485040594,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 8,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "5789c1bc-b910-4dca-be1d-de233160ee40",
+                "type": "event-chair-1",
+                "x": 6613.083485040595,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 9,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "3a38f8ed-415a-40e8-9876-abca0d84c23b",
+                "type": "event-chair-1",
+                "x": 7263.083485040595,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 10,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "5c7bf038-8bb9-4493-b20f-d96f33dbebcc",
+                "type": "event-chair-1",
+                "x": 7913.083485040595,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 11,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "633ccf37-b0eb-4889-9110-5377fac8004c",
+                "type": "event-chair-1",
+                "x": 8563.083485040595,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 12,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "97bbb321-3f97-43d1-b7bb-81295a80a69b",
+                "type": "event-chair-1",
+                "x": 9213.083485040595,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 13,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "7241f377-c3c8-4988-a5fa-a62fb47d3509",
+                "type": "event-chair-1",
+                "x": 9863.083485040595,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 14,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "dcbf71a4-b473-4211-a98a-76d43bc7cf17",
+                "type": "event-chair-1",
+                "x": 12145.76758497735,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 4,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "9f949a3b-520e-4a26-bdfc-e145b51e8e43",
+                "type": "event-chair-1",
+                "x": 12795.76758497735,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 5,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "67c4ed26-4334-4692-9095-42cf8e266079",
+                "type": "event-chair-1",
+                "x": 13445.76758497735,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 6,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "5884abcf-44cd-46f7-85a5-6dd1e9f11a14",
+                "type": "event-chair-1",
+                "x": 14095.76758497735,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 7,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "89b7bbfe-30cd-4c29-9fe1-e7d129a3affa",
+                "type": "event-chair-1",
+                "x": 14745.76758497735,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 8,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "48e4c60c-8acd-479d-9641-435e45a0ef69",
+                "type": "event-chair-1",
+                "x": 15395.76758497735,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 9,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "79553e22-c0e9-4b0f-83b3-b5c52caf2fec",
+                "type": "event-chair-1",
+                "x": 16045.767584977346,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 10,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "0fc1b8ad-48ab-4507-9603-bc7955ff2369",
+                "type": "event-chair-1",
+                "x": 16695.767584977344,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 11,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "5b27bb40-8328-429f-9ee6-65d2eede0b48",
+                "type": "event-chair-1",
+                "x": 17345.767584977344,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 12,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "40e2d90d-4274-40fb-a06b-941ec443132f",
+                "type": "event-chair-1",
+                "x": 17995.767584977344,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 13,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "996b6690-a017-482a-8abc-7632ea333f87",
+                "type": "event-chair-1",
+                "x": 18645.767584977344,
+                "y": 7838.902512253415,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 14,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "aabba59a-a191-4367-8640-70debda235ca",
+                "type": "event-chair-1",
+                "x": 12145.76758497735,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 4,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "372e6a05-12af-4316-94f2-bec96847446b",
+                "type": "event-chair-1",
+                "x": 12795.76758497735,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 5,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "cdb2a455-c104-425d-9391-40cf9a1e0f08",
+                "type": "event-chair-1",
+                "x": 13445.76758497735,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 6,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "d3ea4d9c-c89a-4aae-aef5-c05b18cb642f",
+                "type": "event-chair-1",
+                "x": 14095.76758497735,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 7,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "a7de0f1e-246c-44eb-a741-5c2c59f685b9",
+                "type": "event-chair-1",
+                "x": 14745.76758497735,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 8,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "ad40a4af-fc2b-45b1-a7ce-bf826c1eb70f",
+                "type": "event-chair-1",
+                "x": 15395.76758497735,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 9,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "9403ed88-2f1f-4923-8178-09b2632b87ca",
+                "type": "event-chair-1",
+                "x": 16045.767584977346,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 10,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "c6bbcdea-9e72-4efc-93d6-000cd0371b19",
+                "type": "event-chair-1",
+                "x": 16695.767584977344,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 11,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "83eb19d1-1339-4c8b-bef2-c069846d21b4",
+                "type": "event-chair-1",
+                "x": 17345.767584977344,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 12,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "389639d7-df83-45c0-86d2-881b1e8271cd",
+                "type": "event-chair-1",
+                "x": 17995.767584977344,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 13,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "41d1c446-55c9-4057-9661-03a890bb2baa",
+                "type": "event-chair-1",
+                "x": 18645.767584977344,
+                "y": 6811.153691438928,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 14,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "65fba05d-ce47-4507-a64f-6c7550966c51",
+                "type": "event-chair-1",
+                "x": 3363.0834850405945,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 4,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "5835a614-add1-47a5-ac1b-b5ca6c1f2474",
+                "type": "event-chair-1",
+                "x": 4013.0834850405945,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 5,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "0f530f1b-4072-4b07-b5db-5e3081e7c634",
+                "type": "event-chair-1",
+                "x": 4663.083485040594,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 6,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "c167ed81-ca7a-4d26-8244-a9862ce6928e",
+                "type": "event-chair-1",
+                "x": 5313.083485040594,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 7,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "840f0868-227a-446f-84bd-2e6bc296b488",
+                "type": "event-chair-1",
+                "x": 5963.083485040594,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 8,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "fae68004-ed88-488e-9e92-0b2e262751dc",
+                "type": "event-chair-1",
+                "x": 6613.083485040595,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 9,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "faa52f5c-04c5-4c7d-aad3-cc79431b034e",
+                "type": "event-chair-1",
+                "x": 7263.083485040596,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 10,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "0bcc69e0-28f4-4c2f-8902-e7be8e9a8a17",
+                "type": "event-chair-1",
+                "x": 7913.083485040596,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 11,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "2bae1792-2ab5-4dd3-95c9-3bd87b3d7128",
+                "type": "event-chair-1",
+                "x": 8563.083485040595,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 12,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "7ee035da-5ddc-4310-a884-345365dc6d2d",
+                "type": "event-chair-1",
+                "x": 9213.083485040595,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 13,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "9a40fe4e-16a0-414c-97b1-444eec71654f",
+                "type": "event-chair-1",
+                "x": 9863.083485040595,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 14,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "95afe1af-3cd6-48b6-b850-274a9d977447",
+                "type": "event-chair-1",
+                "x": 12145.76758497735,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 4,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "ee781445-f48e-4d36-88cc-0b740711d5c4",
+                "type": "event-chair-1",
+                "x": 12795.76758497735,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 5,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "f5e163d4-917f-4d94-8003-961f17731c57",
+                "type": "event-chair-1",
+                "x": 13445.76758497735,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 6,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "25783f81-33f4-4ba7-a1f7-eabad3c90efb",
+                "type": "event-chair-1",
+                "x": 14095.76758497735,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 7,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "b755f9ec-63f3-478f-afd5-bf69665daa46",
+                "type": "event-chair-1",
+                "x": 14745.76758497735,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 8,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "0aaad2c4-fcef-4980-b367-19b0102c09dd",
+                "type": "event-chair-1",
+                "x": 15395.767584977351,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 9,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "84d0b1e7-fcc3-4a69-849a-3cdae3be0002",
+                "type": "event-chair-1",
+                "x": 16045.767584977353,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 10,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "a1f50def-ee68-49dd-8dcd-33cad28c40a3",
+                "type": "event-chair-1",
+                "x": 16695.76758497735,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 11,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "8de974f8-5da7-4026-8565-e88313551177",
+                "type": "event-chair-1",
+                "x": 17345.76758497735,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 12,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "229b5a4a-655f-4b24-b6c1-a43ad77e949b",
+                "type": "event-chair-1",
+                "x": 17995.76758497735,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 13,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "e099bcf3-2797-4d2c-93e0-c603922e694e",
+                "type": "event-chair-1",
+                "x": 18645.76758497735,
+                "y": 9031.184498380047,
+                "width": 482,
+                "height": 517,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 14,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 1"
+                },
+                "strokeWidth": 2,
+                "flipX": true,
+                "flipY": true,
+                "groupId": "group-1786820240068"
+            },
+            {
+                "id": "event-chair-4-1787333450475",
+                "type": "event-chair-4",
+                "x": 10696.763437736354,
+                "y": 1958.0008672495826,
+                "width": 429.4281921386719,
+                "height": 462.0625305175781,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 15,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 4"
+                },
+                "strokeWidth": 0.6,
+                "flipY": true
+            },
+            {
+                "id": "b76cbb01-77ae-49bc-bace-f41990ab1b3e",
+                "type": "event-chair-4",
+                "x": 11283.468654951363,
+                "y": 1958.0008672495826,
+                "width": 429.4281921386719,
+                "height": 462.0625305175781,
+                "rotation": 0,
+                "scale": 1,
+                "zIndex": 15,
+                "fillType": "solid",
+                "fillColor": "#ffffff",
+                "metadata": {
+                    "label": "Event Chair 4"
+                },
+                "strokeWidth": 0.6,
+                "flipY": true
+            },
+            {
+                "id": "label-arrow-1787333595037",
+                "startPoint": {
+                    "x": 13438.54651198579,
+                    "y": 11820.778866681285
+                },
+                "endPoint": {
+                    "x": 12287.683025987984,
+                    "y": 10731.789761651104
+                },
+                "label": "Entrance Arch",
+                "fontSize": 89,
+                "fontFamily": "Inter, sans-serif",
+                "color": "#000000",
+                "strokeWidth": 1,
+                "arrowHeadType": "filled-triangle",
+                "arrowTailType": "none",
+                "textPosition": "bottom",
+                "zIndex": 16,
+                "type": "label-arrow",
+                "itemType": "label-arrow",
+                "x": 12863.114768986889,
+                "y": 11276.284314166194
+            },
+            {
+                "id": "label-arrow-1787334384863",
+                "startPoint": {
+                    "x": 14431.79953566306,
+                    "y": 2356.7270172207736
+                },
+                "endPoint": {
+                    "x": 12673.841568323696,
+                    "y": 1058.2353367996534
+                },
+                "label": "Vow taking Arch",
+                "fontSize": 200,
+                "fontFamily": "Inter, sans-serif",
+                "color": "#000000",
+                "strokeWidth": 1,
+                "arrowHeadType": "filled-triangle",
+                "arrowTailType": "none",
+                "textPosition": "bottom",
+                "zIndex": 16,
+                "type": "label-arrow",
+                "itemType": "label-arrow",
+                "x": 13552.820551993378,
+                "y": 1707.4811770102135
+            },
+            {
+                "id": "text-annotation-1787334398117",
+                "x": 10966.513437736354,
+                "y": 223.0008672495826,
+                "text": "STAGE",
+                "fontSize": 300,
+                "color": "#000000",
+                "fontFamily": "Inter, sans-serif",
+                "rotation": 0,
+                "zIndex": 16,
+                "fontWeight": "bold",
+                "type": "text-annotation",
+                "itemType": "text-annotation"
+            }
+        ],
+        "comments": [],
+        "favorites": [],
+        "createdAt": "2026-08-15T17:55:31.006Z",
+        "updatedAt": "2026-09-02T07:10:13.689Z",
+        "__v": 1,
+        "invites": [],
+        "users": [
+            {
+                "user": "68c3ce5c7aaa3072a3e50204",
+                "role": "viewer",
+                "email": "iamezekieljeremiah@gmail.com",
+                "invitedAt": "2026-09-02T07:10:13.685Z"
+            }
+        ]
+    }
+}

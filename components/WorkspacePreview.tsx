@@ -51,11 +51,12 @@ export default function WorkspacePreview({
         const availableWidth = width;
         const availableHeight = height;
 
-        // Calculate zoom to fit all content
+        // Calculate zoom to fill the card WIDTH only. Using zoomX stretches the
+        // layout across the card's full width; the height is left proportional and
+        // center-cropped (card wrapper is overflow:hidden) so a square event fills
+        // a wide card instead of sitting as a small island.
         const zoomX = availableWidth / (bounds.width || 1);
-        const zoomY = availableHeight / (bounds.height || 1);
-        // Allow zooming in to fill the space, up to 2x for clarity
-        const zoom = Math.min(zoomX, zoomY, 2);
+        const zoom = zoomX > 0 ? zoomX : 1;
 
         // Calculate center point
         const centerX = bounds.minX + (bounds.width / 2);

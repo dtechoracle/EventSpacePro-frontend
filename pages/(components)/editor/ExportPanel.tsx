@@ -403,14 +403,16 @@ export default function ExportPanel() {
     enabled: !!slug,
   });
 
-  const { setProjectName } = useProjectStore();
-
+  // NOTE: Do NOT call setProjectName(projectData.name) here. In the editor the
+  // shared store's `projectName` is the EVENT name (set from the event record on
+  // load). Overwriting it with the containing project's name was renaming events
+  // to e.g. "Personal Drafts" across the workspace/property sidebar. projectData
+  // is fetched only to prefill the professional-export title.
   useEffect(() => {
     if (projectData?.name) {
-      setProjectName(projectData.name);
-      setProfDetails(prev => ({ ...prev, eventName: projectData.name }));
+      setProfDetails(prev => ({ ...prev, eventName: prev.eventName || projectData.name }));
     }
-  }, [projectData?.name, setProjectName]);
+  }, [projectData?.name]);
 
   const [profDetails, setProfDetails] = useState<ProfessionalDetails>({
     eventName: projectName || "",

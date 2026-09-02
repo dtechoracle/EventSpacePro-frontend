@@ -1,4 +1,5 @@
 import banquetData from './template-banquet.json';
+import beachWeddingData from './template-beach-wedding.json';
 
 export type TemplateDef = {
     id: string;
@@ -24,21 +25,10 @@ export const TEMPLATES: TemplateDef[] = [
     {
         id: "bedroom",
         name: "Outdoor Event",
-        description: "Outdoor event layout with various zones",
+        description: "Outdoor beach wedding with stage, seating and entrance arch",
         icon: "🌳",
-        canvasData: {
-            walls: [
-                { id: "w1", start: { x: 100, y: 100 }, end: { x: 500, y: 100 }, thickness: 10 },
-                { id: "w2", start: { x: 500, y: 100 }, end: { x: 500, y: 500 }, thickness: 10 },
-                { id: "w3", start: { x: 500, y: 500 }, end: { x: 100, y: 500 }, thickness: 10 },
-                { id: "w4", start: { x: 100, y: 500 }, end: { x: 100, y: 100 }, thickness: 10 }
-            ],
-            assets: [
-                { id: "bed1", type: "furniture-bed-king", x: 250, y: 150, width: 100, height: 120, rotation: 0 },
-                { id: "wardrobe1", type: "furniture-wardrobe", x: 120, y: 450, width: 100, height: 40, rotation: 0 }
-            ],
-            shapes: []
-        }
+        canvasAssets: beachWeddingData,
+        canvases: [{ size: "layout", width: 20000, height: 20000 }],
     },
     {
         id: "indoor",
