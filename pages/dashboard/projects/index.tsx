@@ -3,18 +3,24 @@
 import ProjectCard from "@/components/dashboard/ProjectCard";
 import DashboardSidebar from "../../(components)/DashboardSidebar";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
 import { AssetInstance } from "@/store/sceneStore";
-import { BsSearch } from "react-icons/bs";
+import { BsSearch, BsGrid } from "react-icons/bs";
 import { useState, useMemo } from "react";
 import CreateProjectModal from "../../(components)/projects/CreateProjectModal";
 import ImportModal from "../../(components)/projects/ImportMOdal";
 import { withPreviewableCanvasAssets } from "@/lib/canvasAssets";
+import { buildPreviewData } from "@/helpers/previewHelpers";
+import WorkspacePreview from "@/components/WorkspacePreview";
+import { STANDALONE_SLUG } from "@/lib/standaloneEvent";
 
 interface EventData {
   _id: string;
   name: string;
   canvasAssets: AssetInstance[];
+  canvasData?: any;
+  type?: string;
   createdAt: string;
   updatedAt: string;
   __v: number;
@@ -46,8 +52,74 @@ interface ApiResponse {
   data: ProjectData[];
 }
 
+const StandaloneEventCard = ({ event }: { event: EventData }) => {
+  const router = useRouter();
+  const previewData = useMemo(() => buildPreviewData(event), [event]);
+  const previewDataLoaded = useMemo(() => {
+    if (!previewData) return false;
+    return (
+      previewData.walls.length > 0 ||
+      previewData.shapes.length > 0 ||
+      previewData.assets.length > 0
+    );
+  }, [previewData]);
+
+  const getTimeAgo = (dateString: string) => {
+    const now = new Date();
+    const updated = new Date(dateString);
+    const diffInMs = now.getTime() - updated.getTime();
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+    if (diffInDays === 0) return "Today";
+    if (diffInDays === 1) return "Yesterday";
+    if (diffInDays < 7) return `${diffInDays} days ago`;
+    if (diffInDays < 30) return `${Math.floor(diffInDays / 7)} weeks ago`;
+    return `${Math.floor(diffInDays / 30)} months ago`;
+  };
+
+  return (
+    <div
+      onClick={() => router.push(`/dashboard/editor/${STANDALONE_SLUG}/${event._id}`)}
+      className="bg-white rounded-xl border border-gray-200 overflow-hidden cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all group relative flex flex-col h-full"
+    >
+      <div className="bg-gray-50 w-full relative overflow-hidden flex items-center justify-center border-b border-gray-100" style={{ height: '180px' }}>
+        {previewDataLoaded ? (
+          <div className="w-full h-full relative">
+            <WorkspacePreview
+              walls={previewData.walls}
+              shapes={previewData.shapes}
+              assets={previewData.assets}
+              textAnnotations={previewData.textAnnotations}
+              width={400}
+              height={180}
+              backgroundColor="#ffffff"
+            />
+          </div>
+        ) : (
+          <div className="w-full h-full bg-gray-50 flex flex-col items-center justify-center text-gray-300">
+            <BsGrid className="text-4xl mb-2 opacity-20" />
+            <span className="text-xs font-medium text-gray-400">Empty Event</span>
+          </div>
+        )}
+      </div>
+      <div className="p-5 mt-auto bg-white">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-base mb-1 truncate text-gray-900 group-hover:text-blue-600 transition-colors">
+              {event?.name || "Unnamed Event"}
+            </h3>
+            <p className="text-xs text-gray-500">
+              Updated {getTimeAgo(event?.updatedAt || new Date().toISOString())}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const Projects = () => {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -57,6 +129,29 @@ const Projects = () => {
     queryFn: () => apiRequest("/projects", "GET", null, true),
     staleTime: 0,
     gcTime: 0,
+  });
+
+  // Standalone events (no project) live under GET /events. They are listed
+  // here in their own section so they don't look like an event inside a
+  // project — clicking one opens the standalone editor.
+  const { data: standaloneEvents, isLoading: isLoadingStandalone } = useQuery<EventData[]>({
+    queryKey: ["standalone-events"],
+    queryFn: async () => {
+      const res = await apiRequest("/events", "GET", null, true);
+      const events = (res.data || res || []) as any[];
+      return Promise.all(events.map(async (event: any) => {
+        try {
+          const fullEvent = await apiRequest(`/events/${event._id}`, "GET", null, true);
+          return withPreviewableCanvasAssets(fullEvent.data || fullEvent);
+        } catch (error) {
+          return withPreviewableCanvasAssets(event);
+        }
+      }));
+    },
+    enabled: true,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: true,
   });
 
   const { data: allProjectEvents, isLoading: isLoadingEvents } = useQuery({
@@ -112,6 +207,15 @@ const Projects = () => {
     );
   }, [projectsWithEvents, searchQuery]);
 
+  const filteredStandaloneEvents = useMemo(() => {
+    if (!standaloneEvents) return [];
+    if (!searchQuery) return standaloneEvents;
+    const query = searchQuery.toLowerCase();
+    return standaloneEvents.filter(event =>
+      event.name?.toLowerCase().includes(query)
+    );
+  }, [standaloneEvents, searchQuery]);
+
   return (
     <div className="h-screen flex overflow-hidden bg-gray-50">
       <DashboardSidebar />
@@ -165,6 +269,21 @@ const Projects = () => {
           )}
           {showImportModal && (
             <ImportModal onClose={() => setShowImportModal(false)} />
+          )}
+
+          {/* My events: standalone events that live outside any project */}
+          {!isLoadingStandalone && filteredStandaloneEvents && filteredStandaloneEvents.length > 0 && (
+            <div className="mb-8">
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold">My events</h2>
+                <p className="text-sm text-gray-500 mt-1">Standalone events not tied to a project</p>
+              </div>
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredStandaloneEvents.map((event) => (
+                  <StandaloneEventCard key={event._id} event={event} />
+                ))}
+              </div>
+            </div>
           )}
 
           <div className="mb-6">
