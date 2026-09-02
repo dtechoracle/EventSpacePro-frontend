@@ -4,6 +4,10 @@ import { persist } from "zustand/middleware";
 import { findContainingObjects, findNearestObject, getAnchorsForObject, AnchorType } from '@/utils/snapAnchors';
 import { apiRequest } from "@/helpers/Config";
 import { isCollabAuthoritative } from "@/lib/collabAuthority";
+import {
+  canvasDataFromCollaborationAssets,
+  isCollaborationCanvasShape,
+} from "@/lib/canvasAssets";
 // Temporary type until wallEngine is implemented
 export type WallSegment = {
     id: string;
@@ -1426,43 +1430,29 @@ export const useProjectStore = create<ProjectState>()(
                         // ({ yShapes: { id: shape }, yAssets: {...}, ... }); the
                         // older REST save wrote a flat array of asset instances.
                         const raw = data.canvasAssets;
-                        const collectionValues = (key: string): any[] => {
-                            const value = raw?.[key];
-                            if (Array.isArray(value)) return value.filter(Boolean);
-                            if (value && typeof value === 'object') return Object.values(value).filter(Boolean) as any[];
-                            return [];
-                        };
 
-                        const isCollectionShape = !Array.isArray(raw)
-                            && !!raw
-                            && typeof raw === 'object'
-                            && ['yShapes', 'yAssets', 'yWalls', 'yAnnotations', 'yArrows', 'yDimensions', 'yGroups', 'yWallSegments', 'yComments', 'yCanvas']
-                                .some((key) => key in raw);
-
-                        if (isCollectionShape) {
-                            const loadedWalls = collectionValues('yWalls').map((wall: any) => ({
+                        if (isCollaborationCanvasShape(raw)) {
+                            const normalized = canvasDataFromCollaborationAssets(raw);
+                            const loadedWalls = normalized.walls.map((wall: any) => ({
                                 ...wall,
                                 stroke: normalizeLegacyWallStroke(wall.stroke, wall.strokeColor),
                                 strokeWidth: wall.strokeWidth ?? 2,
                             }));
-                            const canvasConfig = raw.yCanvas?.config || raw.yCanvas?.canvas;
 
                             set({
-                                shapes: collectionValues('yShapes'),
-                                assets: collectionValues('yAssets'),
+                                shapes: normalized.shapes,
+                                assets: normalized.assets,
                                 walls: loadedWalls,
-                                wallSegments: collectionValues('yWallSegments'),
-                                textAnnotations: collectionValues('yAnnotations'),
-                                dimensions: collectionValues('yDimensions'),
-                                labelArrows: collectionValues('yArrows'),
-                                groups: collectionValues('yGroups'),
+                                wallSegments: normalized.wallSegments,
+                                textAnnotations: normalized.textAnnotations,
+                                dimensions: normalized.dimensions,
+                                labelArrows: normalized.labelArrows,
+                                groups: normalized.groups,
                                 layers: [DEFAULT_LAYER],
                                 activeLayerId: DEFAULT_LAYER.id,
-                                canvas: canvasConfig || DEFAULT_CANVAS,
+                                canvas: normalized.canvas || DEFAULT_CANVAS,
                                 comments: normalizeLoadedComments(
-                                    collectionValues('yComments').length
-                                        ? collectionValues('yComments')
-                                        : (data.comments || [])
+                                    normalized.comments.length ? normalized.comments : (data.comments || [])
                                 ),
                                 hasUnsavedChanges: false,
                                 lastSaved: new Date(),

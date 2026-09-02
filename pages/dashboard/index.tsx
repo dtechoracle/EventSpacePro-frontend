@@ -15,6 +15,7 @@ import CreateProjectModal from "@/pages/(components)/projects/CreateProjectModal
 import EventCard from "@/components/dashboard/EventCard";
 import { TEMPLATES } from "@/lib/templates";
 import TemplatePreview from "@/components/dashboard/TemplatePreview";
+import { withPreviewableCanvasAssets } from "@/lib/canvasAssets";
 
 interface EventData {
   _id: string;
@@ -102,7 +103,7 @@ const Dashboard = () => {
             try {
               const fullEventRes = await apiRequest(`/projects/${project.slug}/events/${event._id}`, "GET", null, true);
               const fullEvent = fullEventRes.data || fullEventRes;
-              return fullEvent;
+              return withPreviewableCanvasAssets(fullEvent);
             } catch (error: any) {
               console.error(`[Dashboard] ❌ Failed to fetch full event ${event._id} from DATABASE:`, error);
               return { ...event, canvasData: null, canvasAssets: [] };

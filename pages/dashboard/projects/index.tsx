@@ -9,6 +9,7 @@ import { BsSearch } from "react-icons/bs";
 import { useState, useMemo } from "react";
 import CreateProjectModal from "../../(components)/projects/CreateProjectModal";
 import ImportModal from "../../(components)/projects/ImportMOdal";
+import { withPreviewableCanvasAssets } from "@/lib/canvasAssets";
 
 interface EventData {
   _id: string;
@@ -69,7 +70,7 @@ const Projects = () => {
           const fullEventPromises = events.map(async (event: any) => {
             try {
               const fullEventRes = await apiRequest(`/projects/${project.slug}/events/${event._id}`, "GET", null, true);
-              return fullEventRes.data || fullEventRes;
+              return withPreviewableCanvasAssets(fullEventRes.data || fullEventRes);
             } catch (error) {
               return { ...event, canvasData: null, canvasAssets: [] };
             }

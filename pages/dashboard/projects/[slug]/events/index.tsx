@@ -10,6 +10,7 @@ import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
 import { useUserStore } from "@/store/userStore";
 import { buildPreviewData } from "@/helpers/previewHelpers";
 import { BsStars } from "react-icons/bs";
+import { withPreviewableCanvasAssets } from "@/lib/canvasAssets";
 
 interface EventData {
   _id: string;
@@ -52,7 +53,7 @@ const Events = () => {
         const fullEvents = await Promise.all(events.map(async (event: any) => {
           try {
             const fullRes = await apiRequest(`/projects/${slug}/events/${event._id}`, "GET", null, true);
-            return { ...fullRes.data, projectSlug: slug };
+            return withPreviewableCanvasAssets({ ...fullRes.data, projectSlug: slug });
           } catch (e) { return { ...event, projectSlug: slug }; }
         }));
         return { data: fullEvents };

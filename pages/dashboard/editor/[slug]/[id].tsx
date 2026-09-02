@@ -28,6 +28,12 @@ import toast from "react-hot-toast";
 import { calculateWorkspaceBounds } from "@/utils/workspaceBounds";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { PRELOADED_VENUES } from "@/lib/preloadedVenues";
+import {
+  canvasDataFromCollaborationAssets,
+  flattenCanvasAssets,
+  hasCanvasContent,
+  isCollaborationCanvasShape,
+} from "@/lib/canvasAssets";
 
 const PRELOADED_VENUE_IDS = new Set(PRELOADED_VENUES.map(v => v.id));
 const PRELOADED_VENUE_MAP = new Map(PRELOADED_VENUES.map(v => [v.id, v]));
@@ -1278,6 +1284,49 @@ export default function Editor() {
         canvasDataShapes: data.canvasData?.shapes?.length || 0,
         canvasDataAssets: data.canvasData?.assets?.length || 0,
       });
+
+      // `canvasAssets` comes back in one of two shapes. The collaboration
+      // flush writes the keyed collection object
+      // ({ yShapes: { id: shape }, ... }); the older REST save wrote a flat
+      // array. Every load path below is written against the array — PRIORITY 2
+      // is literally guarded by `Array.isArray` — so an event that had been
+      // edited collaboratively hit neither branch and the editor opened blank
+      // on a canvas mongo was holding perfectly well.
+      //
+      // Normalise it into `canvasData` here, so PRIORITY 1 loads it with the
+      // code that already exists. A real `canvasData` from the server always
+      // wins; this only fills the gap.
+      if (isCollaborationCanvasShape(data.canvasAssets)) {
+        const normalized = canvasDataFromCollaborationAssets(data.canvasAssets);
+        const serverCanvasData = data.canvasData as any;
+        const serverHasContent =
+          !!serverCanvasData &&
+          [
+            serverCanvasData.walls,
+            serverCanvasData.shapes,
+            serverCanvasData.assets,
+            serverCanvasData.textAnnotations,
+            serverCanvasData.dimensions,
+            serverCanvasData.labelArrows,
+          ].some((collection) => Array.isArray(collection) && collection.length > 0);
+
+        if (!serverHasContent && hasCanvasContent(normalized)) {
+          console.log("[Editor] Rebuilt canvasData from collaboration canvasAssets:", {
+            walls: normalized.walls.length,
+            shapes: normalized.shapes.length,
+            assets: normalized.assets.length,
+          });
+          (data as any).canvasData = {
+            ...(serverCanvasData || {}),
+            ...normalized,
+            canvas: normalized.canvas || serverCanvasData?.canvas,
+          };
+        }
+
+        // The preview and card components downstream still expect an array.
+        (data as any).canvasAssets = flattenCanvasAssets(data.canvasAssets);
+      }
+
       return data;
     },
     enabled: !!(isRouterReady && slug && id), // Only enable when router is ready

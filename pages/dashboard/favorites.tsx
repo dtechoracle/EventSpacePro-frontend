@@ -10,6 +10,7 @@ import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
 import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
 import EventCard from "@/components/dashboard/EventCard";
 import { buildPreviewData } from "@/helpers/previewHelpers";
+import { withPreviewableCanvasAssets } from "@/lib/canvasAssets";
 
 interface EventData {
     _id: string;
@@ -77,7 +78,7 @@ const Favorites = () => {
                     const fullEventPromises = events.map(async (event: any) => {
                         try {
                             const fullEventRes = await apiRequest(`/projects/${project.slug}/events/${event._id}`, "GET", null, true);
-                            return fullEventRes.data || fullEventRes;
+                            return withPreviewableCanvasAssets(fullEventRes.data || fullEventRes);
                         } catch (error) {
                             return { ...event, canvasData: null, canvasAssets: [] };
                         }
