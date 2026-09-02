@@ -1647,13 +1647,16 @@ export const useProjectStore = create<ProjectState>()(
                         type: eventType,
                         canvases: canvases,
                         canvasData,
-                        canvasAssets,
                         comments: eventComments,
                     };
+                    if (!isCollabAuthoritative(eventId)) {
+                        payload.canvasAssets = canvasAssets;
+                    }
 
                     console.log(`[projectStore] Saving to DATABASE via PUT /projects/${slug}/events/${eventId}:`, {
                         eventId,
                         slug,
+                        collabAuthoritative: isCollabAuthoritative(eventId),
                         name: eventName,
                         type: eventType,
                         canvasData: { walls: walls.length, shapes: shapes.length, assets: assets.length },
