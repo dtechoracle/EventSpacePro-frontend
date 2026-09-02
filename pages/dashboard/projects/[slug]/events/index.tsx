@@ -11,6 +11,7 @@ import { useUserStore } from "@/store/userStore";
 import { buildPreviewData } from "@/helpers/previewHelpers";
 import { BsStars } from "react-icons/bs";
 import { withPreviewableCanvasAssets } from "@/lib/canvasAssets";
+import { useRouteParams } from "@/hooks/useRouteParams";
 
 interface EventData {
   _id: string;
@@ -39,7 +40,10 @@ const EventCardShimmer = () => (
 
 const Events = () => {
   const router = useRouter();
-  const { slug } = router.query;
+  // See hooks/useRouteParams: on a cold load this route's params never arrive
+  // through the router, which left the page rendering an empty event list.
+  const { params: routeParams } = useRouteParams();
+  const { slug } = routeParams as { slug?: string };
   const { user } = useUserStore(); // Needed for EventCard
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateEventModal, setShowCreateEventModal] = useState(false);

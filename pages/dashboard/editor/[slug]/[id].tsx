@@ -27,6 +27,7 @@ import { ASSET_LIBRARY } from "@/lib/assets";
 import toast from "react-hot-toast";
 import { calculateWorkspaceBounds } from "@/utils/workspaceBounds";
 import { useAutoSave } from "@/hooks/useAutoSave";
+import { useRouteParams } from "@/hooks/useRouteParams";
 import { PRELOADED_VENUES } from "@/lib/preloadedVenues";
 import {
   canvasDataFromCollaborationAssets,
@@ -1187,7 +1188,14 @@ export default function Editor() {
   const [show3D, setShow3D] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
   const router = useRouter();
-  const { slug, id, preview, aiMode } = router.query;
+  // Not `router.query`: on a cold load of this dynamic route the router never
+  // becomes ready on this deployment, so the query stays empty and the event
+  // fetch below never fires — a refresh or a shared link rendered
+  // "No event data found" over a perfectly good event. See hooks/useRouteParams.
+  const { params: routeParams, isReady: isRouterReady } = useRouteParams();
+  const { slug, id, preview, aiMode } = routeParams as {
+    slug?: string; id?: string; preview?: string; aiMode?: string;
+  };
   const queryClient = useQueryClient();
 
   // Allow the AI assistant to open the asset library via a window event
@@ -1227,8 +1235,6 @@ export default function Editor() {
     }
   }, [aiMode, router]);
 
-  // Wait for router to be ready before enabling queries
-  const isRouterReady = router.isReady;
 
   // Detect if we're in an iframe or preview mode
   useEffect(() => {
@@ -1423,9 +1429,9 @@ export default function Editor() {
   // Handle texture query param for outdoor events
   useEffect(() => {
     // Only run if we have the router ready, a texture param, and fully loaded AND SYNCED event data
-    if (isRouterReady && router.query.texture && currentEventData) {
+    if (isRouterReady && routeParams.texture && currentEventData) {
       // Ensure the synced event matches the current route ID
-      const routeId = router.query.id as string;
+      const routeId = routeParams.id as string;
       const currentId = currentEventData._id || (currentEventData as any).id;
 
       if (currentId !== routeId) {
@@ -1433,7 +1439,7 @@ export default function Editor() {
         return;
       }
 
-      const textureParam = router.query.texture;
+      const textureParam = routeParams.texture;
       const textureId = Array.isArray(textureParam) ? textureParam[0] : textureParam;
 
       if (!textureId) return;
@@ -1490,17 +1496,17 @@ export default function Editor() {
 
       }
     }
-  }, [isRouterReady, router.query, router, currentEventData]);
+  }, [isRouterReady, routeParams, router, currentEventData]);
  
   // Handle marqueeId query param
   useEffect(() => {
-    if (isRouterReady && router.query.marqueeId && currentEventData) {
-      const routeId = router.query.id as string;
+    if (isRouterReady && routeParams.marqueeId && currentEventData) {
+      const routeId = routeParams.id as string;
       const currentId = currentEventData._id || (currentEventData as any).id;
  
       if (currentId !== routeId) return;
  
-      const marqueeId = Array.isArray(router.query.marqueeId) ? router.query.marqueeId[0] : router.query.marqueeId;
+      const marqueeId = Array.isArray(routeParams.marqueeId) ? routeParams.marqueeId[0] : routeParams.marqueeId;
       if (!marqueeId) return;
 
       const projectStore = useProjectStore.getState();
@@ -1535,22 +1541,22 @@ export default function Editor() {
         toast.success(`Loaded marquee: ${marqueeDef?.label || marqueeId}`);
       }
     }
-  }, [isRouterReady, router.query, currentEventData]);
+  }, [isRouterReady, routeParams, currentEventData]);
 
 
 
 
   // Handle preloadedVenue query param - force-inject the venue asset if missing
   useEffect(() => {
-    if (isRouterReady && router.query.preloadedVenue && currentEventData) {
-      const routeId = router.query.id as string;
+    if (isRouterReady && routeParams.preloadedVenue && currentEventData) {
+      const routeId = routeParams.id as string;
       const currentId = currentEventData._id || (currentEventData as any).id;
 
       if (currentId !== routeId) return;
 
-      const venueId = Array.isArray(router.query.preloadedVenue)
-        ? router.query.preloadedVenue[0]
-        : router.query.preloadedVenue;
+      const venueId = Array.isArray(routeParams.preloadedVenue)
+        ? routeParams.preloadedVenue[0]
+        : routeParams.preloadedVenue;
       if (!venueId) return;
 
       const venueDef = PRELOADED_VENUE_MAP.get(venueId);
@@ -1613,7 +1619,7 @@ export default function Editor() {
         }, 300);
       }
     }
-  }, [isRouterReady, router.query, currentEventData]);
+  }, [isRouterReady, routeParams, currentEventData]);
 
 
 
@@ -1773,7 +1779,7 @@ export default function Editor() {
 
             // DEFAULT OUTDOOR LAYOUT if empty
             if (eventData.type === 'Outdoor Venue' && shapes.length === 0 && walls.length === 0 && assets.length === 0) {
-              const textureId = (router.query.texture as string) || 'sand-01';
+              const textureId = (routeParams.texture as string) || 'sand-01';
               const canvas = eventData.canvasData?.canvas || eventData.canvases?.[0];
               const width = canvas?.width || 10000;
               const height = canvas?.height || 10000;
