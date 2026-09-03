@@ -774,46 +774,9 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                             const reader = new FileReader();
                             reader.onload = async (event) => {
                                 const arrayBuffer = event.target?.result as ArrayBuffer;
-                                try {
-                                    const pdfjsLib = await loadPdfJs();
-                                    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                                    if (pdf.numPages === 1) {
-                                        const page = await pdf.getPage(1);
-                                        const viewport = page.getViewport({ scale: 1.5 });
-                                        const canvas = document.createElement('canvas');
-                                        const context = canvas.getContext('2d');
-                                        if (context) {
-                                            canvas.width = viewport.width;
-                                            canvas.height = viewport.height;
-                                            await page.render({ canvasContext: context, viewport }).promise;
-                                            const dataUrl = await compressImage(canvas.toDataURL('image/jpeg', 0.7), 1200, 1200);
-                                            const maxSize = 1500;
-                                            let w = canvas.width;
-                                            let h = canvas.height;
-                                            if (w > maxSize || h > maxSize) {
-                                                const ratio = Math.min(maxSize / w, maxSize / h);
-                                                w = w * ratio;
-                                                h = h * ratio;
-                                            }
-                                            const newShape = {
-                                                id: crypto.randomUUID(),
-                                                type: 'image' as any,
-                                                x: 0, y: 0,
-                                                width: Math.max(100, w), height: Math.max(100, h),
-                                                rotation: 0, fillImage: dataUrl, fillType: 'image' as any,
-                                                stroke: '#000000', strokeWidth: 1,
-                                                zIndex: useProjectStore.getState().getNextZIndex(),
-                                            };
-                                            useEditorStore.getState().setPendingImportShape(newShape);
-                                            useEditorStore.getState().setActiveTool('select');
-                                        }
-                                    } else {
-                                        setPdfImportData(arrayBuffer);
-                                        setShowSvgConfirm(true);
-                                    }
-                                } catch (err) {
-                                    console.error("PDF import error:", err);
-                                }
+                                // Show vector vs image choice for all PDFs (single and multi-page)
+                                setPdfImportData(arrayBuffer);
+                                setShowSvgConfirm(true);
                             };
                             reader.readAsArrayBuffer(file);
                         }
