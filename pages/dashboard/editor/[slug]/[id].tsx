@@ -478,6 +478,18 @@ function ElementsPane() {
                 strokeLinejoin="round"
               />
             )}
+            {item.shape.type === "path" && item.shape.svgPath && (
+              <path
+                d={item.shape.svgPath}
+                fill={item.shape.fill || "transparent"}
+                stroke={item.shape.stroke || "#9CA3AF"}
+                strokeWidth={0.6}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+                transform={`translate(12, 12) scale(${20 / Math.max(item.shape.width || 1, item.shape.height || 1)})`}
+              />
+            )}
           </svg>
         )}
         {item.type === "Group" && (

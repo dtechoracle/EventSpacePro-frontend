@@ -656,10 +656,10 @@ const SelectionHighlightLayer = React.memo(({
                     key={`v-${item.id}-${i}`}
                     cx={v.x}
                     cy={v.y}
-                    r={i % 5 === 0 ? 8 / zoom : 6 / zoom}
+                    r={i % 5 === 0 ? 5 / zoom : 4 / zoom}
                     fill={i % 5 === 0 ? "#3b82f6" : "#22c55e"}
                     stroke="white"
-                    strokeWidth={1.4 / zoom}
+                    strokeWidth={1 / zoom}
                     style={{ filter: 'drop-shadow(0 0 2px rgba(0, 0, 0, 0.35))' }}
                   />
                 ))}
@@ -1094,43 +1094,14 @@ export default function Workspace2D({
   );
 
   // Viewport Culling - Filter items that are actually visible to maximize performance with 100k+ assets
-  // Using a ref to track the "last calculated bounds" to avoid re-rendering the whole item list on every single pan pixel
-  const lastCullBounds = useRef({ 
-    left: 0, 
-    top: 0, 
-    right: 0, 
-    bottom: 0, 
-    zoom: 0, 
-    sourceRenderables: null as any[] | null,
-    lastResult: [] as any[] 
-  });
-  
   const visibleRenderables = useMemo(() => {
-    const margin = Math.min(5000, 1000 / Math.max(zoom, 0.05)); // Clamp to avoid 1M margin at zoom=0.001
+    const margin = Math.max(2000, 500 / Math.max(zoom, 0.01));
     const worldLeft = -panX / zoom - margin;
     const worldTop = -panY / zoom - margin;
     const worldRight = (viewportSize.width - panX) / zoom + margin;
     const worldBottom = (viewportSize.height - panY) / zoom + margin;
 
-    // Determine if the camera has moved enough to justify a re-cull (hysteresis)
-    const dx = Math.abs(worldLeft - lastCullBounds.current.left);
-    const dy = Math.abs(worldTop - lastCullBounds.current.top);
-    const dz = Math.abs(zoom - lastCullBounds.current.zoom) / zoom;
-    
-    // Only re-filter if we moved more than 20% of the viewport or zoomed > 10%
-    const viewportWidth = worldRight - worldLeft;
-    const viewportHeight = worldBottom - worldTop;
-    if (
-      lastCullBounds.current.sourceRenderables === svgRenderables &&
-      dx < viewportWidth * 0.2 &&
-      dy < viewportHeight * 0.2 &&
-      dz < 0.1
-    ) {
-       // Return the same array reference to prevent RenderLayer from re-rendering
-       return lastCullBounds.current.lastResult || svgRenderables;
-    }
-
-    // 2. Filter renderables based on spatial intersection
+    // Always re-cull — the cost is low and stale results cause visible flickering
     const result = svgRenderables.filter((item: any) => {
       // Wall culling (checks all nodes)
       if (item._renderType === 'wall' && item.nodes) {
@@ -1150,7 +1121,7 @@ export default function Workspace2D({
         const maxX = Math.max(item.startPoint.x, item.endPoint.x);
         const minY = Math.min(item.startPoint.y, item.endPoint.y);
         const maxY = Math.max(item.startPoint.y, item.endPoint.y);
-        const pad = 200; // Padding for labels/styling
+        const pad = 200;
         return !(maxX + pad < worldLeft || minX - pad > worldRight || maxY + pad < worldTop || minY - pad > worldBottom);
       }
 
@@ -1160,8 +1131,8 @@ export default function Workspace2D({
         const y = item.y ?? 0;
         const w = item.width ?? 600;
         const h = item.height ?? 200;
-        const halfSize = Math.max(w, h);
-        return !(x + halfSize < worldLeft || x - halfSize > worldRight || y + halfSize < worldTop || y - halfSize > worldBottom);
+        const halfW = w / 2, halfH = h / 2;
+        return !(x + halfW < worldLeft || x - halfW > worldRight || y + halfH < worldTop || y - halfH > worldBottom);
       }
 
       // Standard assets and shapes (centered items)
@@ -1169,20 +1140,10 @@ export default function Workspace2D({
       const y = item.y ?? 0;
       const w = item.width ?? 1000;
       const h = item.height ?? 1000;
-      const halfSize = Math.max(w, h); 
-      return !(x + halfSize < worldLeft || x - halfSize > worldRight || y + halfSize < worldTop || y - halfSize > worldBottom);
+      const halfW = w / 2;
+      const halfH = h / 2;
+      return !(x + halfW < worldLeft || x - halfW > worldRight || y + halfH < worldTop || y - halfH > worldBottom);
     });
-
-    // Save bounds for next frame
-    lastCullBounds.current = { 
-      left: worldLeft, 
-      top: worldTop, 
-      right: worldRight, 
-      bottom: worldBottom, 
-      zoom,
-      sourceRenderables: svgRenderables,
-      lastResult: result as any
-    };
 
     return result;
   }, [svgRenderables, panX, panY, zoom, viewportSize]);
