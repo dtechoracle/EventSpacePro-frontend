@@ -705,30 +705,30 @@ export default function PropertiesSidebar(): React.JSX.Element {
           </div>
           <div className="flex items-center gap-1">
             <button
-              className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors flex items-center gap-1.5 ${
+              className={`rounded-lg px-4 py-2 text-xs font-semibold transition-colors flex items-center gap-1.5 ${
                 hasUnsavedChanges
-                  ? "border-blue-600 bg-white text-blue-600 hover:bg-blue-50"
-                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                  ? "bg-blue-600 text-white hover:bg-blue-500"
+                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
               } ${isSaving ? "cursor-not-allowed opacity-50" : ""}`}
               onClick={handleSave}
               disabled={isSaving}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  isSaving ? 'bg-blue-500 animate-pulse' : hasUnsavedChanges ? 'bg-amber-400' : 'bg-emerald-500'
+                  isSaving ? 'bg-white animate-pulse' : hasUnsavedChanges ? 'bg-white' : 'bg-emerald-500'
                 }`}
               />
               {isSaving ? "Saving..." : hasUnsavedChanges ? "Save" : "Saved"}
             </button>
             <button
-              className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:bg-slate-50"
+              className="rounded-lg border border-gray-200 bg-white p-2 text-gray-500 transition-colors hover:bg-gray-50"
               onClick={() => open3D && open3D()}
               title="Preview in 3D"
             >
               <IoPlayOutline size={14} />
             </button>
             <button
-              className="rounded-lg bg-[var(--accent)] px-3 py-2 text-[11px] font-semibold text-white transition-opacity hover:opacity-90"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-500"
               onClick={() => setShowShareModal(true)}
             >
               Share

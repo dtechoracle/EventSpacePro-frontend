@@ -9,13 +9,13 @@ const Trash = () => {
             <DashboardSidebar />
             <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Header */}
-                <div className="bg-white/60 backdrop-blur-sm border-b border-gray-300/50 px-8 py-5 shadow-sm">
+                <div className="bg-white border-b border-gray-200 px-8 py-5">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h1 className="text-3xl font-bold text-[var(--accent)]">
+                            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
                                 Trash
                             </h1>
-                            <p className="text-sm text-gray-500 mt-1">Recover or permanently delete items</p>
+                            <p className="text-xs text-gray-500 mt-0.5">Recover or permanently delete items</p>
                         </div>
                     </div>
                 </div>

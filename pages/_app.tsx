@@ -60,7 +60,7 @@ export default function App({ Component, pageProps }: AppProps) {
   useEffect(() => {
     // Show once when transitioning false -> true
     if (hasUnsavedChanges && !prevHasUnsavedRef.current) {
-      toast("You have unsaved changes", { id: "unsaved", icon: "⚠️", duration: 4000 });
+      toast("You have unsaved changes", { id: "unsaved", duration: 4000 });
     }
     if (!hasUnsavedChanges && prevHasUnsavedRef.current) {
       toast.dismiss("unsaved");
@@ -82,7 +82,7 @@ export default function App({ Component, pageProps }: AppProps) {
   useEffect(() => {
     const handleRouteChangeStart = (url: string) => {
       if (hasUnsavedChanges) {
-        toast("You have unsaved changes", { id: "unsaved-route", icon: "⚠️" });
+        toast("You have unsaved changes", { id: "unsaved-route" });
       }
     };
     router.events.on("routeChangeStart", handleRouteChangeStart);

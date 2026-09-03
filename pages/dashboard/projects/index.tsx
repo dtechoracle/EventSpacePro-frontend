@@ -221,26 +221,26 @@ const Projects = () => {
       <DashboardSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-white/60 backdrop-blur-sm border-b border-gray-300/50 px-8 py-5 shadow-sm">
+        <div className="bg-white border-b border-gray-200 px-8 py-5">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-[var(--accent)]">
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
                 My Projects
               </h1>
-              <p className="text-sm text-gray-500 mt-1">Manage and organize your projects</p>
+              <p className="text-xs text-gray-500 mt-0.5">Manage and organize your projects</p>
             </div>
             <div className="flex items-center gap-3">
               <div className="relative">
-                <BsSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <BsSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
                 <input
                   type="text"
                   placeholder="Search projects..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent w-64 bg-white/80"
+                  className="pl-9 pr-4 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 w-60 bg-gray-50/50"
                 />
               </div>
-              <select className="px-4 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--accent)] bg-white/80">
+              <select className="px-4 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-gray-50/50">
                 <option>Last modified ↓</option>
                 <option>Last modified ↑</option>
                 <option>Name A-Z</option>
@@ -248,13 +248,13 @@ const Projects = () => {
               </select>
               <button
                 onClick={() => setShowImportModal(true)}
-                className="px-5 py-2.5 text-sm font-medium border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors bg-white/80"
+                className="px-4 py-2 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors bg-white"
               >
                 Import
               </button>
               <button
                 onClick={() => setShowCreateProjectModal(true)}
-                className="px-5 py-2.5 text-sm font-semibold bg-[var(--accent)] text-white rounded-xl hover:opacity-90 flex items-center gap-2 shadow-md transition-opacity"
+                className="px-4 py-2 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-500 flex items-center gap-1.5 transition-colors"
               >
                 <span>New Project</span>
               </button>
