@@ -705,17 +705,17 @@ export default function PropertiesSidebar(): React.JSX.Element {
           </div>
           <div className="flex items-center gap-1">
             <button
-              className={`rounded-lg px-4 py-2 text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+              className={`rounded-lg border px-4 py-2 text-xs font-semibold transition-colors flex items-center gap-1.5 ${
                 hasUnsavedChanges
-                  ? "bg-blue-600 text-white hover:bg-blue-500"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                  ? "border-blue-600 bg-white text-blue-600 hover:bg-blue-50"
+                  : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
               } ${isSaving ? "cursor-not-allowed opacity-50" : ""}`}
               onClick={handleSave}
               disabled={isSaving}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  isSaving ? 'bg-white animate-pulse' : hasUnsavedChanges ? 'bg-white' : 'bg-emerald-500'
+                  isSaving ? 'bg-blue-500 animate-pulse' : hasUnsavedChanges ? 'bg-amber-400' : 'bg-emerald-500'
                 }`}
               />
               {isSaving ? "Saving..." : hasUnsavedChanges ? "Save" : "Saved"}
