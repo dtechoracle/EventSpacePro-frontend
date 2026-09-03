@@ -65,40 +65,45 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
             toast.error("No vector elements found — try As Image instead");
             return;
         }
+        const editorState: any = useEditorStore.getState();
+        const viewportW = typeof window !== 'undefined' ? window.innerWidth - 260 - 200 : 800;
+        const viewportH = typeof window !== 'undefined' ? window.innerHeight - 140 : 600;
+        const zoom = editorState.zoom || 1;
+        const panX = editorState.panX || 0;
+        const panY = editorState.panY || 0;
+        const centerX = (viewportW / 2 - panX) / zoom;
+        const centerY = (viewportH / 2 - panY) / zoom;
         let offsetY = 0;
         const gap = 50;
-        pages.forEach((page, pageIdx) => {
-            const offsetX = 0;
-            // page shapes are already in PDF coordinates; offset each page vertically
+        const allShapes: any[] = [];
+        const allTexts: any[] = [];
+        pages.forEach((page) => {
+            const pageOffsetX = centerX - page.width / 2;
+            const pageOffsetY = centerY - page.height / 2 + offsetY;
             const shapes = page.shapes.map((s: any) => ({
                 ...s,
                 id: crypto.randomUUID(),
-                x: s.x + offsetX,
-                y: s.y + offsetY,
+                x: s.x + pageOffsetX,
+                y: s.y + pageOffsetY,
                 zIndex: useProjectStore.getState().getNextZIndex(),
             }));
             const texts = page.textAnnotations.map((t: any) => ({
                 ...t,
                 id: crypto.randomUUID(),
-                x: t.x + offsetX,
-                y: t.y + offsetY,
+                x: t.x + pageOffsetX,
+                y: t.y + pageOffsetY,
                 zIndex: useProjectStore.getState().getNextZIndex(),
             }));
-            if (shapes.length > 0) {
-                if (pageIdx === 0) {
-                    // Use batch for first page as well to avoid many renders
-                    useProjectStore.getState().addShapeBatch(shapes as any);
-                } else {
-                    useProjectStore.getState().addShapeBatch(shapes as any);
-                }
-            }
-            if (texts.length > 0) {
-                const addText = useProjectStore.getState().addTextAnnotation;
-                texts.forEach((t: any) => addText(t));
-            }
-            offsetY += Math.max(100, page.height) + gap;
+            allShapes.push(...shapes);
+            allTexts.push(...texts);
+            offsetY += page.height + gap;
         });
+        if (allShapes.length > 0) useProjectStore.getState().addShapeBatch(allShapes as any);
+        if (allTexts.length > 0) allTexts.forEach((t: any) => useProjectStore.getState().addTextAnnotation(t, true));
+        useProjectStore.getState().saveToHistory();
+        toast.success(`Imported ${allShapes.length + allTexts.length} vector elements`);
         useEditorStore.getState().setActiveTool('select');
+        useEditorStore.getState().setPan(viewportW / 2 - centerX * zoom, viewportH / 2 - centerY * zoom);
     }, []);
 
     const compressImage = (dataUrl: string, maxWidth = 1200, maxHeight = 1200): Promise<string> => {

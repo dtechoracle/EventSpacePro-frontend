@@ -114,40 +114,53 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
 
     const handlePdfSvgImport = React.useCallback((pages: SvgPageData[]) => {
         setPdfImportData(null);
+        const hasContent = pages.some(p => (p.shapes?.length || 0) > 0 || (p.textAnnotations?.length || 0) > 0);
+        if (!hasContent) {
+            toast.error("No vector elements found — try As Image instead");
+            return;
+        }
+        // Place at viewport center, not 0,0 (moyo is at 1.5M, 0,0 is off-screen)
+        const editorState: any = useEditorStore.getState();
+        const viewportW = typeof window !== 'undefined' ? window.innerWidth - 260 - 200 : 800;
+        const viewportH = typeof window !== 'undefined' ? window.innerHeight - 140 : 600;
+        const zoom = editorState.zoom || 1;
+        const panX = editorState.panX || 0;
+        const panY = editorState.panY || 0;
+        const centerX = (viewportW / 2 - panX) / zoom;
+        const centerY = (viewportH / 2 - panY) / zoom;
+
+        let offsetY = 0;
         const gap = 50;
-        let currentY = 0;
-
+        const allShapes: any[] = [];
+        const allTexts: any[] = [];
         pages.forEach((page) => {
-            const pageWidth = page.width;
-            const pageHeight = page.height;
             const baseZIndex = useProjectStore.getState().getNextZIndex();
-
-            const shapesWithPosition = page.shapes.map((s: any, i: number) => ({
+            // Center page at viewport center; offset pages vertically
+            const pageOffsetX = centerX - page.width / 2;
+            const pageOffsetY = centerY - page.height / 2 + offsetY;
+            const shapes = page.shapes.map((s: any, i: number) => ({
                 ...s,
-                x: s.x,
-                y: s.y + currentY,
+                x: s.x + pageOffsetX,
+                y: s.y + pageOffsetY,
                 zIndex: baseZIndex + i,
             }));
-
-            const textsWithPosition = page.textAnnotations.map((t: any, i: number) => ({
+            const texts = page.textAnnotations.map((t: any, i: number) => ({
                 ...t,
-                x: t.x,
-                y: t.y + currentY,
-                zIndex: baseZIndex + page.shapes.length + i,
+                x: t.x + pageOffsetX,
+                y: t.y + pageOffsetY,
+                zIndex: baseZIndex + shapes.length + i,
             }));
-
-            shapesWithPosition.forEach((s: any) => {
-                useProjectStore.getState().addShape(s, true);
-            });
-            textsWithPosition.forEach((t: any) => {
-                useProjectStore.getState().addTextAnnotation(t, true);
-            });
-
-            currentY += pageHeight + gap;
+            allShapes.push(...shapes);
+            allTexts.push(...texts);
+            offsetY += page.height + gap;
         });
+        if (allShapes.length > 0) useProjectStore.getState().addShapeBatch(allShapes as any);
+        if (allTexts.length > 0) allTexts.forEach((t: any) => useProjectStore.getState().addTextAnnotation(t, true));
 
         useProjectStore.getState().saveToHistory();
-        toast.success(`Imported ${pages.reduce((sum, p) => sum + p.shapes.length + p.textAnnotations.length, 0)} vector elements`);
+        toast.success(`Imported ${allShapes.length + allTexts.length} vector elements`);
+        // Pan to show them
+        useEditorStore.getState().setPan(viewportW / 2 - centerX * zoom, viewportH / 2 - centerY * zoom);
     }, []);
 
     // NEW STORE
