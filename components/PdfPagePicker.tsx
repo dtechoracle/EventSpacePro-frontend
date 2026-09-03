@@ -98,12 +98,44 @@ const PdfPagePicker = ({ arrayBuffer, mode, onImport, onImportSvg, onCancel }: P
         for (const s of selected) {
           const page = await pdf.getPage(s.index);
           const viewport = page.getViewport({ scale: 1 });
-          const elements = await extractPdfElements(page, 1);
-          const { shapes, textAnnotations } = toWorkspaceItems(
-            elements,
-            viewport.width,
-            viewport.height
-          );
+          let elements: any[] = [];
+          try {
+            elements = await extractPdfElements(page, 1);
+          } catch {}
+          let shapes: any[] = [];
+          let textAnnotations: any[] = [];
+          if (elements.length > 0) {
+            const converted = toWorkspaceItems(elements, viewport.width, viewport.height);
+            shapes = converted.shapes;
+            textAnnotations = converted.textAnnotations;
+          }
+          // Fallback for raster/scanned PDFs or empty extractions — wrap bitmap in SVG so any PDF converts
+          if (shapes.length === 0 && textAnnotations.length === 0) {
+            const canvas = document.createElement("canvas");
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              await page.render({ canvasContext: ctx, viewport }).promise;
+              const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+              shapes = [
+                {
+                  id: `pdf-shape-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                  type: "image",
+                  x: viewport.width / 2,
+                  y: viewport.height / 2,
+                  width: viewport.width,
+                  height: viewport.height,
+                  rotation: 0,
+                  fillImage: dataUrl,
+                  fillType: "image",
+                  stroke: "#000000",
+                  strokeWidth: 1,
+                  zIndex: 0,
+                },
+              ];
+            }
+          }
           results.push({
             pageIndex: s.index,
             shapes,

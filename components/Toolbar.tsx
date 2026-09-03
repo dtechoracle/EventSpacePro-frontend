@@ -60,11 +60,6 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
 
     const handlePdfImportSvg = React.useCallback((pages: import('./PdfPagePicker').SvgPageData[]) => {
         setPdfImportData(null);
-        const hasContent = pages.some(p => (p.shapes?.length || 0) > 0 || (p.textAnnotations?.length || 0) > 0);
-        if (!hasContent) {
-            toast.error("No vector elements found — try As Image instead");
-            return;
-        }
         const editorState: any = useEditorStore.getState();
         const viewportW = typeof window !== 'undefined' ? window.innerWidth - 260 - 200 : 800;
         const viewportH = typeof window !== 'undefined' ? window.innerHeight - 140 : 600;
