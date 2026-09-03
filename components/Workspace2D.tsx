@@ -421,11 +421,12 @@ const DragPreviewLayer = React.memo(({
           height={gb.height}
           fill="none"
           stroke="#3b82f6"
-          strokeWidth={1.5 / zoom}
-          strokeDasharray={`${6 / zoom} ${3 / zoom}`}
-          rx={4 / zoom}
-          ry={4 / zoom}
+          strokeWidth={1.5}
+          strokeDasharray="6 3"
+          rx={4}
+          ry={4}
           opacity={0.6}
+          style={{ vectorEffect: 'non-scaling-stroke' } as any}
         />
       ))}
 
@@ -576,11 +577,12 @@ const SelectionHighlightLayer = React.memo(({
           height={gb.height}
           fill="none"
           stroke="#3b82f6"
-          strokeWidth={1.5 / zoom}
-          strokeDasharray={`${6 / zoom} ${3 / zoom}`}
-          rx={4 / zoom}
-          ry={4 / zoom}
+          strokeWidth={1.5}
+          strokeDasharray="6 3"
+          rx={4}
+          ry={4}
           className="pointer-events-none"
+          style={{ vectorEffect: 'non-scaling-stroke' } as any}
         />
       ))}
 
@@ -594,7 +596,7 @@ const SelectionHighlightLayer = React.memo(({
         const vertices = marqueeVertices.length > 0
           ? marqueeVertices
           : (() => {
-              if (item._renderType === 'shape') return calculateShapeAnchors(item, zoom).map((a: any) => ({ x: a.x, y: a.y }));
+              if (item._renderType === 'shape') return calculateShapeAnchors(item, Math.round(zoom*20)/20).map((a: any) => ({ x: a.x, y: a.y }));
               if (item._renderType === 'asset') return calculateAssetAnchors(item).map((a: any) => ({ x: a.x, y: a.y }));
               if (item._renderType === 'wall') return calculateWallAnchors(item).map((a: any) => ({ x: a.x, y: a.y }));
               return [];

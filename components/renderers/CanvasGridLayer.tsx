@@ -68,7 +68,7 @@ export default function CanvasGridLayer({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
 
-      if (!show || gridSize <= 0 || zoom <= 0) return;
+      if (!show || gridSize <= 0 || zoom <= 0 || zoom < 0.08) return;
 
       let minorStep = gridSize * zoom;
       let majorEvery = 5;
