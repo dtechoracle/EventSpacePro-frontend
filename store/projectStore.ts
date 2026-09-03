@@ -666,6 +666,29 @@ const getBlendedWallGroupIds = (walls: Wall[], seedIds: string[]) => {
     return visited;
 };
 
+const createDebouncedStorage = () => {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    let pending: { name: string; value: string } | null = null;
+    return {
+        getItem: (name: string) => {
+            try { return localStorage.getItem(name); } catch { return null; }
+        },
+        setItem: (name: string, value: string) => {
+            pending = { name, value };
+            if (timeout) clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                if (!pending) return;
+                try { localStorage.setItem(pending.name, pending.value); } catch {}
+                pending = null;
+                timeout = null;
+            }, 300);
+        },
+        removeItem: (name: string) => {
+            try { localStorage.removeItem(name); } catch {}
+        },
+    };
+};
+
 export const useProjectStore = create<ProjectState>()(
     persist(
         (set, get) => ({
@@ -3012,6 +3035,7 @@ export const useProjectStore = create<ProjectState>()(
         }),
         {
             name: "project-storage",
+            storage: createDebouncedStorage() as any,
             partialize: (state) => ({
                 projectId: state.projectId,
                 projectName: state.projectName,

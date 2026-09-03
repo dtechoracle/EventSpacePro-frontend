@@ -715,6 +715,11 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         lastKnownState = state;
         return;
       }
+      // Defer heavy CRDT work while the user is dragging. Local canvas stays
+      // at 60fps; the final position flushes once on mouse-up. See drag watcher below.
+      if (useEditorStore.getState().isDragging) {
+        return;
+      }
       const previousState = lastKnownState;
       lastKnownState = state;
 
@@ -795,6 +800,12 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         lastKnownState = state;
         return;
       }
+      // Always track the latest state, even while dragging, so the final
+      // drop has the correct end position. Yjs flush is deferred, not dropped.
+      pendingLocalState = state;
+      if (useEditorStore.getState().isDragging) {
+        return;
+      }
       // Only coalesce when the store actually changed relative to what we last
       // flushed (reference inequality), otherwise skip the rAF entirely.
       const prev = lastKnownState;
@@ -810,8 +821,31 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         state.comments !== prev.comments ||
         state.canvas !== prev.canvas;
       if (!changed) return;
-      pendingLocalState = state;
       scheduleLocalFlush();
+    });
+
+    // When a drag ends, flush the final position immediately. While dragging
+    // we keep tracking pendingLocalState but skip Yjs/Broadcast work.
+    const unsubscribeDragWatcher = useEditorStore.subscribe((state, prevState) => {
+      if (prevState.isDragging && !state.isDragging) {
+        // Drag just ended — if there is pending state not yet flushed, push it now.
+        const prev = lastKnownState;
+        const pending = pendingLocalState;
+        const hasPendingChanges =
+          pending.assets !== prev.assets ||
+          pending.walls !== prev.walls ||
+          pending.shapes !== prev.shapes ||
+          pending.textAnnotations !== prev.textAnnotations ||
+          pending.labelArrows !== prev.labelArrows ||
+          pending.dimensions !== prev.dimensions ||
+          pending.groups !== prev.groups ||
+          pending.wallSegments !== prev.wallSegments ||
+          pending.comments !== prev.comments ||
+          pending.canvas !== prev.canvas;
+        if (hasPendingChanges) {
+          scheduleLocalFlush();
+        }
+      }
     });
 
     // ─── Pending updates buffer ───
@@ -1126,6 +1160,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       pendingRemoteUpdates.length = 0;
       flushOutbound();
       unsubscribe();
+      unsubscribeDragWatcher();
       socket.removeAllListeners();
       socket.disconnect();
       clearCollabAuthority(effectiveEventId || null);
