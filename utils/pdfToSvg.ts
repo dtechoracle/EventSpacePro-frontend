@@ -1028,3 +1028,87 @@ export function toWorkspaceItems(
 
   return { shapes, textAnnotations };
 }
+
+/**
+ * Merge all extracted PDF path shapes into a single combined shape per page.
+ * All paths are translated so they share a common origin (top-left of bounding box).
+ */
+export function mergePdfElements(
+  elements: PdfElement[],
+  pageWidth: number,
+  pageHeight: number,
+): { shapes: any[]; textAnnotations: any[] } {
+  const pathElements = elements.filter(e => e.type === 'shape' && (e as any).svgPath) as PdfShape[];
+  const textAnnotations = elements.filter(e => e.type === 'text').map((el, i) => ({
+    id: `pdf-text-${Date.now()}-${i}`,
+    name: `PDF Text`,
+    x: el.x,
+    y: el.y,
+    text: (el as any).text,
+    fontSize: (el as any).fontSize,
+    fontFamily: (el as any).fontFamily,
+    color: (el as any).color,
+    rotation: (el as any).rotation,
+    zIndex: i,
+  }));
+
+  if (pathElements.length === 0) {
+    return { shapes: [], textAnnotations };
+  }
+
+  // Compute overall bounding box across all path elements
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const el of pathElements) {
+    const halfW = el.width / 2;
+    const halfH = el.height / 2;
+    minX = Math.min(minX, el.x - halfW);
+    minY = Math.min(minY, el.y - halfH);
+    maxX = Math.max(maxX, el.x + halfW);
+    maxY = Math.max(maxY, el.y + halfH);
+  }
+
+  const overallWidth = maxX - minX || pageWidth;
+  const overallHeight = maxY - minY || pageHeight;
+  const centerX = minX + overallWidth / 2;
+  const centerY = minY + overallHeight / 2;
+
+  // Combine all paths into one SVG path, offset so (0,0) = top-left of bounding box
+  const combinedParts: string[] = [];
+  for (const el of pathElements) {
+    if (!el.svgPath) continue;
+    const offsetMatrix = new DOMMatrix([1, 0, 0, 1, -minX, -minY]);
+    combinedParts.push(transformPathD(el.svgPath, offsetMatrix));
+  }
+
+  const combinedSvgPath = combinedParts.join(' ');
+
+  // Use the dominant stroke color
+  const strokeColors = new Map<string, number>();
+  for (const el of pathElements) {
+    const s = el.stroke || '#000000';
+    strokeColors.set(s, (strokeColors.get(s) || 0) + 1);
+  }
+  let dominantStroke = '#000000';
+  let maxCount = 0;
+  for (const [color, count] of strokeColors) {
+    if (count > maxCount) { maxCount = count; dominantStroke = color; }
+  }
+
+  const shapes = [{
+    id: `pdf-merged-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    name: `PDF Import`,
+    type: 'path' as const,
+    x: centerX,
+    y: centerY,
+    width: overallWidth,
+    height: overallHeight,
+    rotation: 0,
+    svgPath: combinedSvgPath,
+    fill: 'none',
+    stroke: dominantStroke,
+    strokeWidth: pathElements[0]?.strokeWidth || 1,
+    zIndex: 0,
+  }];
+
+  return { shapes, textAnnotations };
+}

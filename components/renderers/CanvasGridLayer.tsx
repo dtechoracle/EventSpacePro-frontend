@@ -68,18 +68,17 @@ export default function CanvasGridLayer({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
 
-      if (!show || gridSize <= 0 || zoom <= 0 || zoom < 0.08) return;
+      if (!show || gridSize <= 0 || zoom <= 0) return;
 
-      let minorStep = gridSize * zoom;
+      const worldStep = gridSize;
+      let minorStep = worldStep * zoom;
+
       let majorEvery = 5;
-
-      while (minorStep < 8) {
-        minorStep *= 2;
+      while (minorStep * majorEvery < 40) {
         majorEvery *= 2;
       }
 
       const majorStep = minorStep * majorEvery;
-      const worldStep = minorStep / zoom;
       const startWorldX = Math.floor((-panX / zoom) / worldStep) * worldStep;
       const startWorldY = Math.floor((-panY / zoom) / worldStep) * worldStep;
       const endWorldX = ((width - panX) / zoom) + worldStep;

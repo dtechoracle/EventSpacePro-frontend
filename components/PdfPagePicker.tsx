@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { extractPdfElements, toWorkspaceItems, type PdfElement } from "@/utils/pdfToSvg";
+import { extractPdfElements, mergePdfElements, type PdfElement } from "@/utils/pdfToSvg";
 
 export type PageData = {
   pageIndex: number;
@@ -111,8 +111,8 @@ const PdfPagePicker = ({ arrayBuffer, mode, onImport, onImportSvg, onCancel }: P
 
           if (elements.length > 0) {
             const vp = page.getViewport({ scale: 1 });
-            const { toWorkspaceItems } = await import("@/utils/pdfToSvg");
-            const converted = toWorkspaceItems(elements, vp.width, vp.height);
+            const { mergePdfElements } = await import("@/utils/pdfToSvg");
+            const converted = mergePdfElements(elements, vp.width, vp.height);
             shapes = converted.shapes;
             textAnnotations = converted.textAnnotations;
             width = vp.width;
