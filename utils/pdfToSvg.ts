@@ -92,6 +92,192 @@ function cmykToRgb(c: number, m: number, y: number, k: number): Color {
   return { r, g, b };
 }
 
+// ── SVG parse/transform helpers (for SVGGraphics → workspace shapes) ──
+
+function parseSvgTransformMatrix(transform: string): DOMMatrix | null {
+  try {
+    const m = new DOMMatrix();
+    const matrixMatch = transform.match(/matrix\(([^)]+)\)/);
+    if (matrixMatch) {
+      const parts = matrixMatch[1].split(/[\s,]+/).map(Number);
+      if (parts.length >= 6) return new DOMMatrix([parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]]);
+    }
+    const translateMatch = transform.match(/translate\(([^)]+)\)/);
+    if (translateMatch) {
+      const parts = translateMatch[1].split(/[\s,]+/).map(Number);
+      m.translateSelf(parts[0] || 0, parts[1] || 0);
+    }
+    const scaleMatch = transform.match(/scale\(([^)]+)\)/);
+    if (scaleMatch) {
+      const parts = scaleMatch[1].split(/[\s,]+/).map(Number);
+      m.scaleSelf(parts[0] || 1, parts[1] || parts[0] || 1);
+    }
+    const rotateMatch = transform.match(/rotate\(([^)]+)\)/);
+    if (rotateMatch) {
+      const parts = rotateMatch[1].split(/[\s,]+/).map(Number);
+      m.rotateSelf(parts[0] || 0);
+    }
+    return m;
+  } catch { return null; }
+}
+
+function transformPathD(d: string, matrix: DOMMatrix): string {
+  const tokens = d.match(/[a-zA-Z]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g);
+  if (!tokens) return d;
+
+  const toks = tokens;
+  let result = '';
+  let i = 0;
+  let cx = 0, cy = 0, sx = 0, sy = 0;
+
+  function nextNum(): number {
+    while (i < toks.length && isNaN(Number(toks[i]))) i++;
+    return i < toks.length ? Number(toks[i++]) : 0;
+  }
+  function tx(x: number, y: number): [number, number] {
+    const pt = matrix.transformPoint(new DOMPoint(x, y));
+    return [Math.round(pt.x * 100) / 100, Math.round(pt.y * 100) / 100];
+  }
+
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+    switch (cmd) {
+      case 'M': {
+        let first = true;
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          const x = nextNum(), y = nextNum(); cx = x; cy = y;
+          const [px, py] = tx(x, y);
+          if (first) { result += `M ${px} ${py} `; sx = x; sy = y; first = false; }
+          else result += `L ${px} ${py} `;
+        }
+        break;
+      }
+      case 'm': {
+        let first = true;
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          cx += nextNum(); cy += nextNum();
+          const [px, py] = tx(cx, cy);
+          if (first) { result += `M ${px} ${py} `; sx = cx; sy = cy; first = false; }
+          else result += `L ${px} ${py} `;
+        }
+        break;
+      }
+      case 'L': {
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          const x = nextNum(), y = nextNum(); cx = x; cy = y;
+          result += `L ${tx(x, y)[0]} ${tx(x, y)[1]} `;
+        }
+        break;
+      }
+      case 'l': {
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          cx += nextNum(); cy += nextNum();
+          result += `L ${tx(cx, cy)[0]} ${tx(cx, cy)[1]} `;
+        }
+        break;
+      }
+      case 'H': {
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          cx = nextNum();
+          result += `L ${tx(cx, cy)[0]} ${tx(cx, cy)[1]} `;
+        }
+        break;
+      }
+      case 'h': {
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          cx += nextNum();
+          result += `L ${tx(cx, cy)[0]} ${tx(cx, cy)[1]} `;
+        }
+        break;
+      }
+      case 'V': {
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          cy = nextNum();
+          result += `L ${tx(cx, cy)[0]} ${tx(cx, cy)[1]} `;
+        }
+        break;
+      }
+      case 'v': {
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          cy += nextNum();
+          result += `L ${tx(cx, cy)[0]} ${tx(cx, cy)[1]} `;
+        }
+        break;
+      }
+      case 'C': {
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          const x1 = nextNum(), y1 = nextNum(), x2 = nextNum(), y2 = nextNum(), x = nextNum(), y = nextNum();
+          cx = x; cy = y;
+          const [p1x, p1y] = tx(x1, y1), [p2x, p2y] = tx(x2, y2), [px, py] = tx(x, y);
+          result += `C ${p1x} ${p1y} ${p2x} ${p2y} ${px} ${py} `;
+        }
+        break;
+      }
+      case 'c': {
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          const dx1 = nextNum(), dy1 = nextNum(), dx2 = nextNum(), dy2 = nextNum(), dx = nextNum(), dy = nextNum();
+          const x1 = cx + dx1, y1 = cy + dy1, x2 = cx + dx2, y2 = cy + dy2;
+          cx += dx; cy += dy;
+          const [p1x, p1y] = tx(x1, y1), [p2x, p2y] = tx(x2, y2), [px, py] = tx(cx, cy);
+          result += `C ${p1x} ${p1y} ${p2x} ${p2y} ${px} ${py} `;
+        }
+        break;
+      }
+      case 'S': {
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          const x2 = nextNum(), y2 = nextNum(), x = nextNum(), y = nextNum();
+          cx = x; cy = y;
+          result += `S ${tx(x2, y2)[0]} ${tx(x2, y2)[1]} ${tx(x, y)[0]} ${tx(x, y)[1]} `;
+        }
+        break;
+      }
+      case 's': {
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          const dx2 = nextNum(), dy2 = nextNum(), dx = nextNum(), dy = nextNum();
+          cx += dx; cy += dy;
+          result += `S ${tx(cx + dx2, cy + dy2)[0]} ${tx(cx + dx2, cy + dy2)[1]} ${tx(cx, cy)[0]} ${tx(cx, cy)[1]} `;
+        }
+        break;
+      }
+      case 'Q': {
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          const x1 = nextNum(), y1 = nextNum(), x = nextNum(), y = nextNum();
+          cx = x; cy = y;
+          result += `Q ${tx(x1, y1)[0]} ${tx(x1, y1)[1]} ${tx(x, y)[0]} ${tx(x, y)[1]} `;
+        }
+        break;
+      }
+      case 'q': {
+        while (i < tokens.length && !isNaN(Number(tokens[i]))) {
+          const dx1 = nextNum(), dy1 = nextNum(), dx = nextNum(), dy = nextNum();
+          cx += dx; cy += dy;
+          result += `Q ${tx(cx + dx1, cy + dy1)[0]} ${tx(cx + dx1, cy + dy1)[1]} ${tx(cx, cy)[0]} ${tx(cx, cy)[1]} `;
+        }
+        break;
+      }
+      case 'Z': case 'z':
+        cx = sx; cy = sy; result += 'Z '; break;
+      default:
+        break;
+    }
+  }
+  return result.trim();
+}
+
+function computePathBBox(d: string): { x: number; y: number; width: number; height: number } {
+  try {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.style.cssText = 'position:absolute;left:-9999px;width:0;height:0';
+    document.body.appendChild(svg);
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+    const bbox = path.getBBox();
+    document.body.removeChild(svg);
+    return { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height };
+  } catch { return { x: 0, y: 0, width: 0, height: 0 }; }
+}
+
 interface PathBuilder {
   segments: string[];
   currentX: number;
@@ -625,6 +811,71 @@ export async function pdfPageToSvgViaGraphics(
       svgStr = svgStr.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
     }
     return svgStr;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Use pdf.js SVGGraphics to produce true vector SVG, then parse it into individual
+ * workspace path shapes with transforms baked into the coordinates. This gives the
+ * same quality as online PDF→SVG converters.
+ */
+export async function pdfPageToVectorShapesViaSvg(
+  page: any,
+  scale: number,
+  pdfjsLib: any
+): Promise<PdfElement[] | null> {
+  try {
+    const viewport = page.getViewport({ scale });
+    const opList = await page.getOperatorList();
+    const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
+    const svg = await svgGfx.getSVG(opList, viewport);
+    if (!svg) return null;
+
+    const elements: PdfElement[] = [];
+
+    function processElement(el: SVGElement, ctm: DOMMatrix) {
+      const transformAttr = el.getAttribute('transform');
+      let matrix = ctm;
+      if (transformAttr) {
+        const parsed = parseSvgTransformMatrix(transformAttr);
+        if (parsed) matrix = ctm.multiply(parsed);
+      }
+
+      if (el.tagName === 'path') {
+        const d = el.getAttribute('d');
+        if (d && d.length > 2) {
+          const transformedD = transformPathD(d, matrix);
+          const bbox = computePathBBox(transformedD);
+          if (bbox.width > 0.5 || bbox.height > 0.5) {
+            const fill = el.getAttribute('fill');
+            const stroke = el.getAttribute('stroke');
+            const sw = el.getAttribute('stroke-width');
+            elements.push({
+              type: 'shape',
+              shapeType: 'path',
+              x: bbox.x + bbox.width / 2,
+              y: bbox.y + bbox.height / 2,
+              width: bbox.width,
+              height: bbox.height,
+              rotation: 0,
+              svgPath: transformedD,
+              fill: fill === 'none' || !fill ? undefined : fill,
+              stroke: stroke || '#000000',
+              strokeWidth: sw ? parseFloat(sw) : 1,
+            });
+          }
+        }
+      }
+
+      for (const child of el.children) {
+        if (child instanceof SVGElement) processElement(child, matrix);
+      }
+    }
+
+    processElement(svg, new DOMMatrix());
+    return elements.length > 0 ? elements : null;
   } catch {
     return null;
   }

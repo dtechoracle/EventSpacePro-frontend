@@ -99,23 +99,34 @@ const PdfPagePicker = ({ arrayBuffer, mode, onImport, onImportSvg, onCancel }: P
           const page = await pdf.getPage(s.index);
           let shapes: any[] = [];
           let textAnnotations: any[] = [];
-
-          // 1) Try OPS-based vector extraction first
-          let elements: any[] = [];
-          try {
-            const elemViewport = page.getViewport({ scale: 1 });
-            elements = await extractPdfElements(page, 1);
-            if (elements.length > 0) {
-              const converted = toWorkspaceItems(elements, elemViewport.width, elemViewport.height);
-              shapes = converted.shapes;
-              textAnnotations = converted.textAnnotations;
-            }
-          } catch {}
-
-          // 2) Fallback: high-res raster at 2x with transparent PNG
           let width: number;
           let height: number;
-          if (shapes.length === 0 && textAnnotations.length === 0) {
+
+          // 1) Try SVGGraphics → parsed vector paths (true vectors, like online converters)
+          let elements: any[] = [];
+          try {
+            const { pdfPageToVectorShapesViaSvg } = await import("@/utils/pdfToSvg");
+            elements = (await pdfPageToVectorShapesViaSvg(page, 1, pdfjsLib)) ?? [];
+          } catch {}
+
+          // 2) Fallback: OPS-based extraction
+          if (elements.length === 0) {
+            try {
+              const { extractPdfElements } = await import("@/utils/pdfToSvg");
+              elements = await extractPdfElements(page, 1);
+            } catch {}
+          }
+
+          if (elements.length > 0) {
+            const vp = page.getViewport({ scale: 1 });
+            const { toWorkspaceItems } = await import("@/utils/pdfToSvg");
+            const converted = toWorkspaceItems(elements, vp.width, vp.height);
+            shapes = converted.shapes;
+            textAnnotations = converted.textAnnotations;
+            width = vp.width;
+            height = vp.height;
+          } else {
+            // 3) Final fallback: high-res raster at 2x with transparent PNG
             const rasterViewport = page.getViewport({ scale: 2 });
             width = rasterViewport.width;
             height = rasterViewport.height;
@@ -147,10 +158,6 @@ const PdfPagePicker = ({ arrayBuffer, mode, onImport, onImportSvg, onCancel }: P
               width = vp.width;
               height = vp.height;
             }
-          } else {
-            const vp = page.getViewport({ scale: 1 });
-            width = vp.width;
-            height = vp.height;
           }
 
           results.push({
