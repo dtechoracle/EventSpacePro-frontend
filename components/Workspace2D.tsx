@@ -862,7 +862,6 @@ export default function Workspace2D({
 
   
   const {
-    activeUsers,
     updateCursor,
     updateTyping,
     roomId,
@@ -4466,9 +4465,10 @@ export default function Workspace2D({
           error was ever rendered. */}
 
 
-      {/* Remote Cursors Overlay */}
+      {/* Remote Cursors Overlay — reads from usePresenceStore directly so
+          cursor-move events don't re-render the whole Workspace2D canvas */}
       <div className="absolute inset-0 pointer-events-none z-[1000]">
-        <CursorOverlay cursors={activeUsers} />
+        <CursorOverlay />
       </div>
 
       <svg

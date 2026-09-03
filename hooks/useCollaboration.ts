@@ -9,6 +9,7 @@ import { useEditorStore } from "@/store/editorStore";
 import { apiRequest } from "@/helpers/Config";
 import { setCollabAuthority, clearCollabAuthority } from "@/lib/collabAuthority";
 import { isStandaloneSlug } from "@/lib/standaloneEvent";
+import { usePresenceStore } from "@/store/presenceStore";
 import {
   CollaborationHttpUser,
   CollaborationStatusPayload,
@@ -120,7 +121,16 @@ const extractUserArray = (payload: any): CollaborationHttpUser[] => {
 };
 
 export const useCollaboration = (projectId: string | undefined, eventId: string | undefined) => {
-  const [activeUsers, setActiveUsers] = useState<UserPresence[]>([]);
+  // activeUsers lives in usePresenceStore — NOT in React local state.
+  // This is the critical performance fix: cursor-move events from collaborators
+  // used to call setActiveUsers() here, which re-rendered the huge Workspace2D
+  // component on every mouse move. Now only CursorOverlay (which subscribes to
+  // the store) re-renders on cursor updates.
+  const activeUsers = usePresenceStore((s) => s.activeUsers);
+  const storeSetActiveUsers = usePresenceStore.getState().setActiveUsers;
+  const storeMergePresenceUser = usePresenceStore.getState().mergePresenceUser;
+  const storeRemovePresenceUser = usePresenceStore.getState().removePresenceUser;
+  const storeClearPresence = usePresenceStore.getState().clearPresence;
   const [isConnected, setIsConnected] = useState(false);
   const [resolvedProjectId, setResolvedProjectId] = useState<string | null>(
     isProjectObjectId(projectId) ? projectId : null
@@ -142,6 +152,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
   const activeUsersSignatureRef = useRef("");
   const lastCursorSentAtRef = useRef(0);
   const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
+  const lastEmittedCursorRef = useRef<{ x: number; y: number } | null>(null);
   const userInfoCacheRef = useRef<Map<string, { userName?: string; userAvatar?: string; color?: string; role?: string }>>(new Map());
   const resolvedProjectIdRef = useRef<string | null>(
     isProjectObjectId(projectId) ? projectId : null
@@ -216,47 +227,22 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       .filter((entry) => entry.userId !== currentUserIdRef.current)
       .sort((a, b) => a.userId.localeCompare(b.userId));
 
-    const signature = JSON.stringify(
-      mapped.map((u) => [u.sessionId || u.userId, u.userId, u.cursor?.x ?? null, u.cursor?.y ?? null, u.isTyping ?? false, u.lastSeen, u.color])
-    );
-
-    if (signature !== activeUsersSignatureRef.current) {
-      activeUsersSignatureRef.current = signature;
-      setActiveUsers(mapped);
-    }
-  }, [mapPresenceUser]);
+    // Delegate to the Zustand presence store — does not cause Workspace2D re-render
+    storeSetActiveUsers(mapped);
+  }, [mapPresenceUser, storeSetActiveUsers]);
 
   const mergePresenceUser = useCallback((rawUser: CollaborationHttpUser) => {
     const mapped = mapPresenceUser(rawUser);
     if (!mapped || mapped.userId === currentUserIdRef.current) return;
-
-    setActiveUsers((prev) => {
-      const next = [...prev];
-      const identity = mapped.sessionId || mapped.userId;
-      const index = next.findIndex((entry) => (entry.sessionId || entry.userId) === identity);
-      if (index >= 0) next[index] = { ...next[index], ...mapped };
-      else next.push(mapped);
-      next.sort((a, b) => a.userId.localeCompare(b.userId));
-
-      const signature = JSON.stringify(
-        next.map((u) => [u.sessionId || u.userId, u.userId, u.cursor?.x ?? null, u.cursor?.y ?? null, u.isTyping ?? false, u.lastSeen, u.color])
-      );
-      activeUsersSignatureRef.current = signature;
-      return next;
-    });
-  }, [mapPresenceUser]);
+    // Delegate to the Zustand presence store — does not cause Workspace2D re-render
+    storeMergePresenceUser(mapped);
+  }, [mapPresenceUser, storeMergePresenceUser]);
 
   const removePresenceUser = useCallback((userId?: string) => {
     if (!userId) return;
-    setActiveUsers((prev) => {
-      const next = prev.filter((entry) => entry.userId !== userId);
-      const signature = JSON.stringify(
-        next.map((u) => [u.sessionId || u.userId, u.userId, u.cursor?.x ?? null, u.cursor?.y ?? null, u.isTyping ?? false, u.lastSeen, u.color])
-      );
-      activeUsersSignatureRef.current = signature;
-      return next;
-    });
-  }, []);
+    storeRemovePresenceUser(userId);
+  }, [storeRemovePresenceUser]);
+
 
   useEffect(() => {
     let isCancelled = false;
@@ -491,26 +477,21 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       }
 
       // ─── Replay this client's whole document into the room ───
-      //
-      // `ydoc.on("update")` drops every update produced while the socket was
-      // down (`hasJoinedRef` is false), and nothing re-sent them on rejoin, so
-      // a wifi blip, a Render cold start or a redeploy silently cost the room
-      // every edit made in that window. The tab kept those edits in its own
-      // Y.Doc and no later delta reintroduced them, leaving two tabs showing
-      // permanently different canvases.
-      //
-      // Yjs updates are idempotent and the server merges by state vector, so
-      // replaying the full state on every join is safe — it is the same call
-      // `scheduleFullStateResend` already makes — and it is the only thing
-      // that repairs a document the room never saw.
-      const localState = Y.encodeStateAsUpdate(ydoc);
-      const targetRoomId = roomIdRef.current;
-      if (targetRoomId && socket.connected && localState.byteLength > 2) {
-        socket.emit("yjs-update", {
-          roomId: targetRoomId,
-          update: Array.from(localState),
-          userId: currentUserIdRef.current,
-        });
+      // Throttled to avoid re-encoding a huge doc on every reconnect.
+      const now = Date.now();
+      const lastReplay = (ydoc as any).__lastReplayAt || 0;
+      const shouldReplay = now - lastReplay > 5000;
+      if (shouldReplay) {
+        (ydoc as any).__lastReplayAt = now;
+        const localState = Y.encodeStateAsUpdate(ydoc);
+        const targetRoomId = roomIdRef.current;
+        if (targetRoomId && socket.connected && localState.byteLength > 2) {
+          socket.emit("yjs-update", {
+            roomId: targetRoomId,
+            update: Array.from(localState),
+            userId: currentUserIdRef.current,
+          });
+        }
       }
 
       // Flush any updates that were buffered while waiting for join
@@ -524,14 +505,27 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     // them into one apply per frame keeps the remote motion smooth.
     const pendingRemoteUpdates: { payload: any; isInitial: boolean }[] = [];
     let remoteApplyRaf = 0;
+    let suppressYObservers = false;
 
     const flushRemoteUpdates = () => {
       remoteApplyRaf = 0;
       if (pendingRemoteUpdates.length === 0) return;
       const batch = pendingRemoteUpdates.splice(0, pendingRemoteUpdates.length);
-      for (const { payload, isInitial } of batch) {
-        applyRemoteYUpdate(payload, isInitial);
+      // Batch all inbound deltas into one Y apply + one Zustand sync to avoid
+      // N setState per frame (each observer did its own setState).
+      suppressYObservers = true;
+      isRemoteUpdating.current = true;
+      try {
+        for (const { payload } of batch) {
+          const update = normalizeUpdatePayload(payload);
+          if (!update) continue;
+          Y.applyUpdate(ydoc, update, "remote-sync");
+        }
+      } finally {
+        suppressYObservers = false;
+        isRemoteUpdating.current = false;
       }
+      syncVisibleStoreFromYDoc();
     };
 
     const scheduleRemoteFlush = () => {
@@ -561,6 +555,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       removeAction: (id: string) => void,
       collectionName?: string
     ) => {
+      if (suppressYObservers) return;
       if (event.transaction.origin === "local-sync") return;
 
       isRemoteUpdating.current = true;
@@ -667,6 +662,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     ));
 
     yCanvas.observe((event) => {
+      if (suppressYObservers) return;
       if (event.transaction.origin === "local-sync") return;
       isRemoteUpdating.current = true;
       const canvas = toPlainYValue(yCanvas.get("config"));
@@ -1174,6 +1170,8 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       ydoc.destroy();
       ydocRef.current = null;
       setIsConnected(false);
+      // Clear presence so stale cursors don't linger after disconnecting
+      usePresenceStore.getState().clearPresence();
     };
   }, [
     effectiveEventId,
@@ -1266,16 +1264,16 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
   }, [effectiveEventId]);
 
   const updateCursor = useCallback((x: number, y: number) => {
+    const lastSent = lastEmittedCursorRef.current;
+    if (lastSent && Math.hypot(lastSent.x - x, lastSent.y - y) < 5 && performance.now() - lastCursorSentAtRef.current < 120) {
+      return;
+    }
     const emitCursor = (nextCursor: { x: number; y: number }) => {
       if (!socketRef.current || !roomIdRef.current || !hasJoinedRef.current) return;
+      lastEmittedCursorRef.current = nextCursor;
       socketRef.current.emit("cursor-move", {
         roomId: roomIdRef.current,
         cursor: nextCursor,
-        userId: currentUserIdRef.current,
-      });
-      socketRef.current.emit("awareness-update", {
-        roomId: roomIdRef.current,
-        awareness: { cursor: nextCursor },
         userId: currentUserIdRef.current,
       });
     };
@@ -1283,7 +1281,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     const cursor = { x, y };
     const now = performance.now();
     const elapsed = now - lastCursorSentAtRef.current;
-    const minInterval = 80;
+    const minInterval = 120;
 
     if (elapsed >= minInterval) {
       lastCursorSentAtRef.current = now;

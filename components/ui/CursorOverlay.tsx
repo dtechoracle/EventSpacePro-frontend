@@ -1,15 +1,19 @@
 import React from 'react';
-import { UserPresence } from '@/hooks/useCollaboration';
+import { usePresenceStore } from '@/store/presenceStore';
 import { RemoteCursor } from './RemoteCursor';
 
-type CursorOverlayProps = {
-    cursors: UserPresence[];
-};
+/**
+ * Renders remote collaborator cursors.
+ *
+ * Reads directly from `usePresenceStore` so that cursor-move updates only
+ * re-render this component — NOT the parent `Workspace2D` canvas.
+ */
+export const CursorOverlay: React.FC = () => {
+    const activeUsers = usePresenceStore(s => s.activeUsers);
 
-export const CursorOverlay: React.FC<CursorOverlayProps> = ({ cursors }) => {
     return (
         <>
-            {cursors.map((user) => {
+            {activeUsers.map((user) => {
                 if (!user.cursor) return null;
                 return (
                     <RemoteCursor
