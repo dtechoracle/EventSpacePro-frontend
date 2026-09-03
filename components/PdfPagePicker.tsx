@@ -102,20 +102,12 @@ const PdfPagePicker = ({ arrayBuffer, mode, onImport, onImportSvg, onCancel }: P
           let width: number;
           let height: number;
 
-          // 1) Try SVGGraphics → parsed vector paths (true vectors, like online converters)
+          // 1) Try OPS-based extraction → vector paths
           let elements: any[] = [];
           try {
-            const { pdfPageToVectorShapesViaSvg } = await import("@/utils/pdfToSvg");
-            elements = (await pdfPageToVectorShapesViaSvg(page, 1, pdfjsLib)) ?? [];
+            const { extractPdfElements } = await import("@/utils/pdfToSvg");
+            elements = await extractPdfElements(page, 1);
           } catch {}
-
-          // 2) Fallback: OPS-based extraction
-          if (elements.length === 0) {
-            try {
-              const { extractPdfElements } = await import("@/utils/pdfToSvg");
-              elements = await extractPdfElements(page, 1);
-            } catch {}
-          }
 
           if (elements.length > 0) {
             const vp = page.getViewport({ scale: 1 });
@@ -125,8 +117,10 @@ const PdfPagePicker = ({ arrayBuffer, mode, onImport, onImportSvg, onCancel }: P
             textAnnotations = converted.textAnnotations;
             width = vp.width;
             height = vp.height;
-          } else {
-            // 3) Final fallback: high-res raster at 2x with transparent PNG
+          }
+
+          // 2) Fallback: high-res raster at 2x with transparent PNG
+          if (shapes.length === 0) {
             const rasterViewport = page.getViewport({ scale: 2 });
             width = rasterViewport.width;
             height = rasterViewport.height;

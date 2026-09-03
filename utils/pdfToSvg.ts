@@ -944,6 +944,13 @@ export function toWorkspaceItems(
 
   for (const el of elements) {
     if (el.type === 'shape') {
+      // For path shapes, offset svgPath coordinates to be relative to shape center
+      // because ShapeRenderer uses translate(x,y) then draws path at local coords
+      let svgPath = el.svgPath;
+      if (el.shapeType === 'path' && svgPath) {
+        const offsetMatrix = new DOMMatrix([1, 0, 0, 1, -el.x, -el.y]);
+        svgPath = transformPathD(svgPath, offsetMatrix);
+      }
       shapes.push({
         id: `pdf-shape-${now}-${Math.random().toString(36).slice(2, 8)}`,
         name: `PDF Shape`,
@@ -953,7 +960,7 @@ export function toWorkspaceItems(
         width: el.width,
         height: el.height,
         rotation: el.rotation,
-        svgPath: el.svgPath,
+        svgPath,
         fill: el.fill || 'none',
         stroke: el.stroke || '#000000',
         strokeWidth: el.strokeWidth,
