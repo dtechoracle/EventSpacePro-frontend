@@ -235,6 +235,40 @@ const isPointInsideWall = (wall: Wall, worldX: number, worldY: number) => {
 };
 
 
+// ── PENDING IMPORT CURSOR ─────────────────────────────────────────────────────
+// Subscribes to mouseWorldPos INDEPENDENTLY so mouse-move does NOT re-render
+// the parent Workspace2D component.
+const PendingImportCursor = React.memo(() => {
+  const pendingImportShape = useEditorStore(s => s.pendingImportShape);
+  const mouseWorldPos = useEditorStore(s => s.mouseWorldPos);
+  if (!pendingImportShape) return null;
+  return (
+    <g transform={`translate(${mouseWorldPos.x}, ${mouseWorldPos.y})`} opacity={0.7} style={{ pointerEvents: 'none' }}>
+      <image
+        href={pendingImportShape.fillImage}
+        x={-pendingImportShape.width / 2}
+        y={-pendingImportShape.height / 2}
+        width={pendingImportShape.width}
+        height={pendingImportShape.height}
+        preserveAspectRatio="none"
+      />
+      <rect
+        x={-pendingImportShape.width / 2}
+        y={-pendingImportShape.height / 2}
+        width={pendingImportShape.width}
+        height={pendingImportShape.height}
+        fill="none"
+        stroke="#3b82f6"
+        strokeWidth={2}
+        strokeDasharray="8 4"
+        vectorEffect="non-scaling-stroke"
+      />
+    </g>
+  );
+});
+PendingImportCursor.displayName = 'PendingImportCursor';
+
+
 // ── STATIC DRAWING LAYER ─────────────────────────────────────────────────────
 // Parent SVG transforms handle zooming, so walls/shapes/assets do not need to
 // re-render just because the zoom value changed.
@@ -940,9 +974,19 @@ export default function Workspace2D({
   const setPlacementMode = useEditorStore(s => s.setPlacementMode);
   const pendingImportShape = useEditorStore(s => s.pendingImportShape);
   const setPendingImportShape = useEditorStore(s => s.setPendingImportShape);
-  const mouseWorldPos = useEditorStore(s => s.mouseWorldPos);
+  // NOTE: mouseWorldPos is NOT subscribed here — reading it reactively caused
+  // Workspace2D to re-render on EVERY mousemove (60fps), which was the root
+  // cause of drag lag when many elements were visible at low zoom.
+  // Instead, use the ref below for synchronous reads inside event handlers/memos.
+  const mouseWorldPosRef = useRef(useEditorStore.getState().mouseWorldPos);
+  useEffect(() => {
+    return useEditorStore.subscribe(
+      (state) => { mouseWorldPosRef.current = state.mouseWorldPos; }
+    );
+  }, []);
   const setMouseWorldPos = useEditorStore(s => s.setMouseWorldPos);
   const screenToWorld = useEditorStore(s => s.screenToWorld);
+
   const setEditingTextId = useEditorStore(s => s.setEditingTextId);
   const setSelectedEdgeId = useEditorStore(s => s.setSelectedEdgeId);
   const wheelTransformRef = useRef({ zoom, panX, panY });
@@ -1003,11 +1047,19 @@ export default function Workspace2D({
   const wallIdSet = useMemo(() => new Set(walls.map((wall) => wall.id)), [walls]);
 
   const shouldUseDragPreviewForIds = useCallback((ids: string[]) => {
-    if (ids.length > 0 && ids.every(id => wallIdSet.has(id))) return true;
-    if (ids.length > 0 && ids.every(id => assetById.has(id))) return true;
-    if (ids.length >= LARGE_SELECTION_DRAG_PREVIEW_THRESHOLD) return true;
-    return ids.length > 0 && ids.every(id => canvasBackedAssetIds.has(id));
-  }, [assetById, canvasBackedAssetIds, wallIdSet]);
+    // Always use drag preview for any non-empty selection.
+    //
+    // Previously this only returned true for assets/walls/large-selections,
+    // leaving plain shapes (rectangles, circles) to write their position to
+    // the store on every mousemove frame. That caused batchUpdateShapes →
+    // allRenderables → visibleRenderables → RenderLayer to recompute at 60fps.
+    // At low zoom (many elements visible) this is the main source of drag lag.
+    //
+    // The mouseup handler (previewToCommit) already commits the final offset
+    // for ALL types: shapes, assets, walls, textAnnotations, labelArrows, and
+    // dimensions — so extending preview to shapes is safe.
+    return ids.length > 0;
+  }, []);
 
   // Top-level memoized list of all renderable items for efficient hit-testing and rendering
   const allRenderables = useMemo(() => {
@@ -1168,8 +1220,10 @@ export default function Workspace2D({
 
   const activeHoveredSnapPoint = useMemo(() => {
     if (hoveredSnapPoints.length === 0) return null;
-    return findClosestSnapPointFromList(mouseWorldPos, hoveredSnapPoints, 20 / zoom);
-  }, [hoveredSnapPoints, mouseWorldPos, zoom]);
+    // mouseWorldPosRef.current: synchronous read without creating a reactive dep
+    // (only used for cursor-style crosshair — slight staleness is acceptable)
+    return findClosestSnapPointFromList(mouseWorldPosRef.current, hoveredSnapPoints, 20 / zoom);
+  }, [hoveredSnapPoints, zoom]);
 
 
   const showGrid = useSceneStore(s => s.showGrid);
@@ -1642,20 +1696,43 @@ export default function Workspace2D({
 
           if (itemBounds) {
             const selectedIdSet = new Set(selectedIds);
-            const targetSearchMargin = Math.max(itemBounds.width, itemBounds.height, 2500 / zoom);
+            // Cap the snap search radius at 10,000 world-units (≈10m).
+            // Previously this was `2500/zoom`, meaning at zoom=0.05 it reached
+            // 50,000 units — the entire canvas — making every element a snap
+            // target and causing O(n) computation on every mousemove frame.
+            const MAX_SNAP_SEARCH = 10000;
+            const targetSearchMargin = Math.min(
+              Math.max(itemBounds.width, itemBounds.height, MAX_SNAP_SEARCH),
+              MAX_SNAP_SEARCH
+            );
+            const snapSearchBox = {
+              left:   itemBounds.x - (itemBounds.width  / 2) - targetSearchMargin,
+              top:    itemBounds.y - (itemBounds.height / 2) - targetSearchMargin,
+              right:  itemBounds.x + (itemBounds.width  / 2) + targetSearchMargin,
+              bottom: itemBounds.y + (itemBounds.height / 2) + targetSearchMargin,
+            };
             const nearbyAssets = assetSpatialIndex
-              .query({
-                left: itemBounds.x - (itemBounds.width / 2) - targetSearchMargin,
-                top: itemBounds.y - (itemBounds.height / 2) - targetSearchMargin,
-                right: itemBounds.x + (itemBounds.width / 2) + targetSearchMargin,
-                bottom: itemBounds.y + (itemBounds.height / 2) + targetSearchMargin,
-              })
+              .query(snapSearchBox)
               .map((entry) => entry.item)
               .filter((asset) => !selectedIdSet.has(asset.id));
 
-            // Collect targets (exclude all selected items)
+            // Collect targets (exclude all selected items).
+            // Shapes used to be included as ALL shapes — now we spatially filter
+            // them to only those within the search box.
+            const nearbyShapes = shapes.filter(s => {
+              if (selectedIdSet.has(s.id)) return false;
+              const halfW = (s.width || 0) / 2;
+              const halfH = (s.height || 0) / 2;
+              return (
+                s.x + halfW >= snapSearchBox.left &&
+                s.x - halfW <= snapSearchBox.right &&
+                s.y + halfH >= snapSearchBox.top &&
+                s.y - halfH <= snapSearchBox.bottom
+              );
+            });
+
             const targets = [
-              ...shapes.filter(s => !selectedIdSet.has(s.id)).map(s => {
+              ...nearbyShapes.map(s => {
                 const rad = ((s.rotation || 0) * Math.PI) / 180;
                 const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
                 return { id: s.id, x: s.x, y: s.y, width: s.width * cos + s.height * sin, height: s.width * sin + s.height * cos };
@@ -1700,8 +1777,11 @@ export default function Workspace2D({
               })
             ];
 
-            // Use our new smart snapping calc
-            const result = calculateSmartSnap(itemBounds, targets as any[], 10 / zoom);
+            // Use our new smart snapping calc.
+            // Cap the snap threshold at 200 world-units to avoid snapping across
+            // the whole canvas when zoomed out.
+            const snapThreshold = Math.min(10 / zoom, 200);
+            const result = calculateSmartSnap(itemBounds, targets as any[], snapThreshold);
 
             // result.dx/dy are the adjustments to the PROPOSED position (itemBounds)
             // So final position = itemBounds.x + result.dx
@@ -4510,30 +4590,11 @@ export default function Workspace2D({
             <PlacementRenderer />
           )}
 
-          {/* Pending Import Shape Preview (follows cursor) */}
-          {pendingImportShape && (
-            <g transform={`translate(${mouseWorldPos.x}, ${mouseWorldPos.y})`} opacity={0.7} style={{ pointerEvents: 'none' }}>
-              <image
-                href={pendingImportShape.fillImage}
-                x={-pendingImportShape.width / 2}
-                y={-pendingImportShape.height / 2}
-                width={pendingImportShape.width}
-                height={pendingImportShape.height}
-                preserveAspectRatio="none"
-              />
-              <rect
-                x={-pendingImportShape.width / 2}
-                y={-pendingImportShape.height / 2}
-                width={pendingImportShape.width}
-                height={pendingImportShape.height}
-                fill="none"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                strokeDasharray="8 4"
-                vectorEffect="non-scaling-stroke"
-              />
-            </g>
-          )}
+
+          {/* Pending Import Shape Preview — rendered by PendingImportCursor which
+              subscribes to mouseWorldPos independently, so mouse-move does NOT
+              re-render Workspace2D. */}
+          <PendingImportCursor />
 
           {/* Snap Mode Source Highlight - Removed as redundant with SnapMarkers/AnchorHighlights */}
           {/* ... Removed ... */}

@@ -90,12 +90,13 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
     };
 
     const renderPrimitive = (isHighlight: boolean, overrideProps: any = {}) => {
-        // Determine strokeDasharray based on lineType
+        // Determine strokeDasharray based on lineType — use fixed screen-space values
+        // vectorEffect:non-scaling-stroke keeps stroke constant, so no 1/zoom needed
         let dashArray = shape.strokeDasharray;
         if (shape.lineType === 'dashed') {
-            dashArray = `${10 / zoom},${10 / zoom}`;
+            dashArray = `10,10`;
         } else if (shape.lineType === 'dotted') {
-            dashArray = `${2 / zoom},${5 / zoom}`;
+            dashArray = `2,5`;
         } else if (shape.lineType === 'solid' || !shape.lineType) {
             dashArray = undefined;
         }
@@ -204,7 +205,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                             r={4 / zoom}
                             fill="#ffffff"
                             stroke="#3b82f6"
-                            strokeWidth={1.5 / zoom}
+                            strokeWidth={1.5} vectorEffect="non-scaling-stroke"
                             className="cursor-move"
                             data-id={shape.id}
                         />
@@ -256,7 +257,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                                     r={4 / zoom}
                                     fill="#ffffff"
                                     stroke="#3b82f6"
-                                    strokeWidth={1.5 / zoom}
+                                    strokeWidth={1.5} vectorEffect="non-scaling-stroke"
                                     className="cursor-move"
                                     data-id={shape.id}
                                 />
@@ -287,7 +288,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                                 r={4 / zoom}
                                 fill="#ffffff"
                                 stroke="#3b82f6"
-                                strokeWidth={1.5 / zoom}
+                                strokeWidth={1.5} vectorEffect="non-scaling-stroke"
                                 className="cursor-move"
                                 data-id={shape.id}
                             />
@@ -316,7 +317,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                                 r={4 / zoom}
                                 fill="#ffffff"
                                 stroke="#3b82f6"
-                                strokeWidth={1.5 / zoom}
+                                strokeWidth={1.5} vectorEffect="non-scaling-stroke"
                                 className="cursor-move"
                                 data-id={shape.id}
                             />
@@ -326,7 +327,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                                 r={4 / zoom}
                                 fill="#ffffff"
                                 stroke="#3b82f6"
-                                strokeWidth={1.5 / zoom}
+                                strokeWidth={1.5} vectorEffect="non-scaling-stroke"
                                 className="cursor-move"
                                 data-id={shape.id}
                             />
@@ -575,7 +576,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                                 cx={p.x} cy={p.y} r={4 / zoom}
                                 fill={i % 2 === 0 ? '#ffffff' : '#fbbf24'}
                                 stroke={i % 2 === 0 ? '#3b82f6' : '#f59e0b'}
-                                strokeWidth={1.5 / zoom}
+                                strokeWidth={1.5} vectorEffect="non-scaling-stroke"
                                 className="cursor-move"
                                 data-id={shape.id}
                             />
@@ -603,7 +604,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                             cx={p.x} cy={p.y} r={4 / zoom}
                             fill={i === 2 ? '#fbbf24' : '#ffffff'}
                             stroke={i === 2 ? '#f59e0b' : '#3b82f6'}
-                            strokeWidth={1.5 / zoom}
+                            strokeWidth={1.5} vectorEffect="non-scaling-stroke"
                             className="cursor-move"
                             data-id={shape.id}
                         />
