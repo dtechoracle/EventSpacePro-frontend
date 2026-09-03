@@ -40,7 +40,7 @@ const PdfPagePicker = ({ arrayBuffer, mode, onImport, onImportSvg, onCancel }: P
     const loadPdf = async () => {
       try {
         const pdfjsLib = await loadPdfJs();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer.slice(0) }).promise;
         if (cancelled) return;
         const pageData: typeof pages = [];
         for (let i = 1; i <= pdf.numPages; i++) {
@@ -92,7 +92,7 @@ const PdfPagePicker = ({ arrayBuffer, mode, onImport, onImportSvg, onCancel }: P
       setExtracting(true);
       try {
         const pdfjsLib = (window as any).pdfjsLib;
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer.slice(0) }).promise;
 
         const results: SvgPageData[] = [];
         for (const s of selected) {
@@ -122,7 +122,7 @@ const PdfPagePicker = ({ arrayBuffer, mode, onImport, onImportSvg, onCancel }: P
     }
 
     const pdfjsLib = (window as any).pdfjsLib;
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer.slice(0) }).promise;
 
     const results: PageData[] = [];
     for (const s of selected) {
