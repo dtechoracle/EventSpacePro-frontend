@@ -702,18 +702,18 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     // frame so a drag frame collapses to ONE ydoc diff + ONE broadcast.
     let pendingLocalState = useProjectStore.getState();
     let localSyncRaf = 0;
+    let dragThrottleTimer: ReturnType<typeof setTimeout> | null = null;
 
     const flushLocalChanges = () => {
       localSyncRaf = 0;
+      if (dragThrottleTimer) {
+        clearTimeout(dragThrottleTimer);
+        dragThrottleTimer = null;
+      }
       const state = pendingLocalState;
 
       if (isRemoteUpdating.current) {
         lastKnownState = state;
-        return;
-      }
-      // Defer heavy CRDT work while the user is dragging. Local canvas stays
-      // at 60fps; the final position flushes once on mouse-up. See drag watcher below.
-      if (useEditorStore.getState().isDragging) {
         return;
       }
       const previousState = lastKnownState;
@@ -796,10 +796,17 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         lastKnownState = state;
         return;
       }
-      // Always track the latest state, even while dragging, so the final
-      // drop has the correct end position. Yjs flush is deferred, not dropped.
+      // Always track the latest state, even while dragging, so live preview and
+      // final drop have the correct position. While dragging we throttle to
+      // ~12Hz to keep live movement without 60Hz thrash.
       pendingLocalState = state;
       if (useEditorStore.getState().isDragging) {
+        if (!dragThrottleTimer) {
+          dragThrottleTimer = setTimeout(() => {
+            dragThrottleTimer = null;
+            flushLocalChanges();
+          }, 80);
+        }
         return;
       }
       // Only coalesce when the store actually changed relative to what we last
@@ -820,11 +827,13 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       scheduleLocalFlush();
     });
 
-    // When a drag ends, flush the final position immediately. While dragging
-    // we keep tracking pendingLocalState but skip Yjs/Broadcast work.
+    // When a drag ends, flush the final position immediately.
     const unsubscribeDragWatcher = useEditorStore.subscribe((state, prevState) => {
       if (prevState.isDragging && !state.isDragging) {
-        // Drag just ended — if there is pending state not yet flushed, push it now.
+        if (dragThrottleTimer) {
+          clearTimeout(dragThrottleTimer);
+          dragThrottleTimer = null;
+        }
         const prev = lastKnownState;
         const pending = pendingLocalState;
         const hasPendingChanges =
@@ -1152,6 +1161,10 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       if (remoteApplyRaf !== 0) {
         cancelAnimationFrame(remoteApplyRaf);
         remoteApplyRaf = 0;
+      }
+      if (dragThrottleTimer) {
+        clearTimeout(dragThrottleTimer);
+        dragThrottleTimer = null;
       }
       pendingRemoteUpdates.length = 0;
       flushOutbound();
