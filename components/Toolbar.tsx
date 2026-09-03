@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import toast from 'react-hot-toast';
 import { useEditorStore, type Tool } from '@/store/editorStore';
 import { useProjectStore } from '@/store/projectStore';
 import { useSceneStore } from '@/store/sceneStore';
@@ -19,6 +20,7 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
 
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [pdfImportData, setPdfImportData] = React.useState<ArrayBuffer | null>(null);
+    const [pdfMode, setPdfMode] = React.useState<'image' | 'svg'>('image');
 
     const handlePdfImport = React.useCallback((pages: PageData[]) => {
         setPdfImportData(null);
@@ -54,6 +56,49 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
                 useProjectStore.getState().addShape(newShape as any);
             }
         });
+    }, []);
+
+    const handlePdfImportSvg = React.useCallback((pages: import('./PdfPagePicker').SvgPageData[]) => {
+        setPdfImportData(null);
+        const hasContent = pages.some(p => (p.shapes?.length || 0) > 0 || (p.textAnnotations?.length || 0) > 0);
+        if (!hasContent) {
+            toast.error("No vector elements found — try As Image instead");
+            return;
+        }
+        let offsetY = 0;
+        const gap = 50;
+        pages.forEach((page, pageIdx) => {
+            const offsetX = 0;
+            // page shapes are already in PDF coordinates; offset each page vertically
+            const shapes = page.shapes.map((s: any) => ({
+                ...s,
+                id: crypto.randomUUID(),
+                x: s.x + offsetX,
+                y: s.y + offsetY,
+                zIndex: useProjectStore.getState().getNextZIndex(),
+            }));
+            const texts = page.textAnnotations.map((t: any) => ({
+                ...t,
+                id: crypto.randomUUID(),
+                x: t.x + offsetX,
+                y: t.y + offsetY,
+                zIndex: useProjectStore.getState().getNextZIndex(),
+            }));
+            if (shapes.length > 0) {
+                if (pageIdx === 0) {
+                    // Use batch for first page as well to avoid many renders
+                    useProjectStore.getState().addShapeBatch(shapes as any);
+                } else {
+                    useProjectStore.getState().addShapeBatch(shapes as any);
+                }
+            }
+            if (texts.length > 0) {
+                const addText = useProjectStore.getState().addTextAnnotation;
+                texts.forEach((t: any) => addText(t));
+            }
+            offsetY += Math.max(100, page.height) + gap;
+        });
+        useEditorStore.getState().setActiveTool('select');
     }, []);
 
     const compressImage = (dataUrl: string, maxWidth = 1200, maxHeight = 1200): Promise<string> => {
@@ -138,45 +183,9 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
         } else if (file.type === 'application/pdf') {
             reader.onload = async (event) => {
                 const arrayBuffer = event.target?.result as ArrayBuffer;
-                try {
-                    const pdfjsLib = await loadPdfJs();
-                    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                    if (pdf.numPages === 1) {
-                        const page = await pdf.getPage(1);
-                        const viewport = page.getViewport({ scale: 1.5 });
-                        const canvas = document.createElement('canvas');
-                        const context = canvas.getContext('2d');
-                        if (context) {
-                            canvas.width = viewport.width;
-                            canvas.height = viewport.height;
-                            await page.render({ canvasContext: context, viewport }).promise;
-                            const dataUrl = await compressImage(canvas.toDataURL('image/jpeg', 0.7), 1200, 1200);
-                            const maxSize = 1500;
-                            let w = canvas.width;
-                            let h = canvas.height;
-                            if (w > maxSize || h > maxSize) {
-                                const ratio = Math.min(maxSize / w, maxSize / h);
-                                w = w * ratio;
-                                h = h * ratio;
-                            }
-                            const newShape = {
-                                id: crypto.randomUUID(),
-                                type: 'image' as any,
-                                x: 0, y: 0,
-                                width: Math.max(100, w), height: Math.max(100, h),
-                                rotation: 0, fillImage: dataUrl, fillType: 'image' as any,
-                                stroke: '#000000', strokeWidth: 1,
-                                zIndex: useProjectStore.getState().getNextZIndex(),
-                            };
-                            useEditorStore.getState().setPendingImportShape(newShape);
-                            useEditorStore.getState().setActiveTool('select');
-                        }
-                    } else {
-                        setPdfImportData(arrayBuffer);
-                    }
-                } catch (err) {
-                    console.error("PDF import error:", err);
-                }
+                // Always show picker so user can choose vector vs image, even for single page
+                setPdfMode('image');
+                setPdfImportData(arrayBuffer);
             };
             reader.readAsArrayBuffer(file);
         }
@@ -334,12 +343,29 @@ export default function Toolbar({ className = '' }: ToolbarProps) {
                 </div>
             </div>
             {pdfImportData && (
-                <PdfPagePicker
-                    arrayBuffer={pdfImportData}
-                    mode="image"
-                    onImport={handlePdfImport}
-                    onCancel={() => setPdfImportData(null)}
-                />
+                <div className="fixed inset-0 z-[9998] flex flex-col">
+                    <PdfPagePicker
+                        arrayBuffer={pdfImportData}
+                        mode={pdfMode}
+                        onImport={handlePdfImport}
+                        onImportSvg={handlePdfImportSvg}
+                        onCancel={() => setPdfImportData(null)}
+                    />
+                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[10000] flex items-center gap-2 bg-white border border-gray-200 rounded-full p-1 shadow-lg">
+                        <button
+                            onClick={() => setPdfMode('image')}
+                            className={`px-4 py-2 rounded-full text-xs font-semibold transition-colors ${pdfMode === 'image' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                        >
+                            As Image (PDF)
+                        </button>
+                        <button
+                            onClick={() => setPdfMode('svg')}
+                            className={`px-4 py-2 rounded-full text-xs font-semibold transition-colors ${pdfMode === 'svg' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                        >
+                            As Vectors
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );
