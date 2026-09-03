@@ -97,35 +97,43 @@ const PdfPagePicker = ({ arrayBuffer, mode, onImport, onImportSvg, onCancel }: P
         const results: SvgPageData[] = [];
         for (const s of selected) {
           const page = await pdf.getPage(s.index);
-          const viewport = page.getViewport({ scale: 1 });
-          let elements: any[] = [];
-          try {
-            elements = await extractPdfElements(page, 1);
-          } catch {}
           let shapes: any[] = [];
           let textAnnotations: any[] = [];
-          if (elements.length > 0) {
-            const converted = toWorkspaceItems(elements, viewport.width, viewport.height);
-            shapes = converted.shapes;
-            textAnnotations = converted.textAnnotations;
-          }
-          // Fallback for raster/scanned PDFs or empty extractions — wrap bitmap in SVG so any PDF converts
+
+          // 1) Try OPS-based vector extraction first
+          let elements: any[] = [];
+          try {
+            const elemViewport = page.getViewport({ scale: 1 });
+            elements = await extractPdfElements(page, 1);
+            if (elements.length > 0) {
+              const converted = toWorkspaceItems(elements, elemViewport.width, elemViewport.height);
+              shapes = converted.shapes;
+              textAnnotations = converted.textAnnotations;
+            }
+          } catch {}
+
+          // 2) Fallback: high-res raster at 2x with transparent PNG
+          let width: number;
+          let height: number;
           if (shapes.length === 0 && textAnnotations.length === 0) {
+            const rasterViewport = page.getViewport({ scale: 2 });
+            width = rasterViewport.width;
+            height = rasterViewport.height;
             const canvas = document.createElement("canvas");
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
+            canvas.width = rasterViewport.width;
+            canvas.height = rasterViewport.height;
             const ctx = canvas.getContext("2d");
             if (ctx) {
-              await page.render({ canvasContext: ctx, viewport }).promise;
-              const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+              await page.render({ canvasContext: ctx, viewport: rasterViewport }).promise;
+              const dataUrl = canvas.toDataURL("image/png");
               shapes = [
                 {
                   id: `pdf-shape-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                   type: "image",
-                  x: viewport.width / 2,
-                  y: viewport.height / 2,
-                  width: viewport.width,
-                  height: viewport.height,
+                  x: rasterViewport.width / 2,
+                  y: rasterViewport.height / 2,
+                  width: rasterViewport.width,
+                  height: rasterViewport.height,
                   rotation: 0,
                   fillImage: dataUrl,
                   fillType: "image",
@@ -134,14 +142,23 @@ const PdfPagePicker = ({ arrayBuffer, mode, onImport, onImportSvg, onCancel }: P
                   zIndex: 0,
                 },
               ];
+            } else {
+              const vp = page.getViewport({ scale: 1 });
+              width = vp.width;
+              height = vp.height;
             }
+          } else {
+            const vp = page.getViewport({ scale: 1 });
+            width = vp.width;
+            height = vp.height;
           }
+
           results.push({
             pageIndex: s.index,
             shapes,
             textAnnotations,
-            width: viewport.width,
-            height: viewport.height,
+            width: width!,
+            height: height!,
           });
         }
         onImportSvg(results);

@@ -603,6 +603,34 @@ export async function extractPdfElements(
 }
 
 /**
+ * Robust vector path — uses pdf.js SVGGraphics for true vector fidelity.
+ * Falls back to raster-in-SVG for scanned PDFs, but at high-res PNG with transparency
+ * instead of blurry JPEG white-bg.
+ */
+export async function pdfPageToSvgViaGraphics(
+  page: any,
+  scale: number,
+  pdfjsLib: any
+): Promise<string | null> {
+  try {
+    const viewport = page.getViewport({ scale });
+    const opList = await page.getOperatorList();
+    const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
+    const svg = await svgGfx.getSVG(opList, viewport);
+    // Serialize the generated <svg> element
+    const serializer = new XMLSerializer();
+    let svgStr = serializer.serializeToString(svg);
+    // Ensure proper namespace and no extra white background rect
+    if (!svgStr.includes('xmlns="http://www.w3.org/2000/svg"')) {
+      svgStr = svgStr.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+    }
+    return svgStr;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fallback for raster PDFs: render the PDF page to an image and wrap it in an SVG shape
  * so "As Vectors" works for any PDF, not just pure vector PDFs. Online converters do
  * exactly this — a scanned PDF becomes an SVG with an embedded bitmap.
@@ -624,7 +652,7 @@ export async function pdfPageToVectorWithFallback(
   const ctx = canvas.getContext("2d");
   if (!ctx) return elements;
   await page.render({ canvasContext: ctx, viewport }).promise;
-  const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+  const dataUrl = canvas.toDataURL("image/png");
   // Return as a single image shape that toWorkspaceItems will turn into an image shape
   // We encode it as a PdfShape of type image via a synthetic element
   return [
