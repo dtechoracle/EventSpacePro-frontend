@@ -656,10 +656,10 @@ const SelectionHighlightLayer = React.memo(({
                     key={`v-${item.id}-${i}`}
                     cx={v.x}
                     cy={v.y}
-                    r={i % 5 === 0 ? 8 : 6}
+                    r={i % 5 === 0 ? 8 / zoom : 6 / zoom}
                     fill={i % 5 === 0 ? "#3b82f6" : "#22c55e"}
                     stroke="white"
-                    strokeWidth={1.4}
+                    strokeWidth={1.4 / zoom}
                     style={{ filter: 'drop-shadow(0 0 2px rgba(0, 0, 0, 0.35))' }}
                   />
                 ))}

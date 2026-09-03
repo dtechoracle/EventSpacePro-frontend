@@ -1072,11 +1072,13 @@ export function mergePdfElements(
   const centerX = minX + overallWidth / 2;
   const centerY = minY + overallHeight / 2;
 
-  // Combine all paths into one SVG path, offset so (0,0) = top-left of bounding box
+  // Combine all paths into one SVG path, offset so (0,0) = center of bounding box
+  // ShapeRenderer translates to (shape.x, shape.y) then draws path, so path must be
+  // centered at origin to match the selection bounding box (which is centered at shape.x/y).
   const combinedParts: string[] = [];
   for (const el of pathElements) {
     if (!el.svgPath) continue;
-    const offsetMatrix = new DOMMatrix([1, 0, 0, 1, -minX, -minY]);
+    const offsetMatrix = new DOMMatrix([1, 0, 0, 1, -centerX, -centerY]);
     combinedParts.push(transformPathD(el.svgPath, offsetMatrix));
   }
 

@@ -85,15 +85,11 @@ export default function SnapMarkersRenderer() {
 
     if (!markerSourceId || snapPoints.length === 0) return null;
 
-    const markerRadius = 14;
-    const strokeWidth = 2.5;
+    const markerRadius = 14 / zoom;
+    const strokeWidth = 2.5 / zoom;
 
     return (
         <g pointerEvents="none" className="snap-markers">
-            {/* Highlight the hovered element with a subtle outline */}
-            {/* This depends on getting the shape/asset geometry which might be complex to re-calculate here. 
-                Let's stick to just points for now. */}
-
             {snapPoints.map((point, index) => (
                 <g key={`${point.elementId}-${index}`} transform={`translate(${point.x}, ${point.y})`}>
                     {activePoint && activePoint.x === point.x && activePoint.y === point.y && (
@@ -107,7 +103,7 @@ export default function SnapMarkersRenderer() {
                     )}
                     <circle
                         r={markerRadius}
-                        fill="#22c55e" // Green
+                        fill="#22c55e"
                         opacity={activePoint && activePoint.x === point.x && activePoint.y === point.y ? 1 : 0.8}
                     />
                 </g>
