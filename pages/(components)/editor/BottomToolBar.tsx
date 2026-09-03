@@ -858,8 +858,9 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     return (
         <div
             ref={containerRef}
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] pointer-events-auto flex flex-col items-center gap-2"
+            className="fixed bottom-4 inset-x-0 flex justify-center z-[9999] pointer-events-none"
         >
+            <div className="pointer-events-auto flex flex-col items-center gap-2">
             {/* Wall Drawing Status */}
             {isWallMode && (
                 <motion.div
@@ -1242,6 +1243,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                     onCancel={() => setPdfImportData(null)}
                 />
             )}
+            </div>
         </div>
     );
 }
