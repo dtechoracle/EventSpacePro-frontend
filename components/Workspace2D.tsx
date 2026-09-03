@@ -1052,7 +1052,7 @@ export default function Workspace2D({
   });
   
   const visibleRenderables = useMemo(() => {
-    const margin = 1000 / zoom; // Larger margin for better pre-loading
+    const margin = Math.min(5000, 1000 / Math.max(zoom, 0.05)); // Clamp to avoid 1M margin at zoom=0.001
     const worldLeft = -panX / zoom - margin;
     const worldTop = -panY / zoom - margin;
     const worldRight = (viewportSize.width - panX) / zoom + margin;
