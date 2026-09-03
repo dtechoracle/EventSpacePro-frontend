@@ -448,19 +448,22 @@ export async function extractPdfElements(
 
       // Path construction
       case OPS.moveTo:
-        if (currentPath && arg) {
+        if (arg) {
+          if (!currentPath) currentPath = createPathBuilder();
           const p = transformPathPoint(arg[0], arg[1]);
           moveTo(currentPath, p.x, p.y);
         }
         break;
       case OPS.lineTo:
-        if (currentPath && arg) {
+        if (arg) {
+          if (!currentPath) currentPath = createPathBuilder();
           const p = transformPathPoint(arg[0], arg[1]);
           lineTo(currentPath, p.x, p.y);
         }
         break;
       case OPS.curveTo:
-        if (currentPath && arg) {
+        if (arg) {
+          if (!currentPath) currentPath = createPathBuilder();
           const p1 = transformPathPoint(arg[0], arg[1]);
           const p2 = transformPathPoint(arg[2], arg[3]);
           const p3 = transformPathPoint(arg[4], arg[5]);
@@ -468,7 +471,8 @@ export async function extractPdfElements(
         }
         break;
       case OPS.curveTo2:
-        if (currentPath && arg) {
+        if (arg) {
+          if (!currentPath) currentPath = createPathBuilder();
           const p1 = { x: currentPath.currentX, y: currentPath.currentY };
           const p2 = transformPathPoint(arg[0], arg[1]);
           const p3 = transformPathPoint(arg[2], arg[3]);
@@ -476,14 +480,16 @@ export async function extractPdfElements(
         }
         break;
       case OPS.curveTo3:
-        if (currentPath && arg) {
+        if (arg) {
+          if (!currentPath) currentPath = createPathBuilder();
           const p1 = transformPathPoint(arg[0], arg[1]);
           const p3 = transformPathPoint(arg[2], arg[3]);
           curveTo(currentPath, p1.x, p1.y, p3.x, p3.y, p3.x, p3.y);
         }
         break;
       case OPS.rectangle:
-        if (currentPath && arg) {
+        if (arg) {
+          if (!currentPath) currentPath = createPathBuilder();
           const x = arg[0], y = arg[1], w = arg[2], h = arg[3];
           const p1 = transformPathPoint(x, y);
           const p2 = transformPathPoint(x + w, y);
@@ -504,32 +510,68 @@ export async function extractPdfElements(
 
       case OPS.constructPath:
         if (arg && arg.length >= 2) {
-          const drawOps = arg[0]; // array of OPS.moveTo, OPS.lineTo, etc.
+          const drawOps = arg[0]; // array of OPS values (same enum as top-level)
           const pathArgs = arg[1]; // flat array of coordinates
           let argIdx = 0;
           for (const drawOp of drawOps) {
             switch (drawOp) {
-              case 0: { // DrawOPS.moveTo
+              case OPS.moveTo: {
+                if (!currentPath) currentPath = createPathBuilder();
                 const p = transformPathPoint(pathArgs[argIdx], pathArgs[argIdx + 1]);
-                if (currentPath) moveTo(currentPath, p.x, p.y);
+                moveTo(currentPath, p.x, p.y);
                 argIdx += 2;
                 break;
               }
-              case 1: { // DrawOPS.lineTo
+              case OPS.lineTo: {
+                if (!currentPath) currentPath = createPathBuilder();
                 const p = transformPathPoint(pathArgs[argIdx], pathArgs[argIdx + 1]);
-                if (currentPath) lineTo(currentPath, p.x, p.y);
+                lineTo(currentPath, p.x, p.y);
                 argIdx += 2;
                 break;
               }
-              case 2: { // DrawOPS.curveTo
+              case OPS.curveTo: {
+                if (!currentPath) currentPath = createPathBuilder();
                 const p1 = transformPathPoint(pathArgs[argIdx], pathArgs[argIdx + 1]);
                 const p2 = transformPathPoint(pathArgs[argIdx + 2], pathArgs[argIdx + 3]);
                 const p3 = transformPathPoint(pathArgs[argIdx + 4], pathArgs[argIdx + 5]);
-                if (currentPath) curveTo(currentPath, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
+                curveTo(currentPath, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
                 argIdx += 6;
                 break;
               }
-              case 3: // DrawOPS.closePath
+              case OPS.curveTo2: {
+                if (!currentPath) currentPath = createPathBuilder();
+                const p1 = { x: currentPath.currentX, y: currentPath.currentY };
+                const p2 = transformPathPoint(pathArgs[argIdx], pathArgs[argIdx + 1]);
+                const p3 = transformPathPoint(pathArgs[argIdx + 2], pathArgs[argIdx + 3]);
+                curveTo(currentPath, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
+                argIdx += 4;
+                break;
+              }
+              case OPS.curveTo3: {
+                if (!currentPath) currentPath = createPathBuilder();
+                const p1 = transformPathPoint(pathArgs[argIdx], pathArgs[argIdx + 1]);
+                const p3 = transformPathPoint(pathArgs[argIdx + 2], pathArgs[argIdx + 3]);
+                curveTo(currentPath, p1.x, p1.y, p3.x, p3.y, p3.x, p3.y);
+                argIdx += 4;
+                break;
+              }
+              case OPS.rectangle: {
+                if (!currentPath) currentPath = createPathBuilder();
+                const x = pathArgs[argIdx], y = pathArgs[argIdx + 1];
+                const w = pathArgs[argIdx + 2], h = pathArgs[argIdx + 3];
+                const p1 = transformPathPoint(x, y);
+                const p2 = transformPathPoint(x + w, y);
+                const p3 = transformPathPoint(x + w, y + h);
+                const p4 = transformPathPoint(x, y + h);
+                moveTo(currentPath, p1.x, p1.y);
+                lineTo(currentPath, p2.x, p2.y);
+                lineTo(currentPath, p3.x, p3.y);
+                lineTo(currentPath, p4.x, p4.y);
+                closePath(currentPath);
+                argIdx += 4;
+                break;
+              }
+              case OPS.closePath:
                 if (currentPath) closePath(currentPath);
                 break;
             }
@@ -784,6 +826,8 @@ export async function extractPdfElements(
   delete (elements as any)._textFont;
   delete (elements as any)._textFontSize;
   delete (elements as any)._textLeading;
+
+  console.log(`[PDF] extractPdfElements: ${elements.length} elements (${elements.filter(e => e.type === 'shape').length} shapes, ${elements.filter(e => e.type === 'text').length} texts)`);
 
   return elements;
 }
