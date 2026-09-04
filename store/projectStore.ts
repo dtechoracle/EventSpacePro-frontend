@@ -1687,19 +1687,21 @@ export const useProjectStore = create<ProjectState>()(
                     });
 
                     // MERGE with backend canvasAssets to prevent overwriting another browser's changes.
-                    // Start with backend items (preserves additions from other browsers),
-                    // then overlay our local items on top (our changes take precedence).
+                    // LOCAL-FIRST: start with our local items (preserves our deletions and moves),
+                    // then add backend items that we don't have (preserves other browsers' additions).
+                    // Previous additive-only merge resurrected deleted items because it started from
+                    // the full backend set and never removed items the user had deleted locally.
                     if (backendCanvasAssets.length > 0) {
-                        const merged = [...backendCanvasAssets];
-                        for (const item of canvasAssets) {
-                            const idx = merged.findIndex((m: any) => m.id === item.id);
-                            if (idx >= 0) {
-                                merged[idx] = item;
-                            } else {
-                                merged.push(item);
+                        const localIds = new Set(canvasAssets.map((item: any) => item.id));
+                        const merged = [...canvasAssets];
+                        let addedCount = 0;
+                        for (const backendItem of backendCanvasAssets) {
+                            if (!localIds.has(backendItem.id)) {
+                                merged.push(backendItem);
+                                addedCount++;
                             }
                         }
-                        console.log(`[projectStore] Merged canvasAssets: ${backendCanvasAssets.length} backend + ${canvasAssets.length} local → ${merged.length} total`);
+                        console.log(`[projectStore] Merged canvasAssets: ${canvasAssets.length} local + ${addedCount} new from backend → ${merged.length} total`);
                         canvasAssets = merged;
                     }
 

@@ -525,7 +525,25 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         suppressYObservers = false;
         isRemoteUpdating.current = false;
       }
-      syncVisibleStoreFromYDoc();
+      // Do NOT call syncVisibleStoreFromYDoc here for non-initial updates.
+      // The Yjs observers (applyYChangeToStore) already applied each remote
+      // change incrementally to Zustand. A full-state replacement would overwrite
+      // unflushed local changes (moves, deletes) that haven't been pushed to Yjs
+      // yet, causing them to revert.
+      //
+      // Full-state replacement is only needed on the initial sync when the
+      // Zustand store is empty and we need to hydrate from the room.
+      if (!hasAppliedInitialSync.current) {
+        syncVisibleStoreFromYDoc();
+      }
+
+      // After remote updates are applied, flush any local changes that were
+      // held back while isRemoteUpdating was true. This ensures local deletes
+      // and moves get pushed to Yjs and are not lost.
+      if (pendingHeldLocalFlush) {
+        pendingHeldLocalFlush = false;
+        requestAnimationFrame(() => flushLocalChanges());
+      }
     };
 
     const scheduleRemoteFlush = () => {
@@ -703,6 +721,7 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     let pendingLocalState = useProjectStore.getState();
     let localSyncRaf = 0;
     let dragThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+    let pendingHeldLocalFlush = false;
 
     const flushLocalChanges = () => {
       localSyncRaf = 0;
@@ -713,7 +732,12 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       const state = pendingLocalState;
 
       if (isRemoteUpdating.current) {
-        lastKnownState = state;
+        // Don't discard the pending state — flag it so flushRemoteUpdates
+        // can retry the flush after the remote batch is applied. Previous
+        // behavior stored lastKnownState and returned, which meant local
+        // deletes and moves were silently lost when a remote update arrived
+        // before the local flush could run.
+        pendingHeldLocalFlush = true;
         return;
       }
       const previousState = lastKnownState;
