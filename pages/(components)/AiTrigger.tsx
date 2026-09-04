@@ -4069,7 +4069,7 @@ export default function AiTrigger() {
 
                         {/* Asset Selection Grid */}
                         {m.assetSelection && (
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-3xl mt-1">
+                          <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 w-full max-w-2xl mt-1">
                             {m.assetSelection.options
                               .filter((option: { path: string }) => !option.path || !missingOptionPaths.has(option.path))
                               .map((option: { id: string; name: string; category: string; path: string; width?: number; height?: number }) => (
@@ -4078,17 +4078,18 @@ export default function AiTrigger() {
                                 onClick={() => {
                                   handleSubmit(`I want to use the ${option.name}`);
                                 }}
-                                className="flex flex-col items-center p-1.5 rounded-md border border-gray-200 bg-white hover:border-[var(--accent)] hover:bg-blue-50 transition-all text-left"
+                                className="flex flex-col items-center p-1 rounded-md border border-gray-200 bg-white hover:border-[var(--accent)] hover:bg-blue-50 transition-all text-left"
                               >
                                   <div
-                                    className={`w-full rounded mb-2 overflow-hidden flex items-center justify-center border border-gray-100 shadow-sm transition-colors relative ${
+                                    className={`w-full rounded mb-1 overflow-hidden flex items-center justify-center border border-gray-100 shadow-sm transition-colors relative ${
                                       option.category === 'Marquee'
                                         ? 'bg-slate-50 group-hover:bg-slate-100'
                                         : 'bg-white group-hover:bg-blue-50'
                                     }`}
                                     style={{
-                                      aspectRatio: `${Math.max(1, option.width || 1200)} / ${Math.max(1, option.height || 900)}`,
-                                      minHeight: 58
+                                      aspectRatio: `1 / ${Math.min(1, (option.height || 900) / Math.max(1, option.width || 1200))}`,
+                                      minHeight: 40,
+                                      maxHeight: 56,
                                     }}
                                   >
                                     {option.category === 'Marquee' ? (
@@ -4117,8 +4118,8 @@ export default function AiTrigger() {
                                     />
                                   )}
                                 </div>
-                                <span className="text-[9px] font-bold text-slate-700 line-clamp-1 w-full">{option.name}</span>
-                                <span className="text-[8px] text-slate-400 uppercase tracking-widest w-full font-bold">{option.category}</span>
+                                <span className="text-[8px] font-bold text-slate-700 line-clamp-1 w-full">{option.name}</span>
+                                <span className="text-[7px] text-slate-400 uppercase tracking-widest w-full font-bold">{option.category}</span>
                               </button>
                             ))}
                           </div>
