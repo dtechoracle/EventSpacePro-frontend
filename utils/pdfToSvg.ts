@@ -321,25 +321,69 @@ function buildPath(pb: PathBuilder): string {
 }
 
 function getBoundingBox(pb: PathBuilder): { x: number; y: number; width: number; height: number } {
-  const points: [number, number][] = [];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+  function addPoint(x: number, y: number) {
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+
+  let cx = 0, cy = 0, sx = 0, sy = 0;
   for (const seg of pb.segments) {
     const parts = seg.split(/\s+/);
-    if (parts[0] === 'M' || parts[0] === 'L') {
-      points.push([parseFloat(parts[1]), parseFloat(parts[2])]);
-    } else if (parts[0] === 'C') {
-      points.push([parseFloat(parts[1]), parseFloat(parts[2])]);
-      points.push([parseFloat(parts[3]), parseFloat(parts[4])]);
-      points.push([parseFloat(parts[5]), parseFloat(parts[6])]);
+    const cmd = parts[0];
+    if (cmd === 'M') {
+      cx = parseFloat(parts[1]); cy = parseFloat(parts[2]);
+      sx = cx; sy = cy;
+      addPoint(cx, cy);
+    } else if (cmd === 'L') {
+      cx = parseFloat(parts[1]); cy = parseFloat(parts[2]);
+      addPoint(cx, cy);
+    } else if (cmd === 'C') {
+      const x1 = parseFloat(parts[1]), y1 = parseFloat(parts[2]);
+      const x2 = parseFloat(parts[3]), y2 = parseFloat(parts[4]);
+      const x3 = parseFloat(parts[5]), y3 = parseFloat(parts[6]);
+      // Compute actual cubic Bezier bounding box via extrema
+      function bezierEval(t: number, p0: number, p1: number, p2: number, p3: number): number {
+        const s = 1 - t;
+        return s*s*s*p0 + 3*s*s*t*p1 + 3*s*t*t*p2 + t*t*t*p3;
+      }
+      function findRoots(p0: number, p1: number, p2: number, p3: number): number[] {
+        const a = -3*p0 + 9*p1 - 9*p2 + 3*p3;
+        const b = 6*p0 - 12*p1 + 6*p2;
+        const c = -3*p0 + 3*p1;
+        const roots: number[] = [];
+        if (Math.abs(a) < 1e-10) {
+          if (Math.abs(b) >= 1e-10) {
+            const t = -c / b;
+            if (t > 0 && t < 1) roots.push(t);
+          }
+        } else {
+          const disc = b*b - 4*a*c;
+          if (disc >= 0) {
+            const sq = Math.sqrt(disc);
+            for (const t of [(-b+sq)/(2*a), (-b-sq)/(2*a)]) {
+              if (t > 0 && t < 1) roots.push(t);
+            }
+          }
+        }
+        return roots;
+      }
+      const tSet = new Set<number>(findRoots(cx,x1,x2,x3).concat(findRoots(cy,y1,y2,y3)));
+      for (const t of tSet) {
+        addPoint(bezierEval(t,cx,x1,x2,x3), bezierEval(t,cy,y1,y2,y3));
+      }
+      addPoint(x3, y3);
+      cx = x3; cy = y3;
+    } else if (cmd === 'Z') {
+      cx = sx; cy = sy;
+      addPoint(cx, cy);
     }
   }
-  if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const [x, y] of points) {
-    minX = Math.min(minX, x);
-    minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x);
-    maxY = Math.max(maxY, y);
-  }
+
+  if (minX === Infinity) return { x: 0, y: 0, width: 0, height: 0 };
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
@@ -590,7 +634,7 @@ export async function extractPdfElements(
       case OPS.closeEOFillStroke:
         if (currentPath && currentPath.segments.length > 0) {
           const svgPath = buildPath(currentPath);
-          const bb = getBoundingBox(currentPath);
+          const bb = computePathBBox(svgPath);
           const decomposed = decomposeMatrix(ctm);
 
           const isStroke = fn === OPS.stroke || fn === OPS.closeStroke || fn === OPS.fillStroke || fn === OPS.eoFillStroke || fn === OPS.closeFillStroke || fn === OPS.closeEOFillStroke;
@@ -991,9 +1035,16 @@ export function toWorkspaceItems(
       // For path shapes, offset svgPath coordinates to be relative to shape center
       // because ShapeRenderer uses translate(x,y) then draws path at local coords
       let svgPath = el.svgPath;
+      let shapeWidth = el.width;
+      let shapeHeight = el.height;
       if (el.shapeType === 'path' && svgPath) {
         const offsetMatrix = new DOMMatrix([1, 0, 0, 1, -el.x, -el.y]);
         svgPath = transformPathD(svgPath, offsetMatrix);
+        const bbox = computePathBBox(svgPath);
+        if (bbox.width > 0 && bbox.height > 0) {
+          shapeWidth = bbox.width;
+          shapeHeight = bbox.height;
+        }
       }
       shapes.push({
         id: `pdf-shape-${now}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1001,8 +1052,8 @@ export function toWorkspaceItems(
         type: el.shapeType === 'rectangle' ? 'rectangle' : el.shapeType === 'ellipse' ? 'ellipse' : 'path',
         x: el.x + offsetX,
         y: el.y + offsetY,
-        width: el.width,
-        height: el.height,
+        width: shapeWidth,
+        height: shapeHeight,
         rotation: el.rotation,
         svgPath,
         fill: el.fill || 'none',
@@ -1056,32 +1107,42 @@ export function mergePdfElements(
     return { shapes: [], textAnnotations };
   }
 
-  // Compute overall bounding box across all path elements
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  // Step 1: Combine all paths WITHOUT any offset, in their original coordinates.
+  const rawParts: string[] = [];
   for (const el of pathElements) {
-    const halfW = el.width / 2;
-    const halfH = el.height / 2;
-    minX = Math.min(minX, el.x - halfW);
-    minY = Math.min(minY, el.y - halfH);
-    maxX = Math.max(maxX, el.x + halfW);
-    maxY = Math.max(maxY, el.y + halfH);
+    if (!el.svgPath) continue;
+    rawParts.push(el.svgPath);
+  }
+  const rawCombined = rawParts.join(' ');
+
+  // Step 2: Get the ACTUAL bounding box of the raw combined path using the browser's
+  // native SVG getBBox. This is pixel-perfect — no approximation from individual elements.
+  let actualBBox = computePathBBox(rawCombined);
+  if ((actualBBox.width < 0.5 && actualBBox.height < 0.5) && rawParts.length > 0) {
+    // Fallback: compute from individual elements
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const el of pathElements) {
+      minX = Math.min(minX, el.x - el.width / 2);
+      minY = Math.min(minY, el.y - el.height / 2);
+      maxX = Math.max(maxX, el.x + el.width / 2);
+      maxY = Math.max(maxY, el.y + el.height / 2);
+    }
+    actualBBox = { x: minX, y: minY, width: maxX - minX || pageWidth, height: maxY - minY || pageHeight };
   }
 
-  const overallWidth = maxX - minX || pageWidth;
-  const overallHeight = maxY - minY || pageHeight;
-  const centerX = minX + overallWidth / 2;
-  const centerY = minY + overallHeight / 2;
+  // Step 3: The center of the actual bounding box is where the shape should be placed.
+  // ShapeRenderer does translate(shape.x, shape.y) then draws path at local coords,
+  // so the path must be offset by (-centerX, -centerY) to be centered at (0,0).
+  const centerX = actualBBox.x + actualBBox.width / 2;
+  const centerY = actualBBox.y + actualBBox.height / 2;
 
-  // Combine all paths into one SVG path, offset so (0,0) = center of bounding box
-  // ShapeRenderer translates to (shape.x, shape.y) then draws path, so path must be
-  // centered at origin to match the selection bounding box (which is centered at shape.x/y).
+  // Step 4: Offset all paths so they are centered at (0,0)
+  const offsetMatrix = new DOMMatrix([1, 0, 0, 1, -centerX, -centerY]);
   const combinedParts: string[] = [];
   for (const el of pathElements) {
     if (!el.svgPath) continue;
-    const offsetMatrix = new DOMMatrix([1, 0, 0, 1, -centerX, -centerY]);
     combinedParts.push(transformPathD(el.svgPath, offsetMatrix));
   }
-
   const combinedSvgPath = combinedParts.join(' ');
 
   // Use the dominant stroke color
@@ -1102,8 +1163,8 @@ export function mergePdfElements(
     type: 'path' as const,
     x: centerX,
     y: centerY,
-    width: overallWidth,
-    height: overallHeight,
+    width: actualBBox.width,
+    height: actualBBox.height,
     rotation: 0,
     svgPath: combinedSvgPath,
     fill: 'none',

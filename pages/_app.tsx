@@ -93,7 +93,13 @@ export default function App({ Component, pageProps }: AppProps) {
     <QueryClientProvider client={queryClient}>
       <div className={instrumentSans.className}>
         {loading && <Preloader />}
-        <Toaster position="top-right" reverseOrder={false} />
+        <Toaster
+          position="top-center"
+          reverseOrder={false}
+          toastOptions={{
+            style: { marginTop: '80px' },
+          }}
+        />
         <Component {...pageProps} />
       </div>
     </QueryClientProvider>

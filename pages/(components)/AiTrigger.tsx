@@ -14,6 +14,8 @@ import { ASSET_LIBRARY, compareAssetsForDisplay } from "@/lib/assets";
 import { texturePatterns } from "@/utils/texturePatterns";
 import { DEFAULT_ASSET_STROKE_WIDTH } from "@/utils/assetRenderMode";
 import { isKnownMissingSvg, validateSvgPath } from "@/components/tools/InlineSvg";
+import { EVENTSPACE_TOOLS } from "@/lib/aiTools";
+import { executeToolCalls, type ToolCall } from "@/lib/aiToolExecutor";
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -3406,6 +3408,104 @@ export default function AiTrigger() {
     setInputValue("");
   };
 
+  // ── AI Operator: Tool-calling loop ──────────────────────────────────────────
+  // Sends the user's message to the operator endpoint. DeepSeek may respond with
+  // tool_calls which we execute locally, then send results back, repeating until
+  // the AI returns a final text response or we hit the max iteration limit.
+  const runOperatorLoop = async (userPrompt: string): Promise<{ handled: boolean }> => {
+    const MAX_STEPS = 15;
+
+    // Build conversation messages for the operator
+    const conversationMessages: any[] = [
+      { role: 'user', content: userPrompt },
+    ];
+
+    let step = 0;
+    let finalContent = '';
+
+    while (step < MAX_STEPS) {
+      const res = await fetch('/api/ai/operator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: conversationMessages,
+          tools: EVENTSPACE_TOOLS,
+          step,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`Operator API error: ${res.status}`);
+      const data = await res.json();
+
+      if (data.type === 'tool_calls' && data.tool_calls?.length > 0) {
+        // Show progress message
+        const toolNames = data.tool_calls.map((tc: any) => tc.function?.name).filter(Boolean);
+        const progressMsg = getToolProgressMessage(toolNames, step);
+        if (progressMsg) {
+          setMessages((m: any) => {
+            const lastMsg = m[m.length - 1];
+            // Update existing progress message or add new one
+            if (lastMsg?.role === 'assistant' && lastMsg?.isProgress) {
+              return [...m.slice(0, -1), { role: 'assistant', content: progressMsg, isProgress: true }];
+            }
+            return [...m, { role: 'assistant', content: progressMsg, isProgress: true }];
+          });
+        }
+
+        // Execute tools locally
+        const toolResults = executeToolCalls(data.tool_calls);
+
+        // Add assistant message with tool_calls to conversation history
+        conversationMessages.push({
+          role: 'assistant',
+          content: data.content || null,
+          tool_calls: data.tool_calls,
+        });
+
+        // Add tool results to conversation history
+        for (const tr of toolResults) {
+          conversationMessages.push({
+            role: 'tool',
+            tool_call_id: tr.tool_call_id,
+            content: tr.content,
+          });
+        }
+
+        step++;
+      } else {
+        // Final text response from DeepSeek
+        finalContent = data.content || 'Done.';
+        step++;
+        break;
+      }
+    }
+
+    if (!finalContent) finalContent = 'Done.';
+
+    // Remove progress messages and add final response
+    setMessages((m: any) => {
+      const withoutProgress = m.filter((msg: any) => !msg.isProgress);
+      return [...withoutProgress, { role: 'assistant', content: finalContent }];
+    });
+
+    return { handled: true };
+  };
+
+  function getToolProgressMessage(toolNames: string[], step: number): string {
+    if (toolNames.includes('get_current_layout')) return 'Checking current layout...';
+    if (toolNames.includes('arrange_tables')) return 'Arranging tables...';
+    if (toolNames.includes('add_table')) return 'Adding tables...';
+    if (toolNames.includes('add_stage')) return 'Adding stage...';
+    if (toolNames.includes('add_marquee')) return 'Adding marquee...';
+    if (toolNames.includes('add_asset')) return 'Adding elements...';
+    if (toolNames.includes('create_room')) return 'Creating room...';
+    if (toolNames.includes('add_shape')) return 'Adding shapes...';
+    if (toolNames.includes('update_element')) return 'Updating elements...';
+    if (toolNames.includes('remove_element')) return 'Removing elements...';
+    if (toolNames.includes('clear_layout')) return 'Clearing layout...';
+    return 'Working...';
+  }
+
     const handleSubmit = async (overridePrompt?: string) => {
       if (!inputValue.trim() && !overridePrompt) return;
       const prompt = overridePrompt || inputValue.trim();
@@ -3418,6 +3518,18 @@ export default function AiTrigger() {
       }
       setMessages((m: any) => [...m, { role: 'user', content: prompt }]);
       setIsLoading(true);
+
+    // ── AI OPERATOR: Try tool-calling loop first ──────────────────────────────
+    try {
+      const operatorResult = await runOperatorLoop(prompt);
+      if (operatorResult.handled) {
+        setIsLoading(false);
+        return;
+      }
+    } catch (opErr) {
+      console.log('[AI-Operator] Falling back to plan endpoint:', opErr);
+      // Fall through to existing plan endpoint
+    }
 
     const selectedAssets = getCurrentSelectedAssets();
 
