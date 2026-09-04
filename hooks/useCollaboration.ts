@@ -416,30 +416,14 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
 
         const appliedRoomSnapshot = syncVisibleStoreFromYDoc();
 
-        if (!appliedRoomSnapshot && storeItems > 0 && yShapes.size === 0 && yAssets.size === 0 && yWalls.size === 0) {
-          console.log("[Collaboration] Step 4: Server Yjs empty, pushing store → Ydoc");
-          ydoc.transact(() => {
-            storeBefore.shapes.forEach(s => yShapes.set(s.id, JSON.parse(JSON.stringify(s))));
-            storeBefore.assets.forEach(a => yAssets.set(a.id, JSON.parse(JSON.stringify(a))));
-            storeBefore.walls.forEach(w => yWalls.set(w.id, JSON.parse(JSON.stringify(w))));
-            storeBefore.textAnnotations.forEach(t => yAnnotations.set(t.id, JSON.parse(JSON.stringify(t))));
-            storeBefore.dimensions.forEach(d => yDimensions.set(d.id, JSON.parse(JSON.stringify(d))));
-            storeBefore.labelArrows.forEach(l => yArrows.set(l.id, JSON.parse(JSON.stringify(l))));
-            storeBefore.groups.forEach(g => yGroups.set(g.id, JSON.parse(JSON.stringify(g))));
-            storeBefore.wallSegments.forEach(s => yWallSegments.set(s.id, JSON.parse(JSON.stringify(s))));
-            storeBefore.comments.forEach(c => yComments.set(c.id, JSON.parse(JSON.stringify(c))));
-            if (storeBefore.canvas) yCanvas.set("config", JSON.parse(JSON.stringify(storeBefore.canvas)));
-          }, "local-sync");
-          console.log("[Collaboration] Step 4: Pushed store → Ydoc. Ydoc shapes:", yShapes.size, "assets:", yAssets.size, "walls:", yWalls.size);
-          return;
-        }
-
         if (appliedRoomSnapshot) {
           console.log("[Collaboration] Step 4: Applied server Yjs snapshot to visible store");
         } else if (storeItems === 0 && (yShapes.size > 0 || yAssets.size > 0 || yWalls.size > 0)) {
           console.log("[Collaboration] Step 4: Zustand empty, server has data — applied yjs-sync");
         } else if (storeItems > 0) {
-          console.log("[Collaboration] Step 4: Both store and server have data — applied yjs-sync (server wins)");
+          console.log("[Collaboration] Step 4: Both store and server have data — server wins via yjs-sync");
+        } else {
+          console.log("[Collaboration] Step 4: Both store and server empty — nothing to sync");
         }
       }
     };
@@ -453,46 +437,6 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       setCollaborationError(null);
       console.log("[Collaboration] Step 4: hasJoined = true — safe to emit");
       applyRemoteYUpdate(payload, true);
-
-      // Push any store data that isn't in the Ydoc yet
-      if (!isInitializedRef.current) {
-        isInitializedRef.current = true;
-        const store = useProjectStore.getState();
-        const storeItems = store.shapes.length + store.assets.length + store.walls.length +
-          store.textAnnotations.length + store.dimensions.length + store.labelArrows.length +
-          store.groups.length + store.wallSegments.length;
-        if (storeItems > 0 && yShapes.size === 0 && yAssets.size === 0 && yWalls.size === 0) {
-          console.log("[Collaboration] Step 4: Post-join sync: pushing store → Ydoc (store has", storeItems, "items)");
-          ydoc.transact(() => {
-            store.shapes.forEach(s => yShapes.set(s.id, JSON.parse(JSON.stringify(s))));
-            store.assets.forEach(a => yAssets.set(a.id, JSON.parse(JSON.stringify(a))));
-            store.walls.forEach(w => yWalls.set(w.id, JSON.parse(JSON.stringify(w))));
-            store.textAnnotations.forEach(t => yAnnotations.set(t.id, JSON.parse(JSON.stringify(t))));
-            store.dimensions.forEach(d => yDimensions.set(d.id, JSON.parse(JSON.stringify(d))));
-            store.labelArrows.forEach(l => yArrows.set(l.id, JSON.parse(JSON.stringify(l))));
-            store.groups.forEach(g => yGroups.set(g.id, JSON.parse(JSON.stringify(g))));
-            store.wallSegments.forEach(s => yWallSegments.set(s.id, JSON.parse(JSON.stringify(s))));
-          }, "local-sync");
-        }
-      }
-
-      // ─── Replay this client's whole document into the room ───
-      // Throttled to avoid re-encoding a huge doc on every reconnect.
-      const now = Date.now();
-      const lastReplay = (ydoc as any).__lastReplayAt || 0;
-      const shouldReplay = now - lastReplay > 5000;
-      if (shouldReplay) {
-        (ydoc as any).__lastReplayAt = now;
-        const localState = Y.encodeStateAsUpdate(ydoc);
-        const targetRoomId = roomIdRef.current;
-        if (targetRoomId && socket.connected && localState.byteLength > 2) {
-          socket.emit("yjs-update", {
-            roomId: targetRoomId,
-            update: Array.from(localState),
-            userId: currentUserIdRef.current,
-          });
-        }
-      }
 
       // Flush any updates that were buffered while waiting for join
       flushPendingUpdates();
@@ -1125,6 +1069,18 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     socket.on("collaboration-error", (payload: any) => {
       console.error("[Collaboration] collaboration-error:", payload);
       const message = String(payload?.message || payload?.error || "Collaboration sync failed");
+
+      // "Busy syncing" means the backend Redis lock was held by the flush
+      // worker. This is transient and self-resolving — the flush will release
+      // the lock within seconds. Silently resend our state without showing
+      // an error banner, since the user can't do anything about it and the
+      // error would just cause confusion.
+      if (/busy syncing/i.test(message)) {
+        console.warn("[Collaboration] Room lock busy; resending state silently");
+        scheduleFullStateResend();
+        return;
+      }
+
       setCollaborationError(message);
 
       // The server is the authority on roles. If it refuses an edit because we
