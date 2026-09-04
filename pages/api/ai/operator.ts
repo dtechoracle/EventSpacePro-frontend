@@ -2,25 +2,35 @@
  * EventSpacePro AI Operator — Server-Side Endpoint
  *
  * Implements the tool-calling loop:
- * 1. User message → DeepSeek (with tools)
- * 2. DeepSeek returns tool_calls → send to client
+ * 1. User message → LLM (with tools)
+ * 2. LLM returns tool_calls → send to client
  * 3. Client executes tools → sends results back
- * 4. DeepSeek with tool results → next response
- * 5. Repeat until DeepSeek returns text only (or max iterations)
+ * 4. LLM with tool results → next response
+ * 5. Repeat until LLM returns text only (or max iterations)
  */
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { OPERATOR_SYSTEM_PROMPT } from '@/lib/aiTools';
 
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const MAX_AGENT_STEPS = 15;
 
 type IncomingMessage = { role: 'user' | 'assistant' | 'tool'; content?: string; tool_calls?: any[]; tool_call_id?: string };
 
+async function callLLM(apiKey: string, apiUrl: string, model: string, requestBody: any) {
+  return fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(requestBody),
+  });
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!DEEPSEEK_API_KEY) return res.status(500).json({ error: 'DEEPSEEK_API_KEY not configured' });
 
   try {
     const { messages, tools, step = 0 } = req.body as {
@@ -33,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'messages array is required' });
     }
 
-    // Build the request for DeepSeek
+    // Build the request for the LLM
     const apiMessages: any[] = [
       { role: 'system', content: OPERATOR_SYSTEM_PROMPT },
       ...messages.map(m => {
@@ -48,7 +58,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ];
 
     const requestBody: any = {
-      model: 'deepseek-chat',
       messages: apiMessages,
       temperature: 0.1,
       max_tokens: 4096,
@@ -60,26 +69,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       requestBody.tool_choice = 'auto';
     }
 
-    const response = await fetch(DEEPSEEK_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
+    // Try DeepSeek first, fall back to OpenAI
+    let response: Response | null = null;
+    let lastError = '';
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('[AI-Operator] DeepSeek error:', response.status, errText);
-      return res.status(response.status).json({ error: `DeepSeek API error: ${response.status}` });
+    if (DEEPSEEK_API_KEY) {
+      requestBody.model = 'deepseek-chat';
+      response = await callLLM(DEEPSEEK_API_KEY, 'https://api.deepseek.com/v1/chat/completions', 'deepseek-chat', requestBody);
+      if (!response.ok) {
+        lastError = `DeepSeek ${response.status}`;
+        console.log(`[AI-Operator] DeepSeek failed (${response.status}), trying OpenAI...`);
+        response = null;
+      }
+    }
+
+    if (!response && OPENAI_API_KEY) {
+      requestBody.model = 'gpt-4o';
+      response = await callLLM(OPENAI_API_KEY, 'https://api.openai.com/v1/chat/completions', 'gpt-4o', requestBody);
+      if (!response.ok) {
+        lastError += ` | OpenAI ${response.status}`;
+        console.error(`[AI-Operator] OpenAI also failed: ${response.status}`);
+        response = null;
+      }
+    }
+
+    if (!response) {
+      return res.status(502).json({ error: `All LLM providers failed: ${lastError || 'no API keys configured'}` });
     }
 
     const data = await response.json();
     const choice = data.choices?.[0];
 
     if (!choice) {
-      return res.status(500).json({ error: 'No response from DeepSeek' });
+      return res.status(500).json({ error: 'No response from LLM' });
     }
 
     const message = choice.message;
