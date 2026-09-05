@@ -2070,7 +2070,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                               className="sidebar-input w-16 text-center"
                               min={0}
                               max={Math.min((selectedItem as any).width, (selectedItem as any).height) / 2}
-                              step={10}
+step={1}
                             />
                           </div>
                           <span className="text-[10px] text-gray-400 italic text-right">Max: {Math.floor(Math.min((selectedItem as any).width, (selectedItem as any).height) / 2)}mm</span>
