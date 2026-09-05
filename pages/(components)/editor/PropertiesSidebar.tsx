@@ -2675,14 +2675,17 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       <span className="text-gray-500">Font Size</span>
                       <input
                         type="number"
-                        value={selectedLabelArrow.fontSize || 14}
+                        value={selectedLabelArrow.fontSize || 120}
                         onChange={(e) => {
                           const val = Number(e.target.value);
-                          updateLabelArrow(selectedLabelArrow.id, { fontSize: Math.max(8, val) });
+                          if (!isNaN(val)) {
+                            updateLabelArrow(selectedLabelArrow.id, { fontSize: Math.min(500, Math.max(8, val)) });
+                          }
                         }}
                         className="sidebar-input w-16 text-center"
                         min={8}
                         max={500}
+                        step={10}
                       />
                     </div>
 
