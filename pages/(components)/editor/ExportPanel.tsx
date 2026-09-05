@@ -505,6 +505,38 @@ export default function ExportPanel() {
     // an <img> from a blob URL cannot render external <image> references, so these
     // would appear blank (and would double-draw over the manually rendered assets).
     clone.querySelectorAll('image[href*="/assets/raster/"], image[xlink\\:href*="/assets/raster/"]').forEach((node) => node.remove());
+
+    // ─── Embed external <image> references as base64 data URLs ───
+    // When the SVG is serialized to a blob and loaded as an <img>, external
+    // resource paths (like /assets/textures/Grass 01.png) fail to resolve.
+    // We fetch each image, convert to base64, and inline it so textures
+    // render correctly in the exported PNG/PDF.
+    const imageElements = clone.querySelectorAll('image');
+    const base64Cache = new Map<string, string>();
+    await Promise.all(Array.from(imageElements).map(async (imgEl) => {
+      const href = imgEl.getAttribute('href') || imgEl.getAttribute('xlink:href') || '';
+      if (!href || href.startsWith('data:') || href.startsWith('blob:')) return;
+      if (!href.includes('/assets/') && !href.includes('texture') && !href.includes('raster')) return;
+      try {
+        let base64 = base64Cache.get(href);
+        if (!base64) {
+          const resp = await fetch(href);
+          if (!resp.ok) return;
+          const imageBlob = await resp.blob();
+          base64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(imageBlob);
+          });
+          base64Cache.set(href, base64);
+        }
+        imgEl.setAttribute('href', base64);
+        if (imgEl.hasAttribute('xlink:href')) imgEl.setAttribute('xlink:href', base64);
+      } catch {
+        // If fetch fails, leave the element — it will just be invisible
+      }
+    }));
+
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     clone.setAttribute('width', `${screenWidth}`);
     clone.setAttribute('height', `${screenHeight}`);
