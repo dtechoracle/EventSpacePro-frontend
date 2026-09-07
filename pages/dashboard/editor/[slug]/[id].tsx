@@ -1382,7 +1382,10 @@ export default function Editor() {
 
   const writeLocalWorkspaceDraft = useCallback(() => {
     if (typeof window === "undefined" || !id || !slug || typeof id !== "string" || typeof slug !== "string") return;
-    if (isCollabAuthoritative(id)) return;
+    // NOTE: This intentionally does NOT check isCollabAuthoritative.
+    // The draft is a safety net for unsaved local changes (e.g. before a
+    // reload). Skipping it when collab is active means local edits are lost
+    // on page refresh — the user sees the DB state instead of their work.
 
     try {
       const projectState = useProjectStore.getState();
@@ -2529,10 +2532,10 @@ export default function Editor() {
 
     const draftKey = getLocalDraftKey(slug, id);
     if (restoredLocalDraftRef.current === draftKey) return;
-    if (isCollabAuthoritative(id)) {
-      restoredLocalDraftRef.current = draftKey;
-      return;
-    }
+    // NOTE: Do NOT skip when isCollabAuthoritative is true. The draft may
+    // contain unsaved local changes that the user made before reloading.
+    // The collab room will overwrite the store when yjs-sync arrives, but
+    // the draft gives the user immediate feedback that their work existed.
 
     try {
       const raw = window.localStorage.getItem(draftKey);
@@ -2593,10 +2596,6 @@ export default function Editor() {
   // Fast local draft checkpoint for crash / shutdown recovery
   useEffect(() => {
     if (!currentEventData || !id || !slug || typeof id !== "string" || typeof slug !== "string") return;
-    if (isCollabAuthoritative(id)) {
-      clearLocalWorkspaceDraft();
-      return;
-    }
 
     const hasAnyUnsavedChanges = projectHasUnsavedChanges || hasUnsavedChanges;
     if (!hasAnyUnsavedChanges) {
