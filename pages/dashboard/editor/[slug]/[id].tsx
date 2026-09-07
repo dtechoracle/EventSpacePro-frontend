@@ -1730,9 +1730,15 @@ export default function Editor() {
         const isDifferentEvent = !currentId || currentId !== eventId;
 
         if (isDifferentEvent) {
-          console.log(`[Editor] Clearing workspace before loading event ${eventId}`);
-          projectStore.reset();
-          projectStore.clearWorkspace();
+          // If the collab room has already synced (isCollabAuthoritative), the
+          // Yjs room data is the source of truth. Do NOT reset() here — it
+          // would empty the store that yjs-sync just populated, creating a
+          // window where saveEvent or flushLocalChanges could wipe the DB.
+          if (!isCollabAuthoritative(eventId)) {
+            console.log(`[Editor] Clearing workspace before loading event ${eventId}`);
+            projectStore.reset();
+            projectStore.clearWorkspace();
+          }
           projectStore.setProjectName(eventData.name);
         }
 

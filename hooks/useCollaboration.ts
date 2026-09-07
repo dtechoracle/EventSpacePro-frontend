@@ -676,14 +676,21 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       const state = pendingLocalState;
 
       if (isRemoteUpdating.current) {
-        // Don't discard the pending state — flag it so flushRemoteUpdates
-        // can retry the flush after the remote batch is applied. Previous
-        // behavior stored lastKnownState and returned, which meant local
-        // deletes and moves were silently lost when a remote update arrived
-        // before the local flush could run.
         pendingHeldLocalFlush = true;
         return;
       }
+
+      // Don't flush to Yjs when there are no actual local changes. The
+      // subscription fires on every setState (including DB hydration and
+      // yjs-sync), but those aren't user edits — they're the store being
+      // loaded. Flushing them would overwrite the Yjs room with potentially
+      // stale DB data, deleting items that collaborators added since the
+      // last DB save.
+      if (!useProjectStore.getState().hasUnsavedChanges) {
+        lastKnownState = state;
+        return;
+      }
+
       const previousState = lastKnownState;
       lastKnownState = state;
 

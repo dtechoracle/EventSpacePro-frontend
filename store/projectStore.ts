@@ -1726,11 +1726,20 @@ export const useProjectStore = create<ProjectState>()(
                         eventName: eventName,
                         type: eventType,
                         canvases: canvases,
-                        comments: eventComments,
                     };
                     if (!collabOwnsCanvas) {
-                        payload.canvasAssets = canvasAssets;
-                        payload.canvasData = canvasData;
+                        // SAFETY: Never send empty canvas data to the DB.
+                        // A save that fires before the store is hydrated (e.g.
+                        // during page reload) would overwrite a populated DB
+                        // with empty arrays, permanently losing all data.
+                        const hasCanvasContent = canvasAssets.length > 0 ||
+                            walls.length > 0 || shapes.length > 0 || assets.length > 0;
+                        if (hasCanvasContent) {
+                            payload.canvasAssets = canvasAssets;
+                            payload.canvasData = canvasData;
+                        } else {
+                            console.warn('[projectStore] Skipping canvas save — store is empty, preserving DB data');
+                        }
                     }
 
                     console.log(`[projectStore] Saving to DATABASE via PUT /projects/${slug}/events/${eventId}:`, {
