@@ -17,6 +17,7 @@ const WORKSPACE_STROKE_RATIO = 0.009;
 const INPUT_DIRS = [
   path.join(PUBLIC_DIR, 'assets', 'modal'),
   path.join(PUBLIC_DIR, 'Marquees'),
+  path.join(PUBLIC_DIR, 'assets', 'preloaded-venues'),
 ];
 
 function readSvgSize(svgText) {
@@ -127,8 +128,12 @@ async function main() {
 
   let converted = 0;
   for (const svgPath of inputFiles) {
-    await convertSvg(svgPath);
-    converted += 1;
+    try {
+      await convertSvg(svgPath);
+      converted += 1;
+    } catch (err) {
+      console.error(`Skipped ${path.basename(svgPath)}:`, err.message);
+    }
   }
 
   console.log(`Generated ${converted} WebP asset rasters in ${path.relative(ROOT, OUTPUT_ROOT)}`);

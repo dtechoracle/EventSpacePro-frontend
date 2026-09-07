@@ -647,24 +647,6 @@ const SelectionHighlightLayer = React.memo(({
             {item._renderType === 'wall' && (
               <WallRenderer key={`highlight-${getWallRenderKey(item)}`} wall={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
             )}
-            
-            {/* Premium Vertex Visualization */}
-            {(isSelected || isHovered) && vertices.length > 0 && (
-              <g className="vertex-anchors pointer-events-none">
-                {vertices.filter((v: any) => Number.isFinite(v?.x) && Number.isFinite(v?.y)).map((v, i) => (
-                  <circle
-                    key={`v-${item.id}-${i}`}
-                    cx={v.x}
-                    cy={v.y}
-                    r={i % 5 === 0 ? 5 / zoom : 4 / zoom}
-                    fill={i % 5 === 0 ? "#3b82f6" : "#22c55e"}
-                    stroke="white"
-                    strokeWidth={1 / zoom}
-                    style={{ filter: 'drop-shadow(0 0 2px rgba(0, 0, 0, 0.35))' }}
-                  />
-                ))}
-              </g>
-            )}
           </React.Fragment>
         );
       })}

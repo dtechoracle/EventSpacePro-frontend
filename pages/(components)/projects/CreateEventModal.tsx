@@ -13,6 +13,7 @@ import { MARQUEES } from "@/lib/marquees";
 import { PRELOADED_VENUES, PreloadedVenueDef } from "@/lib/preloadedVenues";
 import { STANDALONE_SLUG } from "@/lib/standaloneEvent";
 import InlineSvg from "@/components/tools/InlineSvg";
+import VenueThumbnail from "@/components/dashboard/VenueThumbnail";
 import { FaUserPlus, FaChevronDown, FaPlus, FaMapMarkerAlt } from "react-icons/fa";
 import { BsStars } from "react-icons/bs";
 
@@ -827,11 +828,10 @@ export default function CreateEventModal({
                     >
                       <div className="w-full aspect-video bg-white rounded-xl border border-gray-100 overflow-hidden flex items-center justify-center p-3 group-hover:shadow-sm transition-all relative">
                         <div className="w-full h-full p-2 flex items-center justify-center">
-                          <InlineSvg
+                          <VenueThumbnail
                             src={venue.path}
                             stroke="#272235"
-                            strokeWidth={2}
-                            fill="none"
+                            strokeWidth={1.5}
                           />
                         </div>
                         <button

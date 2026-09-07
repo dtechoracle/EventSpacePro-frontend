@@ -441,7 +441,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         if (canUseFastImage) return null;
         if (!rawSvgContent || typeof window === 'undefined' || !definition?.path) return null;
 
-        const cacheKey = `${definition.path}_workspace_v48_content_bounds_normalized`;
+        const cacheKey = `${definition.path}_workspace_v50_cleaned`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
@@ -533,18 +533,32 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             // If we only set fill on the outer <svg>, that inner group blocks the fill,
             // so circles / auto-fill paths still render as unfilled.
             // Remove inherited fill/stroke blockers from containers only.
+            const isVenueAsset = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
+
+            // For venue assets, remove the baked-in optimize-venues style that forces
+            // uniform stroke-width on all elements — we want to preserve per-element strokes.
+            if (isVenueAsset) {
+                const bakedStyle = doc.getElementById('preloaded-venue-style');
+                if (bakedStyle) bakedStyle.remove();
+            }
+
             doc.querySelectorAll("svg, g").forEach(container => {
                 container.removeAttribute("fill");
                 container.removeAttribute("stroke");
-                container.removeAttribute("stroke-width");
+                // Preserve per-element stroke-width for venue assets so different
+                // architectural layers (walls, doors, stairs) keep their distinct widths.
+                if (!isVenueAsset) {
+                    container.removeAttribute("stroke-width");
+                }
 
                 const styleAttr = container.getAttribute("style");
                 if (styleAttr) {
-                    const cleaned = styleAttr
+                    let cleaned = styleAttr
                         .replace(/fill\s*:[^;]+;?/gi, "")
-                        .replace(/stroke\s*:[^;]+;?/gi, "")
-                        .replace(/stroke-width\s*:[^;]+;?/gi, "");
-
+                        .replace(/stroke\s*:[^;]+;?/gi, "");
+                    if (!isVenueAsset) {
+                        cleaned = cleaned.replace(/stroke-width\s*:[^;]+;?/gi, "");
+                    }
                     if (cleaned.trim()) container.setAttribute("style", cleaned);
                     else container.removeAttribute("style");
                 }
@@ -557,8 +571,9 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
                 styleEl.setAttribute("id", styleId);
                 const isLayoutAsset = definition?.category === "Layout";
-                const vectorEffectRule = isLayoutAsset ? "" : "svg path, svg circle, svg rect, svg line, svg polyline, svg ellipse { vector-effect: non-scaling-stroke !important; }";
-                styleEl.textContent = `${vectorEffectRule} svg .fill-none-el { fill: none !important; stroke: inherit !important; stroke-width: inherit !important; } svg .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } svg .auto-fill-el { fill: inherit !important; stroke: none !important; } svg .stroke-top-layer { pointer-events: none; } svg .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } svg .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } svg .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } svg .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
+                const vectorEffectRule = isLayoutAsset ? "" : isVenueAsset ? "" : "svg path, svg circle, svg rect, svg line, svg polyline, svg ellipse { vector-effect: non-scaling-stroke !important; }";
+                const strokeWidthInheritRule = isVenueAsset ? "" : "stroke-width: inherit !important;";
+                styleEl.textContent = `${vectorEffectRule} svg .fill-none-el { fill: none !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .fill-inherit-el { fill: inherit !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .auto-fill-el { fill: inherit !important; stroke: none !important; } svg .stroke-top-layer { pointer-events: none; } svg .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } svg .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
                 svg.prepend(styleEl);
             }
 
@@ -677,9 +692,12 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 }
 
                 if (styleAttr) {
-                    const cleaned = shouldBeNone
-                        ? styleAttr.replace(/fill\s*:[^;]+;?/gi, "").replace(/stroke\s*:[^;]+;?/gi, "").replace(/stroke-width\s*:[^;]+;?/gi, "")
-                        : styleAttr.replace(/fill\s*:[^;]+;?/gi, "").replace(/stroke\s*:[^;]+;?/gi, "").replace(/stroke-width\s*:[^;]+;?/gi, "");
+                    let cleaned = styleAttr
+                        .replace(/fill\s*:[^;]+;?/gi, "")
+                        .replace(/stroke\s*:[^;]+;?/gi, "");
+                    if (!isVenueAsset) {
+                        cleaned = cleaned.replace(/stroke-width\s*:[^;]+;?/gi, "");
+                    }
                     // For background elements, strip stroke definitions from inline styles so stroke='none' takes effect
                     if (isBgFill) {
                         const bgCleaned = cleaned.replace(/stroke\s*:[^;]+;?/gi, "").replace(/stroke-width\s*:[^;]+;?/gi, "");
@@ -693,7 +711,10 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
 
                 el.removeAttribute("fill");
                 el.removeAttribute("stroke");
-                el.removeAttribute("stroke-width");
+                // Preserve per-element stroke-width for venue assets
+                if (!isVenueAsset) {
+                    el.removeAttribute("stroke-width");
+                }
 
                 if (!isFurniture) {
                     const isConsentricOuter = tag === 'circle' && circles.length > 1 && !innerCircles.has(el);
@@ -733,6 +754,33 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 }
             });
 
+            // ── VENUE STROKE-WIDTH SCALING ────────────────────────────────────────
+            // Venue SVGs use mm-scale stroke-widths (0.5 for exterior walls, 0.35 for
+            // interior walls, 0.25 for doors, etc.) that are too thin at display size.
+            // Scale them up by a factor so the relative differences are clearly visible.
+            if (isVenueAsset) {
+                const STROKE_SCALE = 10;
+                const allEls = doc.querySelectorAll('path, circle, rect, line, polyline, ellipse');
+                allEls.forEach(el => {
+                    const currentSW = el.getAttribute('stroke-width');
+                    if (currentSW) {
+                        const parsed = parseFloat(currentSW);
+                        if (!isNaN(parsed) && parsed > 0) {
+                            el.setAttribute('stroke-width', String(parsed * STROKE_SCALE));
+                        }
+                    }
+                    const styleSW = el.getAttribute('style');
+                    if (styleSW && /stroke-width\s*:/i.test(styleSW)) {
+                        const newStyle = styleSW.replace(/stroke-width\s*:\s*([\d.]+)/gi, (_m, val) => {
+                            const parsed = parseFloat(val);
+                            return isNaN(parsed) ? _m : `stroke-width: ${parsed * STROKE_SCALE}`;
+                        });
+                        el.setAttribute('style', newStyle);
+                    }
+                });
+            }
+            // ────────────────────────────────────────────────────────────────────────
+
             // ── Z-ORDER FIX ─────────────────────────────────────────────────────────
             // Move details to top layer
             const rootGroup = svg.querySelector('g');
@@ -750,7 +798,9 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             svg.removeAttribute("style");
             svg.removeAttribute("fill");
             svg.removeAttribute("stroke");
-            svg.removeAttribute("stroke-width");
+            if (!isVenueAsset) {
+                svg.removeAttribute("stroke-width");
+            }
             svg.removeAttribute("width");
             svg.removeAttribute("height");
             if (metrics.shouldCropToContent && metrics.contentX !== null && metrics.contentY !== null && metrics.contentWidth && metrics.contentHeight) {
@@ -800,6 +850,14 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 .replace(/\s+fill\s*=\s*["'][^"']*["']/gi, '')
                 .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '');
 
+            // For venue assets, don't set a uniform stroke-width on the root SVG.
+            // Per-element stroke-widths are preserved from the original SVG so different
+            // architectural layers (walls 0.5, interior 0.35, doors 0.25, etc.) keep
+            // their distinct visual weights.
+            const isVenueFinal = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
+            if (isVenueFinal) {
+                return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" width="${displayWidth}" height="${displayHeight}" x="${-displayWidth / 2}" y="${-displayHeight / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none;">`;
+            }
             return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="${displayWidth}" height="${displayHeight}" x="${-displayWidth / 2}" y="${-displayHeight / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none;">`;
         });
     }, [baseSvg, canUseFastImage, currentFill, currentStroke, currentStrokeWidth, displayWidth, displayHeight]);
@@ -917,22 +975,50 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                             style={{ filter: 'none' }}
                         />
                     ) : (
-                        fastImageHref && (
-                            <image
-                                href={fastImageHref}
-                                x={-displayWidth / 2}
-                                y={-displayHeight / 2}
-                                width={displayWidth}
-                                height={displayHeight}
-                                preserveAspectRatio="none"
-                                onError={() => {
-                                    if (canUseFastImage && fastImageHref !== assetPath) {
-                                        setRasterImageFailed(true);
-                                    }
-                                }}
-                                style={{ outline: 'none', filter: 'none', pointerEvents: 'none' }}
-                            />
-                        )
+                        fastImageHref && (() => {
+                            const isVenueImage = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
+                            if (isVenueImage) {
+                                const FIXED_PX = 1024;
+                                const aspect = displayWidth / Math.max(1, displayHeight);
+                                const imgW = aspect >= 1 ? FIXED_PX : Math.round(FIXED_PX * aspect);
+                                const imgH = aspect >= 1 ? Math.round(FIXED_PX / aspect) : FIXED_PX;
+                                const scaleX = displayWidth / imgW;
+                                const scaleY = displayHeight / imgH;
+                                return (
+                                    <image
+                                        href={fastImageHref}
+                                        x={-imgW / 2}
+                                        y={-imgH / 2}
+                                        width={imgW}
+                                        height={imgH}
+                                        preserveAspectRatio="none"
+                                        transform={`scale(${scaleX}, ${scaleY})`}
+                                        onError={() => {
+                                            if (canUseFastImage && fastImageHref !== assetPath) {
+                                                setRasterImageFailed(true);
+                                            }
+                                        }}
+                                        style={{ outline: 'none', filter: 'none', pointerEvents: 'none' }}
+                                    />
+                                );
+                            }
+                            return (
+                                <image
+                                    href={fastImageHref}
+                                    x={-displayWidth / 2}
+                                    y={-displayHeight / 2}
+                                    width={displayWidth}
+                                    height={displayHeight}
+                                    preserveAspectRatio="none"
+                                    onError={() => {
+                                        if (canUseFastImage && fastImageHref !== assetPath) {
+                                            setRasterImageFailed(true);
+                                        }
+                                    }}
+                                    style={{ outline: 'none', filter: 'none', pointerEvents: 'none' }}
+                                />
+                            );
+                        })()
                     )}
 
                     <rect

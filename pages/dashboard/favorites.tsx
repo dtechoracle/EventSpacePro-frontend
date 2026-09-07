@@ -63,8 +63,8 @@ const Favorites = () => {
     const { data, isLoading, refetch: refetchProjects } = useQuery<ApiResponse>({
         queryKey: ["projects"],
         queryFn: () => apiRequest("/projects", "GET", null, true),
-        staleTime: 0,
-        gcTime: 0,
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
     });
 
     const { data: allProjectEvents, isLoading: isLoadingEvents, refetch: refetchEvents } = useQuery({
@@ -102,9 +102,9 @@ const Favorites = () => {
             return Promise.all(eventPromises);
         },
         enabled: !!data?.data && data.data.length > 0,
-        staleTime: 0,
-        gcTime: 0,
-        refetchOnMount: true,
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+        refetchOnMount: false,
     });
 
     const allEvents = useMemo(() => {

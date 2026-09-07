@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, memo } from "react";
 import { DEFAULT_ASSET_STROKE_WIDTH } from "@/utils/assetRenderMode";
 
 const svgCache: Record<string, string> = {};
@@ -276,7 +276,7 @@ type InlineSvgProps = {
     onLoadError?: () => void;
 };
 
-export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadError }: InlineSvgProps) => {
+export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidth, category, onLoadError }: InlineSvgProps) {
     const [rawSvg, setRawSvg] = useState<string | null>(svgCache[src] || null);
     const [loadFailed, setLoadFailed] = useState<boolean>(Boolean(failedSvgCache[src]));
 
@@ -320,7 +320,7 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
     const baseSvg = useMemo(() => {
         if (!rawSvg || typeof window === "undefined") return "";
         
-        const cacheKey = `${src}_${category || 'none'}_v8_viewbox_normalized`;
+        const cacheKey = `${src}_${category || 'none'}_v10_viewbox_cleaned`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
@@ -573,6 +573,6 @@ export const InlineSvg = ({ src, fill, stroke, strokeWidth, category, onLoadErro
             } as any} 
         />
     );
-};
+});
 
 export default InlineSvg;

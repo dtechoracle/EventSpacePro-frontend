@@ -1364,12 +1364,12 @@ export default function Editor() {
 
       return data;
     },
-    enabled: !!(isRouterReady && slug && id), // Only enable when router is ready
-    staleTime: 0, // Always refetch when route changes
-    gcTime: 0, // Don't cache (formerly cacheTime)
-    refetchOnMount: true, // Always refetch when component mounts
-    refetchOnWindowFocus: false, // Don't refetch on window focus
-    refetchInterval: false, // Don't auto-refetch periodically
+    enabled: !!(isRouterReady && slug && id),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchInterval: false,
   });
 
   // Track if we just saved to prevent reloading
@@ -2716,15 +2716,46 @@ export default function Editor() {
   const isPreviewMode = preview === 'true' || isInIframe;
 
   if (isLoading) {
+    const SidebarSkeleton = () => (
+      <div className="p-3 space-y-3 animate-pulse">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-gray-200" />
+            <div className="flex-1 space-y-1.5">
+              <div className="h-2.5 bg-gray-200 rounded w-3/4" />
+              <div className="h-2 bg-gray-100 rounded w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+
     return isPreviewMode ? (
       <div className="h-full w-full flex items-center justify-center">
-        <div className="text-lg">Loading event data...</div>
+        <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     ) : (
       <div className="flex h-screen bg-gray-50 overflow-hidden">
         <DashboardSidebar />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-lg">Loading event data...</div>
+        <div className="flex-1 flex overflow-hidden">
+          <div className="w-40 bg-white border-r border-gray-200 flex-shrink-0 shadow-sm">
+            <div className="p-3 border-b border-gray-100">
+              <div className="h-4 bg-gray-200 rounded w-2/3 animate-pulse" />
+            </div>
+            <SidebarSkeleton />
+          </div>
+          <div className="flex-1 flex items-center justify-center bg-gray-50">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-xs text-gray-400">Loading workspace...</p>
+            </div>
+          </div>
+          <div className="w-64 bg-white border-l border-gray-200 flex-shrink-0">
+            <div className="p-3 border-b border-gray-100">
+              <div className="h-4 bg-gray-200 rounded w-1/2 animate-pulse" />
+            </div>
+            <SidebarSkeleton />
+          </div>
         </div>
       </div>
     );

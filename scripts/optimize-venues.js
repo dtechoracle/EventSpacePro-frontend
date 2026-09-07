@@ -7,7 +7,6 @@ const styleBlock = `
   <style id="preloaded-venue-style">
     * { 
       vector-effect: non-scaling-stroke !important; 
-      stroke-width: 1.8px !important; 
     }
     path, circle, rect, line, polyline, ellipse {
       stroke: #272235 !important;
@@ -27,9 +26,13 @@ function optimize() {
     const filePath = path.join(VENUES_DIR, file);
     let content = fs.readFileSync(filePath, 'utf8');
     
+    // Strip unverified QCAD dashed construction paths that cause heavy rendering lag
+    content = content.replace(/<path[^>]*qs:layer="ESP-UNVERIFIED"[^>]*\/>\s*/gi, '');
+
     // Check if style is already injected
     if (content.includes('id="preloaded-venue-style"')) {
-      console.log(`Already optimized: ${file}`);
+      fs.writeFileSync(filePath, content, 'utf8');
+      console.log(`Already optimized (cleaned): ${file}`);
       return;
     }
     

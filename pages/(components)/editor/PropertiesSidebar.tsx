@@ -13,6 +13,7 @@ import { useEditorStore } from "@/store/editorStore";
 import { useProjectStore } from "@/store/projectStore";
 import { texturePatterns } from '@/utils/texturePatterns';
 import { useRouter } from "next/router";
+import { isStandaloneSlug } from "@/lib/standaloneEvent";
 import { useUserStore } from "@/store/userStore";
 import { ASSET_LIBRARY } from "@/lib/assets";
 import toast from "react-hot-toast";
@@ -560,7 +561,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
 
   const router = useRouter();
-  const { id, slug } = router.query;
+  const slug = router.query.slug as string | undefined;
+  const id = router.query.id as string | undefined;
 
   const { data: projectData } = useQuery({
     queryKey: id ? ["event-collaborators", slug, id] : ["project-collaborators", slug],
@@ -569,13 +571,17 @@ export default function PropertiesSidebar(): React.JSX.Element {
       // Prefer event-scoped collaborators when inside an event
       if (id) {
         try {
-          const res = await apiRequest(`/projects/${slug}/events/${id}`, "GET", null, true);
+          const endpoint = isStandaloneSlug(slug)
+            ? `/events/${id}`
+            : `/projects/${slug}/events/${id}`;
+          const res = await apiRequest(endpoint, "GET", null, true);
           const evt = res.data || res;
           if (evt.users || evt.invites) return evt;
         } catch (err) {
           console.error("Failed to fetch event for collaborators:", err);
         }
       }
+      if (isStandaloneSlug(slug)) return null;
       try {
         const res = await apiRequest(`/projects/${slug}`, "GET", null, true).catch(async () => {
           const allRes = await apiRequest("/projects", "GET", null, true);
@@ -1544,9 +1550,9 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     )}
 
                     {/* Relocated Appearance Section */}
-                    {/* Appearance (Shape/Asset) */}
+                    {/* Appearance (Shape/Asset) - Hidden for preloaded venues */}
                 
-                  <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className="mt-3 pt-3 border-t border-gray-100" style={isSelectedVenue ? { display: 'none' } : undefined}>
 
                     {/* Fill Type Selector - Only for Shapes currently */}
                     {itemType === 'shape' && (

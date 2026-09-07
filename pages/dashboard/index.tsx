@@ -3,7 +3,7 @@
 import { BsStars, BsSearch } from "react-icons/bs";
 import { FaPlus } from "react-icons/fa";
 import { useUserStore } from "@/store/userStore";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import { useRouter } from "next/router";
@@ -78,12 +78,14 @@ const Dashboard = () => {
       console.log('[Dashboard] Fetching projects from DATABASE');
       return apiRequest("/projects", "GET", null, true);
     },
-    staleTime: 0,
-    gcTime: 0,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
+  const projectSlugs = useMemo(() => data?.data?.map(p => p.slug).join(',') ?? '', [data?.data]);
+
   const { data: allProjectEvents, isLoading: isLoadingEvents, error: eventsError } = useQuery({
-    queryKey: ["all-events", data?.data?.map(p => p.slug)],
+    queryKey: ["all-events", projectSlugs],
     queryFn: async () => {
       if (!data?.data) return [];
 
@@ -139,9 +141,28 @@ const Dashboard = () => {
       return results;
     },
     enabled: !!data?.data && data.data.length > 0,
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnMount: true,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnMount: false,
+  });
+
+  const { data: standaloneEvents } = useQuery<EventData[]>({
+    queryKey: ["standalone-events"],
+    queryFn: async () => {
+      const res = await apiRequest("/events", "GET", null, true);
+      const events = (res.data || res || []) as any[];
+      return Promise.all(events.map(async (event: any) => {
+        try {
+          const fullEvent = await apiRequest(`/events/${event._id}`, "GET", null, true);
+          return withPreviewableCanvasAssets(fullEvent.data || fullEvent);
+        } catch (error) {
+          return withPreviewableCanvasAssets(event);
+        }
+      }));
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnMount: false,
   });
 
   const projectsWithEvents = useMemo(() => {
@@ -157,20 +178,19 @@ const Dashboard = () => {
     });
   }, [data?.data, allProjectEvents]);
 
+  const searchFilter = useMemo(() => searchQuery.toLowerCase(), [searchQuery]);
+
   const filteredProjects = useMemo(() => {
     const HIDDEN_PROJECT_NAME = "Personal Drafts";
     const baseProjects = projectsWithEvents.filter(p => p.name !== HIDDEN_PROJECT_NAME);
-    if (!searchQuery) return baseProjects;
-    const query = searchQuery.toLowerCase();
+    if (!searchFilter) return baseProjects;
     return baseProjects.filter(project =>
-      project.name?.toLowerCase().includes(query)
+      project.name?.toLowerCase().includes(searchFilter)
     );
-  }, [projectsWithEvents, searchQuery]);
+  }, [projectsWithEvents, searchFilter]);
 
   const recentEvents = useMemo(() => {
-    if (!allProjectEvents) return [];
-
-    const allEventsFlat = allProjectEvents.flatMap(project =>
+    const allProjectEventsFlat = (allProjectEvents || []).flatMap(project =>
       (project.events || []).map((event: any) => ({
         ...event,
         projectSlug: project.projectSlug,
@@ -178,17 +198,25 @@ const Dashboard = () => {
       }))
     );
 
-    const filteredEvents = searchQuery
+    const standaloneEventsFlat = (standaloneEvents || []).map((event: any) => ({
+      ...event,
+      projectSlug: 'standalone',
+      projectName: 'Standalone'
+    }));
+
+    const allEventsFlat = [...allProjectEventsFlat, ...standaloneEventsFlat];
+
+    const filteredEvents = searchFilter
       ? allEventsFlat.filter(event =>
-        event.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        event.projectName?.toLowerCase().includes(searchQuery.toLowerCase())
+        event.name?.toLowerCase().includes(searchFilter) ||
+        event.projectName?.toLowerCase().includes(searchFilter)
       )
       : allEventsFlat;
 
     return filteredEvents
       .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
       .slice(0, 8);
-  }, [allProjectEvents, searchQuery]);
+  }, [allProjectEvents, standaloneEvents, searchFilter]);
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">

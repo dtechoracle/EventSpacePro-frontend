@@ -127,8 +127,8 @@ const Projects = () => {
   const { data, isLoading, error } = useQuery<ApiResponse>({
     queryKey: ["projects"],
     queryFn: () => apiRequest("/projects", "GET", null, true),
-    staleTime: 0,
-    gcTime: 0,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   // Standalone events (no project) live under GET /events. They are listed
@@ -149,9 +149,9 @@ const Projects = () => {
       }));
     },
     enabled: true,
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnMount: true,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnMount: false,
   });
 
   const { data: allProjectEvents, isLoading: isLoadingEvents } = useQuery({
@@ -179,9 +179,9 @@ const Projects = () => {
       return Promise.all(eventPromises);
     },
     enabled: !!data?.data && data.data.length > 0,
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnMount: true,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnMount: false,
   });
 
   const projectsWithEvents = useMemo(() => {

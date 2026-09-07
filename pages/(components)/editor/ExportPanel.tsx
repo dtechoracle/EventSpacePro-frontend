@@ -1376,9 +1376,12 @@ const renderAssetToCanvas = (
       if (workspaceSnapshot) {
         wallSegmentsToDraw.forEach(a => renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, new Map(), { wallFillOnly: true }));
         ctx.drawImage(workspaceSnapshot, 0, 0, sourceCanvas.width, sourceCanvas.height);
-        // Overlay assets (including preloaded venues) to guarantee crisp SVG/image rendering
+        // Only overlay assets that render as raster images (not SVG-native assets
+        // like chairs/tables which are already crisp in the workspace snapshot).
+        // Re-rendering SVG assets on top of the snapshot caused double-drawing
+        // distortion (blurry hatching, misaligned strokes).
         assetsToExport.forEach(a => {
-          if (a.type !== 'wall-segments') {
+          if (a.type !== 'wall-segments' && canvasBackedAssetIds.has(a.id)) {
             renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages);
           }
         });
