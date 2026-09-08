@@ -6,6 +6,7 @@ import { buildPreviewData } from "@/helpers/previewHelpers";
 import { apiRequest } from "@/helpers/Config";
 import toast from "react-hot-toast";
 import RenameEventModal from "@/pages/(components)/projects/RenameEventModal";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 function getTimeAgo(dateString: string | undefined): string {
     if (!dateString) return "Recently";
@@ -43,6 +44,7 @@ const EventCard = memo(function EventCard({ event, user, previewData, onFavorite
     const [isLoading, setIsLoading] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [showRenameModal, setShowRenameModal] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     useEffect(() => {
         if (event?.name && event.name !== eventName) setEventName(event.name);
@@ -103,8 +105,12 @@ const EventCard = memo(function EventCard({ event, user, previewData, onFavorite
 
     const handleDelete = useCallback(async (e?: React.MouseEvent) => {
         e?.stopPropagation();
-        if (!confirm("Move this event to trash? You can restore it from the Trash page.")) return;
         setShowMenu(false);
+        setShowDeleteConfirm(true);
+    }, []);
+
+    const confirmDelete = useCallback(async () => {
+        setShowDeleteConfirm(false);
         try {
             const endpoint = event?.projectSlug === 'standalone'
                 ? `/events/${event._id}`
@@ -273,6 +279,16 @@ const EventCard = memo(function EventCard({ event, user, previewData, onFavorite
                     onSuccess={(newName) => setEventName(newName)}
                 />
             )}
+
+            <ConfirmModal
+                open={showDeleteConfirm}
+                title="Move to Trash"
+                description="This event will be moved to trash. You can restore it from the Trash page."
+                confirmLabel="Move to Trash"
+                confirmColor="bg-red-600 hover:bg-red-700"
+                onConfirm={confirmDelete}
+                onCancel={() => setShowDeleteConfirm(false)}
+            />
         </div>
     );
 });

@@ -1,35 +1,57 @@
 "use client";
 import React, { useCallback, useState } from "react";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
-import { BsTrash, BsRecycle, BsExclamationTriangle } from "react-icons/bs";
+import { BsTrash, BsRecycle, BsClock, BsThreeDotsVertical } from "react-icons/bs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import toast from "react-hot-toast";
+import WorkspacePreview from "@/components/WorkspacePreview";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 interface TrashedEvent {
   _id: string;
   name: string;
   type?: string;
+  canvasData?: {
+    walls: any[];
+    shapes: any[];
+    assets: any[];
+    textAnnotations?: any[];
+  };
+  canvasAssets?: any[];
   createdAt: string;
   updatedAt: string;
   trashedAt: string;
   trashedBy?: string;
 }
 
-function getTimeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days > 30) return `${Math.floor(days / 30)}mo ago`;
-  if (days > 0) return `${days}d ago`;
-  const hours = Math.floor(diff / 3600000);
-  if (hours > 0) return `${hours}h ago`;
-  const mins = Math.floor(diff / 60000);
-  return mins > 0 ? `${mins}m ago` : "Just now";
+function getTimeAgo(dateString: string | undefined): string {
+  if (!dateString) return "Recently";
+  const now = new Date();
+  const updated = new Date(dateString);
+  if (isNaN(updated.getTime())) return "Recently";
+  const diffInMs = now.getTime() - updated.getTime();
+  const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+  if (diffInDays === 0) return "Deleted today";
+  if (diffInDays === 1) return "Deleted yesterday";
+  if (diffInDays < 7) return `Deleted ${diffInDays} days ago`;
+  if (diffInDays < 30) return `Deleted ${Math.floor(diffInDays / 7)} weeks ago`;
+  return `Deleted ${Math.floor(diffInDays / 30)} months ago`;
+}
+
+function buildPreviewData(event: TrashedEvent) {
+  const data = event.canvasData || {};
+  return {
+    walls: data.walls || [],
+    shapes: data.shapes || [],
+    assets: data.assets || event.canvasAssets || [],
+    textAnnotations: data.textAnnotations || [],
+  };
 }
 
 const Trash = () => {
   const queryClient = useQueryClient();
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TrashedEvent | null>(null);
 
   const { data: trashedEvents = [], isLoading } = useQuery<TrashedEvent[]>({
     queryKey: ["trashed-events"],
@@ -63,7 +85,7 @@ const Trash = () => {
     onSuccess: () => {
       toast.success("Event permanently deleted");
       queryClient.invalidateQueries({ queryKey: ["trashed-events"] });
-      setConfirmDeleteId(null);
+      setDeleteTarget(null);
     },
     onError: () => {
       toast.error("Failed to delete event");
@@ -78,17 +100,10 @@ const Trash = () => {
     [restoreMutation],
   );
 
-  const handlePermanentDelete = useCallback(
-    (e: React.MouseEvent, eventId: string) => {
-      e.stopPropagation();
-      if (confirmDeleteId === eventId) {
-        permanentDeleteMutation.mutate(eventId);
-      } else {
-        setConfirmDeleteId(eventId);
-      }
-    },
-    [confirmDeleteId, permanentDeleteMutation],
-  );
+  const handlePermanentDelete = useCallback((e: React.MouseEvent, event: TrashedEvent) => {
+    e.stopPropagation();
+    setDeleteTarget(event);
+  }, []);
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -109,9 +124,18 @@ const Trash = () => {
 
         <div className="flex-1 overflow-y-auto p-8">
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center text-center py-20">
-              <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mb-4" />
-              <p className="text-gray-500 text-sm">Loading trash...</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="bg-gray-100 h-40" />
+                    <div className="p-3">
+                      <div className="h-4 bg-gray-100 rounded w-2/3 mb-2" />
+                      <div className="h-3 bg-gray-100 rounded w-1/3" />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : trashedEvents.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center py-20">
@@ -127,59 +151,81 @@ const Trash = () => {
               </p>
             </div>
           ) : (
-            <div className="max-w-4xl">
-              <div className="space-y-2">
-                {trashedEvents.map((event) => (
-                  <div
-                    key={event._id}
-                    className="bg-white border border-gray-200 rounded-lg px-5 py-4 flex items-center justify-between hover:border-gray-300 transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">
-                        {event.name}
-                      </p>
-                      <div className="flex items-center gap-3 mt-1">
-                        <p className="text-xs text-gray-400">
-                          Deleted {event.trashedAt ? getTimeAgo(event.trashedAt) : "recently"}
-                        </p>
-                        {event.type && (
-                          <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
-                            {event.type}
-                          </span>
-                        )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {trashedEvents.map((event) => {
+                const preview = buildPreviewData(event);
+                return (
+                  <div key={event._id} className="flex flex-col relative">
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden group relative">
+                      <div className="absolute top-2 right-2 z-30">
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={(e) => handleRestore(e, event._id)}
+                            disabled={restoreMutation.isPending}
+                            className="p-1.5 rounded-full bg-white/90 text-green-600 hover:bg-green-50 shadow-md backdrop-blur-sm transition-all disabled:opacity-50"
+                            title="Restore"
+                          >
+                            <BsRecycle className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => handlePermanentDelete(e, event)}
+                            disabled={permanentDeleteMutation.isPending}
+                            className="p-1.5 rounded-full bg-white/90 text-red-500 hover:bg-red-50 shadow-md backdrop-blur-sm transition-all disabled:opacity-50"
+                            title="Delete permanently"
+                          >
+                            <BsTrash className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 w-full relative overflow-hidden" style={{ height: "160px" }}>
+                        <div className="absolute inset-0 opacity-40 pointer-events-none">
+                          <WorkspacePreview
+                            walls={preview.walls}
+                            shapes={preview.shapes}
+                            assets={preview.assets}
+                            textAnnotations={preview.textAnnotations}
+                            width={480}
+                            height={160}
+                            backgroundColor="#f9fafb"
+                          />
+                        </div>
+                        <div className="absolute inset-0 bg-white/30" />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-xs font-medium text-gray-400 bg-white/70 px-2 py-0.5 rounded-full backdrop-blur-sm">Trashed</span>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 ml-4">
-                      <button
-                        onClick={(e) => handleRestore(e, event._id)}
-                        disabled={restoreMutation.isPending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50"
-                      >
-                        <BsRecycle className="w-3 h-3" />
-                        Restore
-                      </button>
-                      <button
-                        onClick={(e) => handlePermanentDelete(e, event._id)}
-                        disabled={permanentDeleteMutation.isPending}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 ${
-                          confirmDeleteId === event._id
-                            ? "text-white bg-red-600 hover:bg-red-700 border border-red-600"
-                            : "text-red-700 bg-red-50 border border-red-200 hover:bg-red-100"
-                        }`}
-                      >
-                        <BsExclamationTriangle className="w-3 h-3" />
-                        {confirmDeleteId === event._id
-                          ? "Confirm Delete"
-                          : "Delete"}
-                      </button>
+
+                    <div className="mt-2">
+                      <h3 className="font-semibold text-sm mb-1 truncate text-gray-500">
+                        {event.name || "Unnamed Event"}
+                      </h3>
+                      <p className="text-xs text-gray-400 flex items-center gap-1.5">
+                        <BsClock className="w-3 h-3" />
+                        {getTimeAgo(event.trashedAt)}
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete Permanently"
+        description={`Are you sure you want to permanently delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete Permanently"
+        confirmColor="bg-red-600 hover:bg-red-700"
+        onConfirm={() => {
+          if (deleteTarget) permanentDeleteMutation.mutate(deleteTarget._id);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+        isLoading={permanentDeleteMutation.isPending}
+      />
     </div>
   );
 };
