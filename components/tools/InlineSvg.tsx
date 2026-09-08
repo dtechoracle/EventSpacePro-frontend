@@ -320,7 +320,7 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
     const baseSvg = useMemo(() => {
         if (!rawSvg || typeof window === "undefined") return "";
         
-        const cacheKey = `${src}_${category || 'none'}_v10_viewbox_cleaned`;
+        const cacheKey = `${src}_${category || 'none'}_v11_viewbox_padded`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
@@ -518,7 +518,9 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
             svg.removeAttribute("height");
             const isVenue = category === 'Venue' || src.toLowerCase().includes('preloaded-venues');
             if (metrics.shouldCropToContent && !isVenue && metrics.contentX !== null && metrics.contentY !== null && metrics.contentWidth && metrics.contentHeight) {
-                svg.setAttribute("viewBox", `${metrics.contentX} ${metrics.contentY} ${metrics.contentWidth} ${metrics.contentHeight}`);
+                // Expand viewBox by a small margin so SVG strokes at the edges aren't clipped
+                const pad = Math.max(metrics.contentWidth, metrics.contentHeight) * 0.03;
+                svg.setAttribute("viewBox", `${metrics.contentX - pad} ${metrics.contentY - pad} ${metrics.contentWidth + pad * 2} ${metrics.contentHeight + pad * 2}`);
             } else if (!svg.getAttribute("viewBox") && metrics.artboardWidth && metrics.artboardHeight) {
                 svg.setAttribute("viewBox", `0 0 ${metrics.artboardWidth} ${metrics.artboardHeight}`);
             }

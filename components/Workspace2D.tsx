@@ -664,6 +664,7 @@ const RenderLayer = React.memo(({
   zoom,
   verticesMap,
   dragPreview,
+  activeTool,
   groups,
   allShapes,
   allAssets,
@@ -676,6 +677,7 @@ const RenderLayer = React.memo(({
   zoom: number,
   verticesMap: Record<string, { x: number; y: number }[]>,
   dragPreview: DragPreview | null,
+  activeTool: string,
   groups?: any[],
   allShapes?: any[],
   allAssets?: any[],
@@ -692,10 +694,24 @@ const RenderLayer = React.memo(({
       <StaticDrawingLayer visibleRenderables={visibleRenderables} hiddenIds={previewHiddenIds} selectedIds={selectedIds} zoom={zoom} />
       <AnnotationDrawingLayer visibleRenderables={visibleRenderables} zoom={zoom} hiddenIds={previewHiddenIds} />
       <DragPreviewLayer visibleRenderables={visibleRenderables} preview={dragPreview} zoom={zoom} groups={groups} allShapes={allShapes} allAssets={allAssets} allWalls={allWalls} allTextAnnotations={allTextAnnotations} />
-      {!dragPreview && (
+      {!dragPreview && activeTool !== 'select' && (
         <SelectionHighlightLayer 
           visibleRenderables={visibleRenderables}
           selectedIds={selectedIds} 
+          hoveredId={hoveredId} 
+          verticesMap={verticesMap}
+          zoom={zoom}
+          groups={groups}
+          allShapes={allShapes}
+          allAssets={allAssets}
+          allWalls={allWalls}
+          allTextAnnotations={allTextAnnotations}
+        />
+      )}
+      {!dragPreview && activeTool === 'select' && (
+        <SelectionHighlightLayer 
+          visibleRenderables={visibleRenderables}
+          selectedIds={[]}
           hoveredId={hoveredId} 
           verticesMap={verticesMap}
           zoom={zoom}
@@ -4576,6 +4592,7 @@ export default function Workspace2D({
             zoom={zoom}
             verticesMap={verticesMap}
             dragPreview={dragPreview}
+            activeTool={activeTool}
             groups={groups}
             allShapes={shapes}
             allAssets={assets}

@@ -98,7 +98,7 @@ export default function SnapMarkersRenderer({ dragPreview }: SnapMarkersRenderer
 
     if (!markerSourceId || snapPoints.length === 0) return null;
 
-    const markerRadius = 8 / zoom;
+    const markerRadius = 4 / zoom;
 
     return (
         <g pointerEvents="none" className="snap-markers">
