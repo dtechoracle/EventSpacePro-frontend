@@ -47,9 +47,9 @@ export default function ShareModal({ onClose, slug: propSlug, eventId: propEvent
       try {
         const res = await apiRequest(`/projects/${slug}`, "GET", null, true).catch(async () => {
           const allRes = await apiRequest("/projects", "GET", null, true);
-          return allRes.data.find((p: any) => p.slug === slug);
+          return allRes?.data?.find((p: any) => p.slug === slug) || null;
         });
-        return res.data || res;
+        return res?.data || res || null;
       } catch (err) {
         console.error("Failed to fetch project for collaborators:", err);
         return null;
