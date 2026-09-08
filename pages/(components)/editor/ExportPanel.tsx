@@ -139,6 +139,100 @@ const normalizeDateInput = (value: string) => {
 };
 
 /**
+ * Processes venue SVG for export, scaling layer stroke widths non-linearly
+ * so that layer stroke hierarchies (exterior walls > interior walls > doors > stairs > windows)
+ * are preserved while ensuring hairline elements (stroke-width <= 0.01) have a visible minimum stroke.
+ */
+function processVenueSvgForExport(svgText: string): string {
+  if (!svgText) return svgText;
+
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(svgText, 'image/svg+xml');
+    const svgEl = doc.querySelector('svg');
+    if (!svgEl) return svgText;
+
+    // 1. Remove hardcoded root width/height attributes (e.g. height="26970.07mm")
+    // so intrinsic aspect ratio is strictly driven by the viewBox coordinates.
+    svgEl.removeAttribute('width');
+    svgEl.removeAttribute('height');
+    svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+    // 2. Determine viewBox max dimension
+    const viewBoxAttr = svgEl.getAttribute('viewBox') || '';
+    const parts = viewBoxAttr.trim().split(/[\s,]+/).map(Number);
+    let maxDim = 1000;
+    if (parts.length === 4 && parts[2] && parts[3]) {
+      maxDim = Math.max(Math.abs(parts[2]), Math.abs(parts[3]));
+    }
+
+    // 3. Define target stroke widths in viewBox units based on CAD layer hierarchy:
+    // Exterior Wall (w=0.5): ~0.0035 * maxDim (~10.5px on 3000px paper canvas)
+    // Interior Wall (w=0.35): ~0.0026 * maxDim (~7.8px on 3000px paper canvas)
+    // Doors / Tent Wall (w=0.2-0.25): ~0.0018 * maxDim (~5.4px on 3000px paper canvas)
+    // Stairs / Details (w=0.05-0.13): ~0.0010 * maxDim (~3.0px on 3000px paper canvas)
+    // Windows / Annotations / Hairlines (w<=0.01): ~0.0006 * maxDim (~1.8px floor minimum on paper canvas)
+    const minStroke = maxDim * 0.0006;
+    const maxWallStroke = maxDim * 0.0035;
+
+    const getScaledStrokeWidth = (w: number | null | undefined): number => {
+      if (w === null || w === undefined || isNaN(w) || w <= 0.005) {
+        return minStroke;
+      }
+      if (w >= 0.5) {
+        return maxWallStroke * (w / 0.5);
+      }
+      const t = (w - 0.005) / (0.5 - 0.005);
+      return minStroke + t * (maxWallStroke - minStroke);
+    };
+
+    if (!svgEl.getAttribute('stroke') || svgEl.getAttribute('stroke') === 'inherit') {
+      svgEl.setAttribute('stroke', '#000000');
+    }
+
+    const allEls = doc.querySelectorAll('path, circle, rect, line, polyline, ellipse');
+    allEls.forEach(el => {
+      const currentSW = el.getAttribute('stroke-width');
+      const styleAttr = el.getAttribute('style');
+      let parsedSW: number | null = null;
+
+      if (currentSW) {
+        const num = parseFloat(currentSW);
+        if (!isNaN(num) && num > 0) parsedSW = num;
+      } else if (styleAttr && /stroke-width\s*:/i.test(styleAttr)) {
+        const match = styleAttr.match(/stroke-width\s*:\s*([\d.]+)/i);
+        if (match) {
+          const num = parseFloat(match[1]);
+          if (!isNaN(num) && num > 0) parsedSW = num;
+        }
+      }
+
+      const finalSW = getScaledStrokeWidth(parsedSW);
+      el.setAttribute('stroke-width', String(finalSW));
+
+      if (styleAttr) {
+        if (/stroke-width/i.test(styleAttr)) {
+          const newStyle = styleAttr.replace(/stroke-width\s*:\s*[\d.]+/gi, `stroke-width: ${finalSW}`);
+          el.setAttribute('style', newStyle);
+        } else {
+          el.setAttribute('style', `${styleAttr}; stroke-width: ${finalSW}`);
+        }
+      }
+    });
+
+    const styleEls = doc.querySelectorAll('style');
+    styleEls.forEach(s => {
+      s.textContent = s.textContent?.replace(/vector-effect\s*:\s*non-scaling-stroke[^;]*/gi, '') || '';
+    });
+
+    return new XMLSerializer().serializeToString(doc);
+  } catch (err) {
+    console.error("Failed to process venue SVG for export", err);
+    return svgText;
+  }
+}
+
+/**
  * Robustly loads SVGs for export, applying real-time color/stroke overrides
  */
 const loadSvgAssets = async (assets: AssetInstance[]) => {
@@ -159,22 +253,25 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
     }
 
     try {
-      // Prefer the pre-rasterized WebP (same thick-stroke image the workspace uses).
-      // DOM-processed SVGs use hairline strokes (stroke-width 0.5 + non-scaling-stroke),
-      // which render nearly invisible at export scale.
-      const rasterPath = definition.path ? getRasterAssetPath(definition.path) : null;
-      if (rasterPath) {
-        const rasterImg = new Image();
-        const rasterOk = await new Promise<boolean>((resolve) => {
-          const timer = setTimeout(() => resolve(false), 5000);
-          rasterImg.onload = () => { clearTimeout(timer); resolve(rasterImg.naturalWidth > 0); };
-          rasterImg.onerror = () => { clearTimeout(timer); resolve(false); };
-          rasterImg.src = rasterPath;
-        });
-        if (rasterOk) {
-          loadedImages.set(asset.id, rasterImg);
-          if (!typeIconCache[asset.type]) typeIconCache[asset.type] = rasterImg;
-          return;
+      const isVenue = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
+
+      // Prefer the pre-rasterized WebP for non-venue assets.
+      // For venue assets, always use processed SVG to ensure crisp, stroke-hierarchical rendering.
+      if (!isVenue) {
+        const rasterPath = definition.path ? getRasterAssetPath(definition.path) : null;
+        if (rasterPath) {
+          const rasterImg = new Image();
+          const rasterOk = await new Promise<boolean>((resolve) => {
+            const timer = setTimeout(() => resolve(false), 5000);
+            rasterImg.onload = () => { clearTimeout(timer); resolve(rasterImg.naturalWidth > 0); };
+            rasterImg.onerror = () => { clearTimeout(timer); resolve(false); };
+            rasterImg.src = rasterPath;
+          });
+          if (rasterOk) {
+            loadedImages.set(asset.id, rasterImg);
+            if (!typeIconCache[asset.type]) typeIconCache[asset.type] = rasterImg;
+            return;
+          }
         }
       }
 
@@ -190,46 +287,12 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
       }
 
       let processedSvg = svg;
-      const isVenue = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
       const fill = asset.fillColor || 'transparent';
       const stroke = asset.strokeColor || (isVenue ? 'inherit' : '#000000');
       const exportStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : (isVenue ? 'inherit' : 0.5);
 
       if (isVenue) {
-        // Venue SVGs contain essential structural lines and colored open paths (e.g., red dome walls).
-        // Scale stroke-widths by the same STROKE_SCALE factor the workspace uses (AssetRenderer)
-        // so they don't appear hairline-thin at export resolution.
-        const STROKE_SCALE = 10;
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(processedSvg, 'image/svg+xml');
-        const svgEl = doc.querySelector('svg');
-        if (svgEl) {
-          const allEls = svgEl.querySelectorAll('path, circle, rect, line, polyline, ellipse');
-          allEls.forEach(el => {
-            const currentSW = el.getAttribute('stroke-width');
-            if (currentSW) {
-              const parsed = parseFloat(currentSW);
-              if (!isNaN(parsed) && parsed > 0) {
-                el.setAttribute('stroke-width', String(parsed * STROKE_SCALE));
-              }
-            }
-            // Also scale style attribute stroke-widths
-            const styleAttr = el.getAttribute('style');
-            if (styleAttr && /stroke-width/i.test(styleAttr)) {
-              const scaled = styleAttr.replace(/stroke-width\s*:\s*([\d.]+)/gi, (_m, val) => {
-                const num = parseFloat(val);
-                return isNaN(num) ? _m : `stroke-width: ${num * STROKE_SCALE}`;
-              });
-              el.setAttribute('style', scaled);
-            }
-          });
-          // Remove non-scaling-stroke so strokes scale with the export
-          const styleEls = doc.querySelectorAll('style');
-          styleEls.forEach(s => {
-            s.textContent = s.textContent?.replace(/vector-effect\s*:\s*non-scaling-stroke[^;]*/gi, '') || '';
-          });
-          processedSvg = new XMLSerializer().serializeToString(doc);
-        }
+        processedSvg = processVenueSvgForExport(processedSvg);
         const blob = new Blob([processedSvg], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
         const img = new Image();
@@ -535,10 +598,14 @@ export default function ExportPanel() {
       (node as SVGElement).style.display = '';
       (node as SVGElement).removeAttribute('display');
     });
-    // Remove raster-backed asset <image> elements from the snapshot. SVG loaded as
-    // an <img> from a blob URL cannot render external <image> references, so these
-    // would appear blank (and would double-draw over the manually rendered assets).
-    clone.querySelectorAll('image[href*="/assets/raster/"], image[xlink\\:href*="/assets/raster/"]').forEach((node) => node.remove());
+    // Remove non-venue raster-backed asset <image> elements from the snapshot.
+    // SVG loaded as an <img> from a blob URL cannot render external <image> references,
+    // so furniture/assets are re-rendered manually. Preloaded venues are kept and inlined below.
+    clone.querySelectorAll('image[href*="/assets/raster/"], image[xlink\\:href*="/assets/raster/"]').forEach((node) => {
+      const href = node.getAttribute('href') || node.getAttribute('xlink:href') || '';
+      if (href.includes('preloaded-venues')) return;
+      node.remove();
+    });
 
     // ─── Embed external <image> references as base64 data URLs ───
     // When the SVG is serialized to a blob and loaded as an <img>, external
@@ -556,7 +623,20 @@ export default function ExportPanel() {
         if (!base64) {
           const resp = await fetch(href);
           if (!resp.ok) return;
-          const imageBlob = await resp.blob();
+          let imageBlob: Blob;
+          if (href.includes('preloaded-venues')) {
+            // Preloaded venue SVGs: embed as-is so the export matches the workspace exactly.
+            // The workspace renders them via <image> at fixed dimensions; the browser rasterizes
+            // the SVG with its native strokes at the correct scale. Re-processing with
+            // processVenueSvgForExport() applied different stroke scaling, causing faint exports.
+            imageBlob = await resp.blob();
+          } else if (href.includes('/assets/') && href.toLowerCase().endsWith('.svg')) {
+            const rawSvg = await resp.text();
+            const processedSvg = processVenueSvgForExport(rawSvg);
+            imageBlob = new Blob([processedSvg], { type: 'image/svg+xml' });
+          } else {
+            imageBlob = await resp.blob();
+          }
           base64 = await new Promise<string>((resolve) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result as string);
@@ -570,6 +650,31 @@ export default function ExportPanel() {
         // If fetch fails, leave the element — it will just be invisible
       }
     }));
+
+    // ─── Counteract zoom stroke compression ───
+    // The workspace root SVG contains <g transform="scale(zoom)">.
+    // When cloned for export, zoom (e.g. 0.03) compresses stroke-widths down to hairline (0.1px).
+    // Scaling stroke-widths by (1 / zoom) inside clone restores exact workspace display thickness.
+    if (zoom > 0 && zoom < 1) {
+      const strokeScale = 1 / zoom;
+      clone.querySelectorAll('path, circle, rect, line, polyline, ellipse').forEach((el) => {
+        const sw = el.getAttribute('stroke-width');
+        if (sw) {
+          const num = parseFloat(sw);
+          if (!isNaN(num) && num > 0) {
+            el.setAttribute('stroke-width', String(num * strokeScale));
+          }
+        }
+        const styleAttr = el.getAttribute('style');
+        if (styleAttr && /stroke-width/i.test(styleAttr)) {
+          const scaledStyle = styleAttr.replace(/stroke-width\s*:\s*([\d.]+)/gi, (_m, val) => {
+            const num = parseFloat(val);
+            return isNaN(num) ? _m : `stroke-width: ${num * strokeScale}`;
+          });
+          el.setAttribute('style', scaledStyle);
+        }
+      });
+    }
 
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     clone.setAttribute('width', `${screenWidth}`);
@@ -1416,7 +1521,10 @@ const renderAssetToCanvas = (
         // distortion (blurry hatching, misaligned strokes).
         assetsToExport.forEach(a => {
           if (a.type !== 'wall-segments' && canvasBackedAssetIds.has(a.id)) {
-            renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages);
+            const isVenueAsset = PRELOADED_VENUES.some(v => v.id === a.type || v.name === a.type);
+            if (!isVenueAsset) {
+              renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages);
+            }
           }
         });
       } else {
