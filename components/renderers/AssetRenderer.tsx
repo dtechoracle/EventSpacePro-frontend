@@ -336,11 +336,13 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // thumbnail/preview must avoid a broken/missing raster (otherwise it falls to
     // the SVG-processing path with non-scaling-stroke, which is what keeps a thin
     // outline legible at tiny zoom).
+    const isVenueAsset = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
     const canUseFastImage =
         !!assetPath &&
         !asset.isExploded &&
         !disableFastImageForAsset &&
         !hasCustomColors &&
+        !isVenueAsset &&
         canRenderAssetAsImage(asset, isPreview) &&
         (isPreview ? !!rasterAssetPath : true);
     const fastImageHref = canUseFastImage && rasterAssetPath && !rasterImageFailed ? rasterAssetPath : assetPath;
