@@ -401,6 +401,8 @@ export default function ExportPanel() {
       }
     },
     enabled: !!slug,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   // NOTE: Do NOT call setProjectName(projectData.name) here. In the editor the

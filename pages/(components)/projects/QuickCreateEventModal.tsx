@@ -22,6 +22,8 @@ export default function QuickCreateEventModal({ onClose }: { onClose: () => void
   const { data: projects } = useQuery({
     queryKey: ['projects'],
     queryFn: () => apiRequest('/projects', 'GET'),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const projectsList = (Array.isArray(projects) ? projects : (projects as any)?.data || []);

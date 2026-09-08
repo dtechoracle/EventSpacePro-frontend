@@ -1,9 +1,9 @@
 "use client";
 
-import { BsStars, BsCalendar, BsSearch } from "react-icons/bs";
+import { BsStars, BsSearch } from "react-icons/bs";
 import { useUserStore } from "@/store/userStore";
-import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import { useRouter } from "next/router";
 import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
@@ -28,122 +28,78 @@ interface EventData {
     projectSlug?: string;
     createdAt: string;
     updatedAt: string;
-    favourites?: string[]; // Array of user IDs
-    favorites?: string[]; // Support US spelling
+    favourites?: string[];
+    favorites?: string[];
 }
 
-interface ProjectData {
-    _id: string;
-    name: string;
-    slug: string;
-    events: EventData[];
-    createdAt: string;
-    updatedAt: string;
-}
-
-interface ApiResponse {
-    data: ProjectData[];
+interface BatchResponse {
+    data: {
+        projects: Array<{
+            _id: string;
+            name: string;
+            slug: string;
+            events: EventData[];
+        }>;
+        standaloneEvents: EventData[];
+    };
 }
 
 const Favorites = () => {
-    const { user, fetchUser } = useUserStore();
+    const { user } = useUserStore();
     const router = useRouter();
     const [searchQuery, setSearchQuery] = useState("");
     const [showCreateEventModal, setShowCreateEventModal] = useState(false);
-    const queryClient = useQueryClient();
 
-    useEffect(() => {
-        fetchUser();
-        const interval = setInterval(() => {
-            fetchUser();
-        }, 30000);
-        return () => clearInterval(interval);
-    }, [fetchUser]);
-
-    const { data, isLoading, refetch: refetchProjects } = useQuery<ApiResponse>({
-        queryKey: ["projects"],
-        queryFn: () => apiRequest("/projects", "GET", null, true),
-        staleTime: 5 * 60 * 1000,
-        gcTime: 10 * 60 * 1000,
-    });
-
-    const { data: allProjectEvents, isLoading: isLoadingEvents, refetch: refetchEvents } = useQuery({
-        queryKey: ["all-events", data?.data?.map(p => p.slug)],
+    const { data: batchData, isLoading } = useQuery<BatchResponse>({
+        queryKey: ["batch-all-events"],
         queryFn: async () => {
-            if (!data?.data) return [];
-            const eventPromises = data.data.map(async (project) => {
-                try {
-                    const res = await apiRequest(`/projects/${project.slug}/events`, "GET", null, true);
-                    const events = res.data || [];
-                    const fullEventPromises = events.map(async (event: any) => {
-                        try {
-                            const fullEventRes = await apiRequest(`/projects/${project.slug}/events/${event._id}`, "GET", null, true);
-                            return withPreviewableCanvasAssets(fullEventRes.data || fullEventRes);
-                        } catch (error) {
-                            return { ...event, canvasData: null, canvasAssets: [] };
-                        }
-                    });
-                    const fullEvents = await Promise.all(fullEventPromises);
-                    return {
-                        projectSlug: project.slug,
-                        projectName: project.name,
-                        projectId: project._id,
-                        events: fullEvents
-                    };
-                } catch (error) {
-                    return {
-                        projectSlug: project.slug,
-                        projectName: project.name,
-                        projectId: project._id,
-                        events: []
-                    };
-                }
-            });
-            return Promise.all(eventPromises);
+            return apiRequest("/events/batch/all", "GET", null, true);
         },
-        enabled: !!data?.data && data.data.length > 0,
         staleTime: 5 * 60 * 1000,
         gcTime: 10 * 60 * 1000,
         refetchOnMount: false,
     });
 
     const allEvents = useMemo(() => {
-        if (!allProjectEvents || allProjectEvents.length === 0) return [];
+        if (!batchData?.data) return [];
         const events: EventData[] = [];
-        allProjectEvents.forEach(projectData => {
-            if (projectData.events && Array.isArray(projectData.events)) {
-                projectData.events.forEach(event => {
-                    events.push({
-                        ...event,
-                        projectId: projectData.projectId,
-                        projectName: projectData.projectName,
-                        projectSlug: projectData.projectSlug,
-                    });
+        batchData.data.projects.forEach(project => {
+            (project.events || []).forEach(event => {
+                events.push({
+                    ...event,
+                    projectId: project._id,
+                    projectName: project.name,
+                    projectSlug: project.slug,
                 });
-            }
+            });
+        });
+        (batchData.data.standaloneEvents || []).forEach(event => {
+            events.push({
+                ...event,
+                projectId: '',
+                projectName: 'Standalone',
+                projectSlug: 'standalone',
+            });
         });
         return events.sort((a, b) => {
             const dateA = new Date(a.updatedAt || a.createdAt).getTime();
             const dateB = new Date(b.updatedAt || b.createdAt).getTime();
             return dateB - dateA;
         });
-    }, [allProjectEvents]);
+    }, [batchData]);
 
-    // Filter for FAVORITES only
     const favorites = useMemo(() => {
         let filtered = allEvents;
 
-        // 1. Filter by User ID in favorites array (check both spellings)
         if (user?._id) {
             filtered = filtered.filter(event => {
                 const favs = event.favorites || event.favourites || [];
                 return favs.includes(user._id);
             });
         } else {
-            return []; // No favorites if not logged in
+            return [];
         }
 
-        // 2. Filter by Search
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
             filtered = filtered.filter(event =>
@@ -154,16 +110,12 @@ const Favorites = () => {
         return filtered;
     }, [allEvents, searchQuery, user]);
 
-    const handleFavoriteToggle = () => {
-        // Refresh list when item is unfavorited
-        refetchEvents();
-    };
+    const handleFavoriteToggle = () => {};
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden">
             <DashboardSidebar />
             <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Header */}
                 <div className="bg-white border-b border-gray-200 px-8 py-5">
                     <div className="flex items-center justify-between">
                         <div>
@@ -187,7 +139,6 @@ const Favorites = () => {
                     </div>
                 </div>
 
-                {/* Content */}
                 <div className="flex-1 overflow-y-auto p-8">
                     {showCreateEventModal && (
                         <CreateEventModal onClose={() => setShowCreateEventModal(false)} />
@@ -197,7 +148,7 @@ const Favorites = () => {
                         <div className="flex items-center justify-between mb-6">
                             <span className="text-sm text-gray-500">{favorites.length} {favorites.length === 1 ? 'favorite' : 'favorites'}</span>
                         </div>
-                        {(isLoading || isLoadingEvents) ? (
+                        {isLoading ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                 {[1, 2, 3, 4].map((i) => (
                                     <div key={i} className="bg-gray-100 rounded-lg h-48 animate-pulse" />

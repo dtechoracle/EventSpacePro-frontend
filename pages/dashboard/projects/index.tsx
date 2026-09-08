@@ -48,8 +48,11 @@ interface ProjectData {
   __v: number;
 }
 
-interface ApiResponse {
-  data: ProjectData[];
+interface BatchResponse {
+  data: {
+    projects: ProjectData[];
+    standaloneEvents: EventData[];
+  };
 }
 
 const StandaloneEventCard = ({ event }: { event: EventData }) => {
@@ -124,78 +127,28 @@ const Projects = () => {
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
-  const { data, isLoading, error } = useQuery<ApiResponse>({
-    queryKey: ["projects"],
-    queryFn: () => apiRequest("/projects", "GET", null, true),
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-  });
-
-  // Standalone events (no project) live under GET /events. They are listed
-  // here in their own section so they don't look like an event inside a
-  // project — clicking one opens the standalone editor.
-  const { data: standaloneEvents, isLoading: isLoadingStandalone } = useQuery<EventData[]>({
-    queryKey: ["standalone-events"],
+  const { data: batchData, isLoading, error } = useQuery<BatchResponse>({
+    queryKey: ["batch-all-events"],
     queryFn: async () => {
-      const res = await apiRequest("/events", "GET", null, true);
-      const events = (res.data || res || []) as any[];
-      return Promise.all(events.map(async (event: any) => {
-        try {
-          const fullEvent = await apiRequest(`/events/${event._id}`, "GET", null, true);
-          return withPreviewableCanvasAssets(fullEvent.data || fullEvent);
-        } catch (error) {
-          return withPreviewableCanvasAssets(event);
-        }
-      }));
+      return apiRequest("/events/batch/all", "GET", null, true);
     },
-    enabled: true,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    refetchOnMount: false,
-  });
-
-  const { data: allProjectEvents, isLoading: isLoadingEvents } = useQuery({
-    queryKey: ["all-events", data?.data?.map(p => p.slug)],
-    queryFn: async () => {
-      if (!data?.data) return [];
-      const eventPromises = data.data.map(async (project) => {
-        try {
-          const res = await apiRequest(`/projects/${project.slug}/events`, "GET", null, true);
-          const events = res.data || [];
-          const fullEventPromises = events.map(async (event: any) => {
-            try {
-              const fullEventRes = await apiRequest(`/projects/${project.slug}/events/${event._id}`, "GET", null, true);
-              return withPreviewableCanvasAssets(fullEventRes.data || fullEventRes);
-            } catch (error) {
-              return { ...event, canvasData: null, canvasAssets: [] };
-            }
-          });
-          const fullEvents = await Promise.all(fullEventPromises);
-          return { projectSlug: project.slug, events: fullEvents };
-        } catch (error) {
-          return { projectSlug: project.slug, events: [] };
-        }
-      });
-      return Promise.all(eventPromises);
-    },
-    enabled: !!data?.data && data.data.length > 0,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnMount: false,
   });
 
   const projectsWithEvents = useMemo(() => {
-    if (!data?.data) return [];
-    if (!allProjectEvents) return data.data;
+    if (!batchData?.data?.projects) return [];
+    return batchData.data.projects.map((project: any) => ({
+      ...project,
+      events: (project.events || []).map((e: any) => withPreviewableCanvasAssets(e)),
+    }));
+  }, [batchData]);
 
-    return data.data.map(project => {
-      const eventsData = allProjectEvents.find(p => p.projectSlug === project.slug);
-      return {
-        ...project,
-        events: eventsData?.events || project.events || []
-      };
-    });
-  }, [data?.data, allProjectEvents]);
+  const standaloneEvents = useMemo(() => {
+    if (!batchData?.data?.standaloneEvents) return [];
+    return batchData.data.standaloneEvents.map((e: any) => withPreviewableCanvasAssets(e));
+  }, [batchData]);
 
   const filteredProjects = useMemo(() => {
     // Personal Drafts is now shown so users can access their draft events.
@@ -272,7 +225,7 @@ const Projects = () => {
           )}
 
           {/* My events: standalone events that live outside any project */}
-          {!isLoadingStandalone && filteredStandaloneEvents && filteredStandaloneEvents.length > 0 && (
+          {!isLoading && filteredStandaloneEvents && filteredStandaloneEvents.length > 0 && (
             <div className="mb-8">
               <div className="mb-6">
                 <h2 className="text-2xl font-semibold">My events</h2>
@@ -290,7 +243,7 @@ const Projects = () => {
             <h2 className="text-2xl font-semibold">Recents</h2>
           </div>
 
-          {(isLoading || isLoadingEvents) && (
+          {isLoading && (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 mt-8">
               {Array.from({ length: 6 }).map((_, index) => (
                 <div key={index} className="h-64 bg-gray-100 rounded-2xl animate-pulse" />
@@ -317,7 +270,7 @@ const Projects = () => {
             </div>
           )}
 
-          {filteredProjects && filteredProjects.length > 0 && !(isLoading || isLoadingEvents) && (
+          {filteredProjects && filteredProjects.length > 0 && !isLoading && (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 mt-8">
               {filteredProjects.map((project) => (
                 <ProjectCard key={project._id} project={project} />
@@ -325,7 +278,7 @@ const Projects = () => {
             </div>
           )}
 
-          {filteredProjects && filteredProjects.length === 0 && !(isLoading || isLoadingEvents) && (
+          {filteredProjects && filteredProjects.length === 0 && !isLoading && (
             <div className="mt-8 flex items-center justify-center rounded-2xl bg-white shadow-sm border border-gray-200 p-16">
               <div className="text-center space-y-6 max-w-md">
                 <div className="w-20 h-20 mx-auto bg-gray-50 rounded-2xl flex items-center justify-center">

@@ -23,7 +23,6 @@
     "jspdf": "^3.0.3",
     "lucide-react": "^0.542.0",
     "next": "^15.5.9",
-    "paper": "^0.12.18",
     "polygon-clipping": "^0.15.7",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

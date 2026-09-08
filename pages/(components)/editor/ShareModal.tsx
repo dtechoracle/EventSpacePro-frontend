@@ -35,19 +35,16 @@ export default function ShareModal({ onClose, slug: propSlug, eventId: propEvent
     queryKey: eventId ? ["event-collaborators", slug, eventId] : ["project-collaborators", slug],
     queryFn: async () => {
       if (!slug) return null;
-      // Prefer event-scoped collaborators when inside an event
       if (eventId) {
         try {
           const res = await apiRequest(`/projects/${slug}/events/${eventId}`, "GET", null, true);
           const evt = res.data || res;
-          // Event responses include users/invites separate from project
           if (evt.users || evt.invites) return evt;
         } catch (err) {
           console.error("Failed to fetch event for collaborators:", err);
         }
       }
       try {
-        // First try to get single project, fallback to list if needed
         const res = await apiRequest(`/projects/${slug}`, "GET", null, true).catch(async () => {
           const allRes = await apiRequest("/projects", "GET", null, true);
           return allRes.data.find((p: any) => p.slug === slug);
@@ -59,6 +56,8 @@ export default function ShareModal({ onClose, slug: propSlug, eventId: propEvent
       }
     },
     enabled: !!slug,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const handleInvite = async () => {

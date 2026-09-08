@@ -1,13 +1,5 @@
 "use client";
 
-import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import toast from 'react-hot-toast';
-import { useEditorStore } from '@/store/editorStore';
-import { useProjectStore } from '@/store/projectStore';
-import { useUserStore } from '@/store/userStore';
-import type { Shape, Asset, Wall } from '@/store/projectStore';
-import { useSceneStore } from '@/store/sceneStore';
 import WallRenderer from './renderers/WallRenderer';
 import ShapeRenderer from './renderers/ShapeRenderer';
 import AssetRenderer from './renderers/AssetRenderer';
@@ -15,15 +7,14 @@ import CanvasGridLayer from './renderers/CanvasGridLayer';
 import FreehandRenderer from './renderers/FreehandRenderer';
 import { DimensionRenderer } from './renderers/DimensionRenderer';
 import CommentRenderer from './renderers/CommentRenderer';
-import WallTool from './tools/WallTool';
-import ShapeTool from './tools/ShapeTool';
-import FreehandTool from './tools/FreehandTool';
-import SelectionTool from './tools/SelectionTool';
-import DimensionTool from './tools/DimensionTool';
-import ArchTool from './tools/ArchTool';
-import LabelArrowTool from './tools/LabelArrowTool';
-import TextAnnotationTool from './tools/TextAnnotationTool';
-import TrimTool from './tools/TrimTool';
+import React, { useRef, useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
+import { motion } from 'framer-motion';
+import toast from 'react-hot-toast';
+import { useEditorStore } from '@/store/editorStore';
+import { useProjectStore } from '@/store/projectStore';
+import { useUserStore } from '@/store/userStore';
+import type { Shape, Asset, Wall } from '@/store/projectStore';
+import { useSceneStore } from '@/store/sceneStore';
 import TexturePatternDefs from './TexturePatternDefs';
 import { PlacementRenderer } from './renderers/PlacementRenderer';
 import LabelArrowRenderer from './renderers/LabelArrowRenderer';
@@ -58,6 +49,16 @@ import { blendShapes } from '@/utils/shapeBoolean';
 import { canRenderAssetOnCanvas } from '@/utils/assetRenderMode';
 import { SpatialIndex, getRotatedItemBounds } from '@/utils/spatialIndex';
 import { TEXT_STYLE_FONTS, ensureGoogleFontsLoaded } from '@/utils/googleFonts';
+
+const WallTool = lazy(() => import('./tools/WallTool'));
+const ShapeTool = lazy(() => import('./tools/ShapeTool'));
+const FreehandTool = lazy(() => import('./tools/FreehandTool'));
+const SelectionTool = lazy(() => import('./tools/SelectionTool'));
+const DimensionTool = lazy(() => import('./tools/DimensionTool'));
+const ArchTool = lazy(() => import('./tools/ArchTool'));
+const LabelArrowTool = lazy(() => import('./tools/LabelArrowTool'));
+const TextAnnotationTool = lazy(() => import('./tools/TextAnnotationTool'));
+const TrimTool = lazy(() => import('./tools/TrimTool'));
 
 interface Workspace2DProps {
   width?: number;
@@ -4604,24 +4605,26 @@ export default function Workspace2D({
           {/* Snap Mode Source Highlight - Removed as redundant with SnapMarkers/AnchorHighlights */}
           {/* ... Removed ... */}
 
-          <WallTool
-            isActive={activeTool === 'wall'}
-            thickness={currentWallThickness}
-          />
-
-          <DimensionTool isActive={activeTool === 'dimension'} />
-          <ArchTool isActive={activeTool === 'arch'} />
-          <LabelArrowTool isActive={activeTool === 'label-arrow'} />
-          <TrimTool isActive={activeTool === 'trim' || activeTool === 'trim-to-object'} isTrimToObject={activeTool === 'trim-to-object'} />
-
-          {['shape-rectangle', 'shape-ellipse', 'shape-line', 'shape-arrow', 'shape-polygon'].includes(activeTool) && (
-            <ShapeTool
-              isActive={true}
-              shapeType={activeTool.replace('shape-', '') as 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'polygon'}
+          <Suspense fallback={null}>
+            <WallTool
+              isActive={activeTool === 'wall'}
+              thickness={currentWallThickness}
             />
-          )}
 
-          <FreehandTool isActive={activeTool === 'freehand'} />
+            <DimensionTool isActive={activeTool === 'dimension'} />
+            <ArchTool isActive={activeTool === 'arch'} />
+            <LabelArrowTool isActive={activeTool === 'label-arrow'} />
+            <TrimTool isActive={activeTool === 'trim' || activeTool === 'trim-to-object'} isTrimToObject={activeTool === 'trim-to-object'} />
+
+            {['shape-rectangle', 'shape-ellipse', 'shape-line', 'shape-arrow', 'shape-polygon'].includes(activeTool) && (
+              <ShapeTool
+                isActive={true}
+                shapeType={activeTool.replace('shape-', '') as 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'polygon'}
+              />
+            )}
+
+            <FreehandTool isActive={activeTool === 'freehand'} />
+          </Suspense>
 
           {/* Rectangular Selection Preview */}
           {/* Rectangular Selection Overlay - Only show if in selection mode and NOT dragging an item */}
@@ -4685,7 +4688,9 @@ export default function Workspace2D({
         </g>
         {/* Render SelectionTool outside scaled group so handles stay fixed size */}
         {activeTool === 'select' && !dragPreview && (
-          <SelectionTool isActive={true} viewportSize={viewportSize} />
+          <Suspense fallback={null}>
+            <SelectionTool isActive={true} viewportSize={viewportSize} />
+          </Suspense>
         )}
 
         {/* Snap Guides - Rendered last to be on top */}
@@ -4694,7 +4699,9 @@ export default function Workspace2D({
         </g>
       </svg>
 
-      <TextAnnotationTool isActive={activeTool === 'text-annotation'} />
+      <Suspense fallback={null}>
+        <TextAnnotationTool isActive={activeTool === 'text-annotation'} />
+      </Suspense>
 
       {/* Comments Layer */}
       {

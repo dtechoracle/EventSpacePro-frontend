@@ -40,7 +40,7 @@ function getTimeAgo(dateString: string | undefined): string {
 }
 
 function buildPreviewData(event: TrashedEvent) {
-  const data = event.canvasData || {};
+  const data = event.canvasData as any || {};
   return {
     walls: data.walls || [],
     shapes: data.shapes || [],

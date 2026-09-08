@@ -28,6 +28,7 @@ import toast from "react-hot-toast";
 import { calculateWorkspaceBounds } from "@/utils/workspaceBounds";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { useRouteParams } from "@/hooks/useRouteParams";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { PRELOADED_VENUES } from "@/lib/preloadedVenues";
 import { isStandaloneSlug } from "@/lib/standaloneEvent";
 import { isCollabAuthoritative } from "@/lib/collabAuthority";
@@ -1203,6 +1204,7 @@ const getLocalDraftKey = (slug: string, eventId: string) =>
   `esp-workspace-draft:${slug}:${eventId}`;
 
 export default function Editor() {
+  useUnsavedChangesGuard();
   const [showAssetsModal, setShowAssetsModal] = useState(false);
   const [show3D, setShow3D] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);

@@ -81,7 +81,9 @@ export default function CreateEventModal({
   const { data: projects } = useQuery({
     queryKey: ['projects'],
     queryFn: () => apiRequest('/projects', 'GET'),
-    enabled: !slug
+    enabled: !slug,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const [selectedProjectId, setSelectedProjectId] = useState((slug as string) || "");

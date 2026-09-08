@@ -6,14 +6,20 @@ import toast, { Toaster } from "react-hot-toast";
 import { useRouter } from "next/router";
 import Preloader from "./(components)/Preloader";
 import { instrumentSans } from "@/helpers/fonts";
-import { useProjectStore } from "@/store/projectStore";
 
 export default function App({ Component, pageProps }: AppProps) {
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+        refetchOnWindowFocus: false,
+        retry: 1,
+      },
+    },
+  }));
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const hasUnsavedChanges = useProjectStore((s) => s.hasUnsavedChanges);
-  const prevHasUnsavedRef = useRef(hasUnsavedChanges);
 
   useEffect(() => {
     const handleStart = () => setLoading(true);
@@ -33,7 +39,6 @@ export default function App({ Component, pageProps }: AppProps) {
     };
   }, [router]);
 
-  // No internet toast
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -45,7 +50,6 @@ export default function App({ Component, pageProps }: AppProps) {
       toast.success("Back online", { id: "online" });
     };
 
-    // Initial check
     if (!navigator.onLine) handleOffline();
 
     window.addEventListener("offline", handleOffline);
@@ -55,39 +59,6 @@ export default function App({ Component, pageProps }: AppProps) {
       window.removeEventListener("online", handleOnline);
     };
   }, []);
-
-  // Unsaved changes toast + navigation guard
-  useEffect(() => {
-    // Show once when transitioning false -> true
-    if (hasUnsavedChanges && !prevHasUnsavedRef.current) {
-      toast("You have unsaved changes", { id: "unsaved", duration: 4000 });
-    }
-    if (!hasUnsavedChanges && prevHasUnsavedRef.current) {
-      toast.dismiss("unsaved");
-    }
-    prevHasUnsavedRef.current = hasUnsavedChanges;
-  }, [hasUnsavedChanges]);
-
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = "";
-      }
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [hasUnsavedChanges]);
-
-  useEffect(() => {
-    const handleRouteChangeStart = (url: string) => {
-      if (hasUnsavedChanges) {
-        toast("You have unsaved changes", { id: "unsaved-route" });
-      }
-    };
-    router.events.on("routeChangeStart", handleRouteChangeStart);
-    return () => router.events.off("routeChangeStart", handleRouteChangeStart);
-  }, [hasUnsavedChanges, router]);
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -49,8 +49,11 @@ interface ProjectData {
   assets?: any[];
 }
 
-interface ApiResponse {
-  data: ProjectData[];
+interface BatchResponse {
+  data: {
+    projects: ProjectData[];
+    standaloneEvents: EventData[];
+  };
 }
 
 const Dashboard = () => {
@@ -66,99 +69,13 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchUser();
-    const interval = setInterval(() => {
-      fetchUser();
-    }, 30000);
-    return () => clearInterval(interval);
   }, [fetchUser]);
 
-  const { data, isLoading, error: projectsError } = useQuery<ApiResponse>({
-    queryKey: ["projects"],
-    queryFn: () => {
-      console.log('[Dashboard] Fetching projects from DATABASE');
-      return apiRequest("/projects", "GET", null, true);
-    },
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-  });
-
-  const projectSlugs = useMemo(() => data?.data?.map(p => p.slug).join(',') ?? '', [data?.data]);
-
-  const { data: allProjectEvents, isLoading: isLoadingEvents, error: eventsError } = useQuery({
-    queryKey: ["all-events", projectSlugs],
+  const { data: batchData, isLoading, error: batchError } = useQuery<BatchResponse>({
+    queryKey: ["batch-all-events"],
     queryFn: async () => {
-      if (!data?.data) return [];
-
-      console.log('[Dashboard] Fetching ALL events from DATABASE for projects:', data.data.map(p => p.slug));
-
-      const failedProjects: string[] = [];
-
-      const eventPromises = data.data.map(async (project) => {
-        try {
-          console.log(`[Dashboard] Fetching events from DATABASE for project: ${project.slug}`);
-          const res = await apiRequest(`/projects/${project.slug}/events`, "GET", null, true);
-          const events = res.data || [];
-
-          console.log(`[Dashboard] ✅ Fetched ${events.length} events from DATABASE for project ${project.slug}`);
-
-          const fullEventPromises = events.map(async (event: any) => {
-            try {
-              const fullEventRes = await apiRequest(`/projects/${project.slug}/events/${event._id}`, "GET", null, true);
-              const fullEvent = fullEventRes.data || fullEventRes;
-              return withPreviewableCanvasAssets(fullEvent);
-            } catch (error: any) {
-              console.error(`[Dashboard] ❌ Failed to fetch full event ${event._id} from DATABASE:`, error);
-              return { ...event, canvasData: null, canvasAssets: [] };
-            }
-          });
-
-          const fullEvents = await Promise.all(fullEventPromises);
-
-          return {
-            projectSlug: project.slug,
-            projectName: project.name,
-            projectId: project._id,
-            events: fullEvents
-          };
-        } catch (error: any) {
-          console.error(`[Dashboard] ❌ Failed to fetch events for project ${project.slug}:`, error);
-          failedProjects.push(project.slug);
-          return {
-            projectSlug: project.slug,
-            projectName: project.name,
-            projectId: project._id,
-            events: []
-          };
-        }
-      });
-
-      const results = await Promise.all(eventPromises);
-
-      if (failedProjects.length === data.data.length && data.data.length > 0) {
-        throw new Error("Failed to load events from server");
-      }
-
-      return results;
-    },
-    enabled: !!data?.data && data.data.length > 0,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    refetchOnMount: false,
-  });
-
-  const { data: standaloneEvents } = useQuery<EventData[]>({
-    queryKey: ["standalone-events"],
-    queryFn: async () => {
-      const res = await apiRequest("/events", "GET", null, true);
-      const events = (res.data || res || []) as any[];
-      return Promise.all(events.map(async (event: any) => {
-        try {
-          const fullEvent = await apiRequest(`/events/${event._id}`, "GET", null, true);
-          return withPreviewableCanvasAssets(fullEvent.data || fullEvent);
-        } catch (error) {
-          return withPreviewableCanvasAssets(event);
-        }
-      }));
+      console.log('[Dashboard] Fetching ALL data in single batch request');
+      return apiRequest("/events/batch/all", "GET", null, true);
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
@@ -166,17 +83,17 @@ const Dashboard = () => {
   });
 
   const projectsWithEvents = useMemo(() => {
-    if (!data?.data) return [];
-    if (!allProjectEvents) return data.data;
+    if (!batchData?.data?.projects) return [];
+    return batchData.data.projects.map((project: any) => ({
+      ...project,
+      events: (project.events || []).map((e: any) => withPreviewableCanvasAssets(e)),
+    }));
+  }, [batchData]);
 
-    return data.data.map(project => {
-      const eventsData = allProjectEvents.find(p => p.projectSlug === project.slug);
-      return {
-        ...project,
-        events: eventsData?.events || []
-      };
-    });
-  }, [data?.data, allProjectEvents]);
+  const standaloneEvents = useMemo(() => {
+    if (!batchData?.data?.standaloneEvents) return [];
+    return batchData.data.standaloneEvents.map((e: any) => withPreviewableCanvasAssets(e));
+  }, [batchData]);
 
   const searchFilter = useMemo(() => searchQuery.toLowerCase(), [searchQuery]);
 
@@ -190,15 +107,15 @@ const Dashboard = () => {
   }, [projectsWithEvents, searchFilter]);
 
   const recentEvents = useMemo(() => {
-    const allProjectEventsFlat = (allProjectEvents || []).flatMap(project =>
+    const allProjectEventsFlat = projectsWithEvents.flatMap(project =>
       (project.events || []).map((event: any) => ({
         ...event,
-        projectSlug: project.projectSlug,
-        projectName: project.projectName
+        projectSlug: project.slug,
+        projectName: project.name
       }))
     );
 
-    const standaloneEventsFlat = (standaloneEvents || []).map((event: any) => ({
+    const standaloneEventsFlat = standaloneEvents.map((event: any) => ({
       ...event,
       projectSlug: 'standalone',
       projectName: 'Standalone'
@@ -216,7 +133,7 @@ const Dashboard = () => {
     return filteredEvents
       .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
       .slice(0, 8);
-  }, [allProjectEvents, standaloneEvents, searchFilter]);
+  }, [projectsWithEvents, standaloneEvents, searchFilter]);
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -279,7 +196,7 @@ const Dashboard = () => {
           )}
 
           <section className="mb-16">
-            {!isLoading && !isLoadingEvents && (filteredProjects.length === 0) && recentEvents.length === 0 && !searchQuery ? (
+            {!isLoading && (filteredProjects.length === 0) && recentEvents.length === 0 && !searchQuery ? (
               <div className="w-full bg-white rounded-xl border border-gray-200 p-8 my-4">
                 <div className="max-w-2xl">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-blue-50 text-blue-600 text-xs font-semibold mb-4 border border-blue-100">
@@ -345,7 +262,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                {(isLoading || isLoadingEvents) ? (
+                {(isLoading) ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {[1, 2, 3, 4].map((i) => (
                       <div
@@ -364,7 +281,7 @@ const Dashboard = () => {
                       </div>
                     ))}
                   </div>
-                ) : projectsError || eventsError ? (
+                ) : batchError ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
                     <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center">
                       <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

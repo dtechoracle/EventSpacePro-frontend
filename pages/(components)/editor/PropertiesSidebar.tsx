@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { FaUserCircle, FaChevronDown, FaChevronRight, FaAlignLeft, FaAlignCenter, FaAlignRight, FaArrowUp, FaArrowDown, FaArrowsAltV, FaArrowsAltH, FaCircleNotch, FaBold, FaItalic, FaUnderline, FaHighlighter, FaTimes, FaExpand, FaPlus } from "react-icons/fa";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
@@ -233,7 +233,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const selectedIdSet = useMemo(() => new Set(resolvedSelectedIds), [resolvedSelectedIds]);
 
   // Calculate collective bounding box for multi-selection or single item
-  const getCollectiveBounds = () => {
+  const collectiveBounds = useMemo(() => {
     if (resolvedSelectedIds.length === 0) return null;
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -306,16 +306,14 @@ export default function PropertiesSidebar(): React.JSX.Element {
       width: maxX - minX,
       height: maxY - minY
     };
-  };
+  }, [resolvedSelectedIds, shapes, assets, walls, textAnnotations]);
 
-  const collectiveBounds = getCollectiveBounds();
-
-  const selectedShape = selectedId ? shapes.find(s => s.id === selectedId) : null;
-  const selectedAsset = selectedId ? assets.find(a => a.id === selectedId) : null;
-  const selectedWall = selectedId ? walls.find(w => w.id === selectedId) : null;
-  const selectedTextAnnotation = selectedId ? textAnnotations.find(t => t.id === selectedId) : null;
-  const selectedLabelArrow = selectedId ? labelArrows.find(l => l.id === selectedId) : null;
-  const selectedDimension = selectedId ? dimensions.find(d => d.id === selectedId) : null;
+  const selectedShape = useMemo(() => selectedId ? shapes.find(s => s.id === selectedId) : null, [selectedId, shapes]);
+  const selectedAsset = useMemo(() => selectedId ? assets.find(a => a.id === selectedId) : null, [selectedId, assets]);
+  const selectedWall = useMemo(() => selectedId ? walls.find(w => w.id === selectedId) : null, [selectedId, walls]);
+  const selectedTextAnnotation = useMemo(() => selectedId ? textAnnotations.find(t => t.id === selectedId) : null, [selectedId, textAnnotations]);
+  const selectedLabelArrow = useMemo(() => selectedId ? labelArrows.find(l => l.id === selectedId) : null, [selectedId, labelArrows]);
+  const selectedDimension = useMemo(() => selectedId ? dimensions.find(d => d.id === selectedId) : null, [selectedId, dimensions]);
 
   const selectedItem = selectedShape || selectedAsset || selectedWall || selectedTextAnnotation || selectedLabelArrow || selectedDimension;
   const itemType = selectedShape ? 'shape' : selectedWall ? 'wall' : (selectedAsset?.type === 'wall-segments') ? 'wall' : selectedAsset ? 'asset' : selectedTextAnnotation ? 'text-annotation' : selectedLabelArrow ? 'label-arrow' : selectedDimension ? 'dimension' : null;
