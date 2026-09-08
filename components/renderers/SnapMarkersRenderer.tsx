@@ -12,30 +12,45 @@ const marqueeAssetTypes = new Set(
 
 const snapDrawingTools = new Set(['wall', 'shape-line', 'shape-arrow', 'dimension', 'arch', 'shape-rectangle', 'shape-ellipse', 'shape-polygon', 'freehand']);
 
-export default function SnapMarkersRenderer() {
+interface SnapMarkersRendererProps {
+  dragPreview?: { ids: string[]; dx: number; dy: number } | null;
+}
+
+export default function SnapMarkersRenderer({ dragPreview }: SnapMarkersRendererProps) {
     const hoveredId = useEditorStore(s => s.hoveredId);
     const zoom = useEditorStore(s => s.zoom);
     const mouseWorldPos = useEditorStore(s => s.mouseWorldPos);
     const activeTool = useEditorStore(s => s.activeTool);
     const shapes = useProjectStore(s => s.shapes);
     const allAssets = useProjectStore(s => s.assets);
-    const marqueeAssets = useMemo(
-        () => allAssets.filter(asset => marqueeAssetTypes.has(asset.type) || String(asset.type || asset.name || '').toLowerCase().includes('marquee')),
-        [allAssets]
-    );
     const walls = useProjectStore(s => s.walls);
+
+    const dragOffset = useMemo(() => {
+        if (!dragPreview || dragPreview.ids.length === 0) return null;
+        const offsetMap = new Map<string, { dx: number; dy: number }>();
+        for (const id of dragPreview.ids) {
+            offsetMap.set(id, { dx: dragPreview.dx, dy: dragPreview.dy });
+        }
+        return offsetMap;
+    }, [dragPreview]);
+
+    const offsetPoints = (id: string, pts: ReturnType<typeof getSnapPoints>) => {
+        const off = dragOffset?.get(id);
+        if (off) return pts.map(p => ({ ...p, x: p.x + off.dx, y: p.y + off.dy }));
+        return pts;
+    };
 
     const fallbackCandidates = useMemo<Array<{ id: string; points: ReturnType<typeof getSnapPoints> }>>(() => {
         if (!snapDrawingTools.has(activeTool)) return [];
 
         const candidates: Array<{ id: string; points: ReturnType<typeof getSnapPoints> }> = [
-            ...shapes.map((shape) => ({ id: shape.id, points: getSnapPoints(shape) })),
-            ...walls.map((wall) => ({ id: wall.id, points: getSnapPoints(wall) })),
-            ...allAssets.map((asset) => ({ id: asset.id, points: getSnapPoints(asset) })),
+            ...shapes.map((shape) => ({ id: shape.id, points: offsetPoints(shape.id, getSnapPoints(shape)) })),
+            ...walls.map((wall) => ({ id: wall.id, points: offsetPoints(wall.id, getSnapPoints(wall)) })),
+            ...allAssets.map((asset) => ({ id: asset.id, points: offsetPoints(asset.id, getSnapPoints(asset)) })),
         ];
 
         return candidates;
-    }, [activeTool, allAssets, shapes, walls]);
+    }, [activeTool, allAssets, shapes, walls, dragOffset]);
 
     const fallbackSnapTargetId = useMemo<string | null>(() => {
         if (fallbackCandidates.length === 0) {
@@ -65,18 +80,16 @@ export default function SnapMarkersRenderer() {
         if (!markerSourceId) return [];
 
         const shape = shapes.find(s => s.id === markerSourceId);
-        if (shape) return getSnapPoints(shape);
+        if (shape) return offsetPoints(markerSourceId, getSnapPoints(shape));
 
         const asset = allAssets.find(a => a.id === markerSourceId);
-        if (asset) {
-            return getSnapPoints(asset);
-        }
+        if (asset) return offsetPoints(markerSourceId, getSnapPoints(asset));
 
         const wall = walls.find(w => w.id === markerSourceId);
-        if (wall) return getSnapPoints(wall);
+        if (wall) return offsetPoints(markerSourceId, getSnapPoints(wall));
 
         return [];
-    }, [markerSourceId, shapes, allAssets, walls]);
+    }, [markerSourceId, shapes, allAssets, walls, dragOffset]);
 
     const activePoint = useMemo(() => {
         if (!markerSourceId || snapPoints.length === 0) return null;
@@ -86,7 +99,6 @@ export default function SnapMarkersRenderer() {
     if (!markerSourceId || snapPoints.length === 0) return null;
 
     const markerRadius = 8 / zoom;
-    const strokeWidth = 1.5 / zoom;
 
     return (
         <g pointerEvents="none" className="snap-markers">

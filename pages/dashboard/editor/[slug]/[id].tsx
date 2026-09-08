@@ -1220,6 +1220,13 @@ export default function Editor() {
   };
   const queryClient = useQueryClient();
 
+  // Invalidate dashboard batch query on unmount so fresh data shows when navigating back
+  useEffect(() => {
+    return () => {
+      queryClient.invalidateQueries({ queryKey: ["batch-all-events"] });
+    };
+  }, [queryClient]);
+
   // Allow the AI assistant to open the asset library via a window event
   useEffect(() => {
     const openAssets = () => setShowAssetsModal(true);

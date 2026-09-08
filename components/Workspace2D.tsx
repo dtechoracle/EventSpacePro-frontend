@@ -4567,7 +4567,7 @@ export default function Workspace2D({
       >
         <TexturePatternDefs />
         <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>
-          <SnapMarkersRenderer />
+          <SnapMarkersRenderer dragPreview={dragPreview} />
 
           <RenderLayer 
             visibleRenderables={visibleRenderables}
@@ -4687,7 +4687,7 @@ export default function Workspace2D({
           {/* SelectionTool handles will be rendered outside the scaled group for fixed size */}
         </g>
         {/* Render SelectionTool outside scaled group so handles stay fixed size */}
-        {activeTool === 'select' && !dragPreview && (
+        {activeTool === 'select' && (
           <Suspense fallback={null}>
             <SelectionTool isActive={true} viewportSize={viewportSize} />
           </Suspense>
