@@ -1378,6 +1378,45 @@ export default function Workspace2D({
             break;
           }
 
+          case 'labelArrow': {
+            const arrow = item;
+            const dx = arrow.endPoint.x - arrow.startPoint.x, dy = arrow.endPoint.y - arrow.startPoint.y;
+            const lenSq = dx * dx + dy * dy;
+            const thickness = (arrow.strokeWidth || 2) + 30;
+            let arrowHit = false;
+            if (lenSq === 0) {
+              if (Math.hypot(worldX - arrow.startPoint.x, worldY - arrow.startPoint.y) <= thickness) arrowHit = true;
+            } else {
+              const t = Math.max(0, Math.min(1, ((worldX - arrow.startPoint.x) * dx + (worldY - arrow.startPoint.y) * dy) / lenSq));
+              if (Math.hypot(worldX - (arrow.startPoint.x + t * dx), worldY - (arrow.startPoint.y + t * dy)) <= thickness) arrowHit = true;
+            }
+            if (!arrowHit) {
+              const lLen = Math.hypot(dx, dy);
+              if (lLen > 0.01) {
+                const labelPos = arrow.textPosition || 'bottom';
+                const labelT = labelPos === 'top' ? 0.86 : labelPos === 'middle' ? 0.5 : 0.14;
+                const labelX = arrow.startPoint.x + dx * labelT;
+                const labelY = arrow.startPoint.y + dy * labelT;
+                const fontSize = arrow.fontSize || 120;
+                const rectPadH = fontSize * 0.5;
+                const rectPadV = fontSize * 0.35;
+                const lbl = arrow.label || '';
+                const rectWidth = Math.max(fontSize * 2, lbl.length * fontSize * 0.62 + rectPadH * 2);
+                const rectHeight = fontSize + rectPadV * 2;
+                let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+                if (textAngle > 90 || textAngle < -90) textAngle += 180;
+                const rad = -textAngle * Math.PI / 180;
+                const cosA = Math.cos(rad), sinA = Math.sin(rad);
+                const localX = worldX - labelX, localY = worldY - labelY;
+                const rotX = localX * cosA - localY * sinA;
+                const rotY = localX * sinA + localY * cosA;
+                if (Math.abs(rotX) <= rectWidth / 2 + 10 && Math.abs(rotY) <= rectHeight / 2 + 10) arrowHit = true;
+              }
+            }
+            if (arrowHit) targetId = arrow.id;
+            break;
+          }
+
           case 'textAnnotation': {
             const ann = item;
             const fontSize = ann.fontSize || 250;
@@ -2514,12 +2553,35 @@ export default function Workspace2D({
               const arrow = item;
               const dx = arrow.endPoint.x - arrow.startPoint.x, dy = arrow.endPoint.y - arrow.startPoint.y;
               const lenSq = dx * dx + dy * dy;
-              const thickness = (arrow.strokeWidth || 2) + 30; // Increased hit radius
+              const thickness = (arrow.strokeWidth || 2) + 30;
               if (lenSq === 0) {
                 if (Math.hypot(worldX - arrow.startPoint.x, worldY - arrow.startPoint.y) <= thickness) isHit = true;
               } else {
                 const t = Math.max(0, Math.min(1, ((worldX - arrow.startPoint.x) * dx + (worldY - arrow.startPoint.y) * dy) / lenSq));
                 if (Math.hypot(worldX - (arrow.startPoint.x + t * dx), worldY - (arrow.startPoint.y + t * dy)) <= thickness) isHit = true;
+              }
+              if (!isHit) {
+                const lLen = Math.hypot(dx, dy);
+                if (lLen > 0.01) {
+                  const labelPos = arrow.textPosition || 'bottom';
+                  const labelT = labelPos === 'top' ? 0.86 : labelPos === 'middle' ? 0.5 : 0.14;
+                  const labelX = arrow.startPoint.x + dx * labelT;
+                  const labelY = arrow.startPoint.y + dy * labelT;
+                  const fontSize = arrow.fontSize || 120;
+                  const rectPadH = fontSize * 0.5;
+                  const rectPadV = fontSize * 0.35;
+                  const lbl = arrow.label || '';
+                  const rectWidth = Math.max(fontSize * 2, lbl.length * fontSize * 0.62 + rectPadH * 2);
+                  const rectHeight = fontSize + rectPadV * 2;
+                  let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+                  if (textAngle > 90 || textAngle < -90) textAngle += 180;
+                  const rad = -textAngle * Math.PI / 180;
+                  const cosA = Math.cos(rad), sinA = Math.sin(rad);
+                  const localX = worldX - labelX, localY = worldY - labelY;
+                  const rotX = localX * cosA - localY * sinA;
+                  const rotY = localX * sinA + localY * cosA;
+                  if (Math.abs(rotX) <= rectWidth / 2 + 10 && Math.abs(rotY) <= rectHeight / 2 + 10) isHit = true;
+                }
               }
             }
 

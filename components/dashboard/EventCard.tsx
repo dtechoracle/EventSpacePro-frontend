@@ -103,14 +103,14 @@ const EventCard = memo(function EventCard({ event, user, previewData, onFavorite
 
     const handleDelete = useCallback(async (e?: React.MouseEvent) => {
         e?.stopPropagation();
-        if (!confirm("Are you sure you want to delete this event? This cannot be undone.")) return;
+        if (!confirm("Move this event to trash? You can restore it from the Trash page.")) return;
         setShowMenu(false);
         try {
             const endpoint = event?.projectSlug === 'standalone'
                 ? `/events/${event._id}`
                 : `/projects/${event.projectSlug}/events/${event._id}`;
             await apiRequest(endpoint, "DELETE", null, true);
-            toast.success("Event deleted successfully");
+            toast.success("Moved to trash");
             if (onDelete) {
                 onDelete();
             } else {
