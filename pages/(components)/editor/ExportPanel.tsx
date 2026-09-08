@@ -1520,9 +1520,11 @@ const renderAssetToCanvas = (
         // Re-rendering SVG assets on top of the snapshot caused double-drawing
         // distortion (blurry hatching, misaligned strokes).
         assetsToExport.forEach(a => {
-          if (a.type !== 'wall-segments' && canvasBackedAssetIds.has(a.id)) {
+          if (a.type !== 'wall-segments') {
             const isVenueAsset = PRELOADED_VENUES.some(v => v.id === a.type || v.name === a.type);
-            if (!isVenueAsset) {
+            if (isVenueAsset && loadedImages.has(a.id)) {
+              renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages);
+            } else if (!isVenueAsset && canvasBackedAssetIds.has(a.id)) {
               renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages);
             }
           }
