@@ -4689,7 +4689,7 @@ export default function Workspace2D({
         {/* Render SelectionTool outside scaled group so handles stay fixed size */}
         {activeTool === 'select' && (
           <Suspense fallback={null}>
-            <SelectionTool isActive={true} viewportSize={viewportSize} />
+            <SelectionTool isActive={true} viewportSize={viewportSize} dragPreview={dragPreview} />
           </Suspense>
         )}
 

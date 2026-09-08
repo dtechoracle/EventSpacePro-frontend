@@ -9,9 +9,10 @@ import { ASSET_LIBRARY } from '@/lib/assets';
 interface SelectionToolProps {
     isActive: boolean;
     viewportSize: { width: number; height: number };
+    dragPreview?: { ids: string[]; dx: number; dy: number } | null;
 }
 
-export default function SelectionTool({ isActive, viewportSize }: SelectionToolProps) {
+export default function SelectionTool({ isActive, viewportSize, dragPreview }: SelectionToolProps) {
     const ROTATION_SNAP_STEP = 15;
     const ROTATION_SNAP_THRESHOLD = 4;
     const selectedIds = useEditorStore(s => s.selectedIds);
@@ -203,6 +204,23 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
         }
         return nextGroupBounds;
     }, [selectedIds.length, selectedItems]);
+
+    // During drag, offset groupBounds by the drag delta so the selection box
+    // tracks the DragPreviewLayer position (store positions haven't updated yet).
+    const liveGroupBounds = useMemo(() => {
+        if (!dragPreview || dragPreview.ids.length === 0) return groupBounds;
+        const dragIdSet = new Set(dragPreview.ids);
+        const anySelectedIsDragged = selectedItems.some(item => {
+            const id = (item.object as any).id;
+            return dragIdSet.has(id);
+        });
+        if (!anySelectedIsDragged) return groupBounds;
+        return {
+            ...groupBounds,
+            x: groupBounds.x + dragPreview.dx,
+            y: groupBounds.y + dragPreview.dy,
+        };
+    }, [groupBounds, dragPreview, selectedItems]);
 
     const handleMouseDown = useCallback((e: React.MouseEvent, handle: string) => {
         if (selectedIds.length === 0) return;
@@ -509,7 +527,7 @@ export default function SelectionTool({ isActive, viewportSize }: SelectionToolP
 
     // Only use initial state for Rotation to keep pivot stable.
     // Movement and Resizing should use the live recalculated groupBounds from the store.
-    const activeGroupBounds = (dragHandle === 'rotate' && initialState) ? initialState.groupBounds : groupBounds;
+    const activeGroupBounds = (dragHandle === 'rotate' && initialState) ? initialState.groupBounds : liveGroupBounds;
     const { x, y, width, height, rotation } = activeGroupBounds;
     const effectiveRotation = (dragHandle === 'rotate') ? (rotation + currentRotation) : rotation;
 
