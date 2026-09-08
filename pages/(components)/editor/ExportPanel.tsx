@@ -197,7 +197,39 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
 
       if (isVenue) {
         // Venue SVGs contain essential structural lines and colored open paths (e.g., red dome walls).
-        // Preserve their original SVG strokes and fills so they render perfectly in exports.
+        // Scale stroke-widths by the same STROKE_SCALE factor the workspace uses (AssetRenderer)
+        // so they don't appear hairline-thin at export resolution.
+        const STROKE_SCALE = 10;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(processedSvg, 'image/svg+xml');
+        const svgEl = doc.querySelector('svg');
+        if (svgEl) {
+          const allEls = svgEl.querySelectorAll('path, circle, rect, line, polyline, ellipse');
+          allEls.forEach(el => {
+            const currentSW = el.getAttribute('stroke-width');
+            if (currentSW) {
+              const parsed = parseFloat(currentSW);
+              if (!isNaN(parsed) && parsed > 0) {
+                el.setAttribute('stroke-width', String(parsed * STROKE_SCALE));
+              }
+            }
+            // Also scale style attribute stroke-widths
+            const styleAttr = el.getAttribute('style');
+            if (styleAttr && /stroke-width/i.test(styleAttr)) {
+              const scaled = styleAttr.replace(/stroke-width\s*:\s*([\d.]+)/gi, (_m, val) => {
+                const num = parseFloat(val);
+                return isNaN(num) ? _m : `stroke-width: ${num * STROKE_SCALE}`;
+              });
+              el.setAttribute('style', scaled);
+            }
+          });
+          // Remove non-scaling-stroke so strokes scale with the export
+          const styleEls = doc.querySelectorAll('style');
+          styleEls.forEach(s => {
+            s.textContent = s.textContent?.replace(/vector-effect\s*:\s*non-scaling-stroke[^;]*/gi, '') || '';
+          });
+          processedSvg = new XMLSerializer().serializeToString(doc);
+        }
         const blob = new Blob([processedSvg], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
         const img = new Image();

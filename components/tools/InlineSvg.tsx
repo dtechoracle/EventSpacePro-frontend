@@ -517,10 +517,22 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
             svg.removeAttribute("width");
             svg.removeAttribute("height");
             const isVenue = category === 'Venue' || src.toLowerCase().includes('preloaded-venues');
-            if (metrics.shouldCropToContent && !isVenue && metrics.contentX !== null && metrics.contentY !== null && metrics.contentWidth && metrics.contentHeight) {
-                // Expand viewBox by a small margin so SVG strokes at the edges aren't clipped
-                const pad = Math.max(metrics.contentWidth, metrics.contentHeight) * 0.03;
-                svg.setAttribute("viewBox", `${metrics.contentX - pad} ${metrics.contentY - pad} ${metrics.contentWidth + pad * 2} ${metrics.contentHeight + pad * 2}`);
+            if (!isVenue) {
+                // Always expand the viewBox slightly so strokes at edges aren't clipped
+                const existingVB = svg.getAttribute("viewBox");
+                if (metrics.shouldCropToContent && metrics.contentX !== null && metrics.contentY !== null && metrics.contentWidth && metrics.contentHeight) {
+                    const pad = Math.max(metrics.contentWidth, metrics.contentHeight) * 0.03;
+                    svg.setAttribute("viewBox", `${metrics.contentX - pad} ${metrics.contentY - pad} ${metrics.contentWidth + pad * 2} ${metrics.contentHeight + pad * 2}`);
+                } else if (existingVB) {
+                    const parts = existingVB.trim().split(/[\s,]+/).map(parseFloat);
+                    if (parts.length === 4 && parts.every(Number.isFinite)) {
+                        const [vbX, vbY, vbW, vbH] = parts;
+                        const pad = Math.max(vbW, vbH) * 0.03;
+                        svg.setAttribute("viewBox", `${vbX - pad} ${vbY - pad} ${vbW + pad * 2} ${vbH + pad * 2}`);
+                    }
+                } else if (metrics.artboardWidth && metrics.artboardHeight) {
+                    svg.setAttribute("viewBox", `0 0 ${metrics.artboardWidth} ${metrics.artboardHeight}`);
+                }
             } else if (!svg.getAttribute("viewBox") && metrics.artboardWidth && metrics.artboardHeight) {
                 svg.setAttribute("viewBox", `0 0 ${metrics.artboardWidth} ${metrics.artboardHeight}`);
             }
