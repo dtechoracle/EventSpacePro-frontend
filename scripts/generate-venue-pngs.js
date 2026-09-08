@@ -19,18 +19,23 @@ async function processOne(file) {
     if (parts.length === 4) { vbWidth = Math.abs(parts[2]); vbHeight = Math.abs(parts[3]); }
   }
 
-  const strokeWidth = Math.max(3, Math.round(Math.max(vbWidth, vbHeight) * 0.004));
+  const sw = Math.max(3, Math.round(Math.max(vbWidth, vbHeight) * 0.004));
 
-  // Strip baked-in style block
+  // Strip problematic elements
   svgText = svgText.replace(/<style id="preloaded-venue-style">[\s\S]*?<\/style>/gi, '');
   svgText = svgText.replace(/<!--[\s\S]*?-->/g, '');
   svgText = svgText.replace(/<metadata[\s\S]*?<\/metadata>/gi, '');
 
-  // Inject simple stroke styling
-  const style = `<style>* { stroke: #272235; stroke-width: ${strokeWidth}; fill: none; }</style>`;
-  let rasterSvgText = svgText.replace(/<svg\b([^>]*)>/i, (m) => `${m}${style}`);
+  // Per-element stroke override via attribute manipulation (avoids !important issues with sharp)
+  svgText = svgText.replace(/stroke-width="[^"]*"/gi, `stroke-width="${sw}"`);
+  svgText = svgText.replace(/stroke="[^"]*"/gi, 'stroke="#272235"');
+  svgText = svgText.replace(/fill="[^"]*"/gi, 'fill="none"');
 
-  const buf = Buffer.from(rasterSvgText);
+  // Also strip inline style stroke overrides
+  svgText = svgText.replace(/style="[^"]*stroke-width[^"]*"/gi, `style="stroke-width:${sw}"`);
+  svgText = svgText.replace(/style="[^"]*stroke:[^"]*"/gi, 'style="stroke:#272235"');
+
+  const buf = Buffer.from(svgText);
 
   await sharp(buf, { density: 24, limitInputPixels: false })
     .resize({ width: 512, height: 512, fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 }, withoutEnlargement: true })
@@ -38,7 +43,7 @@ async function processOne(file) {
     .toFile(pngPath);
 
   const pngStat = await fs.stat(pngPath);
-  console.log(`${file} -> PNG: ${(pngStat.size/1024).toFixed(1)}KB`);
+  console.log(`${file} -> PNG: ${(pngStat.size/1024).toFixed(1)}KB (stroke: ${sw})`);
 }
 
 (async () => {
