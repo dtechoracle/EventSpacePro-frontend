@@ -320,7 +320,7 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
     const baseSvg = useMemo(() => {
         if (!rawSvg || typeof window === "undefined") return "";
         
-        const cacheKey = `${src}_${category || 'none'}_v11_viewbox_padded`;
+        const cacheKey = `${src}_${category || 'none'}_v12_overflow_visible`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
@@ -548,7 +548,7 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
                 .replace(/\s+height\s*=\s*["'][^"']*["']/gi, '')
                 .replace(/\s+fill\s*=\s*["'][^"']*["']/gi, '')
                 .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '');
-            return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%;">`;
+            return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%;overflow:visible;">`;
         });
     }, [baseSvg, fill, stroke, strokeWidth]);
 
