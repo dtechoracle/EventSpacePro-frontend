@@ -833,7 +833,6 @@ export default function CreateEventModal({
                           <VenueThumbnail
                             src={venue.path}
                             stroke="#272235"
-                            strokeWidth={1.5}
                           />
                         </div>
                         <button
