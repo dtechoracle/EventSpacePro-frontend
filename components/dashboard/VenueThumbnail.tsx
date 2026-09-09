@@ -14,6 +14,12 @@ function parseSvg(raw: string): { viewBox: string; innerHtml: string } {
   return { viewBox, innerHtml: svg.innerHTML };
 }
 
+function forceBlackStrokes(innerHtml: string): string {
+  return innerHtml
+    .replace(/style="[^"]*stroke\s*:\s*[^;"]+;?/gi, (match) => match.replace(/stroke\s*:\s*[^;"]+/gi, 'stroke:#272235'))
+    .replace(/stroke="[^"]*"/gi, 'stroke="#272235"');
+}
+
 const VenueThumbnail = memo(function VenueThumbnail({
   src,
   stroke = '#272235',
@@ -61,10 +67,8 @@ const VenueThumbnail = memo(function VenueThumbnail({
       xmlns="http://www.w3.org/2000/svg"
       style={{ width: '100%', height: '100%' }}
     >
+      <style>{`* { stroke: ${stroke} !important; fill: none !important; }`}</style>
       <g
-        stroke={stroke}
-        strokeWidth={strokeWidth}
-        fill="none"
         dangerouslySetInnerHTML={{ __html: data.innerHtml }}
       />
     </svg>
