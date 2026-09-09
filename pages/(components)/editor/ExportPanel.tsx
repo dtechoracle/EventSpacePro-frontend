@@ -651,11 +651,8 @@ export default function ExportPanel() {
           const resp = await fetch(href);
           if (!resp.ok) return;
           let imageBlob: Blob;
-          if (href.includes('preloaded-venues')) {
-            // Preloaded venue SVGs: embed as-is so the export matches the workspace exactly.
-            // The workspace renders them via <image> at fixed dimensions; the browser rasterizes
-            // the SVG with its native strokes at the correct scale. Re-processing with
-            // processVenueSvgForExport() applied different stroke scaling, causing faint exports.
+          if (href.includes('preloaded-venues') || href.includes('/assets/preloaded-venues/')) {
+            // Venue SVGs: embed as-is so the export matches the workspace exactly.
             imageBlob = await resp.blob();
           } else if (href.includes('/assets/') && href.toLowerCase().endsWith('.svg')) {
             const rawSvg = await resp.text();
@@ -685,6 +682,8 @@ export default function ExportPanel() {
     if (zoom > 0 && zoom < 1) {
       const strokeScale = 1 / zoom;
       clone.querySelectorAll('path, circle, rect, line, polyline, ellipse').forEach((el) => {
+        // Skip venue SVG elements — they have their own stroke widths that match the workspace
+        if (el.closest('[data-venue="true"]')) return;
         const sw = el.getAttribute('stroke-width');
         if (sw) {
           const num = parseFloat(sw);

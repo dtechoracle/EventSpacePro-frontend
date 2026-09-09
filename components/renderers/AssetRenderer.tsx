@@ -1014,6 +1014,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                         />
                     ) : processedSvg ? (
                         <g
+                            data-venue="true"
                             dangerouslySetInnerHTML={{ __html: processedSvg }}
                             style={{ filter: 'none' }}
                         />
