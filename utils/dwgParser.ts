@@ -76,9 +76,12 @@ function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTableEntry>, layers: DwgLayerTableEntry[], visited: Set<string>): string | null {
+function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTableEntry>, layers: DwgLayerTableEntry[], visited: Set<string>, strokeWidth: number): string | null {
   const color = '#000000';
-  const attrs = `stroke="${color}" fill="none" stroke-width="2"`;
+  const attrs = `stroke="${color}" fill="none" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"`;
+
+  const layer = layers.find(l => l.name === entity.layer);
+  if (layer && (layer.frozen || layer.off)) return null;
 
   switch (entity.type) {
     case 'LINE': {
@@ -271,7 +274,7 @@ function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTabl
             }
           }
           if (bp.isClosed) d += ' Z';
-          paths.push(`<path d="${d}" fill="none" stroke="#000000" stroke-width="1"/>`);
+          paths.push(`<path d="${d}" fill="none" stroke="#000000" stroke-width="${strokeWidth * 0.5}" stroke-linecap="round" stroke-linejoin="round"/>`);
         } else if ('edges' in bp && bp.edges) {
           let d = '';
           for (const edge of bp.edges) {
@@ -290,20 +293,20 @@ function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTabl
               d += `M${x1},${y1} A${edge.radius},${edge.radius} 0 ${largeArc} 1 ${x2},${y2} `;
             }
           }
-          if (d) paths.push(`<path d="${d}" fill="none" stroke="#000000" stroke-width="1"/>`);
+          if (d) paths.push(`<path d="${d}" fill="none" stroke="#000000" stroke-width="${strokeWidth * 0.5}" stroke-linecap="round" stroke-linejoin="round"/>`);
         }
       }
       return paths.join('') || null;
     }
     case 'INSERT': {
       const e = entity as any;
-      if (visited.has(e.name)) return null;
       const block = blockMap.get(e.name);
       if (!block) return null;
+      if (visited.has(e.name)) return null;
       visited.add(e.name);
       const innerSvgs: string[] = [];
       for (const ent of block.entities) {
-        const svg = entityToSvg(ent, blockMap, layers, visited);
+        const svg = entityToSvg(ent, blockMap, layers, visited, strokeWidth);
         if (svg) innerSvgs.push(svg);
       }
       visited.delete(e.name);
@@ -344,9 +347,9 @@ function buildSvgFromDb(db: DwgDatabase): string {
 
   for (const block of db.tables.BLOCK_RECORD.entries) {
     const name = block.name.toUpperCase();
-    if (name === '*MODEL_SPACE' || name === 'MODEL_SPACE') {
+    if (name === '*MODEL_SPACE') {
       modelSpace = block;
-    } else {
+    } else if (!name.startsWith('*PAPER_SPACE')) {
       blockMap.set(block.name, block);
     }
   }
@@ -459,6 +462,10 @@ function buildSvgFromDb(db: DwgDatabase): string {
       case 'INSERT': {
         const e = entity as any;
         updateBounds(e.insertionPoint.x, e.insertionPoint.y);
+        const block = blockMap.get(e.name);
+        if (block) {
+          for (const ent of block.entities) measureEntity(ent);
+        }
         break;
       }
     }
@@ -475,17 +482,21 @@ function buildSvgFromDb(db: DwgDatabase): string {
 
   const vbWidth = maxX - minX;
   const vbHeight = maxY - minY;
+  const maxDim = Math.max(vbWidth, vbHeight);
+
+  // Scale stroke width to ~0.5% of the largest dimension for visible lines
+  const strokeWidth = Math.max(2, maxDim * 0.005);
 
   const svgElements: string[] = [];
   const visited = new Set<string>();
   for (const ent of modelSpace.entities) {
-    const svg = entityToSvg(ent, blockMap, layers, visited);
+    const svg = entityToSvg(ent, blockMap, layers, visited, strokeWidth);
     if (svg) svgElements.push(svg);
   }
 
   return `<?xml version="1.0"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${-maxY} ${vbWidth} ${vbHeight}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
-  <g transform="matrix(1,0,0,-1,0,0)">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${vbWidth} ${vbHeight}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+  <g transform="translate(0,${vbHeight}) scale(1,-1)">
     ${svgElements.join('\n    ')}
   </g>
 </svg>`;
