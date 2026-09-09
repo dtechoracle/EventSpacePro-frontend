@@ -109,7 +109,7 @@ const VenueThumbnail = memo(function VenueThumbnail({
         src={pngPath}
         alt=""
         className={className}
-        style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#f3f4f6' }}
+        style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#f9fafb' }}
       />
     );
   }

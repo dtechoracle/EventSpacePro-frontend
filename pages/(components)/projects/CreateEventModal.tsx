@@ -6,7 +6,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useEditorStore } from "@/store/editorStore";
 import { useProjectStore } from "@/store/projectStore";
 import { motion, AnimatePresence } from "framer-motion";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import toast from "react-hot-toast";
 import { MARQUEES } from "@/lib/marquees";
@@ -59,6 +59,7 @@ export default function CreateEventModal({
   collabPermissionRef.current = collabPermission;
   const { assets } = useProjectStore();
   const router = useRouter();
+  const queryClient = useQueryClient();
   
   const preloadedVenueId = router.query.preloadedVenue as string | undefined;
   // Pan to the preloaded venue asset if present in the workspace
@@ -313,6 +314,7 @@ export default function CreateEventModal({
 
       // If AI mode, navigate with aiMode flag
       if (creationType === 'ai') {
+        queryClient.invalidateQueries({ queryKey: ["batch-all-events"] });
         router.push({
           pathname: `/dashboard/editor/${routeSlug}/${eventId}`,
           query: { 
@@ -329,6 +331,7 @@ export default function CreateEventModal({
 
       // If preloaded venue with image, analyze it first
       if (venueType === 'preloaded' && venueImage) {
+        queryClient.invalidateQueries({ queryKey: ["batch-all-events"] });
         setIsAnalyzing(true);
         try {
           // Upload and analyze image
@@ -366,6 +369,7 @@ export default function CreateEventModal({
         }
       } else {
         // Normal event - go straight to editor
+        queryClient.invalidateQueries({ queryKey: ["batch-all-events"] });
         const query: any = { focus: 'true' };
         if (venueType === 'outdoor' && outdoorType) {
           query.texture = outdoorType === 'beach' ? 'sand-01' : (outdoorType === 'parking-lot' ? 'parking-lot' : 'grass-01');

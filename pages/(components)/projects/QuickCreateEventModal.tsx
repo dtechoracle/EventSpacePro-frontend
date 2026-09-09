@@ -46,7 +46,7 @@ export default function QuickCreateEventModal({ onClose }: { onClose: () => void
       return response;
     },
     onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: ["all-events"] });
+      queryClient.invalidateQueries({ queryKey: ["batch-all-events"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       const eventId = response.data?._id || (response as any).data?.id;
       router.push(`/dashboard/editor/${STANDALONE_SLUG}/${eventId}`);
