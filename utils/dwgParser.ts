@@ -313,8 +313,17 @@ function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTabl
     }
     case 'DIMENSION': {
       const e = entity as any;
-      const pts = [e.definitionPoint, e.textPoint];
       return `<text x="${e.textPoint.x}" y="${e.textPoint.y}" font-size="150" fill="#000000" stroke="none" font-family="Arial,sans-serif">${escapeXml(e.text || '')}</text>`;
+    }
+    case 'MLINE': {
+      const e = entity as any;
+      if (!e.vertices || e.vertices.length < 2) return null;
+      let d = `M${e.vertices[0].vertex.x},${e.vertices[0].vertex.y}`;
+      for (let i = 1; i < e.vertices.length; i++) {
+        d += ` L${e.vertices[i].vertex.x},${e.vertices[i].vertex.y}`;
+      }
+      if (e.flags & 2) d += ' Z';
+      return `<path d="${d}" ${attrs}/>`;
     }
     case 'RAY': {
       const e = entity as any;
@@ -466,6 +475,11 @@ function buildSvgFromDb(db: DwgDatabase): string {
         }
         break;
       }
+      case 'MLINE': {
+        const e = entity as any;
+        if (e.vertices) for (const v of e.vertices) updateBounds(v.vertex.x, v.vertex.y);
+        break;
+      }
     }
   }
 
@@ -501,7 +515,11 @@ function buildSvgFromDb(db: DwgDatabase): string {
 
   for (const ent of modelSpace.entities) {
     const svg = entityToSvg(ent, blockMap, layers, visited, strokeWidth);
-    if (svg) svgElements.push(svg);
+    if (svg) {
+      svgElements.push(svg);
+    } else {
+      console.log('[DWG] Skipped entity:', ent.type, ent.handle);
+    }
   }
 
   return `<?xml version="1.0"?>
