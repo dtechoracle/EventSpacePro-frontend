@@ -80,9 +80,6 @@ function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTabl
   const color = '#000000';
   const attrs = `stroke="${color}" fill="none" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"`;
 
-  const layer = layers.find(l => l.name === entity.layer);
-  if (layer && (layer.frozen || layer.off)) return null;
-
   switch (entity.type) {
     case 'LINE': {
       const e = entity as any;
@@ -351,6 +348,7 @@ function buildSvgFromDb(db: DwgDatabase): string {
       modelSpace = block;
     } else if (!name.startsWith('*PAPER_SPACE')) {
       blockMap.set(block.name, block);
+      blockMap.set(block.name.toLowerCase(), block);
     }
   }
 
@@ -484,11 +482,23 @@ function buildSvgFromDb(db: DwgDatabase): string {
   const vbHeight = maxY - minY;
   const maxDim = Math.max(vbWidth, vbHeight);
 
-  // Scale stroke width to ~0.5% of the largest dimension for visible lines
-  const strokeWidth = Math.max(2, maxDim * 0.005);
+  // Scale stroke width to ~0.3% of the largest dimension
+  const strokeWidth = Math.max(2, maxDim * 0.003);
 
   const svgElements: string[] = [];
   const visited = new Set<string>();
+
+  // Debug: log entity types and INSERT block names
+  const entityCounts: Record<string, number> = {};
+  const insertNames: string[] = [];
+  for (const ent of modelSpace.entities) {
+    entityCounts[ent.type] = (entityCounts[ent.type] || 0) + 1;
+    if (ent.type === 'INSERT') insertNames.push((ent as any).name);
+  }
+  console.log('[DWG] Entity types:', entityCounts);
+  console.log('[DWG] INSERT block names:', insertNames);
+  console.log('[DWG] Block map keys:', Array.from(blockMap.keys()));
+
   for (const ent of modelSpace.entities) {
     const svg = entityToSvg(ent, blockMap, layers, visited, strokeWidth);
     if (svg) svgElements.push(svg);
