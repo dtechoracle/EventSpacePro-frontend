@@ -17,7 +17,6 @@ const WORKSPACE_STROKE_RATIO = 0.009;
 const INPUT_DIRS = [
   path.join(PUBLIC_DIR, 'assets', 'modal'),
   path.join(PUBLIC_DIR, 'Marquees'),
-  path.join(PUBLIC_DIR, 'assets', 'preloaded-venues'),
 ];
 
 function readSvgSize(svgText) {
@@ -41,6 +40,17 @@ function readSvgSize(svgText) {
 }
 
 function prepareSvgForWorkspaceRaster(svgText, strokeWidth) {
+  // Expand viewBox by 5% so outer stroke width along asset edges is never clipped
+  let expandedSvg = svgText.replace(/viewBox=["']([\d\s.-]+)["']/i, (match, vb) => {
+    const parts = vb.trim().split(/[\s,]+/).map(Number);
+    if (parts.length === 4 && parts.every(Number.isFinite)) {
+      const [x, y, w, h] = parts;
+      const pad = Math.max(Math.abs(w), Math.abs(h)) * 0.05;
+      return `viewBox="${x - pad} ${y - pad} ${w + pad * 2} ${h + pad * 2}"`;
+    }
+    return match;
+  });
+
   const style = `
     <style id="esp-workspace-raster-style">
       * {
@@ -62,7 +72,7 @@ function prepareSvgForWorkspaceRaster(svgText, strokeWidth) {
     </style>
   `;
 
-  return svgText.replace(/<svg\b([^>]*)>/i, (match) => `${match}${style}`);
+  return expandedSvg.replace(/<svg\b([^>]*)>/i, (match) => `${match}${style}`);
 }
 
 async function walkSvgFiles(dir) {
@@ -83,9 +93,12 @@ async function walkSvgFiles(dir) {
 
 async function convertSvg(svgPath) {
   const relativePublicPath = path.relative(PUBLIC_DIR, svgPath);
+  const normalizedRelPath = relativePublicPath.startsWith('assets' + path.sep)
+    ? relativePublicPath.slice(('assets' + path.sep).length)
+    : relativePublicPath;
   const outputPath = path.join(
     OUTPUT_ROOT,
-    relativePublicPath.replace(/\.svg$/i, '.webp')
+    normalizedRelPath.replace(/\.svg$/i, '.webp')
   );
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });

@@ -786,7 +786,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             // ── Z-ORDER FIX ─────────────────────────────────────────────────────────
             // Move details to top layer
             const rootGroup = svg.querySelector('g');
-            if (rootGroup && !hasExplicitAutoFill) {
+            if (rootGroup) {
                 const strokeOnlyEls = Array.from(rootGroup.querySelectorAll('.fill-none-el'));
                 if (strokeOnlyEls.length > 0) {
                     const topLayer = doc.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -806,7 +806,18 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             svg.removeAttribute("width");
             svg.removeAttribute("height");
             if (metrics.shouldCropToContent && metrics.contentX !== null && metrics.contentY !== null && metrics.contentWidth && metrics.contentHeight) {
-                svg.setAttribute("viewBox", `${metrics.contentX} ${metrics.contentY} ${metrics.contentWidth} ${metrics.contentHeight}`);
+                const pad = Math.max(metrics.contentWidth, metrics.contentHeight) * 0.03;
+                svg.setAttribute("viewBox", `${metrics.contentX - pad} ${metrics.contentY - pad} ${metrics.contentWidth + pad * 2} ${metrics.contentHeight + pad * 2}`);
+            } else if (!isVenueAsset) {
+                const existingVB = svg.getAttribute("viewBox");
+                if (existingVB) {
+                    const parts = existingVB.trim().split(/[\s,]+/).map(parseFloat);
+                    if (parts.length === 4 && parts.every(Number.isFinite)) {
+                        const [vbX, vbY, vbW, vbH] = parts;
+                        const pad = Math.max(vbW, vbH) * 0.03;
+                        svg.setAttribute("viewBox", `${vbX - pad} ${vbY - pad} ${vbW + pad * 2} ${vbH + pad * 2}`);
+                    }
+                }
             }
 
             const result = new XMLSerializer().serializeToString(doc);
