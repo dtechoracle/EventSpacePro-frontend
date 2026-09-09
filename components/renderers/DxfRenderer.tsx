@@ -71,7 +71,7 @@ function drawEntity(ctx: CanvasRenderingContext2D, entity: DxfEntity) {
       break;
 
     case 'SPLINE': {
-      const pts = entity.points || entity.vertices;
+      const pts = entity.controlPoints || entity.points || entity.vertices;
       if (pts && pts.length >= 2) {
         ctx.beginPath();
         ctx.moveTo(pts[0].x, pts[0].y);
@@ -98,7 +98,7 @@ function drawEntity(ctx: CanvasRenderingContext2D, entity: DxfEntity) {
 
     case 'TEXT':
     case 'MTEXT': {
-      const pos = entity.insertionPoint || (entity.vertices && entity.vertices[0]);
+      const pos = entity.insertionPoint || entity.position || (entity.vertices && entity.vertices[0]);
       if (pos && entity.text) {
         const fontSize = entity.height || 100;
         ctx.font = `${fontSize}px Arial`;
@@ -152,8 +152,10 @@ const DxfRenderer = memo(function DxfRenderer({
         const contentW = bounds.maxX - bounds.minX + padding * 2;
         const contentH = bounds.maxY - bounds.minY + padding * 2;
 
-        canvas.width = contentW;
-        canvas.height = contentH;
+        const MAX_CANVAS = 4096;
+        const canvasScale = Math.min(1, MAX_CANVAS / Math.max(contentW, contentH));
+        canvas.width = Math.max(1, Math.round(contentW * canvasScale));
+        canvas.height = Math.max(1, Math.round(contentH * canvasScale));
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
@@ -161,10 +163,14 @@ const DxfRenderer = memo(function DxfRenderer({
         ctx.fillStyle = '#f9fafb';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        ctx.strokeStyle = '#272235';
+        ctx.lineWidth = Math.max(0.5, canvasScale * 2);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
         ctx.save();
-        ctx.translate(padding - bounds.minX, padding - bounds.minY);
-        // DXF Y is inverted compared to canvas
-        ctx.scale(1, -1);
+        ctx.translate((padding - bounds.minX) * canvasScale, (padding - bounds.minY) * canvasScale);
+        ctx.scale(canvasScale, -canvasScale);
         ctx.translate(0, -(bounds.minY + bounds.maxY));
 
         for (const entity of parsed.entities) {

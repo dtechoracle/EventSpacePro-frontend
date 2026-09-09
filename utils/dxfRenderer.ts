@@ -1,6 +1,7 @@
 import { parseDxf, computeDxfBounds } from '@/utils/dxfParser';
 
 const dxfDataUrlCache: Record<string, string> = {};
+const MAX_CANVAS = 4096;
 
 export function renderDxfToDataUrl(dxfText: string): string {
   const parsed = parseDxf(dxfText);
@@ -10,24 +11,28 @@ export function renderDxfToDataUrl(dxfText: string): string {
   const contentW = bounds.maxX - bounds.minX + padding * 2;
   const contentH = bounds.maxY - bounds.minY + padding * 2;
 
+  const scale = Math.min(1, MAX_CANVAS / Math.max(contentW, contentH));
+  const canvasW = Math.max(1, Math.round(contentW * scale));
+  const canvasH = Math.max(1, Math.round(contentH * scale));
+
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(contentW));
-  canvas.height = Math.max(1, Math.round(contentH));
+  canvas.width = canvasW;
+  canvas.height = canvasH;
 
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
 
   ctx.fillStyle = '#f9fafb';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, canvasW, canvasH);
 
   ctx.strokeStyle = '#272235';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = Math.max(0.5, scale * 2);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
   ctx.save();
-  ctx.translate(padding - bounds.minX, padding - bounds.minY);
-  ctx.scale(1, -1);
+  ctx.translate((padding - bounds.minX) * scale, (padding - bounds.minY) * scale);
+  ctx.scale(scale, -scale);
   ctx.translate(0, -(bounds.minY + bounds.maxY));
 
   for (const entity of parsed.entities) {
@@ -104,7 +109,7 @@ function drawEntity(ctx: CanvasRenderingContext2D, entity: any) {
       break;
 
     case 'SPLINE': {
-      const pts = entity.points || entity.vertices;
+      const pts = entity.controlPoints || entity.points || entity.vertices;
       if (pts && pts.length >= 2) {
         ctx.beginPath();
         ctx.moveTo(pts[0].x, pts[0].y);

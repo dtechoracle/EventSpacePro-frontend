@@ -17,6 +17,8 @@ export interface DxfEntity {
   ratioOfEllipseAxis?: number;
   polyline?: { vertices: { x: number; y: number; z: number }[]; isClosed?: boolean };
   points?: { x: number; y: number; z: number }[];
+  controlPoints?: { x: number; y: number; z: number }[];
+  position?: { x: number; y: number; z: number };
   bulge?: number;
 }
 
@@ -68,6 +70,10 @@ export function computeDxfBounds(entities: DxfEntity[]): {
       }
     }
     if (e.insertionPoint) update(e.insertionPoint.x, e.insertionPoint.y);
+    if (e.position) update(e.position.x, e.position.y);
+    if (e.controlPoints) {
+      for (const v of e.controlPoints) update(v.x, v.y);
+    }
     if (e.polyline?.vertices) {
       for (const v of e.polyline.vertices) update(v.x, v.y);
     }
