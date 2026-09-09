@@ -94,7 +94,7 @@ export const PRELOADED_VENUES: PreloadedVenueDef[] = [
   {
     id: "monarch",
     name: "Monarch",
-    path: "/assets/preloaded-venues/Monarch.svg",
+    path: "/assets/preloaded-venues/Monarch.dwg",
     width: 34026,
     height: 44793,
     latitude: 6.4371,
