@@ -357,6 +357,10 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // Fetch SVG content
     useEffect(() => {
         if (!definition?.path) return;
+        if (isDxf) {
+            setRawSvgContent(null);
+            return;
+        }
 
         const currentW = asset.width;
         const currentH = asset.height;
