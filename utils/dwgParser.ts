@@ -77,8 +77,8 @@ function escapeXml(s: string): string {
 }
 
 function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTableEntry>, layers: DwgLayerTableEntry[], visited: Set<string>): string | null {
-  const color = getEntityColor(entity, layers);
-  const attrs = `stroke="${color}" fill="none" stroke-width="0.5"`;
+  const color = '#000000';
+  const attrs = `stroke="${color}" fill="none" stroke-width="2"`;
 
   switch (entity.type) {
     case 'LINE': {
@@ -220,16 +220,16 @@ function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTabl
     case 'TEXT': {
       const e = entity as any;
       const size = e.textHeight || 200;
-      return `<text x="${e.startPoint.x}" y="${e.startPoint.y}" font-size="${size}" fill="${color}" stroke="none" font-family="Arial,sans-serif" transform="rotate(${(e.rotation || 0) * 180 / Math.PI} ${e.startPoint.x} ${e.startPoint.y})">${escapeXml(e.text || '')}</text>`;
+      return `<text x="${e.startPoint.x}" y="${e.startPoint.y}" font-size="${size}" fill="#000000" stroke="none" font-family="Arial,sans-serif" transform="rotate(${(e.rotation || 0) * 180 / Math.PI} ${e.startPoint.x} ${e.startPoint.y})">${escapeXml(e.text || '')}</text>`;
     }
     case 'MTEXT': {
       const e = entity as any;
       const size = e.textHeight || 200;
-      return `<text x="${e.insertionPoint.x}" y="${e.insertionPoint.y}" font-size="${size}" fill="${color}" stroke="none" font-family="Arial,sans-serif" transform="rotate(${(e.rotation || 0) * 180 / Math.PI} ${e.insertionPoint.x} ${e.insertionPoint.y})">${escapeXml(e.text || '')}</text>`;
+      return `<text x="${e.insertionPoint.x}" y="${e.insertionPoint.y}" font-size="${size}" fill="#000000" stroke="none" font-family="Arial,sans-serif" transform="rotate(${(e.rotation || 0) * 180 / Math.PI} ${e.insertionPoint.x} ${e.insertionPoint.y})">${escapeXml(e.text || '')}</text>`;
     }
     case 'POINT': {
       const e = entity as any;
-      return `<circle cx="${e.position.x}" cy="${e.position.y}" r="3" fill="${color}" stroke="none"/>`;
+      return `<circle cx="${e.position.x}" cy="${e.position.y}" r="3" fill="#000000" stroke="none"/>`;
     }
     case '3DFACE': {
       const e = entity as any;
@@ -271,7 +271,7 @@ function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTabl
             }
           }
           if (bp.isClosed) d += ' Z';
-          paths.push(`<path d="${d}" fill="none" stroke="${color}" stroke-width="0.3"/>`);
+          paths.push(`<path d="${d}" fill="none" stroke="#000000" stroke-width="1"/>`);
         } else if ('edges' in bp && bp.edges) {
           let d = '';
           for (const edge of bp.edges) {
@@ -290,7 +290,7 @@ function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTabl
               d += `M${x1},${y1} A${edge.radius},${edge.radius} 0 ${largeArc} 1 ${x2},${y2} `;
             }
           }
-          if (d) paths.push(`<path d="${d}" fill="none" stroke="${color}" stroke-width="0.3"/>`);
+          if (d) paths.push(`<path d="${d}" fill="none" stroke="#000000" stroke-width="1"/>`);
         }
       }
       return paths.join('') || null;
@@ -314,7 +314,7 @@ function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTabl
     case 'DIMENSION': {
       const e = entity as any;
       const pts = [e.definitionPoint, e.textPoint];
-      return `<text x="${e.textPoint.x}" y="${e.textPoint.y}" font-size="150" fill="${color}" stroke="none" font-family="Arial,sans-serif">${escapeXml(e.text || '')}</text>`;
+      return `<text x="${e.textPoint.x}" y="${e.textPoint.y}" font-size="150" fill="#000000" stroke="none" font-family="Arial,sans-serif">${escapeXml(e.text || '')}</text>`;
     }
     case 'RAY': {
       const e = entity as any;
