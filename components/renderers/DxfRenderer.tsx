@@ -163,15 +163,15 @@ const DxfRenderer = memo(function DxfRenderer({
         ctx.fillStyle = '#f9fafb';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.strokeStyle = '#272235';
-        ctx.lineWidth = Math.max(0.5, canvasScale * 2);
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
         ctx.save();
         ctx.translate((padding - bounds.minX) * canvasScale, (padding - bounds.minY) * canvasScale);
         ctx.scale(canvasScale, -canvasScale);
         ctx.translate(0, -(bounds.minY + bounds.maxY));
+
+        ctx.strokeStyle = '#272235';
+        ctx.lineWidth = 80;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
 
         for (const entity of parsed.entities) {
           drawEntity(ctx, entity);

@@ -25,15 +25,16 @@ export function renderDxfToDataUrl(dxfText: string): string {
   ctx.fillStyle = '#f9fafb';
   ctx.fillRect(0, 0, canvasW, canvasH);
 
-  ctx.strokeStyle = '#272235';
-  ctx.lineWidth = Math.max(0.5, scale * 2);
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
   ctx.save();
   ctx.translate((padding - bounds.minX) * scale, (padding - bounds.minY) * scale);
   ctx.scale(scale, -scale);
   ctx.translate(0, -(bounds.minY + bounds.maxY));
+
+  // Set stroke AFTER scale so lineWidth is in DXF units
+  ctx.strokeStyle = '#272235';
+  ctx.lineWidth = 80;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
 
   for (const entity of parsed.entities) {
     drawEntity(ctx, entity);
