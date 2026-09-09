@@ -675,6 +675,30 @@ export default function ExportPanel() {
       }
     }));
 
+    // ─── Darken venue SVG strokes ───
+    // Venue SVGs use faint/light stroke colors that look fine on screen but nearly
+    // invisible on exported paper. Force all venue strokes to black.
+    clone.querySelectorAll('[data-venue="true"]').forEach((venueG) => {
+      venueG.querySelectorAll('path, circle, rect, line, polyline, ellipse, text').forEach((el) => {
+        const stroke = el.getAttribute('stroke');
+        if (stroke && stroke !== 'none' && stroke !== 'transparent') {
+          el.setAttribute('stroke', '#000000');
+        }
+        const styleAttr = el.getAttribute('style');
+        if (styleAttr && /stroke\s*:/i.test(styleAttr)) {
+          el.setAttribute('style', styleAttr.replace(/stroke\s*:\s*[^;]+;?/gi, 'stroke: #000000;'));
+        }
+      });
+      // Also darken the nested <svg>'s inherited stroke
+      const nestedSvg = venueG.querySelector('svg');
+      if (nestedSvg) {
+        const svgStroke = nestedSvg.getAttribute('stroke');
+        if (svgStroke && svgStroke !== 'none' && svgStroke !== 'transparent') {
+          nestedSvg.setAttribute('stroke', '#000000');
+        }
+      }
+    });
+
     // ─── Counteract zoom stroke compression ───
     // The workspace root SVG contains <g transform="scale(zoom)">.
     // When cloned for export, zoom (e.g. 0.03) compresses stroke-widths down to hairline (0.1px).
