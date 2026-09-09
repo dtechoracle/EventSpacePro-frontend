@@ -93,12 +93,9 @@ async function walkSvgFiles(dir) {
 
 async function convertSvg(svgPath) {
   const relativePublicPath = path.relative(PUBLIC_DIR, svgPath);
-  const normalizedRelPath = relativePublicPath.startsWith('assets' + path.sep)
-    ? relativePublicPath.slice(('assets' + path.sep).length)
-    : relativePublicPath;
   const outputPath = path.join(
     OUTPUT_ROOT,
-    normalizedRelPath.replace(/\.svg$/i, '.webp')
+    relativePublicPath.replace(/\.svg$/i, '.webp')
   );
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
