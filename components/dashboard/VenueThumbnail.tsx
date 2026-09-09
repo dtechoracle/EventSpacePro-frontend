@@ -1,4 +1,4 @@
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 
 const svgCache = new Map<string, { viewBox: string; innerHtml: string }>();
 
@@ -8,26 +8,20 @@ function parseSvg(raw: string, forceStroke: string): { viewBox: string; innerHtm
   const svg = doc.querySelector('svg');
   if (!svg) return { viewBox: '0 0 100 100', innerHtml: '' };
   const viewBox = svg.getAttribute('viewBox') || `0 0 ${svg.getAttribute('width') || 100} ${svg.getAttribute('height') || 100}`;
-
   svg.removeAttribute('width');
   svg.removeAttribute('height');
   svg.removeAttribute('style');
 
-  const allElements = svg.querySelectorAll('*');
-  allElements.forEach((el) => {
+  svg.querySelectorAll('*').forEach((el) => {
     el.setAttribute('stroke', forceStroke);
-    el.removeAttribute('stroke-width');
     el.removeAttribute('fill');
-    el.removeAttribute('stroke-dasharray');
-    el.removeAttribute('stroke-dashoffset');
     if (el.hasAttribute('style')) {
-      const s = el.getAttribute('style') || '';
       el.setAttribute(
         'style',
-        s
+        el
+          .getAttribute('style')!
           .replace(/stroke\s*:\s*[^;]+;?/gi, '')
           .replace(/fill\s*:\s*[^;]+;?/gi, '')
-          .replace(/stroke-width\s*:\s*[^;]+;?/gi, '')
           .trim()
       );
     }
@@ -45,29 +39,29 @@ const VenueThumbnail = memo(function VenueThumbnail({
   stroke?: string;
   className?: string;
 }) {
-  const [data, setData] = useState<{ viewBox: string; innerHtml: string } | null>(
-    () => svgCache.get(src) || null
+  const [rawSvg, setRawSvg] = useState<string | null>(
+    () => svgCache.has(src) ? null : null
   );
 
   useEffect(() => {
-    if (svgCache.has(src)) {
-      setData(svgCache.get(src)!);
-      return;
-    }
+    if (svgCache.has(src)) return;
     let cancelled = false;
     fetch(encodeURI(src))
       .then((r) => r.text())
-      .then((raw) => {
-        if (cancelled) return;
-        const parsed = parseSvg(raw, stroke);
-        svgCache.set(src, parsed);
-        setData(parsed);
+      .then((text) => {
+        if (!cancelled) setRawSvg(text);
       })
-      .catch(() => {
-        if (!cancelled) setData({ viewBox: '0 0 100 100', innerHtml: '' });
-      });
+      .catch(() => {});
     return () => { cancelled = true; };
-  }, [src, stroke]);
+  }, [src]);
+
+  const data = useMemo(() => {
+    if (svgCache.has(src)) return svgCache.get(src)!;
+    if (!rawSvg) return null;
+    const parsed = parseSvg(rawSvg, stroke);
+    svgCache.set(src, parsed);
+    return parsed;
+  }, [src, rawSvg, stroke]);
 
   if (!data) {
     return <div className={`animate-pulse bg-gray-100 rounded ${className}`} />;
