@@ -1,12 +1,18 @@
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect, useMemo, memo, lazy, Suspense } from 'react';
+
+const DxfRenderer = lazy(() => import('@/components/renderers/DxfRenderer'));
 
 const svgCache = new Map<string, { viewBox: string; innerHtml: string }>();
 const pngCache = new Map<string, boolean>();
 
-function derivePngPath(svgPath: string): string {
-  return svgPath
+function isDxf(src: string): boolean {
+  return src.toLowerCase().endsWith('.dxf');
+}
+
+function derivePngPath(assetPath: string): string {
+  return assetPath
     .replace('/assets/preloaded-venues/', '/assets/thumbnails/preloaded-venues/')
-    .replace(/\.svg$/i, '.png');
+    .replace(/\.(svg|dxf)$/i, '.png');
 }
 
 function parseSvg(raw: string, forceStroke: string): { viewBox: string; innerHtml: string } {
@@ -46,6 +52,7 @@ const VenueThumbnail = memo(function VenueThumbnail({
   stroke?: string;
   className?: string;
 }) {
+  const dxf = isDxf(src);
   const pngPath = derivePngPath(src);
   const [hasPng, setHasPng] = useState<boolean>(() => pngCache.get(pngPath) ?? false);
   const [pngChecked, setPngChecked] = useState(false);
@@ -76,9 +83,9 @@ const VenueThumbnail = memo(function VenueThumbnail({
     return () => { cancelled = true; };
   }, [pngPath]);
 
-  // Fetch SVG only if no PNG
+  // Fetch SVG only if no PNG and not DXF
   useEffect(() => {
-    if (!pngChecked || hasPng) return;
+    if (!pngChecked || hasPng || dxf) return;
     if (svgCache.has(src)) return;
     let cancelled = false;
     fetch(encodeURI(src))
@@ -88,16 +95,16 @@ const VenueThumbnail = memo(function VenueThumbnail({
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [src, pngChecked, hasPng]);
+  }, [src, pngChecked, hasPng, dxf]);
 
   const data = useMemo(() => {
-    if (hasPng) return null;
+    if (hasPng || dxf) return null;
     if (svgCache.has(src)) return svgCache.get(src)!;
     if (!rawSvg) return null;
     const parsed = parseSvg(rawSvg, stroke);
     svgCache.set(src, parsed);
     return parsed;
-  }, [src, rawSvg, stroke, hasPng]);
+  }, [src, rawSvg, stroke, hasPng, dxf]);
 
   if (!pngChecked) {
     return <div className={`animate-pulse bg-gray-100 rounded ${className}`} />;
@@ -114,6 +121,14 @@ const VenueThumbnail = memo(function VenueThumbnail({
     );
   }
 
+  if (dxf) {
+    return (
+      <Suspense fallback={<div className={`animate-pulse bg-gray-100 rounded ${className}`} />}>
+        <DxfRenderer src={src} className={className} />
+      </Suspense>
+    );
+  }
+
   if (!data) {
     return <div className={`animate-pulse bg-gray-100 rounded ${className}`} />;
   }
@@ -124,7 +139,7 @@ const VenueThumbnail = memo(function VenueThumbnail({
       className={className}
       preserveAspectRatio="xMidYMid meet"
       xmlns="http://www.w3.org/2000/svg"
-      style={{ width: '100%', height: '100%', backgroundColor: '#f3f4f6' }}
+      style={{ width: '100%', height: '100%', backgroundColor: '#f9fafb' }}
     >
       <g dangerouslySetInnerHTML={{ __html: data.innerHtml }} />
     </svg>
