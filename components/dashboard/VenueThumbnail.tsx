@@ -1,18 +1,19 @@
-import { useState, useEffect, useMemo, memo, lazy, Suspense } from 'react';
-
-const DxfRenderer = lazy(() => import('@/components/renderers/DxfRenderer'));
+import { useState, useEffect, useMemo, memo } from 'react';
+import { getDwgSvgString, extractSvgViewBox } from '@/utils/dwgParser';
 
 const svgCache = new Map<string, { viewBox: string; innerHtml: string }>();
+const dwgSvgCache = new Map<string, { viewBox: string; innerHtml: string }>();
 const pngCache = new Map<string, boolean>();
 
-function isDxf(src: string): boolean {
-  return src.toLowerCase().endsWith('.dxf');
+function isCad(src: string): boolean {
+  const lower = src.toLowerCase();
+  return lower.endsWith('.dwg') || lower.endsWith('.dxf');
 }
 
 function derivePngPath(assetPath: string): string {
   return assetPath
     .replace('/assets/preloaded-venues/', '/assets/thumbnails/preloaded-venues/')
-    .replace(/\.(svg|dxf)$/i, '.png');
+    .replace(/\.(svg|dwg|dxf)$/i, '.png');
 }
 
 function parseSvg(raw: string, forceStroke: string): { viewBox: string; innerHtml: string } {
@@ -43,6 +44,37 @@ function parseSvg(raw: string, forceStroke: string): { viewBox: string; innerHtm
   return { viewBox, innerHtml: svg.innerHTML };
 }
 
+function parseDwgSvg(raw: string): { viewBox: string; innerHtml: string } {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(raw, 'image/svg+xml');
+  const svg = doc.querySelector('svg');
+  if (!svg) return { viewBox: '0 0 100 100', innerHtml: '' };
+
+  const vb = extractSvgViewBox(raw);
+  const viewBox = svg.getAttribute('viewBox') || (vb ? `0 0 ${vb.width} ${vb.height}` : '0 0 100 100');
+
+  svg.removeAttribute('width');
+  svg.removeAttribute('height');
+  svg.removeAttribute('style');
+
+  svg.querySelectorAll('*').forEach((el) => {
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'path' || tag === 'line' || tag === 'polyline' || tag === 'polygon' ||
+        tag === 'circle' || tag === 'ellipse' || tag === 'rect') {
+      if (!el.getAttribute('stroke') || el.getAttribute('stroke') === 'none') {
+        el.setAttribute('stroke', '#272235');
+      }
+      if (el.getAttribute('fill') === 'none') {
+        // keep none for open paths
+      } else if (tag === 'path' || tag === 'polyline' || tag === 'line') {
+        el.setAttribute('fill', 'none');
+      }
+    }
+  });
+
+  return { viewBox, innerHtml: svg.innerHTML };
+}
+
 const VenueThumbnail = memo(function VenueThumbnail({
   src,
   stroke = '#272235',
@@ -52,12 +84,13 @@ const VenueThumbnail = memo(function VenueThumbnail({
   stroke?: string;
   className?: string;
 }) {
-  const dxf = isDxf(src);
+  const cad = isCad(src);
   const pngPath = derivePngPath(src);
   const [hasPng, setHasPng] = useState<boolean>(() => pngCache.get(pngPath) ?? false);
   const [pngChecked, setPngChecked] = useState(false);
 
   const [rawSvg, setRawSvg] = useState<string | null>(null);
+  const [dwgParsed, setDwgParsed] = useState<{ viewBox: string; innerHtml: string } | null>(null);
 
   // Check if PNG exists
   useEffect(() => {
@@ -83,9 +116,28 @@ const VenueThumbnail = memo(function VenueThumbnail({
     return () => { cancelled = true; };
   }, [pngPath]);
 
-  // Fetch SVG only if no PNG and not DXF
+  // Parse DWG/DXF to SVG
   useEffect(() => {
-    if (!pngChecked || hasPng || dxf) return;
+    if (!cad) return;
+    if (dwgSvgCache.has(src)) {
+      setDwgParsed(dwgSvgCache.get(src)!);
+      return;
+    }
+    let cancelled = false;
+    getDwgSvgString(encodeURI(src))
+      .then((svgStr) => {
+        if (cancelled) return;
+        const parsed = parseDwgSvg(svgStr);
+        dwgSvgCache.set(src, parsed);
+        setDwgParsed(parsed);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [src, cad]);
+
+  // Fetch SVG only if no PNG and not DWG
+  useEffect(() => {
+    if (!pngChecked || hasPng || cad) return;
     if (svgCache.has(src)) return;
     let cancelled = false;
     fetch(encodeURI(src))
@@ -95,16 +147,16 @@ const VenueThumbnail = memo(function VenueThumbnail({
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [src, pngChecked, hasPng, dxf]);
+  }, [src, pngChecked, hasPng, cad]);
 
   const data = useMemo(() => {
-    if (hasPng || dxf) return null;
+    if (hasPng || cad) return null;
     if (svgCache.has(src)) return svgCache.get(src)!;
     if (!rawSvg) return null;
     const parsed = parseSvg(rawSvg, stroke);
     svgCache.set(src, parsed);
     return parsed;
-  }, [src, rawSvg, stroke, hasPng, dxf]);
+  }, [src, rawSvg, stroke, hasPng, cad]);
 
   if (!pngChecked) {
     return <div className={`animate-pulse bg-gray-100 rounded ${className}`} />;
@@ -121,11 +173,20 @@ const VenueThumbnail = memo(function VenueThumbnail({
     );
   }
 
-  if (dxf) {
+  if (cad) {
+    if (!dwgParsed) {
+      return <div className={`animate-pulse bg-gray-100 rounded ${className}`} />;
+    }
     return (
-      <Suspense fallback={<div className={`animate-pulse bg-gray-100 rounded ${className}`} />}>
-        <DxfRenderer src={src} className={className} />
-      </Suspense>
+      <svg
+        viewBox={dwgParsed.viewBox}
+        className={className}
+        preserveAspectRatio="xMidYMid meet"
+        xmlns="http://www.w3.org/2000/svg"
+        style={{ width: '100%', height: '100%', backgroundColor: '#f9fafb' }}
+      >
+        <g dangerouslySetInnerHTML={{ __html: dwgParsed.innerHtml }} />
+      </svg>
     );
   }
 

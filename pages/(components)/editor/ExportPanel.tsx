@@ -257,26 +257,28 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
 
     try {
       const isVenue = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
-      const isDxf = !!definition?.path && definition.path.toLowerCase().endsWith('.dxf');
+      const isCad = !!definition?.path && (definition.path.toLowerCase().endsWith('.dwg') || definition.path.toLowerCase().endsWith('.dxf'));
 
-      // DXF: render to data URL directly
-      if (isDxf && definition?.path) {
+      // CAD (DWG/DXF): parse to SVG, then render to image
+      if (isCad && definition?.path) {
         try {
-          const { getDxfDataUrl } = await import('@/utils/dxfRenderer');
-          const dataUrl = await getDxfDataUrl(encodeURI(definition.path));
+          const { getDwgSvgString } = await import('@/utils/dwgParser');
+          const svgStr = await getDwgSvgString(encodeURI(definition.path));
+          const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+          const url = URL.createObjectURL(blob);
           const img = new Image();
           const isOk = await new Promise<boolean>((resolve) => {
-            const timeout = setTimeout(() => resolve(false), 10000);
-            img.onload = () => { clearTimeout(timeout); resolve(img.naturalWidth > 0 || img.width > 0); };
-            img.onerror = () => { clearTimeout(timeout); resolve(false); };
-            img.src = dataUrl;
+            const timeout = setTimeout(() => { URL.revokeObjectURL(url); resolve(false); }, 10000);
+            img.onload = () => { clearTimeout(timeout); URL.revokeObjectURL(url); resolve(img.naturalWidth > 0 || img.width > 0); };
+            img.onerror = () => { clearTimeout(timeout); URL.revokeObjectURL(url); resolve(false); };
+            img.src = url;
           });
           if (isOk) {
             loadedImages.set(asset.id, img);
             return;
           }
         } catch (e) {
-          console.error("Failed to render DXF for export", e);
+          console.error("Failed to render DWG for export", e);
         }
       }
 

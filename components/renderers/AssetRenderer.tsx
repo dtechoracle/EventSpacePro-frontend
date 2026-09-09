@@ -7,7 +7,7 @@ import { ASSET_LIBRARY } from '@/lib/assets';
 import { PRELOADED_VENUES } from '@/lib/preloadedVenues';
 import { DEFAULT_ASSET_STROKE_WIDTH, canRenderAssetAsImage } from '@/utils/assetRenderMode';
 import { getRasterAssetPath } from '@/utils/assetRasterPath';
-import { getDxfDataUrl } from '@/utils/dxfRenderer';
+import { getDwgSvgString } from '@/utils/dwgParser';
 
 // Global cache for SVGs - defined at module top level to prevent ReferenceErrors during evaluation
 const svgCache: Record<string, string> = {};
@@ -293,7 +293,7 @@ interface AssetRendererProps {
 const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHighlightOnly = false, isPreview, onMouseEnter, onMouseLeave, isCanvasBacked = false }: AssetRendererProps) => {
     const [rawSvgContent, setRawSvgContent] = useState<string | null>(null);
     const [rasterImageFailed, setRasterImageFailed] = useState(false);
-    const [dxfDataUrl, setDxfDataUrl] = useState<string | null>(null);
+    const [dwgSvgData, setDwgSvgData] = useState<string | null>(null);
     const updateAsset = useSceneStore(s => s.updateAsset);
 
     // Global numbering settings from store
@@ -339,7 +339,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // the SVG-processing path with non-scaling-stroke, which is what keeps a thin
     // outline legible at tiny zoom).
     const isVenueAsset = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
-    const isDxf = !!definition?.path && definition.path.toLowerCase().endsWith('.dxf');
+    const isCad = !!definition?.path && (definition.path.toLowerCase().endsWith('.dwg') || definition.path.toLowerCase().endsWith('.dxf'));
     const canUseFastImage =
         !!assetPath &&
         !asset.isExploded &&
@@ -357,7 +357,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // Fetch SVG content
     useEffect(() => {
         if (!definition?.path) return;
-        if (isDxf) {
+        if (isCad) {
             setRawSvgContent(null);
             return;
         }
@@ -445,15 +445,18 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             .catch(err => console.error("Failed to load SVG", err));
     }, [assetPath, definition?.path, definition?.width, definition?.height, asset.id, asset.width, asset.height, asset.type, canUseFastImage, updateAsset]);
 
-    // Fetch DXF and render to data URL
+    // Fetch CAD file (DWG/DXF) and parse to SVG
     useEffect(() => {
-        if (!isDxf || !assetPath) return;
+        if (!isCad || !assetPath) return;
         let cancelled = false;
-        getDxfDataUrl(assetPath).then((url) => {
-            if (!cancelled) setDxfDataUrl(url);
+        getDwgSvgString(assetPath).then((svgStr) => {
+            if (cancelled) return;
+            const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            setDwgSvgData(url);
         }).catch(() => {});
         return () => { cancelled = true; };
-    }, [isDxf, assetPath]);
+    }, [isCad, assetPath]);
 
     // 1. Base SVG processing (Heavy - matches InlineSvg logic)
     const baseSvg = useMemo(() => {
@@ -999,9 +1002,9 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 )
             ) : (
                 <>
-                    {isDxf && dxfDataUrl ? (
+                    {isCad && dwgSvgData ? (
                         <image
-                            href={dxfDataUrl}
+                            href={dwgSvgData}
                             x={-displayWidth / 2}
                             y={-displayHeight / 2}
                             width={displayWidth}
