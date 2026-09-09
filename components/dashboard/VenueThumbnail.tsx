@@ -1,6 +1,13 @@
 import { useState, useEffect, useMemo, memo } from 'react';
 
 const svgCache = new Map<string, { viewBox: string; innerHtml: string }>();
+const pngCache = new Map<string, boolean>();
+
+function derivePngPath(svgPath: string): string {
+  return svgPath
+    .replace('/assets/preloaded-venues/', '/assets/thumbnails/preloaded-venues/')
+    .replace(/\.svg$/i, '.png');
+}
 
 function parseSvg(raw: string, forceStroke: string): { viewBox: string; innerHtml: string } {
   const parser = new DOMParser();
@@ -39,11 +46,39 @@ const VenueThumbnail = memo(function VenueThumbnail({
   stroke?: string;
   className?: string;
 }) {
-  const [rawSvg, setRawSvg] = useState<string | null>(
-    () => svgCache.has(src) ? null : null
-  );
+  const pngPath = derivePngPath(src);
+  const [hasPng, setHasPng] = useState<boolean>(() => pngCache.get(pngPath) ?? false);
+  const [pngChecked, setPngChecked] = useState(false);
 
+  const [rawSvg, setRawSvg] = useState<string | null>(null);
+
+  // Check if PNG exists
   useEffect(() => {
+    if (pngCache.has(pngPath)) {
+      setPngChecked(true);
+      return;
+    }
+    let cancelled = false;
+    fetch(pngPath, { method: 'HEAD' })
+      .then((r) => {
+        if (cancelled) return;
+        const ok = r.ok;
+        pngCache.set(pngPath, ok);
+        setHasPng(ok);
+        setPngChecked(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          pngCache.set(pngPath, false);
+          setPngChecked(true);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [pngPath]);
+
+  // Fetch SVG only if no PNG
+  useEffect(() => {
+    if (!pngChecked || hasPng) return;
     if (svgCache.has(src)) return;
     let cancelled = false;
     fetch(encodeURI(src))
@@ -53,15 +88,31 @@ const VenueThumbnail = memo(function VenueThumbnail({
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [src]);
+  }, [src, pngChecked, hasPng]);
 
   const data = useMemo(() => {
+    if (hasPng) return null;
     if (svgCache.has(src)) return svgCache.get(src)!;
     if (!rawSvg) return null;
     const parsed = parseSvg(rawSvg, stroke);
     svgCache.set(src, parsed);
     return parsed;
-  }, [src, rawSvg, stroke]);
+  }, [src, rawSvg, stroke, hasPng]);
+
+  if (!pngChecked) {
+    return <div className={`animate-pulse bg-gray-100 rounded ${className}`} />;
+  }
+
+  if (hasPng) {
+    return (
+      <img
+        src={pngPath}
+        alt=""
+        className={className}
+        style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#f3f4f6' }}
+      />
+    );
+  }
 
   if (!data) {
     return <div className={`animate-pulse bg-gray-100 rounded ${className}`} />;
@@ -73,7 +124,7 @@ const VenueThumbnail = memo(function VenueThumbnail({
       className={className}
       preserveAspectRatio="xMidYMid meet"
       xmlns="http://www.w3.org/2000/svg"
-      style={{ width: '100%', height: '100%' }}
+      style={{ width: '100%', height: '100%', backgroundColor: '#f3f4f6' }}
     >
       <g dangerouslySetInnerHTML={{ __html: data.innerHtml }} />
     </svg>
