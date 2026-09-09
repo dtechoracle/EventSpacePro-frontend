@@ -1548,9 +1548,10 @@ const renderAssetToCanvas = (
         assetsToExport.forEach(a => {
           if (a.type !== 'wall-segments') {
             const isVenueAsset = PRELOADED_VENUES.some(v => v.id === a.type || v.name === a.type);
-            if (isVenueAsset && loadedImages.has(a.id)) {
-              renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages);
-            } else if (!isVenueAsset && canvasBackedAssetIds.has(a.id)) {
+            // Venue assets are already rendered correctly in the workspace snapshot
+            // (inline SVG with proper stroke widths). Re-drawing them on top using
+            // processVenueSvgForExport inflates strokes, making walls appear solid.
+            if (!isVenueAsset && canvasBackedAssetIds.has(a.id)) {
               renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages);
             }
           }
