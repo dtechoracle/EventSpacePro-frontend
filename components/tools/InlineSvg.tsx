@@ -331,6 +331,8 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
             const metrics = svgMetricsCache[src] || getSvgMetrics(rawSvg);
             svgMetricsCache[src] = metrics;
 
+            svg.removeAttribute("xmlns:qs");
+
             doc.querySelectorAll("svg, g").forEach(container => {
                 container.removeAttribute("fill");
                 container.removeAttribute("stroke");
@@ -559,7 +561,8 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
                 .replace(/\s+width\s*=\s*["'][^"']*["']/gi, '')
                 .replace(/\s+height\s*=\s*["'][^"']*["']/gi, '')
                 .replace(/\s+fill\s*=\s*["'][^"']*["']/gi, '')
-                .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '');
+                .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '')
+                .replace(/\s+xmlns:\w+\s*=\s*["'][^"']*["']/gi, '');
             return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%;overflow:visible;">`;
         });
     }, [baseSvg, fill, stroke, strokeWidth]);

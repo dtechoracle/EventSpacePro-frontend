@@ -15,7 +15,6 @@ import { getDimensionsForWall, getDimensionsForObject, renderDimensionToCanvas }
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
-import { canRenderAssetAsImage } from "@/utils/assetRenderMode";
 import { getRasterAssetPath } from "@/utils/assetRasterPath";
 import { downloadDxf } from "@/lib/dxfExport";
 
@@ -156,6 +155,7 @@ function processVenueSvgForExport(svgText: string): string {
     // so intrinsic aspect ratio is strictly driven by the viewBox coordinates.
     svgEl.removeAttribute('width');
     svgEl.removeAttribute('height');
+    svgEl.removeAttribute('xmlns:qs');
     svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
     // 2. Determine viewBox max dimension and expand viewBox padding so outer wall strokes are not clipped at edges
@@ -345,6 +345,7 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
           // Remove natural dimensions to let us control scaling
           svgEl.removeAttribute("width");
           svgEl.removeAttribute("height");
+          svgEl.removeAttribute("xmlns:qs");
           svgEl.setAttribute("preserveAspectRatio", "xMidYMid meet");
           // Ensure it has a coordinate system we can reliably draw into
           if (!svgEl.getAttribute("viewBox")) {
@@ -1547,16 +1548,6 @@ const renderAssetToCanvas = (
       ctx.fillStyle = '#ffffff'; 
       ctx.fillRect(0, 0, sourceCanvas.width, sourceCanvas.height);
       const workspaceSnapshot = await loadWorkspaceSnapshot(minX, minY, maxX, maxY, mmPadding);
-      const canvasBackedAssetIds = new Set(
-        assets
-          .filter(asset =>
-            !asset.isExploded &&
-            assetTypesWithSvgPaths.has(asset.type) &&
-            canRenderAssetAsImage(asset) &&
-            (!option.exportSelection || selectedIds.includes(asset.id))
-          )
-          .map(asset => asset.id)
-      );
       const loadedImages = await loadSvgAssets(assetsToExport);
       const wallSegmentsToDraw = assetsToExport
         .filter(asset => asset.type === 'wall-segments')
@@ -1565,19 +1556,16 @@ const renderAssetToCanvas = (
       if (workspaceSnapshot) {
         wallSegmentsToDraw.forEach(a => renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, new Map(), { wallFillOnly: true }));
         ctx.drawImage(workspaceSnapshot, 0, 0, sourceCanvas.width, sourceCanvas.height);
-        // Only overlay assets that render as raster images (not SVG-native assets
-        // like chairs/tables which are already crisp in the workspace snapshot).
-        // Re-rendering SVG assets on top of the snapshot caused double-drawing
-        // distortion (blurry hatching, misaligned strokes).
+        // Only draw non-SVG assets (freehand, dimensions, labels, text, primitive shapes)
+        // that aren't captured in the workspace SVG snapshot. SVG assets (chairs, tables,
+        // venue floorplans) are already crisp in the snapshot — re-drawing them causes
+        // double-drawing distortion (thick strokes, blurry hatching, misaligned lines).
         assetsToExport.forEach(a => {
-          if (a.type !== 'wall-segments') {
-            const isVenueAsset = PRELOADED_VENUES.some(v => v.id === a.type || v.name === a.type);
-            // Venue assets are already rendered correctly in the workspace snapshot
-            // (inline SVG with proper stroke widths). Re-drawing them on top using
-            // processVenueSvgForExport inflates strokes, making walls appear solid.
-            if (!isVenueAsset && canvasBackedAssetIds.has(a.id)) {
-              renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages);
-            }
+          if (a.type === 'wall-segments') return;
+          const isVenueAsset = PRELOADED_VENUES.some(v => v.id === a.type || v.name === a.type);
+          if (isVenueAsset) return;
+          if (!assetTypesWithSvgPaths.has(a.type)) {
+            renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages);
           }
         });
       } else {
@@ -1599,18 +1587,31 @@ const renderAssetToCanvas = (
         await drawProfessionalPanel(fctx, targetW, targetH, details, assetsToExport, panelW_px, panelX);
       }
 
-      // 8. Output
-      const fileName = `export-${Date.now()}.${option.format}`;
+      // 8. Output — compress via JPEG to keep file size reasonable
+      const JPEG_QUALITY = 0.92;
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        finalCanvas.toBlob((b) => {
+          if (b) resolve(b);
+          else reject(new Error("Failed to encode image"));
+        }, 'image/jpeg', JPEG_QUALITY);
+      });
+      const fileName = `export-${Date.now()}.${option.format === 'png' ? 'jpg' : option.format}`;
       if (option.format === 'pdf') {
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
         const doc = new jsPDF({ orientation: (targetW > targetH ? 'l' : 'p'), unit: 'mm', format: option.paperSize.toLowerCase() });
-        const dataUrl = finalCanvas.toDataURL('image/png', 1.0);
-        doc.addImage(dataUrl, 'PNG', 0, 0, (targetW/paperPx), (targetH/paperPx), undefined, 'FAST');
+        doc.addImage(dataUrl, 'JPEG', 0, 0, (targetW/paperPx), (targetH/paperPx), undefined, 'FAST');
         doc.save(fileName);
       } else {
-        const a = document.createElement('a'); 
-        a.download = fileName; 
-        a.href = finalCanvas.toDataURL(`image/${option.format}`, 1.0); 
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.download = fileName;
+        a.href = url;
         a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
       toast.success("Export finished!");
     } catch (e) {

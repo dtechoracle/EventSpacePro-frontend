@@ -820,6 +820,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             svg.removeAttribute("style");
             svg.removeAttribute("fill");
             svg.removeAttribute("stroke");
+            svg.removeAttribute("xmlns:qs");
             if (!isVenueAsset) {
                 svg.removeAttribute("stroke-width");
             }
@@ -881,7 +882,8 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 .replace(/\s+x\s*=\s*["'][^"']*["']/gi, '')
                 .replace(/\s+y\s*=\s*["'][^"']*["']/gi, '')
                 .replace(/\s+fill\s*=\s*["'][^"']*["']/gi, '')
-                .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '');
+                .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '')
+                .replace(/\s+xmlns:\w+\s*=\s*["'][^"']*["']/gi, '');
 
             // For venue assets, don't set a uniform stroke-width on the root SVG.
             // Per-element stroke-widths are preserved from the original SVG so different

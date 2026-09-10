@@ -25,6 +25,7 @@ function parseSvg(raw: string, forceStroke: string): { viewBox: string; innerHtm
   svg.removeAttribute('width');
   svg.removeAttribute('height');
   svg.removeAttribute('style');
+  svg.removeAttribute('xmlns:qs');
 
   svg.querySelectorAll('*').forEach((el) => {
     el.setAttribute('stroke', forceStroke);
@@ -56,6 +57,7 @@ function parseDwgSvg(raw: string): { viewBox: string; innerHtml: string } {
   svg.removeAttribute('width');
   svg.removeAttribute('height');
   svg.removeAttribute('style');
+  svg.removeAttribute('xmlns:qs');
 
   svg.querySelectorAll('*').forEach((el) => {
     const tag = el.tagName.toLowerCase();
