@@ -412,7 +412,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                     hasLegacyTwentySeaterSize ||
                     (metrics.shouldCropToContent && currentMatchesArtboard);
 
-                if (needsUpdate) {
+                if (needsUpdate && !isVenueAsset) {
                     setTimeout(() => {
                         updateAsset(asset.id, { width: svgWidth, height: svgHeight });
                     }, 0);
@@ -1022,29 +1022,9 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                         fastImageHref && (() => {
                             const isVenueImage = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
                             if (isVenueImage) {
-                                const FIXED_PX = 1024;
-                                const aspect = displayWidth / Math.max(1, displayHeight);
-                                const imgW = aspect >= 1 ? FIXED_PX : Math.round(FIXED_PX * aspect);
-                                const imgH = aspect >= 1 ? Math.round(FIXED_PX / aspect) : FIXED_PX;
-                                const scaleX = displayWidth / imgW;
-                                const scaleY = displayHeight / imgH;
-                                return (
-                                    <image
-                                        href={fastImageHref}
-                                        x={-imgW / 2}
-                                        y={-imgH / 2}
-                                        width={imgW}
-                                        height={imgH}
-                                        preserveAspectRatio="none"
-                                        transform={`scale(${scaleX}, ${scaleY})`}
-                                        onError={() => {
-                                            if (canUseFastImage && fastImageHref !== assetPath) {
-                                                setRasterImageFailed(true);
-                                            }
-                                        }}
-                                        style={{ outline: 'none', filter: 'none', pointerEvents: 'none' }}
-                                    />
-                                );
+                                // Venue SVGs: wait for processedSvg to avoid flicker between
+                                // image fallback and inline SVG at different sizes.
+                                return null;
                             }
                             return (
                                 <image
