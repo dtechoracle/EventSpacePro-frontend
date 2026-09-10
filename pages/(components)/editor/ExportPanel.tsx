@@ -16,6 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
 import { getRasterAssetPath } from "@/utils/assetRasterPath";
+import { canRenderAssetAsImage } from "@/utils/assetRenderMode";
 import { downloadDxf } from "@/lib/dxfExport";
 
 type ExportFormat = "pdf" | "png" | "jpg" | "jpeg" | "dxf";
@@ -335,6 +336,25 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
         }
       }
 
+      // For non-venue SVGs, load as-is to preserve original per-element styling.
+      // DOM processing strips fill/stroke from elements and applies root-level overrides,
+      // which destroys original coloring and causes thick borders when rasterized as an image.
+      if (!isVenue) {
+        const blob = new Blob([processedSvg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        const isOk = await new Promise<boolean>((resolve) => {
+          const timeout = setTimeout(() => resolve(false), 5000);
+          img.onload = () => { clearTimeout(timeout); resolve(img.naturalWidth > 0 || img.width > 0); };
+          img.onerror = () => { clearTimeout(timeout); resolve(false); };
+          img.src = url;
+        });
+        if (isOk) {
+          loadedImages.set(asset.id, img);
+          return;
+        }
+      }
+
       // ROBUST DOM-BASED PROCESSING (Matches AssetRenderer.tsx logic)
       try {
         const parser = new DOMParser();
@@ -354,7 +374,7 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
           }
 
           const styleId = "dynamic-asset-style-export";
-          if (!doc.getElementById(styleId)) {
+          if (isVenue && !doc.getElementById(styleId)) {
             const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
             styleEl.setAttribute("id", styleId);
             styleEl.textContent = `* { vector-effect: non-scaling-stroke !important; } .fill-none-el { fill: none !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } .stroke-top-layer { pointer-events: none; }`;
@@ -407,15 +427,13 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
             if (styleAttr) {
               const cleaned = styleAttr
                 .replace(/fill\s*:[^;]+;?/gi, "")
-                .replace(/stroke\s*:[^;]+;?/gi, "")
-                .replace(/stroke-width\s*:[^;]+;?/gi, "");
+                .replace(/stroke\s*:[^;]+;?/gi, "");
               if (cleaned.trim()) el.setAttribute("style", cleaned);
               else el.removeAttribute("style");
             }
 
             el.removeAttribute("fill");
             el.removeAttribute("stroke");
-            el.removeAttribute("stroke-width");
 
             let shouldBeNone = wasExplicitlyNone || isLineElement;
             if (!isFurniture) {
@@ -433,7 +451,7 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
           });
 
           const rootGroup = svgEl.querySelector('g');
-          if (rootGroup) {
+          if (rootGroup && isVenue) {
             const strokeOnlyEls = Array.from(rootGroup.querySelectorAll('.fill-none-el'));
             if (strokeOnlyEls.length > 0) {
               const topLayer = doc.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -452,7 +470,8 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
               .replace(/\s+fill\s*=\s*["'][^"']*["']/gi, '')
               .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '');
 
-            return `<svg${cleanAttrs} fill="${fill}" stroke="${stroke}" stroke-width="${exportStrokeWidth}" preserveAspectRatio="xMidYMid meet">`;
+            const strokeWidthAttr = isVenue ? ` stroke-width="${exportStrokeWidth}"` : '';
+            return `<svg${cleanAttrs} fill="${fill}" stroke="${stroke}"${strokeWidthAttr} preserveAspectRatio="xMidYMid meet">`;
           });
         }
       } catch (err) {
@@ -570,7 +589,7 @@ export default function ExportPanel() {
         strokeColor: (s as any).stroke || (s as any).strokeColor || '#000000',
         strokeWidth: s.strokeWidth || 1,
         scale: 1,
-        zIndex: s.zIndex || (s.type === 'rectangle' ? -1 : 0),
+        zIndex: s.zIndex || 0,
       })),
       ...walls.map(w => {
         const validEdges = w.edges.filter(e => w.nodes.find(n => n.id === e.nodeA) && w.nodes.find(n => n.id === e.nodeB));
@@ -1525,6 +1544,16 @@ const renderAssetToCanvas = (
       ctx.fillStyle = '#ffffff'; 
       ctx.fillRect(0, 0, sourceCanvas.width, sourceCanvas.height);
       const workspaceSnapshot = await loadWorkspaceSnapshot(minX, minY, maxX, maxY, mmPadding);
+      const canvasBackedAssetIds = new Set(
+        assets
+          .filter(asset =>
+            !asset.isExploded &&
+            assetTypesWithSvgPaths.has(asset.type) &&
+            canRenderAssetAsImage(asset) &&
+            (!option.exportSelection || selectedIds.includes(asset.id))
+          )
+          .map(asset => asset.id)
+      );
       const loadedImages = await loadSvgAssets(assetsToExport);
       const wallSegmentsToDraw = assetsToExport
         .filter(asset => asset.type === 'wall-segments')
@@ -1537,11 +1566,14 @@ const renderAssetToCanvas = (
         // Their <image> elements reference /assets/raster/ PNGs which are removed
         // from the snapshot (can't resolve in blob URL context), so we draw them
         // from loaded images at export resolution.
+        // Only re-draw assets in canvasBackedAssetIds — SVG-native assets (with
+        // custom styling) are already correct in the snapshot as base64. Re-drawing
+        // them causes double-drawing distortion (thick strokes, blurry hatching).
         assetsToExport.forEach(a => {
           if (a.type === 'wall-segments') return;
           const isVenueAsset = PRELOADED_VENUES.some(v => v.id === a.type || v.name === a.type);
           if (isVenueAsset) return;
-          if (assetTypesWithSvgPaths.has(a.type)) {
+          if (canvasBackedAssetIds.has(a.id)) {
             renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages);
           }
         });
