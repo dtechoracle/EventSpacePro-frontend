@@ -672,8 +672,12 @@ export default function ExportPanel() {
           if (!resp.ok) return;
           let imageBlob: Blob;
           if (href.includes('preloaded-venues') || href.includes('/assets/preloaded-venues/')) {
-            // Venue SVGs: embed as-is so the export matches the workspace exactly.
-            imageBlob = await resp.blob();
+            // Venue SVGs: process with non-linear stroke scaling to match workspace appearance.
+            // Workspace applies STROKE_SCALE=10 in AssetRenderer; processVenueSvgForExport
+            // maps CAD-scale stroke-widths to export-appropriate values.
+            const svgText = await resp.text();
+            const processed = processVenueSvgForExport(svgText);
+            imageBlob = new Blob([processed], { type: 'image/svg+xml' });
           } else {
             // Non-venue assets: embed as-is (raster PNGs, regular SVGs).
             // processVenueSvgForExport must NOT be applied here — it inflates
