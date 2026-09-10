@@ -623,6 +623,46 @@ export default function ExportPanel() {
     return items.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
   }, [shapes, assets, walls, textAnnotations, labelArrows, dimensions]);
 
+  // Scales venue SVG stroke-widths by a factor to match workspace rendering.
+  // AssetRenderer applies STROKE_SCALE=10 to venue stroke-widths on the workspace.
+  // This function applies the same scaling in the export snapshot so venues don't appear faint.
+  const scaleVenueStrokesForExport = (svgText: string, scaleFactor: number): string => {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svgText, 'image/svg+xml');
+      const svgEl = doc.querySelector('svg');
+      if (!svgEl) return svgText;
+
+      svgEl.removeAttribute('width');
+      svgEl.removeAttribute('height');
+      svgEl.removeAttribute('xmlns:qs');
+      svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+      const allEls = doc.querySelectorAll('path, circle, rect, line, polyline, ellipse');
+      allEls.forEach(el => {
+        const currentSW = el.getAttribute('stroke-width');
+        if (currentSW) {
+          const parsed = parseFloat(currentSW);
+          if (!isNaN(parsed) && parsed > 0) {
+            el.setAttribute('stroke-width', String(parsed * scaleFactor));
+          }
+        }
+        const styleSW = el.getAttribute('style');
+        if (styleSW && /stroke-width\s*:/i.test(styleSW)) {
+          const newStyle = styleSW.replace(/stroke-width\s*:\s*([\d.]+)/gi, (_m, val) => {
+            const parsed = parseFloat(val);
+            return isNaN(parsed) ? _m : `stroke-width: ${parsed * scaleFactor}`;
+          });
+          el.setAttribute('style', newStyle);
+        }
+      });
+
+      return new XMLSerializer().serializeToString(doc);
+    } catch {
+      return svgText;
+    }
+  };
+
   const loadWorkspaceSnapshot = async (
     minX: number,
     minY: number,
@@ -672,11 +712,11 @@ export default function ExportPanel() {
           if (!resp.ok) return;
           let imageBlob: Blob;
           if (href.includes('preloaded-venues') || href.includes('/assets/preloaded-venues/')) {
-            // Venue SVGs: process with non-linear stroke scaling to match workspace appearance.
-            // Workspace applies STROKE_SCALE=10 in AssetRenderer; processVenueSvgForExport
-            // maps CAD-scale stroke-widths to export-appropriate values.
+            // Venue SVGs: apply STROKE_SCALE=10 to match workspace rendering.
+            // AssetRenderer.tsx multiplies all venue stroke-widths by 10 so
+            // CAD-scale values (0.25, 0.35, 0.5) become visible (2.5, 3.5, 5.0).
             const svgText = await resp.text();
-            const processed = processVenueSvgForExport(svgText);
+            const processed = scaleVenueStrokesForExport(svgText, 10);
             imageBlob = new Blob([processed], { type: 'image/svg+xml' });
           } else {
             // Non-venue assets: embed as-is (raster PNGs, regular SVGs).
