@@ -655,11 +655,10 @@ export default function ExportPanel() {
           if (href.includes('preloaded-venues') || href.includes('/assets/preloaded-venues/')) {
             // Venue SVGs: embed as-is so the export matches the workspace exactly.
             imageBlob = await resp.blob();
-          } else if (href.includes('/assets/') && href.toLowerCase().endsWith('.svg')) {
-            const rawSvg = await resp.text();
-            const processedSvg = processVenueSvgForExport(rawSvg);
-            imageBlob = new Blob([processedSvg], { type: 'image/svg+xml' });
           } else {
+            // Non-venue assets: embed as-is (raster PNGs, regular SVGs).
+            // processVenueSvgForExport must NOT be applied here — it inflates
+            // stroke widths designed for CAD floorplans and ruins regular assets.
             imageBlob = await resp.blob();
           }
           base64 = await new Promise<string>((resolve) => {
@@ -700,32 +699,10 @@ export default function ExportPanel() {
       }
     });
 
-    // ─── Counteract zoom stroke compression ───
-    // The workspace root SVG contains <g transform="scale(zoom)">.
-    // When cloned for export, zoom (e.g. 0.03) compresses stroke-widths down to hairline (0.1px).
-    // Scaling stroke-widths by (1 / zoom) inside clone restores exact workspace display thickness.
-    if (zoom > 0 && zoom < 1) {
-      const strokeScale = 1 / zoom;
-      clone.querySelectorAll('path, circle, rect, line, polyline, ellipse').forEach((el) => {
-        // Skip venue SVG elements — they have their own stroke widths that match the workspace
-        if (el.closest('[data-venue="true"]')) return;
-        const sw = el.getAttribute('stroke-width');
-        if (sw) {
-          const num = parseFloat(sw);
-          if (!isNaN(num) && num > 0) {
-            el.setAttribute('stroke-width', String(num * strokeScale));
-          }
-        }
-        const styleAttr = el.getAttribute('style');
-        if (styleAttr && /stroke-width/i.test(styleAttr)) {
-          const scaledStyle = styleAttr.replace(/stroke-width\s*:\s*([\d.]+)/gi, (_m, val) => {
-            const num = parseFloat(val);
-            return isNaN(num) ? _m : `stroke-width: ${num * strokeScale}`;
-          });
-          el.setAttribute('style', scaledStyle);
-        }
-      });
-    }
+    // ─── Stroke compensation ───
+    // Workspace SVGs use `vector-effect: non-scaling-stroke` which keeps strokes
+    // at their CSS pixel width regardless of the zoom transform. No stroke scaling
+    // is needed — the snapshot captures the exact workspace appearance.
 
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     clone.setAttribute('width', `${screenWidth}`);
@@ -1556,15 +1533,15 @@ const renderAssetToCanvas = (
       if (workspaceSnapshot) {
         wallSegmentsToDraw.forEach(a => renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, new Map(), { wallFillOnly: true }));
         ctx.drawImage(workspaceSnapshot, 0, 0, sourceCanvas.width, sourceCanvas.height);
-        // Only draw non-SVG assets (freehand, dimensions, labels, text, primitive shapes)
-        // that aren't captured in the workspace SVG snapshot. SVG assets (chairs, tables,
-        // venue floorplans) are already crisp in the snapshot — re-drawing them causes
-        // double-drawing distortion (thick strokes, blurry hatching, misaligned lines).
+        // Re-draw raster-backed assets that were removed from the snapshot.
+        // Their <image> elements reference /assets/raster/ PNGs which are removed
+        // from the snapshot (can't resolve in blob URL context), so we draw them
+        // from loaded images at export resolution.
         assetsToExport.forEach(a => {
           if (a.type === 'wall-segments') return;
           const isVenueAsset = PRELOADED_VENUES.some(v => v.id === a.type || v.name === a.type);
           if (isVenueAsset) return;
-          if (!assetTypesWithSvgPaths.has(a.type)) {
+          if (assetTypesWithSvgPaths.has(a.type)) {
             renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages);
           }
         });
