@@ -78,7 +78,7 @@ function escapeXml(s: string): string {
 
 function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTableEntry>, layers: DwgLayerTableEntry[], visited: Set<string>, strokeWidth: number): string | null {
   const color = '#000000';
-  const attrs = `stroke="${color}" fill="none" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"`;
+  const attrs = `stroke="${color}" fill="none" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"`;
 
   switch (entity.type) {
     case 'LINE': {
@@ -271,7 +271,7 @@ function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTabl
             }
           }
           if (bp.isClosed) d += ' Z';
-          paths.push(`<path d="${d}" fill="none" stroke="#000000" stroke-width="${strokeWidth * 0.5}" stroke-linecap="round" stroke-linejoin="round"/>`);
+          paths.push(`<path d="${d}" fill="none" stroke="#000000" stroke-width="${strokeWidth * 0.5}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`);
         } else if ('edges' in bp && bp.edges) {
           let d = '';
           for (const edge of bp.edges) {
@@ -290,7 +290,7 @@ function entityToSvg(entity: DwgEntity, blockMap: Map<string, DwgBlockRecordTabl
               d += `M${x1},${y1} A${edge.radius},${edge.radius} 0 ${largeArc} 1 ${x2},${y2} `;
             }
           }
-          if (d) paths.push(`<path d="${d}" fill="none" stroke="#000000" stroke-width="${strokeWidth * 0.5}" stroke-linecap="round" stroke-linejoin="round"/>`);
+          if (d) paths.push(`<path d="${d}" fill="none" stroke="#000000" stroke-width="${strokeWidth * 0.5}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`);
         }
       }
       return paths.join('') || null;
@@ -496,8 +496,8 @@ function buildSvgFromDb(db: DwgDatabase): string {
   const vbHeight = maxY - minY;
   const maxDim = Math.max(vbWidth, vbHeight);
 
-  // Scale stroke width to ~0.3% of the largest dimension
-  const strokeWidth = Math.max(2, maxDim * 0.003);
+  // Fixed 2px stroke width — non-scaling-stroke means this is in screen pixels
+  const strokeWidth = 2;
 
   const svgElements: string[] = [];
   const visited = new Set<string>();

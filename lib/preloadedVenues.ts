@@ -94,9 +94,9 @@ export const PRELOADED_VENUES: PreloadedVenueDef[] = [
   {
     id: "monarch",
     name: "Monarch",
-    path: "/assets/preloaded-venues/Monarch.dwg",
-    width: 34026,
-    height: 44793,
+    path: "/assets/preloaded-venues/Monarch.svg",
+    width: 29400,
+    height: 48000,
     latitude: 6.4371,
     longitude: 3.4682,
     address: "The Monarch Event Centre, Lekki - Epe Express Rd, Lekki, Lagos, Nigeria",
