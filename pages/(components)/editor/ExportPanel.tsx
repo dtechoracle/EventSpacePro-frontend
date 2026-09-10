@@ -694,6 +694,67 @@ export default function ExportPanel() {
       node.remove();
     });
 
+    // ─── Replace inline venue SVGs with <image> elements ───
+    // Venue SVGs are rendered inline in the workspace with huge CAD-scale viewBoxes
+    // (e.g. 115440×184186). When the snapshot SVG is loaded as an <img>, the nested
+    // SVG's huge viewBox causes content to render microscopic. Replace each inline
+    // venue with an <image> loading the processed SVG as base64, sized to match the
+    // workspace display dimensions.
+    const workspaceVenueGroups = workspaceSvg.querySelectorAll('g[data-venue="true"]');
+    const cloneVenueGroups = clone.querySelectorAll('g[data-venue="true"]');
+    const venueBase64Cache = new Map<string, string>();
+    await Promise.all(Array.from(workspaceVenueGroups).map(async (workspaceVenue, i) => {
+      try {
+        const bbox = (workspaceVenue as SVGGElement).getBBox();
+        const cloneVenue = cloneVenueGroups[i];
+        if (!cloneVenue || bbox.width === 0 || bbox.height === 0) return;
+
+        // Find which venue asset this is from the asset list
+        const cx = bbox.x + bbox.width / 2;
+        const cy = bbox.y + bbox.height / 2;
+        let venueDef: any = null;
+        for (const a of assets) {
+          const isVenue = PRELOADED_VENUES.some(v => v.id === a.type || v.name === a.type);
+          if (!isVenue) continue;
+          const w = (a.width || 0) * (a.scale || 1);
+          const h = (a.height || 0) * (a.scale || 1);
+          if (Math.abs(a.x - cx) < w && Math.abs(a.y - cy) < h) {
+            venueDef = PRELOADED_VENUES.find(v => v.id === a.type || v.name === a.type);
+            break;
+          }
+        }
+        if (!venueDef?.path) return;
+
+        let base64 = venueBase64Cache.get(venueDef.path);
+        if (!base64) {
+          const resp = await fetch(encodeURI(venueDef.path));
+          if (!resp.ok) return;
+          const svgText = await resp.text();
+          const processed = processVenueSvgForExport(svgText);
+          const blob = new Blob([processed], { type: 'image/svg+xml' });
+          base64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+          venueBase64Cache.set(venueDef.path, base64);
+        }
+
+        const ns = 'http://www.w3.org/2000/svg';
+        const imgEl = document.createElementNS(ns, 'image');
+        imgEl.setAttribute('href', base64);
+        imgEl.setAttribute('x', String(bbox.x));
+        imgEl.setAttribute('y', String(bbox.y));
+        imgEl.setAttribute('width', String(bbox.width));
+        imgEl.setAttribute('height', String(bbox.height));
+        imgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        imgEl.setAttribute('data-venue-image', 'true');
+        cloneVenue.parentNode?.replaceChild(imgEl, cloneVenue);
+      } catch (e) {
+        console.error("Failed to replace venue in snapshot", e);
+      }
+    }));
+
     // ─── Embed external <image> references as base64 data URLs ───
     // When the SVG is serialized to a blob and loaded as an <img>, external
     // resource paths (like /assets/textures/Grass 01.png) fail to resolve.
@@ -712,12 +773,7 @@ export default function ExportPanel() {
           if (!resp.ok) return;
           let imageBlob: Blob;
           if (href.includes('preloaded-venues') || href.includes('/assets/preloaded-venues/')) {
-            // Venue SVGs: apply STROKE_SCALE=10 to match workspace rendering.
-            // AssetRenderer.tsx multiplies all venue stroke-widths by 10 so
-            // CAD-scale values (0.25, 0.35, 0.5) become visible (2.5, 3.5, 5.0).
-            const svgText = await resp.text();
-            const processed = scaleVenueStrokesForExport(svgText, 10);
-            imageBlob = new Blob([processed], { type: 'image/svg+xml' });
+            imageBlob = await resp.blob();
           } else {
             // Non-venue assets: embed as-is (raster PNGs, regular SVGs).
             // processVenueSvgForExport must NOT be applied here — it inflates
