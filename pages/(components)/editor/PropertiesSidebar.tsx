@@ -2689,7 +2689,7 @@ step={1}
                         className="sidebar-input w-16 text-center"
                         min={8}
                         max={500}
-                        step={10}
+                        step={1}
                       />
                     </div>
 

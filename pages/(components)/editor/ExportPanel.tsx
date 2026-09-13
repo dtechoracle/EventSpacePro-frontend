@@ -16,7 +16,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
 import { getRasterAssetPath } from "@/utils/assetRasterPath";
-import { canRenderAssetAsImage } from "@/utils/assetRenderMode";
 import { downloadDxf } from "@/lib/dxfExport";
 
 type ExportFormat = "pdf" | "png" | "jpg" | "jpeg" | "dxf";
@@ -688,9 +687,12 @@ export default function ExportPanel() {
     // Remove non-venue raster-backed asset <image> elements from the snapshot.
     // SVG loaded as an <img> from a blob URL cannot render external <image> references,
     // so furniture/assets are re-rendered manually. Preloaded venues are kept and inlined below.
+    const removedRasterAssetIds = new Set<string>();
     clone.querySelectorAll('image[href*="/assets/raster/"], image[xlink\\:href*="/assets/raster/"]').forEach((node) => {
       const href = node.getAttribute('href') || node.getAttribute('xlink:href') || '';
       if (href.includes('preloaded-venues')) return;
+      const parentG = node.closest('g[data-id]');
+      if (parentG) removedRasterAssetIds.add(parentG.getAttribute('data-id')!);
       node.remove();
     });
 
@@ -840,7 +842,7 @@ export default function ExportPanel() {
         image.onerror = () => resolve(null);
         image.src = url;
       });
-      return img;
+      return { img, removedRasterAssetIds };
     } finally {
       URL.revokeObjectURL(url);
     }
@@ -1037,8 +1039,11 @@ const renderAssetToCanvas = (
         ctx.restore();
       }
     } else {
-      const w = (asset.width || 0) * (asset.scale || 1);
-      const h = (asset.height || 0) * (asset.scale || 1);
+      const libDef = ASSET_LIBRARY.find(d => d.id === asset.type);
+      const assetW = asset.width || libDef?.width || 100;
+      const assetH = asset.height || libDef?.height || 100;
+      const w = assetW * (asset.scale || 1);
+      const h = assetH * (asset.scale || 1);
       ctx.translate(cx, cy);
       if (asset.rotation) ctx.rotate((asset.rotation * Math.PI) / 180);
 
@@ -1643,17 +1648,9 @@ const renderAssetToCanvas = (
       if (!ctx) throw new Error("Canvas context error");
       ctx.fillStyle = '#ffffff'; 
       ctx.fillRect(0, 0, sourceCanvas.width, sourceCanvas.height);
-      const workspaceSnapshot = await loadWorkspaceSnapshot(minX, minY, maxX, maxY, mmPadding);
-      const canvasBackedAssetIds = new Set(
-        assets
-          .filter(asset =>
-            !asset.isExploded &&
-            assetTypesWithSvgPaths.has(asset.type) &&
-            canRenderAssetAsImage(asset) &&
-            (!option.exportSelection || selectedIds.includes(asset.id))
-          )
-          .map(asset => asset.id)
-      );
+      const snapshotResult = await loadWorkspaceSnapshot(minX, minY, maxX, maxY, mmPadding);
+      const workspaceSnapshot = snapshotResult?.img ?? null;
+      const removedRasterAssetIds = snapshotResult?.removedRasterAssetIds ?? new Set<string>();
       const loadedImages = await loadSvgAssets(assetsToExport);
       const wallSegmentsToDraw = assetsToExport
         .filter(asset => asset.type === 'wall-segments')
@@ -1666,14 +1663,13 @@ const renderAssetToCanvas = (
         // Their <image> elements reference /assets/raster/ PNGs which are removed
         // from the snapshot (can't resolve in blob URL context), so we draw them
         // from loaded images at export resolution.
-        // Only re-draw assets in canvasBackedAssetIds — SVG-native assets (with
-        // custom styling) are already correct in the snapshot as base64. Re-drawing
-        // them causes double-drawing distortion (thick strokes, blurry hatching).
+        // Only re-draw assets whose images were actually removed — collected during
+        // snapshot processing to avoid double-drawing (snapshot + canvas).
         assetsToExport.forEach(a => {
           if (a.type === 'wall-segments') return;
           const isVenueAsset = PRELOADED_VENUES.some(v => v.id === a.type || v.name === a.type);
           if (isVenueAsset) return;
-          if (canvasBackedAssetIds.has(a.id)) {
+          if (removedRasterAssetIds.has(a.id)) {
             renderAssetToCanvas(ctx, a, minX, minY, mmPadding, 0, MM_TO_PX, loadedImages);
           }
         });

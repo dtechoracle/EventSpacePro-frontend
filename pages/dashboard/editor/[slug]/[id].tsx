@@ -1223,6 +1223,7 @@ export default function Editor() {
   // Invalidate dashboard batch query on unmount so fresh data shows when navigating back
   useEffect(() => {
     return () => {
+      isUnmountingRef.current = true;
       queryClient.invalidateQueries({ queryKey: ["batch-all-events"] });
     };
   }, [queryClient]);
@@ -1386,6 +1387,7 @@ export default function Editor() {
   const restoredLocalDraftRef = useRef<string | null>(null);
   const isAutoSavingRef = useRef(false);
   const pendingAutoSaveRef = useRef(false);
+  const isUnmountingRef = useRef(false);
   const lastSavedProjectHistoryRef = useRef<number | null>(null);
   const lastSavedSceneHistoryRef = useRef<number | null>(null);
 
@@ -2432,6 +2434,7 @@ export default function Editor() {
   // Auto-save functionality - automatically save to database
   useEffect(() => {
     if (!currentEventData || !id || !slug) return;
+    if (isUnmountingRef.current) return;
 
     const hasAnyUnsavedChanges = projectHasUnsavedChanges || hasUnsavedChanges;
     if (!hasAnyUnsavedChanges) {
@@ -2663,6 +2666,41 @@ export default function Editor() {
   }, [writeLocalWorkspaceDraft]);
 
   // Save functionality is handled by PropertiesSidebar
+
+  // On unmount with unsaved changes, revert the DB to the last known good backup
+  // instead of potentially saving partial/empty state.
+  useEffect(() => {
+    const eventId = id;
+    const eventSlug = slug;
+    return () => {
+      if (!eventId || !eventSlug) return;
+      const projectState = useProjectStore.getState();
+      if (!projectState.hasUnsavedChanges) return;
+      try {
+        const raw = window.localStorage.getItem(`event-canvas-${eventId}`);
+        if (!raw) return;
+        const backup = JSON.parse(raw);
+        if (!backup?.canvasData && !backup?.canvasAssets) return;
+        const standalone = isStandaloneSlug(eventSlug);
+        const eventUrl = standalone
+          ? `/events/${eventId}`
+          : `/projects/${eventSlug}/events/${eventId}`;
+        console.warn('[Editor] Unmounting with unsaved changes — reverting DB to last saved backup');
+        apiRequest(eventUrl, 'GET', null, true).then((currentEvent: any) => {
+          const event = currentEvent.data || currentEvent;
+          return apiRequest(eventUrl, 'PUT', {
+            name: event.name || 'Untitled Event',
+            type: event.type || 'custom venue',
+            canvases: event.canvases || [],
+            canvasData: backup.canvasData,
+            canvasAssets: backup.canvasAssets,
+          }, true);
+        }).catch((e: any) => console.warn('[Editor] Failed to revert DB on unmount:', e));
+      } catch (e) {
+        console.warn('[Editor] Could not revert DB on unmount:', e);
+      }
+    };
+  }, [id, slug]);
 
   // Render content based on iframe/preview status
   const renderContent = () => {

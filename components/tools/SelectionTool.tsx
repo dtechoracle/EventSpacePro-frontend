@@ -172,6 +172,30 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                 const la = item.object as LabelArrow;
                 addPoint(la.startPoint.x, la.startPoint.y);
                 addPoint(la.endPoint.x, la.endPoint.y);
+                const dx = la.endPoint.x - la.startPoint.x;
+                const dy = la.endPoint.y - la.startPoint.y;
+                const labelPosition = (la as any).textPosition || 'bottom';
+                const labelT = labelPosition === 'top' ? 0.86 : labelPosition === 'middle' ? 0.5 : 0.14;
+                const labelX = la.startPoint.x + dx * labelT;
+                const labelY = la.startPoint.y + dy * labelT;
+                const fs = la.fontSize || 120;
+                const label = la.label || '';
+                const rectPadH = fs * 0.5;
+                const rectPadV = fs * 0.35;
+                const rectW = Math.max(fs * 2, label.length * fs * 0.62 + rectPadH * 2);
+                const rectH = fs + rectPadV * 2;
+                let textAngle = Math.atan2(dy, dx);
+                if (textAngle > Math.PI / 2 || textAngle < -Math.PI / 2) textAngle += Math.PI;
+                const cosR = Math.cos(textAngle);
+                const sinR = Math.sin(textAngle);
+                const corners = [
+                    { x: -rectW / 2, y: -rectH / 2 }, { x: rectW / 2, y: -rectH / 2 },
+                    { x: rectW / 2, y: rectH / 2 }, { x: -rectW / 2, y: rectH / 2 },
+                ].map(c => ({
+                    x: labelX + c.x * cosR - c.y * sinR,
+                    y: labelY + c.x * sinR + c.y * cosR,
+                }));
+                corners.forEach(c => addPoint(c.x, c.y));
             }
         });
 
@@ -493,6 +517,15 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                     const newEnd = { x: initialDim.endPoint.x + finalDx, y: initialDim.endPoint.y + finalDy };
                     store.updateDimension(item.id, { endPoint: newEnd }, true);
                 }
+            } else if (item.type === 'labelArrow') {
+                const initialArrow = item.object as LabelArrow;
+                if (dragHandle === 'start') {
+                    const newStart = { x: initialArrow.startPoint.x + finalDx, y: initialArrow.startPoint.y + finalDy };
+                    store.updateLabelArrow(item.id, { startPoint: newStart }, true);
+                } else if (dragHandle === 'end') {
+                    const newEnd = { x: initialArrow.endPoint.x + finalDx, y: initialArrow.endPoint.y + finalDy };
+                    store.updateLabelArrow(item.id, { endPoint: newEnd }, true);
+                }
             }
         });
     }, [dragHandle, initialState, screenToWorld, selectedIds, zoom, assetSpatialIndex]);
@@ -572,6 +605,7 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
 
     const isSingleStraightLine = selectedItems.length === 1 && selectedItems[0].type === 'shape' && (((selectedItems[0].object as Shape).type === 'line' || (selectedItems[0].object as Shape).type === 'arrow') && !(selectedItems[0].object as Shape).points);
     const isSingleDimension = selectedItems.length === 1 && selectedItems[0].type === 'dimension';
+    const isSingleLabelArrow = selectedItems.length === 1 && selectedItems[0].type === 'labelArrow';
 
     if (isSingleDimension) {
         const dim = selectedItems[0].object as Dimension;
@@ -588,6 +622,30 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                 <rect x={startScreen.x - 7} y={startScreen.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-nwse-resize" onMouseDown={(e) => handleMouseDown(e, 'w')} />
                 <rect x={endScreen.x - 7} y={endScreen.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-nwse-resize" onMouseDown={(e) => handleMouseDown(e, 'e')} />
                 <circle cx={rotPt.x} cy={rotPt.y} r={7} fill="white" stroke="#3B82F6" strokeWidth={2} className="cursor-grab" onMouseDown={(e) => handleMouseDown(e, 'rotate')} />
+            </g>
+        );
+    }
+
+    if (isSingleLabelArrow) {
+        const la = labelArrows.find(a => a.id === selectedIds[0]);
+        if (!la) return null;
+        let sx = la.startPoint.x, sy = la.startPoint.y;
+        let ex = la.endPoint.x, ey = la.endPoint.y;
+        // When whole arrow is dragged via Workspace2D, it uses dragPreview (ghost)
+        // instead of mutating the store. Apply that live offset so handles track it.
+        if (dragPreview && dragPreview.ids.includes(la.id)) {
+            sx += dragPreview.dx;
+            sy += dragPreview.dy;
+            ex += dragPreview.dx;
+            ey += dragPreview.dy;
+        }
+        const startScreen = worldToScreenPoint(sx, sy);
+        const endScreen = worldToScreenPoint(ex, ey);
+        return (
+            <g data-export-ignore="true">
+                <line x1={startScreen.x} y1={startScreen.y} x2={endScreen.x} y2={endScreen.y} stroke="#3B82F6" strokeWidth={2} strokeDasharray="6 3" vectorEffect="non-scaling-stroke" />
+                <rect x={startScreen.x - 7} y={startScreen.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-move" onMouseDown={(e) => handleMouseDown(e, 'start')} />
+                <rect x={endScreen.x - 7} y={endScreen.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-move" onMouseDown={(e) => handleMouseDown(e, 'end')} />
             </g>
         );
     }
@@ -724,8 +782,19 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                     const hitUnselectedShape = store.shapes.find(s => !selectedSet.has(s.id) && Math.abs(worldX - s.x) <= s.width/2 && Math.abs(worldY - s.y) <= s.height/2);
                     const hitUnselectedAsset = store.assets.find(a => !a.isExploded && !selectedSet.has(a.id) && Math.abs(worldX - a.x) <= (a.width * (a.scale || 1))/2 && Math.abs(worldY - a.y) <= (a.height * (a.scale || 1))/2);
                     const hitUnselectedText = store.textAnnotations.find(t => !selectedSet.has(t.id) && Math.abs(worldX - t.x) <= (t.text.length * (t.fontSize || 250) * 0.3) && Math.abs(worldY - t.y) <= (t.fontSize || 250) * 0.6);
+                    const hitUnselectedArrow = store.labelArrows.find(la => {
+                      if (selectedSet.has(la.id)) return false;
+                      const sx = la.startPoint.x, sy = la.startPoint.y;
+                      const ex = la.endPoint.x, ey = la.endPoint.y;
+                      const dx = ex - sx, dy = ey - sy;
+                      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+                      const t = Math.max(0, Math.min(1, ((worldX - sx) * dx + (worldY - sy) * dy) / (len * len)));
+                      const px = sx + t * dx, py = sy + t * dy;
+                      const dist = Math.sqrt((worldX - px) * (worldX - px) + (worldY - py) * (worldY - py));
+                      return dist <= Math.max(la.fontSize || 120, 150);
+                    });
 
-                    if (hitUnselectedShape || hitUnselectedAsset || hitUnselectedText) {
+                    if (hitUnselectedShape || hitUnselectedAsset || hitUnselectedText || hitUnselectedArrow) {
                       // Do not capture drag on overlay — let event pass to underlying item selection
                       return;
                     }
