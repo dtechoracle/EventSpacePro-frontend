@@ -360,7 +360,7 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
             const styleId = "dynamic-inline-style";
             const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
             styleEl.setAttribute("id", styleId);
-            styleEl.textContent = `.fill-none-el { fill: none !important; stroke: inherit !important; stroke-width: inherit !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } .auto-fill-el { fill: inherit !important; stroke: none !important; } .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
+            styleEl.textContent = `.fill-none-el { fill: none !important; stroke: inherit !important; stroke-width: inherit !important; vector-effect: non-scaling-stroke !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; vector-effect: non-scaling-stroke !important; } .auto-fill-el { fill: inherit !important; stroke: none !important; } .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; vector-effect: non-scaling-stroke !important; } .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; vector-effect: non-scaling-stroke !important; } .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
             svg.prepend(styleEl);
 
 
@@ -552,9 +552,10 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
     const svgContent = useMemo(() => {
         if (!baseSvg) return "";
 
+        const isZeroStroke = strokeWidth !== undefined && Number(strokeWidth) <= 0;
         const currentFill = fill ?? "transparent";
-        const currentStroke = stroke ?? "#000000";
-        const currentStrokeWidth = String(strokeWidth ?? DEFAULT_ASSET_STROKE_WIDTH);
+        const currentStroke = isZeroStroke ? "none" : (stroke ?? "#000000");
+        const currentStrokeWidth = isZeroStroke ? "0" : String(strokeWidth ?? DEFAULT_ASSET_STROKE_WIDTH);
 
         return baseSvg.replace(/<svg([^>]*)>/i, (_match: string, attrs: string) => {
             const cleanAttrs = attrs

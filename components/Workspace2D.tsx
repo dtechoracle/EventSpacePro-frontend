@@ -807,7 +807,7 @@ export default function Workspace2D({
   const assetSpatialIndex = useMemo(
     () => new SpatialIndex(
       assets
-        .filter((asset) => !asset.isExploded)
+        .filter((asset) => !asset.isExploded && !asset.hidden)
         .map((asset) => ({
           id: asset.id,
           item: asset,
@@ -1086,6 +1086,7 @@ export default function Workspace2D({
 
   const svgRenderables = useMemo(
     () => allRenderables.filter((item: any) => {
+      if (item.hidden) return false;
       if (item._renderType !== 'asset') return true;
       return !canRenderAssetOnCanvas(item);
     }),

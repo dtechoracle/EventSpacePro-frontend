@@ -4,9 +4,8 @@ import Image from "next/image"
 import { ASSET_LIBRARY, AssetDef, AssetCategory, ASSET_CATEGORIES } from "@/lib/assets"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { InlineSvg, isKnownMissingSvg, validateSvgPath } from "@/components/tools/InlineSvg"
-
-const venuePngCache = new Map<string, boolean>();
+import { InlineSvg } from "@/components/tools/InlineSvg"
+import { getRasterAssetPath } from "@/utils/assetRasterPath"
 
 function deriveVenuePngPath(assetPath: string): string {
   return assetPath
@@ -30,8 +29,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
   const [activeCategory, setActiveCategory] =
     useState<AssetCategory>("Furniture")
   const [searchTerm, setSearchTerm] = useState("")
-  const [missingAssetPaths, setMissingAssetPaths] = useState<Set<string>>(new Set())
-  const [venuePngAvailable, setVenuePngAvailable] = useState<Set<string>>(new Set())
+  const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     setPosition({ x: window.innerWidth / 2 - 220, y: 90 })
@@ -51,153 +49,92 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
     [activeCategory]
   )
 
-  const visibleCandidates = useMemo(
-    () => (searchTerm ? searchResults : categoryAssets).filter(a => a.path),
-    [searchTerm, searchResults, categoryAssets]
-  )
-
-  useEffect(() => {
-    if (!isOpen || visibleCandidates.length === 0) return
-    let active = true
-    ;(async () => {
-      const unresolved = visibleCandidates.filter(asset => asset.path && !missingAssetPaths.has(asset.path) && !isKnownMissingSvg(asset.path))
-      if (unresolved.length === 0) return
-      const checks = await Promise.all(
-        unresolved.map(async asset => ({
-          path: asset.path,
-          ok: await validateSvgPath(asset.path),
-        }))
-      )
-      if (!active) return
-      const failed = checks.filter(check => !check.ok).map(check => check.path)
-      if (failed.length > 0) {
-        setMissingAssetPaths(prev => {
-          const next = new Set(prev)
-          failed.forEach(path => next.add(path))
-          return next
-        })
-      }
-    })()
-    return () => {
-      active = false
+  const getThumbnailPath = (asset: AssetDef): string | null => {
+    if (!asset.path) return null;
+    if (asset.category === "Venue") {
+      return deriveVenuePngPath(asset.path);
     }
-  }, [isOpen, visibleCandidates, missingAssetPaths])
+    return getRasterAssetPath(asset.path);
+  };
 
-  // Check for PNG thumbnails for venue assets
-  useEffect(() => {
-    if (!isOpen || activeCategory !== "Venue") return
-    let active = true
-    ;(async () => {
-      const venueAssets = visibleCandidates.filter(a => a.path && a.category === "Venue" && !venuePngCache.has(a.path))
-      if (venueAssets.length === 0) return
-      const checks = await Promise.all(
-        venueAssets.map(async asset => {
-          const pngPath = deriveVenuePngPath(asset.path!)
-          try {
-            const res = await fetch(pngPath, { method: "HEAD" })
-            return { path: asset.path!, ok: res.ok }
-          } catch {
-            return { path: asset.path!, ok: false }
-          }
-        })
-      )
-      if (!active) return
-      const available = new Set<string>()
-      checks.forEach(c => { if (c.ok) available.add(c.path) })
-      setVenuePngAvailable(prev => {
-        const next = new Set(prev)
-        available.forEach(p => { next.add(p); venuePngCache.set(p, true) })
-        return next
-      })
-    })()
-    return () => { active = false }
-  }, [isOpen, activeCategory, visibleCandidates])
+  const renderAsset = (asset: AssetDef) => {
+    const thumbnailSrc = getThumbnailPath(asset);
+    const useFallback = !thumbnailSrc || failedThumbnails.has(asset.id);
 
-  const filteredSearchResults = useMemo(
-    () => searchResults.filter(asset => !asset.path || !missingAssetPaths.has(asset.path)),
-    [searchResults, missingAssetPaths]
-  )
+    return (
+      <motion.button
+        key={asset.id}
+        draggable
+        title={asset.label}
+        onClick={() => {
+          window.dispatchEvent(new CustomEvent("esp-add-asset", { detail: { assetId: asset.id } }));
+        }}
+        onDragStartCapture={(e: React.DragEvent<HTMLButtonElement>) => {
+          e.dataTransfer.setData("assetType", asset.id);
 
-  const filteredCategoryAssets = useMemo(
-    () => categoryAssets.filter(asset => !asset.path || !missingAssetPaths.has(asset.path)),
-    [categoryAssets, missingAssetPaths]
-  )
+          // Parse dimensions from name (e.g., "Table 120x60", "1300mm X 650mm", "6ft x 3ft")
+          const dimMatch = asset.label.match(/(\d+(?:\.\d+)?)\s*(mm|cm|m|ft)?\s*[xX]\s*(\d+(?:\.\d+)?)\s*(mm|cm|m|ft)?/i);
+          if (dimMatch) {
+            const val1 = parseFloat(dimMatch[1]);
+            const unit1 = dimMatch[2]?.toLowerCase() || 'mm';
+            const val2 = parseFloat(dimMatch[3]);
+            const unit2 = dimMatch[4]?.toLowerCase() || unit1 || 'mm'; // Inherit unit1 if unit2 missing, else mm
 
-  const renderAsset = (asset: AssetDef) => (
-    <motion.button
-      key={asset.id}
-      draggable
-      title={asset.label}
-      onClick={() => {
-        window.dispatchEvent(new CustomEvent("esp-add-asset", { detail: { assetId: asset.id } }));
-      }}
-      onDragStartCapture={(e: React.DragEvent<HTMLButtonElement>) => {
-        e.dataTransfer.setData("assetType", asset.id);
+            const toMm = (val: number, unit: string) => {
+              switch (unit) {
+                case 'm': return val * 1000;
+                case 'cm': return val * 10;
+                case 'ft': return val * 304.8;
+                default: return val; // mm
+              }
+            };
 
-        // Parse dimensions from name (e.g., "Table 120x60", "1300mm X 650mm", "6ft x 3ft")
-        const dimMatch = asset.label.match(/(\d+(?:\.\d+)?)\s*(mm|cm|m|ft)?\s*[xX]\s*(\d+(?:\.\d+)?)\s*(mm|cm|m|ft)?/i);
-        if (dimMatch) {
-          const val1 = parseFloat(dimMatch[1]);
-          const unit1 = dimMatch[2]?.toLowerCase() || 'mm';
-          const val2 = parseFloat(dimMatch[3]);
-          const unit2 = dimMatch[4]?.toLowerCase() || unit1 || 'mm'; // Inherit unit1 if unit2 missing, else mm
+            const width = Math.round(toMm(val1, unit1));
+            const height = Math.round(toMm(val2, unit2));
 
-          const toMm = (val: number, unit: string) => {
-            switch (unit) {
-              case 'm': return val * 1000;
-              case 'cm': return val * 10;
-              case 'ft': return val * 304.8;
-              default: return val; // mm
+            // Only use if dimensions are reasonable (> 10mm) to avoid tiny accidental matches
+            if (width > 10 && height > 10) {
+              e.dataTransfer.setData("assetWidth", width.toString());
+              e.dataTransfer.setData("assetHeight", height.toString());
             }
-          };
-
-          const width = Math.round(toMm(val1, unit1));
-          const height = Math.round(toMm(val2, unit2));
-
-          // Only use if dimensions are reasonable (> 10mm) to avoid tiny accidental matches
-          if (width > 10 && height > 10) {
-            e.dataTransfer.setData("assetWidth", width.toString());
-            e.dataTransfer.setData("assetHeight", height.toString());
           }
-        }
-      }}
-      whileHover={{ scale: 1.08 }}
-      whileTap={{ scale: 0.95 }}
-      className="w-[5.5rem] h-[5.5rem] flex flex-col items-center justify-center transition-all text-slate-500 hover:text-slate-900 group"
-    >
-      <div className="w-16 h-16 flex items-center justify-center overflow-hidden mb-1">
-        {asset.category === "Venue" && asset.path && venuePngAvailable.has(asset.path) ? (
-          <img
-            src={deriveVenuePngPath(asset.path)}
-            alt={asset.label}
-            className="w-full h-full object-contain"
-            loading="lazy"
-          />
-        ) : (
-          <InlineSvg
-            key={asset.path}
-            src={asset.path}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={0.6}
-            category={asset.category}
-            onLoadError={() => {
-              if (!asset.path) return
-              setMissingAssetPaths(prev => {
-                if (prev.has(asset.path)) return prev
-                const next = new Set(prev)
-                next.add(asset.path)
-                return next
-              })
-            }}
-          />
-        )}
-      </div>
-      <span className="text-[0.6rem] text-center font-medium leading-[1.1] truncate w-full px-1 opacity-70 group-hover:opacity-100 transition-opacity">
-        {formatLabel(asset.label)}
-      </span>
-    </motion.button>
-  )
+        }}
+        whileHover={{ scale: 1.08 }}
+        whileTap={{ scale: 0.95 }}
+        className="w-[5.5rem] h-[5.5rem] flex flex-col items-center justify-center transition-all text-slate-500 hover:text-slate-900 group"
+      >
+        <div className="w-16 h-16 flex items-center justify-center overflow-hidden mb-1">
+          {!useFallback ? (
+            <img
+              src={thumbnailSrc!}
+              alt={asset.label}
+              className="w-full h-full object-contain pointer-events-none"
+              loading="lazy"
+              onError={() => {
+                setFailedThumbnails(prev => {
+                  const next = new Set(prev);
+                  next.add(asset.id);
+                  return next;
+                });
+              }}
+            />
+          ) : (
+            <InlineSvg
+              key={asset.path}
+              src={asset.path}
+              fill="none"
+              stroke="#1e293b"
+              strokeWidth={0.8}
+              category={asset.category}
+            />
+          )}
+        </div>
+        <span className="text-[0.6rem] text-center font-medium leading-[1.1] truncate w-full px-1 opacity-70 group-hover:opacity-100 transition-opacity">
+          {formatLabel(asset.label)}
+        </span>
+      </motion.button>
+    );
+  };
 
   if (!isOpen) return null
 
@@ -237,7 +174,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
               exit={{ opacity: 0 }}
               className="grid grid-cols-5 gap-3 overflow-y-auto h-full pr-1"
             >
-              {filteredSearchResults.map(renderAsset)}
+              {searchResults.map(renderAsset)}
             </motion.div>
           ) : (
             <motion.div
@@ -268,7 +205,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
                 layout
                 className="grid grid-cols-5 gap-3 overflow-y-auto flex-1 min-h-0 pr-1"
               >
-                {filteredCategoryAssets.map(renderAsset)}
+                {categoryAssets.map(renderAsset)}
               </motion.div>
             </motion.div>
           )}
@@ -277,4 +214,3 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
     </motion.div>
   )
 }
-

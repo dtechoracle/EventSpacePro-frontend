@@ -863,9 +863,9 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         return fill;
     }, [asset.fillColor, (asset as any).fillType, (asset as any).fillTexture, (asset as any).fillTextureScale, (asset as any).fillTextureThickness]);
 
-    const currentStroke = asset.strokeColor || '#000000';
     const rawStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : defaultStrokeWidth;
-    const currentStrokeWidth = Math.max(0.5, rawStrokeWidth * 2.5);
+    const currentStrokeWidth = rawStrokeWidth <= 0 ? 0 : rawStrokeWidth;
+    const currentStroke = rawStrokeWidth <= 0 ? 'none' : (asset.strokeColor || '#000000');
     const displayWidth = asset.width || definition?.width || 100;
     const displayHeight = asset.height || definition?.height || 100;
 

@@ -43,12 +43,14 @@ export type Group = {
     name?: string;
     itemIds: string[];
     zIndex: number;
+    hidden?: boolean;
 };
 
 export type Shape = {
     id: string;
     name?: string;
     groupId?: string;
+    hidden?: boolean;
     type: 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand' | 'polygon' | 'arc' | 'path';
     x: number;
     y: number;
@@ -125,6 +127,7 @@ export type Asset = {
     id: string;
     name?: string;
     groupId?: string;
+    hidden?: boolean;
     type: string; // e.g., 'chair', 'table', 'door', 'window'
     tableName?: string; // e.g., 'Table 1' or '1'
     showTableName?: boolean;
@@ -201,6 +204,7 @@ export type Wall = {
     id: string;
     name?: string;
     groupId?: string;
+    hidden?: boolean;
     nodes: WallNode[];
     edges: WallEdge[];
     fill?: string;
@@ -247,6 +251,7 @@ export type Canvas = {
 export interface Dimension {
     id: string;
     name?: string;
+    hidden?: boolean;
     type: 'linear' | 'aligned' | 'angular' | 'radial' | 'dotted' | 'dashed' | 'solid' | 'circular' | 'double';
     startPoint: { x: number; y: number };
     endPoint: { x: number; y: number };
@@ -291,6 +296,7 @@ export type TextAnnotation = {
     id: string;
     name?: string;
     groupId?: string;
+    hidden?: boolean;
     x: number;
     y: number;
     text: string;
@@ -311,6 +317,7 @@ export type LabelArrow = {
     id: string;
     name?: string;
     groupId?: string;
+    hidden?: boolean;
     startPoint: { x: number; y: number };
     endPoint: { x: number; y: number };
     label: string;

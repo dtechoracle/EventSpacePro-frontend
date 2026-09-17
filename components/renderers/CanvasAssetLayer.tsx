@@ -261,7 +261,7 @@ export default function CanvasAssetLayer({
   const globalTableNumberingColor = useProjectStore(s => s.globalTableNumberingColor);
   const fastAssets = useMemo(
     () => assets
-      .filter(asset => !asset.isExploded && canRenderAssetOnCanvas(asset) && getAssetPath(asset))
+      .filter(asset => !asset.isExploded && !asset.hidden && canRenderAssetOnCanvas(asset) && getAssetPath(asset))
       .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)),
     [assets]
   );

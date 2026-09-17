@@ -97,7 +97,7 @@ const getAssetCountBucket = (label: string) => {
 };
 
 // Lightweight pane listing all elements on the workspace (walls, shapes, assets)
-function ElementsPane() {
+function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean; onToggleCollapse?: () => void }) {
   const walls = useProjectStore(s => s.walls);
   const shapes = useProjectStore(s => s.shapes);
   const assets = useProjectStore(s => s.assets);
@@ -122,6 +122,19 @@ function ElementsPane() {
 
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renamingText, setRenamingText] = React.useState("");
+
+  const handleToggleHide = (id: string, currentlyHidden: boolean, type: string) => {
+    const store = useProjectStore.getState();
+    const updates = { hidden: !currentlyHidden };
+
+    if (type === "Wall") store.updateWall(id, updates);
+    else if (type === "Shape") store.updateShape(id, updates);
+    else if (type === "Asset") store.updateAsset(id, updates);
+    else if (type === "Text") store.updateTextAnnotation(id, updates);
+    else if (type === "Dimension") store.updateDimension(id, updates);
+    else if (type === "Label") store.updateLabelArrow(id, updates);
+    else if (type === "Group") store.updateGroup(id, updates);
+  };
 
   const handleRename = (id: string, newName: string, type: string) => {
     const store = useProjectStore.getState();
@@ -163,13 +176,13 @@ function ElementsPane() {
     // Filter out items that belong to an existing group
     ...walls.filter(w => !w.groupId || !existingGroupIds.has(w.groupId)).map((w) => {
       if (!w.nodes || w.nodes.length === 0) {
-        return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: 0, y: 0, wall: w };
+        return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: 0, y: 0, wall: w, hidden: Boolean(w.hidden) };
       }
       const xs = w.nodes.map((n) => n.x);
       const ys = w.nodes.map((n) => n.y);
       const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
       const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
-      return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: centerX, y: centerY, wall: w };
+      return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: centerX, y: centerY, wall: w, hidden: Boolean(w.hidden) };
     }),
     ...independentShapes.filter(s => !s.groupId || !existingGroupIds.has(s.groupId)).map((s) => ({
       id: s.id,
@@ -178,6 +191,7 @@ function ElementsPane() {
       x: s.x,
       y: s.y,
       shape: s,
+      hidden: Boolean(s.hidden),
     })),
     ...assets.filter(a => !a.groupId || !existingGroupIds.has(a.groupId)).map((a) => ({
       id: a.id,
@@ -187,6 +201,7 @@ function ElementsPane() {
       y: a.y,
       asset: a,
       childShapes: assetChildrenMap[a.id] || [],
+      hidden: Boolean(a.hidden),
     })),
     ...textAnnotations.filter(t => !t.groupId || !existingGroupIds.has(t.groupId)).map((t) => ({
       id: t.id,
@@ -195,6 +210,7 @@ function ElementsPane() {
       x: t.x,
       y: t.y,
       text: t,
+      hidden: Boolean(t.hidden),
     })),
     ...dimensions.filter(d => !d.groupId || !existingGroupIds.has(d.groupId)).map((d) => ({
       id: d.id,
@@ -203,6 +219,7 @@ function ElementsPane() {
       x: (d.startPoint.x + d.endPoint.x) / 2,
       y: (d.startPoint.y + d.endPoint.y) / 2,
       dimension: d,
+      hidden: Boolean(d.hidden),
     })),
     ...labelArrows.filter(la => !la.groupId || !existingGroupIds.has(la.groupId)).map((la) => ({
       id: la.id,
@@ -211,6 +228,7 @@ function ElementsPane() {
       x: (la.startPoint.x + la.endPoint.x) / 2,
       y: (la.startPoint.y + la.endPoint.y) / 2,
       labelArrow: la,
+      hidden: Boolean(la.hidden),
     })),
     // Groups
     ...groups.map(g => {
@@ -253,6 +271,7 @@ function ElementsPane() {
         x: avgX,
         y: avgY,
         childIds: g.itemIds,
+        hidden: Boolean(g.hidden),
       };
     }),
     ];
@@ -616,8 +635,10 @@ function ElementsPane() {
       ? itemChildIds.length > 0 && itemChildIds.every(cid => selectedIds.includes(cid))
       : selectedIds.includes(item.id);
 
+    const isHidden = Boolean(item.hidden);
+
     return (
-      <div key={item.id} className={isSelected ? "bg-blue-50" : ""}>
+      <div key={item.id} className={`group relative ${isSelected ? "bg-blue-50" : ""}`}>
         <button
           onClick={(e) =>
             isAsset && hasChildren
@@ -629,7 +650,7 @@ function ElementsPane() {
                 childIds: (item as any).childIds || (hasChildren ? childShapes.map(s => s.id) : undefined),
               }, e)
           }
-          className={`w-full flex items-center gap-1.5 ${plClass} py-1.5 text-[11px] hover:bg-blue-100 border-b border-gray-100 transition-colors ${isSelected ? "text-blue-700 bg-blue-50 font-medium" : "text-gray-700 hover:bg-gray-100"}`}
+          className={`w-full flex items-center gap-1.5 ${plClass} pr-7 py-1.5 text-[11px] hover:bg-blue-100 border-b border-gray-100 transition-colors ${isSelected ? "text-blue-700 bg-blue-50 font-medium" : "text-gray-700 hover:bg-gray-100"} ${isHidden ? "opacity-40" : ""}`}
         >
           {renderMiniPreview(item)}
 
@@ -663,6 +684,33 @@ function ElementsPane() {
               </>
             )}
           </div>
+        </button>
+
+        {/* Eye Icon (Hide / Show Toggle) */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleToggleHide(item.id, isHidden, item.type);
+          }}
+          title={isHidden ? "Show element" : "Hide element"}
+          className={`absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-slate-200/60 transition-all ${
+            isHidden
+              ? "opacity-100 text-blue-600 font-bold"
+              : "opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-700"
+          }`}
+        >
+          {isHidden ? (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+              <line x1="1" y1="1" x2="23" y2="23" />
+            </svg>
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          )}
         </button>
 
         {isAsset && hasChildren && isExpanded && (
@@ -800,10 +848,51 @@ function ElementsPane() {
     );
   };
 
+  if (isCollapsed) {
+    return (
+      <div className="flex flex-col items-center py-3 h-full bg-white select-none">
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          title="Expand Elements Sidebar"
+          className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors mb-2"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+        <span 
+          className="text-[10px] font-bold uppercase tracking-widest text-slate-500 cursor-pointer hover:text-slate-800 transition-colors"
+          style={{ writingMode: 'vertical-rl' }}
+          onClick={onToggleCollapse}
+        >
+          Elements ({items.length})
+        </span>
+      </div>
+    );
+  }
+
   if (items.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-xs text-gray-400 px-3 text-center">
-        No elements on the workspace yet
+      <div className="h-full flex flex-col">
+        <div className="p-3 border-b border-gray-100 flex items-center justify-between font-semibold text-xs text-slate-800">
+          <span>Elements</span>
+          {onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              title="Collapse Elements Sidebar"
+              className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+          )}
+        </div>
+        <div className="flex-1 flex items-center justify-center text-xs text-gray-400 px-3 text-center">
+          No elements on the workspace yet
+        </div>
       </div>
     );
   }
@@ -814,8 +903,20 @@ function ElementsPane() {
       <svg width="0" height="0" className="absolute pointer-events-none">
         <TexturePatternDefs />
       </svg>
-      <div className="p-3 border-b border-gray-100 flex items-center justify-between">
-        Elements
+      <div className="p-3 border-b border-gray-100 flex items-center justify-between font-semibold text-xs text-slate-800">
+        <span>Elements</span>
+        {onToggleCollapse && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            title="Collapse Elements Sidebar"
+            className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+        )}
       </div>
       <div
         className="flex-1 overflow-y-auto"
@@ -827,279 +928,19 @@ function ElementsPane() {
         {groupedElementItems.nonAssetItems.map((item) => renderItemRow(item, "px-3"))}
         {/* Groups section — collapsible */}
         {renderItemGroup('Groups', 'groups', groupedElementItems.groupItems, expandedAssetGroups, setExpandedAssetGroups)}
-        {/* Venue section — shown first when a preloaded venue is on the canvas */}
-        {groupedElementItems.venueItems.length > 0 && (() => {
-          const isExpanded = expandedAssetGroups['venue'] ?? true;
-          return (
-            <div className="border-b border-gray-100">
-              <button
-                type="button"
-                onClick={() => setExpandedAssetGroups(prev => ({ ...prev, venue: !isExpanded }))}
-                className="flex w-full items-center justify-between px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)] hover:bg-[var(--accent)]/5 transition-colors"
-              >
-                <span className="flex items-center gap-1.5">🏛️ Venue</span>
-                <span className="flex items-center gap-2">
-                  <span className="rounded-full bg-[var(--accent)]/10 px-1.5 py-0.5 text-[9px] font-semibold tracking-normal text-[var(--accent)]">{groupedElementItems.venueItems.length}</span>
-                  <span className="text-xs text-gray-400">{isExpanded ? '▾' : '▸'}</span>
-                </span>
-              </button>
-              {isExpanded && groupedElementItems.venueItems.map((item) => {
-                const assetDef: any = item.type === 'Asset' && item.asset
-                  ? (ASSET_LIBRARY.find(a => a.id === item.asset!.type) || PRELOADED_VENUES.find(v => v.id === item.asset!.type))
-                  : null;
-                const isSelected = selectedIds.includes(item.id);
-                return (
-                  <button
-                    key={item.id}
-                    onClick={(e) => handleSelect({ id: item.id, x: item.x, y: item.y }, e)}
-                    className={`w-full flex items-center gap-1.5 px-2 py-2 text-[11px] border-b border-gray-100 transition-colors ${
-                      isSelected ? 'text-indigo-700 bg-indigo-50 font-medium' : 'text-gray-700 hover:bg-indigo-50'
-                    }`}
-                  >
-                    {/* SVG thumbnail */}
-                    <div className="w-10 h-10 rounded border border-indigo-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center p-0.5">
-                      {assetDef?.path ? (
-                        <InlineSvg
-                          src={assetDef.path}
-                          fill="none"
-                          stroke="#4f46e5"
-                          strokeWidth={0.5}
-                          category={assetDef.category}
-                        />
-                      ) : (
-                        <span className="text-[8px] text-indigo-400">SVG</span>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 text-left">
-                      <div className="truncate font-medium text-indigo-700">{item.label}</div>
-                      <div className="text-[0.6rem] text-indigo-400 mt-0.5">Venue</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          );
-        })()}
+        {/* Venue section */}
+        {renderItemGroup('🏛️ Venue', 'venue', groupedElementItems.venueItems, expandedAssetGroups, setExpandedAssetGroups)}
         {renderItemGroup('Walls', 'walls', groupedElementItems.wallItems, expandedAssetGroups, setExpandedAssetGroups)}
         {renderItemGroup('Shapes', 'shapes', groupedElementItems.shapeItems, expandedAssetGroups, setExpandedAssetGroups)}
 
         {assetGroupOrder.map((groupKey) => {
           const groupItems = groupedElementItems.assetBuckets[groupKey] || [];
-          if (groupItems.length === 0) return null;
-
-          const isExpanded = expandedAssetGroups[groupKey] ?? false;
-
-          return (
-            <div key={groupKey} className="border-b border-gray-100">
-              <button
-                type="button"
-                onClick={() =>
-                  setExpandedAssetGroups((prev) => ({
-                    ...prev,
-                    [groupKey]: !isExpanded,
-                  }))
-                }
-                className="flex w-full items-center justify-between px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)] hover:bg-[var(--accent)]/5 transition-colors"
-              >
-                <span>{assetGroupLabels[groupKey] || groupKey}</span>
-                <span className="flex items-center gap-2">
-                  <span className="rounded-full bg-[var(--accent)]/10 px-1.5 py-0.5 text-[9px] font-semibold tracking-normal text-[var(--accent)]">
-                    {groupItems.length}
-                  </span>
-                  <span className="text-xs text-gray-400">{isExpanded ? "▾" : "▸"}</span>
-                </span>
-              </button>
-
-              {isExpanded && (
-                <div>
-                  {groupItems.map((item) => {
-                    const assetDef: any = item.type === "Asset" && item.asset
-                      ? (ASSET_LIBRARY.find(a => a.id === item.asset.type) || PRELOADED_VENUES.find(v => v.id === item.asset.type))
-                      : null;
-
-                    const isAsset = item.type === "Asset";
-                    const childShapes = (item as any).childShapes as any[] | undefined;
-                    const hasChildren = isAsset && childShapes && childShapes.length > 0;
-                    const isExpanded = isAsset && expandedAssets[item.id];
-
-                    const itemChildIds = (item as any).childIds as string[] | undefined;
-                    const isSelected = itemChildIds
-                      ? itemChildIds.length > 0 && itemChildIds.every(cid => selectedIds.includes(cid))
-                      : selectedIds.includes(item.id);
-
-                    return (
-                      <div key={item.id} className={isSelected ? "bg-blue-50" : ""}>
-                        <button
-                          onClick={(e) =>
-                            isAsset && hasChildren
-                              ? setExpandedAssets(prev => ({ ...prev, [item.id]: !prev[item.id] }))
-                              : handleSelect({
-                                id: item.id,
-                                x: item.x,
-                                y: item.y,
-                                childIds: (item as any).childIds || (hasChildren ? childShapes.map(s => s.id) : undefined),
-                              }, e)
-                          }
-                          className={`w-full flex items-center gap-1 px-1.5 py-1.5 pl-3 text-[11px] hover:bg-blue-100 border-t border-gray-100 transition-colors ${isSelected ? "text-blue-700 bg-blue-50 font-medium" : "text-gray-700 hover:bg-gray-100"}`}
-                        >
-                          <div className="w-7 h-7 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
-                            {item.type === "Asset" && item.asset && (
-                              assetDef?.path ? (
-                                <div className="w-full h-full p-1">
-                                  <InlineSvg
-                                    src={assetDef.path}
-                                    fill={item.asset.tableColor || item.asset.chairColor || item.asset.fillColor || (item.asset as any).fill || "none"}
-                                    stroke={item.asset.strokeColor || (item.asset as any).stroke || "currentColor"}
-                                    strokeWidth={0.6}
-                                    category={assetDef.category}
-                                  />
-                                </div>
-                              ) : (
-                                <div className="text-[8px] text-gray-400 text-center px-1">
-                                  {item.asset.type}
-                                </div>
-                              )
-                            )}
-                          </div>
-
-                          <div
-                            className="flex-1 min-w-0"
-                            onDoubleClick={(e) => {
-                              e.stopPropagation();
-                              setRenamingId(item.id);
-                              setRenamingText(item.label);
-                            }}
-                          >
-                            {renamingId === item.id ? (
-                              <input
-                                autoFocus
-                                className="w-full text-[11px] px-1 py-0.5 border border-blue-400 rounded outline-none"
-                                value={renamingText}
-                                onChange={(e) => setRenamingText(e.target.value)}
-                                onBlur={() => handleRename(item.id, renamingText, item.type)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleRename(item.id, renamingText, item.type);
-                                  if (e.key === 'Escape') setRenamingId(null);
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                            ) : (
-                              <>
-                                <div className="truncate text-gray-700 leading-tight">{item.label}</div>
-                                <div className="text-[0.6rem] text-gray-400 mt-0.5">
-                                  {isAsset && hasChildren ? "Asset (exploded)" : item.type}
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </button>
-
-                        {isAsset && hasChildren && isExpanded && (
-                          <div className="ml-6 border-l border-gray-200">
-                            {childShapes!.map((s) => (
-                              <button
-                                key={s.id}
-                                onClick={(e) => handleSelect({ id: s.id, x: s.x, y: s.y }, e)}
-                                className="w-full flex items-center gap-1 px-1.5 py-1 text-[10px] hover:bg-gray-50 border-b border-gray-100"
-                              >
-                                <div className="w-5 h-5 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
-                                  <svg width={18} height={18} viewBox="0 0 24 24">
-                                    {s.type === "rectangle" && (
-                                      <rect
-                                        x={!s.fillType || s.fillType === 'solid' ? 4 : 2}
-                                        y={!s.fillType || s.fillType === 'solid' ? 7 : 5}
-                                        width={!s.fillType || s.fillType === 'solid' ? 16 : 20}
-                                        height={!s.fillType || s.fillType === 'solid' ? 10 : 14}
-                                        fill={(() => {
-                                          if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
-                                            if (s.fillTexture) {
-                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
-                                            }
-                                          }
-                                          return s.fill || "transparent";
-                                        })()}
-                                        stroke={s.stroke || "#9CA3AF"}
-                                        strokeWidth={1}
-                                        rx={1.5}
-                                        ry={1.5}
-                                      />
-                                    )}
-                                    {s.type === "ellipse" && (
-                                      <ellipse
-                                        cx={12}
-                                        cy={12}
-                                        rx={!s.fillType || s.fillType === 'solid' ? 8 : 10}
-                                        ry={!s.fillType || s.fillType === 'solid' ? 9 : 11}
-                                        fill={(() => {
-                                          if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
-                                            if (s.fillTexture) {
-                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
-                                            }
-                                          }
-                                          return s.fill || "transparent";
-                                        })()}
-                                        stroke={s.stroke || "#9CA3AF"}
-                                        strokeWidth={1}
-                                      />
-                                    )}
-                                    {s.type === "line" && (
-                                      <line
-                                        x1={4}
-                                        y1={12}
-                                        x2={20}
-                                        y2={12}
-                                        stroke={s.stroke || "#9CA3AF"}
-                                        strokeWidth={0.6}
-                                        strokeLinecap="round"
-                                      />
-                                    )}
-                                    {s.type === "polygon" && (
-                                      <polygon
-                                        points={(() => {
-                                          const sides =
-                                            s.polygonSides ||
-                                            (s.points ? s.points.length : 4);
-                                          const cnt = Math.max(3, Math.min(12, sides || 4));
-                                          const cx = 12;
-                                          const cy = 12;
-                                          const r = !s.fillType || s.fillType === 'solid' ? 8 : 10;
-                                          const pts: string[] = [];
-                                          for (let i = 0; i < cnt; i++) {
-                                            const angle = ((Math.PI * 2) / cnt) * i - Math.PI / 2;
-                                            const x = cx + r * Math.cos(angle);
-                                            const y = cy + r * Math.sin(angle);
-                                            pts.push(`${x},${y}`);
-                                          }
-                                          return pts.join(" ");
-                                        })()}
-                                        fill={(() => {
-                                          if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
-                                            if (s.fillTexture) {
-                                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
-                                            }
-                                          }
-                                          return s.fill || "transparent";
-                                        })()}
-                                        stroke={s.stroke || "#9CA3AF"}
-                                        strokeWidth={1}
-                                        strokeLinejoin="round"
-                                      />
-                                    )}
-                                  </svg>
-                                </div>
-                                <div className="flex-1 text-left truncate">
-                                  <div className="truncate">{s.type}</div>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+          return renderItemGroup(
+            assetGroupLabels[groupKey] || groupKey,
+            groupKey,
+            groupItems,
+            expandedAssetGroups,
+            setExpandedAssetGroups
           );
         })}
       </div>
@@ -2705,6 +2546,9 @@ export default function Editor() {
     };
   }, [id, slug]);
 
+  // State for collapsible Elements Pane
+  const [isElementsCollapsed, setIsElementsCollapsed] = useState(false);
+
   // Render content based on iframe/preview status
   const renderContent = () => {
     const isPreviewMode = preview === 'true' || isInIframe;
@@ -2721,8 +2565,8 @@ export default function Editor() {
           {/* Elements Pane & Assets Sidebar - only show if not in preview mode and not a viewer */}
           {!isPreviewMode && !isViewerMode && (
             <>
-              <div className="w-40 bg-white border-r border-gray-200 flex-shrink-0 shadow-sm" data-tour="elements">
-                <ElementsPane />
+              <div className={`${isElementsCollapsed ? 'w-10' : 'w-44'} bg-white border-r border-gray-200 flex-shrink-0 shadow-sm transition-all duration-200`} data-tour="elements">
+                <ElementsPane isCollapsed={isElementsCollapsed} onToggleCollapse={() => setIsElementsCollapsed(!isElementsCollapsed)} />
               </div>
               <AssetsSidebar
                 isOpen={showAssetsModal}

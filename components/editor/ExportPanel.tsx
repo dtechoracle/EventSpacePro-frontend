@@ -580,7 +580,7 @@ export default function ExportPanel() {
 
   const allItems: AssetInstance[] = useMemo(() => {
     const items: any[] = [
-      ...shapes.map(s => ({
+      ...shapes.filter(s => !s.hidden).map(s => ({
         ...s,
         id: s.id,
         type: s.type === 'ellipse' ? 'circle' : (s as any).type, 
@@ -590,7 +590,7 @@ export default function ExportPanel() {
         scale: 1,
         zIndex: s.zIndex || 0,
       })),
-      ...walls.map(w => {
+      ...walls.filter(w => !w.hidden).map(w => {
         const validEdges = w.edges.filter(e => w.nodes.find(n => n.id === e.nodeA) && w.nodes.find(n => n.id === e.nodeB));
         if (validEdges.length === 0) return null;
         return {
@@ -614,10 +614,10 @@ export default function ExportPanel() {
           dimensionLabelPosition: (w as any).dimensionLabelPosition,
         };
       }).filter(Boolean),
-      ...assets.map(a => ({ ...a })),
-      ...textAnnotations.map(t => ({ ...t, type: 'text-annotation' })),
-      ...labelArrows.map(la => ({ ...la, type: 'label-arrow' })),
-      ...dimensions.map(d => ({ ...d, type: 'dimension' }))
+      ...assets.filter(a => !a.hidden).map(a => ({ ...a })),
+      ...textAnnotations.filter(t => !t.hidden).map(t => ({ ...t, type: 'text-annotation' })),
+      ...labelArrows.filter(la => !la.hidden).map(la => ({ ...la, type: 'label-arrow' })),
+      ...dimensions.filter(d => !d.hidden).map(d => ({ ...d, type: 'dimension' }))
     ];
     return items.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
   }, [shapes, assets, walls, textAnnotations, labelArrows, dimensions]);
@@ -679,7 +679,7 @@ export default function ExportPanel() {
     const screenHeight = Math.max(1, (maxY - minY + paddingMm * 2) * zoom);
 
     const clone = workspaceSvg.cloneNode(true) as SVGSVGElement;
-    clone.querySelectorAll('.interaction-highlights, .snap-markers, .grid-layer, pattern[id^="grid-"], [data-export-ignore="true"]').forEach((node) => node.remove());
+    clone.querySelectorAll('.interaction-highlights, .snap-markers, .grid-layer, pattern[id^="grid-"], [data-export-ignore="true"], [data-hidden="true"]').forEach((node) => node.remove());
     clone.querySelectorAll('[data-canvas-backed-asset="true"]').forEach((node) => {
       (node as SVGElement).style.display = '';
       (node as SVGElement).removeAttribute('display');

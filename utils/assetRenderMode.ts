@@ -35,11 +35,8 @@ const isDefaultStrokeColor = (value?: string) => {
 
 const isDefaultStrokeWidth = (value: number | undefined, defaultStrokeWidth: number) => {
   if (value === undefined || value === null) return true;
-  return (
-    Math.abs(value - defaultStrokeWidth) <= 0.001 ||
-    Math.abs(value - DEFAULT_ASSET_STROKE_WIDTH) <= 0.001 ||
-    Math.abs(value - 0.5) <= 0.001
-  );
+  // All non-zero numeric stroke widths maintain consistent asset render mode
+  return value >= 0;
 };
 
 const isDefaultStyledAsset = (asset: FastRenderableAsset, isPreview = false) => {
