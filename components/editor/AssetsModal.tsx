@@ -89,6 +89,9 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
       key={asset.id}
       draggable
       title={asset.label}
+      onClick={() => {
+        window.dispatchEvent(new CustomEvent("esp-add-asset", { detail: { assetId: asset.id } }));
+      }}
       onDragStartCapture={(e: React.DragEvent<HTMLButtonElement>) => {
         e.dataTransfer.setData("assetType", asset.id);
 

@@ -1826,7 +1826,7 @@ export default function Workspace2D({
             }
 
             // Fallback to grid snap if no object snap was found
-            if (guides.length === 0 && snapToGridEnabled) {
+            if (snapToGridEnabled) {
               const gridSnapped = snapToGridFn({ x: worldX, y: worldY });
               finalX = gridSnapped.x;
               finalY = gridSnapped.y;
@@ -3198,6 +3198,105 @@ export default function Workspace2D({
     },
     [addAsset, assets, walls, setSelectedIds, screenToWorld, shapes]
   );
+
+  // Listen for click-to-place asset from AssetsModal
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const assetId = detail?.assetId;
+      if (!assetId || !canvasRef.current) return;
+
+      const template = ASSET_LIBRARY.find((a) => a.id === assetId);
+      if (!template) return;
+
+      // Place at center of current viewport
+      const rect = canvasRef.current.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const { x: worldX, y: worldY } = screenToWorld(centerX, centerY);
+
+      const defaultSize = assetId.includes('table') ? 1800 : assetId.includes('chair') ? 600 : 1000;
+      const width = template.width || defaultSize;
+      const height = template.height || defaultSize;
+
+      let finalX = worldX;
+      let finalY = worldY;
+      let finalRotation = 0;
+
+      if (template.category === 'Space_Elements') {
+        const snapDistance = 100;
+        const wallSnap = findWallSnapPoint({ x: worldX, y: worldY }, walls, snapDistance, {
+          allowNodes: false, allowCenterLine: false, allowFaces: true,
+        });
+        if (wallSnap.snapped && wallSnap.wallId && wallSnap.edgeId) {
+          const wall = walls.find(w => w.id === wallSnap.wallId);
+          if (wall) {
+            const edge = wall.edges.find(e => e.id === wallSnap.edgeId);
+            if (edge) {
+              const nodeA = wall.nodes.find(n => n.id === edge.nodeA);
+              const nodeB = wall.nodes.find(n => n.id === edge.nodeB);
+              if (nodeA && nodeB) {
+                finalRotation = Math.atan2(nodeB.y - nodeA.y, nodeB.x - nodeA.x) * (180 / Math.PI);
+                const angleRad = finalRotation * (Math.PI / 180);
+                const insertionInset = 50;
+                const insertionOffset = Math.max(0, (height / 2) - insertionInset);
+                finalX = wallSnap.x - Math.sin(angleRad) * insertionOffset;
+                finalY = wallSnap.y + Math.cos(angleRad) * insertionOffset;
+              }
+            }
+          }
+        }
+      }
+
+      const zCandidates = [...walls.map(w => w.zIndex || 0), ...shapes.map(s => s.zIndex || 0), ...assets.map(a => a.zIndex || 0)];
+      const nextZIndex = zCandidates.length > 0 ? Math.max(...zCandidates) + 1 : 1;
+
+      let fillType: 'solid' | 'texture' | 'hatch' | 'gradient' = 'solid';
+      let fillTexture: string | undefined = undefined;
+      let fillColor: string = 'transparent';
+      const typeLower = assetId.toLowerCase();
+      const labelLower = (template.label || '').toLowerCase();
+      if (typeLower.includes('grass') || labelLower.includes('grass')) { fillType = 'texture'; fillTexture = 'grass-01'; }
+      else if (typeLower.includes('beach') || labelLower.includes('beach') || typeLower.includes('sand') || labelLower.includes('sand')) { fillType = 'texture'; fillTexture = 'sand-01'; }
+      else if (typeLower.includes('parking') || labelLower.includes('parking')) { fillType = 'texture'; fillTexture = 'parking-lot'; }
+      if (fillType === 'texture' && fillTexture) { fillColor = `url(#${fillTexture}-scale-4-thick-1)`; }
+
+      const newAsset: Asset = {
+        id: `${assetId}-${Date.now()}`,
+        type: assetId,
+        x: finalX, y: finalY, width, height,
+        rotation: finalRotation, scale: 1, zIndex: nextZIndex,
+        fillType, fillTexture, fillColor,
+        metadata: template ? { label: template.label } : {},
+      };
+
+      const isTableDrop = (typeLower.includes('table') || labelLower.includes('table'))
+        && !typeLower.includes('sofa') && !typeLower.includes('couch') && !typeLower.includes('bench');
+      if (isTableDrop) {
+        try {
+          const raw = window.localStorage.getItem('eventspacepro-table-numbering-settings');
+          if (raw) {
+            const settings = JSON.parse(raw);
+            if (settings.enabled && settings.mode === 'auto') {
+              const startNum = Number(settings.startingNumber) || 1;
+              const existingTables = assets.filter(a => {
+                const h = [a.type, (a as any).name, (a as any).label, (a as any).tableName].filter(Boolean).join(' ').toLowerCase();
+                return h.includes('table') && !h.includes('sofa') && !h.includes('couch') && !h.includes('bench');
+              });
+              (newAsset as any).tableName = String(startNum + existingTables.length);
+            }
+          }
+        } catch {}
+      }
+
+      addAsset(newAsset);
+      setSelectedIds([newAsset.id]);
+      toast.success(`Added ${template.label || assetId}`, { duration: 1500 });
+    };
+
+    window.addEventListener("esp-add-asset", handler);
+    return () => window.removeEventListener("esp-add-asset", handler);
+  }, [addAsset, assets, walls, shapes, setSelectedIds, screenToWorld]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
