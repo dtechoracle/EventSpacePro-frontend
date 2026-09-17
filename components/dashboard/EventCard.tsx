@@ -5,7 +5,7 @@ import { useState, useRef, useEffect, useMemo, useCallback, memo } from "react";
 import { buildPreviewData } from "@/helpers/previewHelpers";
 import { apiRequest } from "@/helpers/Config";
 import toast from "react-hot-toast";
-import RenameEventModal from "@/pages/(components)/projects/RenameEventModal";
+import RenameEventModal from "@/components/projects/RenameEventModal";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 
 function getTimeAgo(dateString: string | undefined): string {

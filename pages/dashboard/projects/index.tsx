@@ -1,15 +1,15 @@
 "use client";
 
 import ProjectCard from "@/components/dashboard/ProjectCard";
-import DashboardSidebar from "../../(components)/DashboardSidebar";
+import DashboardSidebar from "@/components/DashboardSidebar";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { apiRequest } from "@/helpers/Config";
 import { AssetInstance } from "@/store/sceneStore";
 import { BsSearch, BsGrid } from "react-icons/bs";
 import { useState, useMemo } from "react";
-import CreateProjectModal from "../../(components)/projects/CreateProjectModal";
-import ImportModal from "../../(components)/projects/ImportMOdal";
+import CreateProjectModal from "@/components/projects/CreateProjectModal";
+import ImportModal from "@/components/projects/ImportMOdal";
 import { withPreviewableCanvasAssets } from "@/lib/canvasAssets";
 import { buildPreviewData } from "@/helpers/previewHelpers";
 import WorkspacePreview from "@/components/WorkspacePreview";

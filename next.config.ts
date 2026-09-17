@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   poweredByHeader: false,
+  compress: true,
+  compiler: {
+    removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error", "warn"] } : false,
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**.cloudinary.com" },
@@ -20,6 +24,13 @@ const nextConfig: NextConfig = {
       "react-icons/bs",
       "react-icons/fa",
       "react-icons/io5",
+      "recharts",
+      "framer-motion",
+      "react-hot-toast",
+      "jspdf",
+      "html2canvas",
+      "zustand",
+      "@tanstack/react-query",
     ],
   },
 };

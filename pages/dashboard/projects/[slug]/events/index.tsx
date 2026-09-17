@@ -1,12 +1,12 @@
 import EventCard from "@/components/dashboard/EventCard";
-import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
+import DashboardSidebar from "@/components/DashboardSidebar";
 import { useRouter } from "next/router";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
 import { AssetInstance } from "@/store/sceneStore";
 import { BsSearch } from "react-icons/bs";
 import { useState } from "react";
-import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
+import CreateEventModal from "@/components/projects/CreateEventModal";
 import { useUserStore } from "@/store/userStore";
 import { buildPreviewData } from "@/helpers/previewHelpers";
 import { BsStars } from "react-icons/bs";

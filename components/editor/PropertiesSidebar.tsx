@@ -734,6 +734,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
             <button
               className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-500"
               onClick={() => setShowShareModal(true)}
+              data-tour="share-btn"
             >
               Share
             </button>
@@ -1044,7 +1045,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
             </div>
 
             {/* Grid Toggle */}
-            <div className="flex justify-between items-center py-2">
+            <div className="flex justify-between items-center py-2" data-tour="grid-controls">
               <span>Grid</span>
               <div className="inline-flex rounded-lg bg-[#0000000D] p-1">
                 <button
@@ -3908,7 +3909,7 @@ step={1}
         </div>
       )}
       </div>
-        <ExportPanel />
+        <div data-tour="export-tab"><ExportPanel /></div>
       </div>
     </aside >
   );

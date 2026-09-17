@@ -3409,6 +3409,18 @@ export default function Workspace2D({
         e.preventDefault();
         duplicateSelection(1);
       }
+      // Save (Ctrl+S)
+      else if (ctrlKey && e.key === 's') {
+        e.preventDefault();
+        if (eventId && projectId) {
+          toast.loading("Saving...", { id: "save-toast", duration: 10000 });
+          useProjectStore.getState().saveEvent(eventId, projectId).then(() => {
+            toast.success("Saved", { id: "save-toast", duration: 1500 });
+          }).catch(() => {
+            toast.error("Save failed", { id: "save-toast", duration: 2000 });
+          });
+        }
+      }
       // Delete key (global delete for selected items)
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         const active = activeTool;
@@ -3436,7 +3448,7 @@ export default function Workspace2D({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [zoomIn, zoomOut, clearSelection, selectedIds, activeTool, setActiveTool, setPlacementMode, setPendingImportShape, setSelectedEdgeId, undo, redo, copySelection, pasteSelection, setSelectedIds, walls, shapes, assets, dimensions, textAnnotations, labelArrows, groups, batchUpdateItems, saveToHistory, getNextZIndex, addShape, addAsset, addWall, removeItemsBatch]);
+  }, [zoomIn, zoomOut, clearSelection, selectedIds, activeTool, setActiveTool, setPlacementMode, setPendingImportShape, setSelectedEdgeId, undo, redo, copySelection, pasteSelection, setSelectedIds, walls, shapes, assets, dimensions, textAnnotations, labelArrows, groups, batchUpdateItems, saveToHistory, getNextZIndex, addShape, addAsset, addWall, removeItemsBatch, eventId, projectId]);
 
 
 
@@ -4386,6 +4398,16 @@ export default function Workspace2D({
       action: () => {
         useProjectStore.getState().removeItemsBatch(selectedIds);
         useEditorStore.getState().clearSelection();
+      },
+    });
+
+    actions.push({ separator: true });
+
+    actions.push({
+      label: "Send Feedback",
+      action: () => {
+        closeContextMenu();
+        window.dispatchEvent(new CustomEvent("esp-open-feedback"));
       },
     });
 

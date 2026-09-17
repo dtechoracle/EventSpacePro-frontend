@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
-import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
+import DashboardSidebar from "@/components/DashboardSidebar";
+import CreateEventModal from "@/components/projects/CreateEventModal";
 import { BsStars, BsSend, BsRobot, BsPerson, BsPlusCircle } from "react-icons/bs";
 import { motion, AnimatePresence } from "framer-motion";
 import { convertPlanToCanvasData } from "@/helpers/aiHelper";

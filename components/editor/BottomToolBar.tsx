@@ -867,6 +867,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
         <div
             ref={containerRef}
             className="fixed bottom-4 inset-x-0 flex justify-center z-[9999] pointer-events-none"
+            data-tour="toolbar"
         >
             <div className="pointer-events-auto flex flex-col items-center gap-2">
             {/* Wall Drawing Status */}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
+import DashboardSidebar from "@/components/DashboardSidebar";
 import { useUserStore } from "@/store/userStore";
 import toast from "react-hot-toast";
 import Head from "next/head";

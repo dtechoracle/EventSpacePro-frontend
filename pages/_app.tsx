@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState, useRef } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { useRouter } from "next/router";
-import Preloader from "./(components)/Preloader";
+import Preloader from "@/components/Preloader";
 import { instrumentSans } from "@/helpers/fonts";
 
 export default function App({ Component, pageProps }: AppProps) {

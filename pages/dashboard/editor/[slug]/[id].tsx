@@ -1,12 +1,14 @@
 "use client";
 
-import AssetsModal from "@/pages/(components)/editor/AssetsModal";
-import BottomToolbar from "@/pages/(components)/editor/BottomToolBar";
-import PropertiesSidebar from "@/pages/(components)/editor/PropertiesSidebar";
+import AssetsModal from "@/components/editor/AssetsModal";
+import BottomToolbar from "@/components/editor/BottomToolBar";
+import PropertiesSidebar from "@/components/editor/PropertiesSidebar";
 import Workspace2D from "@/components/Workspace2D"; // NEW WORKSPACE
 import Scene3D from "@/components/Scene3D";
-import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
-import AiTrigger from "@/pages/(components)/AiTrigger";
+import DashboardSidebar from "@/components/DashboardSidebar";
+import AiTrigger from "@/components/AiTrigger";
+import TourGuide from "@/components/editor/TourGuide";
+import FeedbackButton from "@/components/editor/FeedbackButton";
 import InlineSvg from "@/components/tools/InlineSvg";
 import TexturePatternDefs from "@/components/TexturePatternDefs";
 import React, { useState, useEffect, useCallback, useRef } from "react";
@@ -2712,12 +2714,12 @@ export default function Editor() {
     return (
       <div className={`${isPreviewMode ? 'h-full w-full' : 'h-screen'} flex overflow-hidden bg-gray-50`}>
         {/* Dashboard Sidebar - only show if not in preview mode */}
-        {!isPreviewMode && <DashboardSidebar />}
+        {!isPreviewMode && <div data-tour="sidebar"><DashboardSidebar /></div>}
 
         <div className="flex-1 flex overflow-hidden">
           {/* Elements Pane - only show if not in preview mode and not a viewer */}
           {!isPreviewMode && !isViewerMode && (
-            <div className="w-40 bg-white border-r border-gray-200 flex-shrink-0 shadow-sm">
+            <div className="w-40 bg-white border-r border-gray-200 flex-shrink-0 shadow-sm" data-tour="elements">
               <ElementsPane />
             </div>
           )}
@@ -2737,7 +2739,7 @@ export default function Editor() {
             {/* Main Content Area */}
             <div className="flex-1 flex overflow-hidden">
               {/* NEW WORKSPACE */}
-              <div className="flex-1 relative overflow-hidden">
+              <div className="flex-1 relative overflow-hidden" data-tour="canvas">
                 {!show3D && (
                   <div className="absolute inset-0">
                     <Workspace2D projectId={Array.isArray(slug) ? slug[0] : slug} eventId={Array.isArray(id) ? id[0] : id} />
@@ -2749,13 +2751,17 @@ export default function Editor() {
 
               {/* Properties Sidebar - only show if not in preview mode and not a viewer */}
               {!isPreviewMode && !isViewerMode && (
-                <div className="flex-shrink-0 w-64 bg-white border-l border-gray-200">
+                <div className="flex-shrink-0 w-64 bg-white border-l border-gray-200" data-tour="properties">
                   <PropertiesSidebar />
                 </div>
               )}
             </div>
           </div>
         </div>
+
+        {/* Tour Guide & Feedback */}
+        {!isPreviewMode && <TourGuide />}
+        {!isPreviewMode && <FeedbackButton />}
       </div>
     );
   };

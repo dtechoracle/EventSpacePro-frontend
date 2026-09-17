@@ -1,5 +1,5 @@
 import React from 'react';
-import { AssetInstance } from '../../../store/sceneStore';
+import { AssetInstance } from '@/store/sceneStore';
 import AssetRenderer from './AssetRenderer';
 import AssetHandlesRenderer from './AssetHandlesRenderer';
 

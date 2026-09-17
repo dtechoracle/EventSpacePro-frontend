@@ -1,12 +1,12 @@
 "use client";
 import React, { useState } from "react";
-import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
+import DashboardSidebar from "@/components/DashboardSidebar";
 import { motion } from "framer-motion";
 import { TEMPLATES } from "@/lib/templates";
 import { useRouter } from "next/router";
 import TemplatePreview from "@/components/dashboard/TemplatePreview";
 import { BsSearch } from "react-icons/bs";
-import CreateEventModal from "@/pages/(components)/projects/CreateEventModal";
+import CreateEventModal from "@/components/projects/CreateEventModal";
 
 const Templates = () => {
     const router = useRouter();

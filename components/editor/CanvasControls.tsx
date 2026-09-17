@@ -19,7 +19,7 @@ export default function CanvasControls({
 
       {/* Rotate Buttons */}
       {selectedAssetId === null && (
-        <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-2 z-10 pointer-events-auto">
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-2 z-10 pointer-events-auto" data-tour="canvas-controls">
           <button 
             onClick={(ev) => { ev.stopPropagation(); onRotateCCW(); }} 
             className="p-2 bg-gray-200 rounded-full shadow hover:bg-gray-300" 

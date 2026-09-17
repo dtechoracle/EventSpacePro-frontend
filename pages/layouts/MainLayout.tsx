@@ -1,9 +1,9 @@
 "use client";
 
 import Head from "next/head";
-import Sidebar from "../(components)/Sidebar";
+import Sidebar from "@/components/Sidebar";
 import { instrumentSans } from "@/helpers/fonts";
-import AiTrigger from "../(components)/AiTrigger";
+import AiTrigger from "@/components/AiTrigger";
 
 interface LayoutProps {
   children: React.ReactNode;

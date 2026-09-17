@@ -3738,6 +3738,7 @@ export default function AiTrigger() {
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         className="fixed bottom-6 right-6 z-50 bg-gradient-to-r from-[var(--accent)] to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 px-4 py-3"
+        data-tour="ai-trigger"
       >
         <FiSearch className="w-4 h-4" />
         <span className="text-sm font-medium">AI Assistant</span>

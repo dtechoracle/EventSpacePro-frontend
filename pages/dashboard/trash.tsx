@@ -1,6 +1,6 @@
 "use client";
 import React, { useCallback, useState } from "react";
-import DashboardSidebar from "@/pages/(components)/DashboardSidebar";
+import DashboardSidebar from "@/components/DashboardSidebar";
 import { BsTrash, BsRecycle, BsClock, BsThreeDotsVertical } from "react-icons/bs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/helpers/Config";
