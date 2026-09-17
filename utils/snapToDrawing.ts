@@ -173,40 +173,11 @@ export function getSnapPoints(element: SnapTarget, vertices: { x: number; y: num
         const halfH = height / 2;
         const rot = asset.rotation || 0;
 
-        const rawPoints = cachedVertices.length > 0 ? [
+        const rawPoints = [
             { x: asset.x - halfW, y: asset.y - halfH, type: 'corner' as const },
             { x: asset.x + halfW, y: asset.y - halfH, type: 'corner' as const },
             { x: asset.x + halfW, y: asset.y + halfH, type: 'corner' as const },
             { x: asset.x - halfW, y: asset.y + halfH, type: 'corner' as const },
-            { x: asset.x, y: asset.y - halfH, type: 'midpoint' as const },
-            { x: asset.x + halfW, y: asset.y, type: 'midpoint' as const },
-            { x: asset.x, y: asset.y + halfH, type: 'midpoint' as const },
-            { x: asset.x - halfW, y: asset.y, type: 'midpoint' as const },
-            { x: asset.x, y: asset.y, type: 'center' as const }
-        ] : [
-            // Corners
-            { x: asset.x - halfW, y: asset.y - halfH, type: 'corner' as const },
-            { x: asset.x + halfW, y: asset.y - halfH, type: 'corner' as const },
-            { x: asset.x + halfW, y: asset.y + halfH, type: 'corner' as const },
-            { x: asset.x - halfW, y: asset.y + halfH, type: 'corner' as const },
-            // Top side: Q1 (25%), midpoint (50%), Q3 (75%)
-            { x: asset.x - halfW / 2, y: asset.y - halfH, type: 'midpoint' as const },
-            { x: asset.x,             y: asset.y - halfH, type: 'midpoint' as const },
-            { x: asset.x + halfW / 2, y: asset.y - halfH, type: 'midpoint' as const },
-            // Bottom side: Q1, midpoint, Q3
-            { x: asset.x - halfW / 2, y: asset.y + halfH, type: 'midpoint' as const },
-            { x: asset.x,             y: asset.y + halfH, type: 'midpoint' as const },
-            { x: asset.x + halfW / 2, y: asset.y + halfH, type: 'midpoint' as const },
-            // Left side: Q1, midpoint, Q3
-            { x: asset.x - halfW, y: asset.y - halfH / 2, type: 'midpoint' as const },
-            { x: asset.x - halfW, y: asset.y,             type: 'midpoint' as const },
-            { x: asset.x - halfW, y: asset.y + halfH / 2, type: 'midpoint' as const },
-            // Right side: Q1, midpoint, Q3
-            { x: asset.x + halfW, y: asset.y - halfH / 2, type: 'midpoint' as const },
-            { x: asset.x + halfW, y: asset.y,             type: 'midpoint' as const },
-            { x: asset.x + halfW, y: asset.y + halfH / 2, type: 'midpoint' as const },
-            // Center
-            { x: asset.x, y: asset.y, type: 'center' as const }
         ];
 
         rawPoints.forEach(p => {

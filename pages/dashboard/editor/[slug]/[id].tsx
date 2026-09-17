@@ -1,6 +1,7 @@
 "use client";
 
 import AssetsModal from "@/components/editor/AssetsModal";
+import AssetsSidebar from "@/components/editor/AssetsSidebar";
 import BottomToolbar from "@/components/editor/BottomToolBar";
 import PropertiesSidebar from "@/components/editor/PropertiesSidebar";
 import Workspace2D from "@/components/Workspace2D"; // NEW WORKSPACE
@@ -2717,20 +2718,22 @@ export default function Editor() {
         {!isPreviewMode && <div data-tour="sidebar"><DashboardSidebar /></div>}
 
         <div className="flex-1 flex overflow-hidden">
-          {/* Elements Pane - only show if not in preview mode and not a viewer */}
+          {/* Elements Pane & Assets Sidebar - only show if not in preview mode and not a viewer */}
           {!isPreviewMode && !isViewerMode && (
-            <div className="w-40 bg-white border-r border-gray-200 flex-shrink-0 shadow-sm" data-tour="elements">
-              <ElementsPane />
-            </div>
+            <>
+              <div className="w-40 bg-white border-r border-gray-200 flex-shrink-0 shadow-sm" data-tour="elements">
+                <ElementsPane />
+              </div>
+              <AssetsSidebar
+                isOpen={showAssetsModal}
+                onClose={() => setShowAssetsModal(false)}
+              />
+            </>
           )}
 
           <div className="flex-1 flex flex-col overflow-hidden">
             {!isPreviewMode && !isViewerMode && (
               <>
-                <AssetsModal
-                  isOpen={showAssetsModal}
-                  onClose={() => setShowAssetsModal(false)}
-                />
                 <BottomToolbar setShowAssetsModal={setShowAssetsModal} />
                 <AiTrigger />
               </>

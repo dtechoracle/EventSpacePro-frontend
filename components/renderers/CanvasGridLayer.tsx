@@ -70,7 +70,19 @@ export default function CanvasGridLayer({
 
       if (!show || gridSize <= 0 || zoom <= 0) return;
 
-      const worldStep = gridSize;
+      // Calculate adaptive step multiplier so minor grid lines never collapse below 25px spacing on screen
+      let stepMultiplier = 1;
+      const minPixelSpacing = 25;
+      const multipliers = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
+      for (const mult of multipliers) {
+        if (gridSize * zoom * mult >= minPixelSpacing) {
+          stepMultiplier = mult;
+          break;
+        }
+        stepMultiplier = mult;
+      }
+
+      const worldStep = gridSize * stepMultiplier;
       let minorStep = worldStep * zoom;
 
       let majorEvery = 5;
@@ -78,7 +90,6 @@ export default function CanvasGridLayer({
         majorEvery *= 2;
       }
 
-      const majorStep = minorStep * majorEvery;
       const startWorldX = Math.floor((-panX / zoom) / worldStep) * worldStep;
       const startWorldY = Math.floor((-panY / zoom) / worldStep) * worldStep;
       const endWorldX = ((width - panX) / zoom) + worldStep;
@@ -108,7 +119,7 @@ export default function CanvasGridLayer({
         ctx.stroke();
       }
 
-      const label = `Grid: ${formatGridSize(gridSize, unitSystem)}`;
+      const label = `Grid: ${formatGridSize(gridSize, unitSystem)}${stepMultiplier > 1 ? ` (${stepMultiplier}x)` : ''}`;
       ctx.font = '600 12px Inter, system-ui, sans-serif';
       const labelWidth = Math.ceil(ctx.measureText(label).width) + 16;
       ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';

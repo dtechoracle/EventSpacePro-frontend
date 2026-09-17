@@ -4532,7 +4532,7 @@ export default function Workspace2D({
   return (
     <div
       ref={canvasRef}
-      className={`relative w-full h-full overflow-hidden bg-gray-50 select-none ${activeTool === 'select' ? 'workspace-cursor-default' : ''}`}
+      className={`relative w-full h-full overflow-auto bg-gray-50 select-none ${activeTool === 'select' ? 'workspace-cursor-default' : ''}`}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleAssetDrop}
       onMouseDown={handleMouseDown}

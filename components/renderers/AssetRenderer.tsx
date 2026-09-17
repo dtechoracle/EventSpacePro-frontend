@@ -827,16 +827,14 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             svg.removeAttribute("width");
             svg.removeAttribute("height");
             if (metrics.shouldCropToContent && metrics.contentX !== null && metrics.contentY !== null && metrics.contentWidth && metrics.contentHeight) {
-                const pad = Math.max(metrics.contentWidth, metrics.contentHeight) * 0.03;
-                svg.setAttribute("viewBox", `${metrics.contentX - pad} ${metrics.contentY - pad} ${metrics.contentWidth + pad * 2} ${metrics.contentHeight + pad * 2}`);
+                svg.setAttribute("viewBox", `${metrics.contentX} ${metrics.contentY} ${metrics.contentWidth} ${metrics.contentHeight}`);
             } else if (!isVenueAsset) {
                 const existingVB = svg.getAttribute("viewBox");
                 if (existingVB) {
                     const parts = existingVB.trim().split(/[\s,]+/).map(parseFloat);
                     if (parts.length === 4 && parts.every(Number.isFinite)) {
                         const [vbX, vbY, vbW, vbH] = parts;
-                        const pad = Math.max(vbW, vbH) * 0.03;
-                        svg.setAttribute("viewBox", `${vbX - pad} ${vbY - pad} ${vbW + pad * 2} ${vbH + pad * 2}`);
+                        svg.setAttribute("viewBox", `${vbX} ${vbY} ${vbW} ${vbH}`);
                     }
                 }
             }
@@ -866,7 +864,8 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     }, [asset.fillColor, (asset as any).fillType, (asset as any).fillTexture, (asset as any).fillTextureScale, (asset as any).fillTextureThickness]);
 
     const currentStroke = asset.strokeColor || '#000000';
-    const currentStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : defaultStrokeWidth;
+    const rawStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : defaultStrokeWidth;
+    const currentStrokeWidth = Math.max(0.5, rawStrokeWidth * 2.5);
     const displayWidth = asset.width || definition?.width || 100;
     const displayHeight = asset.height || definition?.height || 100;
 
