@@ -1840,7 +1840,7 @@ export default function Workspace2D({
             }
 
             // Fallback to grid snap if no object snap was found
-            if (snapToGridEnabled) {
+            if (guides.length === 0 && snapToGridEnabled) {
               const gridSnapped = snapToGridFn({ x: worldX, y: worldY });
               finalX = gridSnapped.x;
               finalY = gridSnapped.y;

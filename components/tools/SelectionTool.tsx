@@ -337,6 +337,13 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                 finalDx = dx + snap.dx;
                 finalDy = dy + snap.dy;
                 setSnapGuides(snap.guides);
+                // If smart snap found no guides, fall back to grid snap
+                if (snap.guides.length === 0 && snapToGridEnabled) {
+                    const newX = Math.round((initialState.groupBounds.x + dx) / gridSize) * gridSize;
+                    const newY = Math.round((initialState.groupBounds.y + dy) / gridSize) * gridSize;
+                    finalDx = newX - initialState.groupBounds.x;
+                    finalDy = newY - initialState.groupBounds.y;
+                }
             } else if (snapToGridEnabled) {
                 const newX = Math.round((initialState.groupBounds.x + dx) / gridSize) * gridSize;
                 const newY = Math.round((initialState.groupBounds.y + dy) / gridSize) * gridSize;
@@ -491,18 +498,51 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                 const localDy = -finalDx * sinR + finalDy * cosR;
                 const initialWidth = initialAsset.width * (initialAsset.scale || 1);
                 const initialHeight = initialAsset.height * (initialAsset.scale || 1);
+                const aspect = initialWidth / initialHeight;
 
-                let halfW = initialWidth / 2;
-                let halfH = initialHeight / 2;
+                // Proportional corner scaling for assets
+                let scaleFactor = 1;
+                if (dragHandle === 'se' || dragHandle === 'ne') {
+                    scaleFactor = Math.max(0.05, (initialWidth + localDx) / initialWidth);
+                } else if (dragHandle === 'sw' || dragHandle === 'nw') {
+                    scaleFactor = Math.max(0.05, (initialWidth - localDx) / initialWidth);
+                } else if (dragHandle === 'n') {
+                    scaleFactor = Math.max(0.05, (initialHeight - localDy) / initialHeight);
+                } else if (dragHandle === 's') {
+                    scaleFactor = Math.max(0.05, (initialHeight + localDy) / initialHeight);
+                } else if (dragHandle === 'e') {
+                    scaleFactor = Math.max(0.05, (initialWidth + localDx) / initialWidth);
+                } else if (dragHandle === 'w') {
+                    scaleFactor = Math.max(0.05, (initialWidth - localDx) / initialWidth);
+                }
+
+                const newW = Math.max(5, initialWidth * scaleFactor);
+                const newH = Math.max(5, initialHeight * scaleFactor);
+
+                // Calculate offset to keep the anchor point stable
+                const isCorner = dragHandle.length === 2;
                 let offLX = 0, offLY = 0;
-                if (dragHandle.includes('e')) { halfW = Math.max(5, halfW + localDx / 2); offLX = halfW - initialWidth / 2; }
-                if (dragHandle.includes('w')) { halfW = Math.max(5, halfW - localDx / 2); offLX = initialWidth / 2 - halfW; }
-                if (dragHandle.includes('s')) { halfH = Math.max(5, halfH + localDy / 2); offLY = halfH - initialHeight / 2; }
-                if (dragHandle.includes('n')) { halfH = Math.max(5, halfH - localDy / 2); offLY = initialHeight / 2 - halfH; }
+                if (isCorner) {
+                    // For corners, offset based on which corner is being dragged
+                    const wDelta = (newW - initialWidth) / 2;
+                    const hDelta = (newH - initialHeight) / 2;
+                    if (dragHandle.includes('e')) offLX = wDelta;
+                    if (dragHandle.includes('w')) offLX = -wDelta;
+                    if (dragHandle.includes('s')) offLY = hDelta;
+                    if (dragHandle.includes('n')) offLY = -hDelta;
+                } else {
+                    // For edges, offset along the drag axis only
+                    const wDelta = (newW - initialWidth) / 2;
+                    const hDelta = (newH - initialHeight) / 2;
+                    if (dragHandle === 'e') offLX = wDelta;
+                    if (dragHandle === 'w') offLX = -wDelta;
+                    if (dragHandle === 's') offLY = hDelta;
+                    if (dragHandle === 'n') offLY = -hDelta;
+                }
 
                 const nextX = initialAsset.x + offLX * cosR - offLY * sinR;
                 const nextY = initialAsset.y + offLX * sinR + offLY * cosR;
-                store.updateAsset(item.id, { x: nextX, y: nextY, width: halfW * 2, height: halfH * 2, scale: 1 }, true);
+                store.updateAsset(item.id, { x: nextX, y: nextY, width: newW, height: newH, scale: 1 }, true);
 
             } else if (item.type === 'wall') {
                 const initialWall = item.object as Wall;

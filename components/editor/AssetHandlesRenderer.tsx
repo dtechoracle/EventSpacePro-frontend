@@ -23,7 +23,7 @@ export default function AssetHandlesRenderer({
     return null;
   }
 
-  const handleSize = 18; // Increased from 14 to 18 for better visibility
+  const handleSize = 12;
   
   // Professional handle styling
   const cornerHandleStyle = {
