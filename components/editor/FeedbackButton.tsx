@@ -57,6 +57,11 @@ export default function FeedbackButton() {
       return;
     }
 
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Please enter a valid email address");
+      return;
+    }
+
     setSending(true);
     setError("");
 
@@ -182,7 +187,7 @@ export default function FeedbackButton() {
                     {/* Email */}
                     <div>
                       <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">
-                        Your Email <span className="text-gray-400 font-normal">(optional)</span>
+                        Your Email <span className="text-red-400">*</span>
                       </label>
                       <input
                         type="email"
@@ -204,7 +209,7 @@ export default function FeedbackButton() {
                     </button>
                     <button
                       onClick={handleSubmit}
-                      disabled={sending || !message.trim()}
+                      disabled={sending || !message.trim() || !email.trim()}
                       className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-medium rounded-xl hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
                       {sending ? (
