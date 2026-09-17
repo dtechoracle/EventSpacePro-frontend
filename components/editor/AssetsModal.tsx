@@ -6,6 +6,14 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { InlineSvg, isKnownMissingSvg, validateSvgPath } from "@/components/tools/InlineSvg"
 
+const venuePngCache = new Map<string, boolean>();
+
+function deriveVenuePngPath(assetPath: string): string {
+  return assetPath
+    .replace('/assets/preloaded-venues/', '/assets/thumbnails/preloaded-venues/')
+    .replace(/\.(svg|dwg|dxf)$/i, '.png');
+}
+
 type AssetsModalProps = {
   isOpen: boolean
   onClose: () => void
@@ -23,6 +31,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
     useState<AssetCategory>("Furniture")
   const [searchTerm, setSearchTerm] = useState("")
   const [missingAssetPaths, setMissingAssetPaths] = useState<Set<string>>(new Set())
+  const [venuePngAvailable, setVenuePngAvailable] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     setPosition({ x: window.innerWidth / 2 - 220, y: 90 })
@@ -73,6 +82,36 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
       active = false
     }
   }, [isOpen, visibleCandidates, missingAssetPaths])
+
+  // Check for PNG thumbnails for venue assets
+  useEffect(() => {
+    if (!isOpen || activeCategory !== "Venue") return
+    let active = true
+    ;(async () => {
+      const venueAssets = visibleCandidates.filter(a => a.path && a.category === "Venue" && !venuePngCache.has(a.path))
+      if (venueAssets.length === 0) return
+      const checks = await Promise.all(
+        venueAssets.map(async asset => {
+          const pngPath = deriveVenuePngPath(asset.path!)
+          try {
+            const res = await fetch(pngPath, { method: "HEAD" })
+            return { path: asset.path!, ok: res.ok }
+          } catch {
+            return { path: asset.path!, ok: false }
+          }
+        })
+      )
+      if (!active) return
+      const available = new Set<string>()
+      checks.forEach(c => { if (c.ok) available.add(c.path) })
+      setVenuePngAvailable(prev => {
+        const next = new Set(prev)
+        available.forEach(p => { next.add(p); venuePngCache.set(p, true) })
+        return next
+      })
+    })()
+    return () => { active = false }
+  }, [isOpen, activeCategory, visibleCandidates])
 
   const filteredSearchResults = useMemo(
     () => searchResults.filter(asset => !asset.path || !missingAssetPaths.has(asset.path)),
@@ -127,23 +166,32 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
       className="w-[5.5rem] h-[5.5rem] flex flex-col items-center justify-center transition-all text-slate-500 hover:text-slate-900 group"
     >
       <div className="w-16 h-16 flex items-center justify-center overflow-hidden mb-1">
-        <InlineSvg
-          key={asset.path}
-          src={asset.path}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={0.6}
-          category={asset.category}
-          onLoadError={() => {
-            if (!asset.path) return
-            setMissingAssetPaths(prev => {
-              if (prev.has(asset.path)) return prev
-              const next = new Set(prev)
-              next.add(asset.path)
-              return next
-            })
-          }}
-        />
+        {asset.category === "Venue" && asset.path && venuePngAvailable.has(asset.path) ? (
+          <img
+            src={deriveVenuePngPath(asset.path)}
+            alt={asset.label}
+            className="w-full h-full object-contain"
+            loading="lazy"
+          />
+        ) : (
+          <InlineSvg
+            key={asset.path}
+            src={asset.path}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={0.6}
+            category={asset.category}
+            onLoadError={() => {
+              if (!asset.path) return
+              setMissingAssetPaths(prev => {
+                if (prev.has(asset.path)) return prev
+                const next = new Set(prev)
+                next.add(asset.path)
+                return next
+              })
+            }}
+          />
+        )}
       </div>
       <span className="text-[0.6rem] text-center font-medium leading-[1.1] truncate w-full px-1 opacity-70 group-hover:opacity-100 transition-opacity">
         {formatLabel(asset.label)}

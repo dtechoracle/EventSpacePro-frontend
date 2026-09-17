@@ -1290,11 +1290,25 @@ export default function Workspace2D({
       if (draggedPoint) {
         const shape = shapes.find(s => s.id === draggedPoint.shapeId);
         if (shape && shape.points) {
-          const dx = worldX - shape.x;
-          const dy = worldY - shape.y;
-          const rad = -shape.rotation * (Math.PI / 180);
-          const localX = dx * Math.cos(rad) - dy * Math.sin(rad);
-          const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
+          let localX: number, localY: number;
+          if (snapToGridEnabled) {
+            // Snap the vertex position to grid
+            const worldPtX = worldX;
+            const worldPtY = worldY;
+            const snappedX = Math.round(worldPtX / gridSize) * gridSize;
+            const snappedY = Math.round(worldPtY / gridSize) * gridSize;
+            const dxS = snappedX - shape.x;
+            const dyS = snappedY - shape.y;
+            const rad = -shape.rotation * (Math.PI / 180);
+            localX = dxS * Math.cos(rad) - dyS * Math.sin(rad);
+            localY = dxS * Math.sin(rad) + dyS * Math.cos(rad);
+          } else {
+            const dx = worldX - shape.x;
+            const dy = worldY - shape.y;
+            const rad = -shape.rotation * (Math.PI / 180);
+            localX = dx * Math.cos(rad) - dy * Math.sin(rad);
+            localY = dx * Math.sin(rad) + dy * Math.cos(rad);
+          }
 
           const newPoints = [...shape.points];
           newPoints[draggedPoint.pointIndex] = { x: localX, y: localY };

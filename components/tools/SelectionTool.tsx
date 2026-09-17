@@ -361,16 +361,26 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
         // Vertex dragging support for polyline shapes
         if (dragHandle.startsWith('vertex-')) {
             const index = parseInt(dragHandle.split('-')[1]);
+            let snapDx = dx;
+            let snapDy = dy;
+            if (snapToGridEnabled) {
+                const firstItem = initialState.items[0]?.object as any;
+                if (firstItem?.points?.[index]) {
+                    const pt = firstItem.points[index];
+                    const snappedX = Math.round((pt.x + dx) / gridSize) * gridSize;
+                    const snappedY = Math.round((pt.y + dy) / gridSize) * gridSize;
+                    snapDx = snappedX - pt.x;
+                    snapDy = snappedY - pt.y;
+                }
+            }
             const batchUpdates: any[] = [];
             initialState.items.forEach(item => {
                 const it = item.object as any;
                 if (item.type === 'shape' && it.points) {
                     const newPoints = [...it.points];
-                    // Polyline points are local to (x, y); we apply dx/dy in rotated local space
-                    // But simplified here to global dx/dy since rotation isn't usually applied to polylines in this app's logic
                     newPoints[index] = { 
-                        x: it.points[index].x + dx, 
-                        y: it.points[index].y + dy 
+                        x: it.points[index].x + snapDx, 
+                        y: it.points[index].y + snapDy 
                     };
                     batchUpdates.push({ id: item.id, type: 'shape', updates: { points: newPoints } });
                 }

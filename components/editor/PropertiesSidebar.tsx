@@ -1210,7 +1210,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     }}
                     className="sidebar-input w-16 text-center"
                     min={0}
-                    step={0.5}
+                    step={0.1}
                   />
                 </div>
 
@@ -1837,7 +1837,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             onChange={(e) => updateShape(selectedItem.id, { fillTextureScale: Number(e.target.value) } as any)}
                             className="sidebar-input w-12 text-center text-xs"
                             max={1000}
-                            step={0.5}
+                            step={0.1}
                           />
                         </div>
 
@@ -1913,7 +1913,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             }}
                             className="sidebar-input w-12 text-center text-xs"
                             max={1000}
-                            step={0.5}
+                            step={0.1}
                           />
                         </div>
 
@@ -2058,7 +2058,7 @@ export default function PropertiesSidebar(): React.JSX.Element {
                             }}
                             className="sidebar-input w-16 text-center"
                             min={0}
-                            step={0.5}
+                            step={0.1}
                           />
                         </div>
 
@@ -2129,7 +2129,7 @@ step={1}
                         }}
                         className="sidebar-input w-16 text-center"
                         min={0}
-                        step={0.5}
+                        step={0.1}
                       />
                     </div> */}
                     <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
