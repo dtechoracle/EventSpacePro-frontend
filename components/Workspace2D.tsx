@@ -39,6 +39,7 @@ const generateId = (): string => {
 };
 
 import { ASSET_LIBRARY } from '@/lib/assets';
+import WorkspaceScrollIndicators from './editor/WorkspaceScrollIndicators';
 import { CursorOverlay } from './ui/CursorOverlay';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { findSnapPoint, findWallSnapPoint } from '@/utils/wallSnapping';
@@ -4959,6 +4960,8 @@ export default function Workspace2D({
         }}
       />
 
+      {/* Custom scroll indicators */}
+      <WorkspaceScrollIndicators />
 
     </div >
   );
