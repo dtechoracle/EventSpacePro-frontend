@@ -27,9 +27,8 @@ export default function WorkspaceScrollIndicators() {
       const dx = me.clientX - dragRef.current.startX;
       const dy = me.clientY - dragRef.current.startY;
       dragRef.current = { startX: me.clientX, startY: me.clientY };
-      const z = useEditorStore.getState().zoom;
-      if (axis === "h") panBy(-dx / z, 0);
-      else panBy(0, -dy / z);
+      if (axis === "h") panBy(dx, 0);
+      else panBy(0, dy);
     };
 
     const handleMouseUp = () => {
