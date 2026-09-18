@@ -4,9 +4,8 @@ import React, { useCallback, useRef, useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
 
 const BAR_THICKNESS = 10;
-const THUMB_COLOR = "rgba(100,116,139,0.45)";
-const THUMB_HOVER_COLOR = "rgba(100,116,139,0.7)";
-const TRACK_COLOR = "rgba(0,0,0,0.06)";
+const THUMB_COLOR = "rgba(100,116,139,0.6)";
+const THUMB_HOVER_COLOR = "rgba(100,116,139,0.85)";
 const MIN_THUMB = 30;
 
 export default function WorkspaceScrollIndicators() {
@@ -59,11 +58,11 @@ export default function WorkspaceScrollIndicators() {
 
   return (
     <>
-      {/* Horizontal scrollbar — full width along bottom */}
+      {/* Horizontal scrollbar — full width along bottom (invisible track, thumb only on hover) */}
       <div
         ref={makeTrackRef("h")}
         className="absolute bottom-0 left-0 right-0 z-40"
-        style={{ height: BAR_THICKNESS, background: TRACK_COLOR, pointerEvents: "auto" }}
+        style={{ height: BAR_THICKNESS, pointerEvents: "auto" }}
         onMouseEnter={() => setHoverBar("h")}
         onMouseLeave={() => { if (!dragging) setHoverBar(null); }}
         onMouseDown={(e) => handleMouseDown("h", e)}
@@ -71,11 +70,11 @@ export default function WorkspaceScrollIndicators() {
         <Thumb trackRef={trackLenRef} axis="h" zoom={zoom} panX={panX} panY={panY} dragging={dragging} hoverBar={hoverBar} onMouseDown={handleMouseDown} />
       </div>
 
-      {/* Vertical scrollbar — full height along right */}
+      {/* Vertical scrollbar — full height along right (invisible track, thumb only on hover) */}
       <div
         ref={makeTrackRef("v")}
         className="absolute top-0 right-0 bottom-0 z-40"
-        style={{ width: BAR_THICKNESS, background: TRACK_COLOR, pointerEvents: "auto" }}
+        style={{ width: BAR_THICKNESS, pointerEvents: "auto" }}
         onMouseEnter={() => setHoverBar("v")}
         onMouseLeave={() => { if (!dragging) setHoverBar(null); }}
         onMouseDown={(e) => handleMouseDown("v", e)}
@@ -120,6 +119,8 @@ function Thumb({ trackRef, axis, zoom, panX, panY, dragging, hoverBar, onMouseDo
 
   const isH = axis === "h";
   const isActive = dragging === axis || hoverBar === axis;
+
+  if (!isActive) return null;
 
   return (
     <div
