@@ -24,6 +24,7 @@ export default function WorkspaceScrollIndicators() {
     dragRef.current = { startX: e.clientX, startY: e.clientY };
 
     const handleMouseMove = (me: MouseEvent) => {
+      me.preventDefault();
       const dx = me.clientX - dragRef.current.startX;
       const dy = me.clientY - dragRef.current.startY;
       dragRef.current = { startX: me.clientX, startY: me.clientY };
@@ -37,7 +38,7 @@ export default function WorkspaceScrollIndicators() {
       document.removeEventListener("mouseup", handleMouseUp);
     };
 
-    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mousemove", handleMouseMove, { passive: false });
     document.addEventListener("mouseup", handleMouseUp);
   }, [panBy]);
 
@@ -48,14 +49,18 @@ export default function WorkspaceScrollIndicators() {
     }
   }, []);
 
+  const stopProp = (e: React.MouseEvent) => { e.stopPropagation(); };
+
   return (
     <>
       {/* Horizontal scrollbar — bottom edge */}
       <div
         ref={makeTrackRef("h")}
         className="absolute bottom-0 left-0 right-0 z-40"
-        style={{ height: BAR_SIZE, background: TRACK_COLOR, cursor: "default" }}
-        onMouseDown={(e) => handleMouseDown("h", e)}
+        style={{ height: BAR_SIZE, background: TRACK_COLOR, cursor: "default !important" as any }}
+        onMouseDown={(e) => { stopProp(e); handleMouseDown("h", e); }}
+        onMouseMove={stopProp}
+        onMouseUp={stopProp}
       >
         <Thumb trackRef={trackLenRef} axis="h" zoom={zoom} panX={panX} panY={panY} activeAxis={activeAxis} onMouseDown={handleMouseDown} />
       </div>
@@ -64,8 +69,10 @@ export default function WorkspaceScrollIndicators() {
       <div
         ref={makeTrackRef("v")}
         className="absolute top-0 right-0 bottom-0 z-40"
-        style={{ width: BAR_SIZE, background: TRACK_COLOR, cursor: "default" }}
-        onMouseDown={(e) => handleMouseDown("v", e)}
+        style={{ width: BAR_SIZE, background: TRACK_COLOR, cursor: "default !important" as any }}
+        onMouseDown={(e) => { stopProp(e); handleMouseDown("v", e); }}
+        onMouseMove={stopProp}
+        onMouseUp={stopProp}
       >
         <Thumb trackRef={trackLenRef} axis="v" zoom={zoom} panX={panX} panY={panY} activeAxis={activeAxis} onMouseDown={handleMouseDown} />
       </div>
@@ -89,12 +96,10 @@ function Thumb({ trackRef, axis, zoom, panX, panY, activeAxis, onMouseDown }: {
     ? (typeof window !== 'undefined' ? window.innerWidth : 1200) / zoom
     : (typeof window !== 'undefined' ? window.innerHeight : 800) / zoom;
 
-  // Virtual workspace = 5x viewport, so thumb is at least 1/5 of track
   const virtualSize = Math.max(viewSize * 5, 10000);
   const thumbRatio = Math.min(1, viewSize / virtualSize);
   const thumbSize = Math.max(20, thumbRatio * trackLen);
 
-  // Pan position as fraction
   const pan = axis === "h" ? panX : panY;
   const panFraction = -pan / virtualSize;
   const thumbPos = Math.max(0, Math.min(trackLen - thumbSize, panFraction * (trackLen - thumbSize)));
@@ -112,10 +117,10 @@ function Thumb({ trackRef, axis, zoom, panX, panY, activeAxis, onMouseDown }: {
         height: isH ? 5 : thumbSize,
         borderRadius: 2.5,
         background: isActive ? THUMB_ACTIVE_COLOR : THUMB_COLOR,
-        cursor: "grab",
+        cursor: "default",
         pointerEvents: "auto",
       }}
-      onMouseDown={(e) => onMouseDown(axis, e)}
+      onMouseDown={(e) => { e.stopPropagation(); onMouseDown(axis, e); }}
     />
   );
 }
