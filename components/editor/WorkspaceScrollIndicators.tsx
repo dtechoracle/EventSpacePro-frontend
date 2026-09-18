@@ -18,26 +18,21 @@ export default function WorkspaceScrollIndicators() {
   const [dragging, setDragging] = useState<"h" | "v" | null>(null);
   const [hoverBar, setHoverBar] = useState<"h" | "v" | null>(null);
   const dragRef = useRef({ startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
+  const trackLenRef = useRef({ w: 0, h: 0 });
 
   // Visible world-space size
   const viewW = (typeof window !== 'undefined' ? window.innerWidth : 1200) / zoom;
   const viewH = (typeof window !== 'undefined' ? window.innerHeight : 800) / zoom;
 
   // Thumb sizes (proportion of visible area to total workspace)
-  const thumbW = Math.max(MIN_THUMB, (viewW / TOTAL_WORKSPACE) * 200);
-  const thumbH = Math.max(MIN_THUMB, (viewH / TOTAL_WORKSPACE) * 200);
-
-  // Track lengths (CSS pixel length of the scrollbar track)
-  const trackLen = 200;
+  const thumbWRatio = viewW / TOTAL_WORKSPACE;
+  const thumbHRatio = viewH / TOTAL_WORKSPACE;
 
   // Thumb position (0..1 normalized)
   const maxPanX = TOTAL_WORKSPACE - viewW;
   const maxPanY = TOTAL_WORKSPACE - viewH;
   const normX = maxPanX > 0 ? Math.max(0, Math.min(1, (-panX) / maxPanX)) : 0;
   const normY = maxPanY > 0 ? Math.max(0, Math.min(1, (-panY) / maxPanY)) : 0;
-
-  const thumbLeft = normX * (trackLen - thumbW);
-  const thumbTop = normY * (trackLen - thumbH);
 
   const handleMouseDown = useCallback((axis: "h" | "v", e: React.MouseEvent) => {
     e.preventDefault();
@@ -48,15 +43,16 @@ export default function WorkspaceScrollIndicators() {
     const handleMouseMove = (me: MouseEvent) => {
       const dx = me.clientX - dragRef.current.startX;
       const dy = me.clientY - dragRef.current.startY;
+      const trackLen = axis === "h" ? trackLenRef.current.w : trackLenRef.current.h;
+      const thumbSize = axis === "h" ? thumbWRatio * trackLen : thumbHRatio * trackLen;
+      const thumbPx = Math.max(MIN_THUMB, thumbSize);
+      const panRange = axis === "h" ? maxPanX : maxPanY;
+      const pixelToPan = panRange / Math.max(1, trackLen - thumbPx);
 
       if (axis === "h") {
-        const panRange = maxPanX;
-        const pixelToPan = panRange / (trackLen - thumbW);
         const newPanX = dragRef.current.startPanX - dx * pixelToPan;
         setPan(Math.max(-TOTAL_WORKSPACE, Math.min(0, newPanX)), panY);
       } else {
-        const panRange = maxPanY;
-        const pixelToPan = panRange / (trackLen - thumbH);
         const newPanY = dragRef.current.startPanY - dy * pixelToPan;
         setPan(panX, Math.max(-TOTAL_WORKSPACE, Math.min(0, newPanY)));
       }
@@ -70,17 +66,23 @@ export default function WorkspaceScrollIndicators() {
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
-  }, [panX, panY, setPan, maxPanX, maxPanY, thumbW, thumbH]);
+  }, [panX, panY, setPan, maxPanX, maxPanY, thumbWRatio, thumbHRatio]);
+
+  const makeTrackRef = useCallback((axis: "h" | "v") => (el: HTMLDivElement | null) => {
+    if (el) {
+      if (axis === "h") trackLenRef.current.w = el.clientWidth;
+      else trackLenRef.current.h = el.clientHeight;
+    }
+  }, []);
 
   return (
     <>
-      {/* Horizontal scrollbar - bottom right */}
+      {/* Horizontal scrollbar - full width along bottom edge */}
       <div
-        className="absolute bottom-2 right-6 z-40"
+        ref={makeTrackRef("h")}
+        className="absolute bottom-0 left-0 right-0 z-40"
         style={{
-          width: trackLen,
           height: BAR_THICKNESS,
-          borderRadius: 5,
           background: TRACK_COLOR,
           cursor: "default",
           pointerEvents: "auto",
@@ -88,37 +90,24 @@ export default function WorkspaceScrollIndicators() {
         onMouseEnter={() => setHoverBar("h")}
         onMouseLeave={() => { if (!dragging) setHoverBar(null); }}
         onMouseDown={(e) => {
-          // Click on track: jump thumb to click position
           const rect = e.currentTarget.getBoundingClientRect();
-          const clickRatio = (e.clientX - rect.left) / rect.width;
+          const trackLen = rect.width;
+          const thumbPx = Math.max(MIN_THUMB, thumbWRatio * trackLen);
+          const clickRatio = (e.clientX - rect.left) / trackLen;
           const newPanX = -(clickRatio * maxPanX);
           setPan(Math.max(-TOTAL_WORKSPACE, Math.min(0, newPanX)), panY);
           handleMouseDown("h", e);
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            left: thumbLeft,
-            top: (BAR_THICKNESS - 6) / 2,
-            width: thumbW,
-            height: 6,
-            borderRadius: 3,
-            background: dragging === "h" || hoverBar === "h" ? THUMB_HOVER_COLOR : THUMB_COLOR,
-            cursor: "grab",
-            transition: dragging ? "none" : "background 0.15s",
-          }}
-          onMouseDown={(e) => handleMouseDown("h", e)}
-        />
+        <Thumb trackRef={trackLenRef} axis="h" norm={normX} ratio={thumbWRatio} dragging={dragging} hoverBar={hoverBar} onMouseDown={handleMouseDown} />
       </div>
 
-      {/* Vertical scrollbar - bottom right */}
+      {/* Vertical scrollbar - full height along right edge */}
       <div
-        className="absolute bottom-6 right-2 z-40"
+        ref={makeTrackRef("v")}
+        className="absolute top-0 right-0 bottom-0 z-40"
         style={{
           width: BAR_THICKNESS,
-          height: trackLen,
-          borderRadius: 5,
           background: TRACK_COLOR,
           cursor: "default",
           pointerEvents: "auto",
@@ -127,27 +116,49 @@ export default function WorkspaceScrollIndicators() {
         onMouseLeave={() => { if (!dragging) setHoverBar(null); }}
         onMouseDown={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
-          const clickRatio = (e.clientY - rect.top) / rect.height;
+          const trackLen = rect.height;
+          const thumbPx = Math.max(MIN_THUMB, thumbHRatio * trackLen);
+          const clickRatio = (e.clientY - rect.top) / trackLen;
           const newPanY = -(clickRatio * maxPanY);
           setPan(panX, Math.max(-TOTAL_WORKSPACE, Math.min(0, newPanY)));
           handleMouseDown("v", e);
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            left: (BAR_THICKNESS - 6) / 2,
-            top: thumbTop,
-            width: 6,
-            height: thumbH,
-            borderRadius: 3,
-            background: dragging === "v" || hoverBar === "v" ? THUMB_HOVER_COLOR : THUMB_COLOR,
-            cursor: "grab",
-            transition: dragging ? "none" : "background 0.15s",
-          }}
-          onMouseDown={(e) => handleMouseDown("v", e)}
-        />
+        <Thumb trackRef={trackLenRef} axis="v" norm={normY} ratio={thumbHRatio} dragging={dragging} hoverBar={hoverBar} onMouseDown={handleMouseDown} />
       </div>
     </>
+  );
+}
+
+function Thumb({ trackRef, axis, norm, ratio, dragging, hoverBar, onMouseDown }: {
+  trackRef: React.MutableRefObject<{ w: number; h: number }>;
+  axis: "h" | "v";
+  norm: number;
+  ratio: number;
+  dragging: "h" | "v" | null;
+  hoverBar: "h" | "v" | null;
+  onMouseDown: (axis: "h" | "v", e: React.MouseEvent) => void;
+}) {
+  const trackLen = axis === "h" ? trackRef.current.w : trackRef.current.h;
+  const thumbSize = Math.max(MIN_THUMB, ratio * trackLen);
+  const thumbPos = norm * Math.max(0, trackLen - thumbSize);
+  const isH = axis === "h";
+  const isActive = dragging === axis || hoverBar === axis;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: isH ? thumbPos : (BAR_THICKNESS - 6) / 2,
+        top: isH ? 0 : thumbPos,
+        width: isH ? thumbSize : 6,
+        height: isH ? 6 : thumbSize,
+        borderRadius: 3,
+        background: isActive ? THUMB_HOVER_COLOR : THUMB_COLOR,
+        cursor: "grab",
+        transition: dragging ? "none" : "background 0.15s",
+      }}
+      onMouseDown={(e) => onMouseDown(axis, e)}
+    />
   );
 }
