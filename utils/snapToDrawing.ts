@@ -97,18 +97,10 @@ export function getSnapPoints(element: SnapTarget, vertices: { x: number; y: num
                 { x: shape.x + halfW, y: shape.y - halfH, type: 'corner' as const },
                 { x: shape.x + halfW, y: shape.y + halfH, type: 'corner' as const },
                 { x: shape.x - halfW, y: shape.y + halfH, type: 'corner' as const },
-                { x: shape.x - halfW / 2, y: shape.y - halfH, type: 'quad' as const },
                 { x: shape.x, y: shape.y - halfH, type: 'midpoint' as const },
-                { x: shape.x + halfW / 2, y: shape.y - halfH, type: 'quad' as const },
-                { x: shape.x + halfW, y: shape.y - halfH / 2, type: 'quad' as const },
                 { x: shape.x + halfW, y: shape.y, type: 'midpoint' as const },
-                { x: shape.x + halfW, y: shape.y + halfH / 2, type: 'quad' as const },
-                { x: shape.x + halfW / 2, y: shape.y + halfH, type: 'quad' as const },
                 { x: shape.x, y: shape.y + halfH, type: 'midpoint' as const },
-                { x: shape.x - halfW / 2, y: shape.y + halfH, type: 'quad' as const },
-                { x: shape.x - halfW, y: shape.y + halfH / 2, type: 'quad' as const },
                 { x: shape.x - halfW, y: shape.y, type: 'midpoint' as const },
-                { x: shape.x - halfW, y: shape.y - halfH / 2, type: 'quad' as const },
                 { x: shape.x, y: shape.y, type: 'center' as const }
             ];
         }
@@ -178,6 +170,11 @@ export function getSnapPoints(element: SnapTarget, vertices: { x: number; y: num
             { x: asset.x + halfW, y: asset.y - halfH, type: 'corner' as const },
             { x: asset.x + halfW, y: asset.y + halfH, type: 'corner' as const },
             { x: asset.x - halfW, y: asset.y + halfH, type: 'corner' as const },
+            { x: asset.x, y: asset.y - halfH, type: 'midpoint' as const },
+            { x: asset.x + halfW, y: asset.y, type: 'midpoint' as const },
+            { x: asset.x, y: asset.y + halfH, type: 'midpoint' as const },
+            { x: asset.x - halfW, y: asset.y, type: 'midpoint' as const },
+            { x: asset.x, y: asset.y, type: 'center' as const },
         ];
 
         rawPoints.forEach(p => {

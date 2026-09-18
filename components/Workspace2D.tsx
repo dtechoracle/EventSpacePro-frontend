@@ -775,16 +775,11 @@ export default function Workspace2D({
       const blendedShape = blendShapes(blend.shapes, mode);
       if (blendedShape) {
         projectStore.saveToHistory();
+        projectStore.removeShape(blend.shapes[0].id, true);
         projectStore.removeShape(blend.shapes[1]!.id, true);
         projectStore.addShape(blendedShape, true);
-        const groupId = crypto.randomUUID();
-        projectStore.addGroup({
-          id: groupId,
-          itemIds: [blend.shapes[0].id, blendedShape.id],
-          zIndex: Math.max(blend.shapes[0].zIndex || 0, blendedShape.zIndex || 0)
-        }, true);
         editorStore.setSelectedIds([blendedShape.id]);
-        toast.success("Shape blended and grouped!", { icon: '✨' });
+        toast.success("Shape blended!", { icon: '✨' });
       } else {
         toast.error("Failed to blend shapes. Ensure they intersect cleanly.");
         editorStore.setSelectedIds([]);
@@ -3319,9 +3314,10 @@ export default function Workspace2D({
 
     const handleWheel = (e: WheelEvent) => {
       // Mouse wheel / trackpad behavior:
-      // - Standard wheel -> Zoom (toward cursor)
-      // - Trackpad pinch (Ctrl+wheel) -> Zoom
-      // - Shift + wheel -> Pan (horizontal scroll)
+      // - Trackpad two-finger scroll -> Pan
+      // - Mouse wheel (pixel delta > 80 or no ctrlKey with large deltaY) -> Zoom
+      // - Ctrl/Cmd + wheel -> Zoom
+      // - Shift + wheel -> Pan
 
       e.preventDefault();
       e.stopPropagation();
@@ -3338,7 +3334,23 @@ export default function Workspace2D({
         return;
       }
 
-      // Zoom Handling (plain wheel + trackpad pinch both zoom around cursor)
+      // Trackpad detection: trackpad scrolls have small pixel deltas
+      const absDeltaX = Math.abs(e.deltaX);
+      const absDeltaY = Math.abs(e.deltaY);
+      const isTrackpadLike = e.deltaMode === 0 && absDeltaY < 80 && absDeltaX < 80;
+      const isZoom = e.ctrlKey || e.metaKey || (!isTrackpadLike && absDeltaY > absDeltaX && absDeltaY > 0);
+
+      if (!isZoom) {
+        // Trackpad two-finger scroll -> Pan
+        const current = wheelTransformRef.current;
+        const nextPanX = current.panX - e.deltaX;
+        const nextPanY = current.panY - e.deltaY;
+        wheelTransformRef.current = { ...current, panX: nextPanX, panY: nextPanY };
+        scheduleViewportTransform({ zoom: current.zoom, panX: nextPanX, panY: nextPanY });
+        return;
+      }
+
+      // Zoom Handling (mouse wheel + trackpad pinch)
       const current = wheelTransformRef.current;
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
       const newZoom = Math.max(0.000001, Math.min(1000000, current.zoom * delta));

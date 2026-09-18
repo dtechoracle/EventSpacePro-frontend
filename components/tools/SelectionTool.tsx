@@ -669,9 +669,9 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
             <g data-export-ignore="true">
                 <line x1={startScreen.x} y1={startScreen.y} x2={endScreen.x} y2={endScreen.y} stroke="#3B82F6" strokeWidth={2} vectorEffect="non-scaling-stroke" />
                 <line x1={centerScreen.x} y1={centerScreen.y} x2={rotPt.x} y2={rotPt.y} stroke="#3B82F6" strokeWidth={2} vectorEffect="non-scaling-stroke" />
-                <rect x={startScreen.x - 7} y={startScreen.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-nwse-resize" onMouseDown={(e) => handleMouseDown(e, 'w')} />
-                <rect x={endScreen.x - 7} y={endScreen.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-nwse-resize" onMouseDown={(e) => handleMouseDown(e, 'e')} />
-                <circle cx={rotPt.x} cy={rotPt.y} r={7} fill="white" stroke="#3B82F6" strokeWidth={2} className="cursor-grab" onMouseDown={(e) => handleMouseDown(e, 'rotate')} />
+                <rect x={startScreen.x - 5} y={startScreen.y - 5} width={10} height={10} fill="white" stroke="#3b82f6" strokeWidth={1.5} className="cursor-nwse-resize" onMouseDown={(e) => handleMouseDown(e, 'w')} />
+                <rect x={endScreen.x - 5} y={endScreen.y - 5} width={10} height={10} fill="white" stroke="#3b82f6" strokeWidth={1.5} className="cursor-nwse-resize" onMouseDown={(e) => handleMouseDown(e, 'e')} />
+                <circle cx={rotPt.x} cy={rotPt.y} r={5} fill="white" stroke="#3B82F6" strokeWidth={1.5} className="cursor-grab" onMouseDown={(e) => handleMouseDown(e, 'rotate')} />
             </g>
         );
     }
@@ -694,8 +694,8 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
         return (
             <g data-export-ignore="true">
                 <line x1={startScreen.x} y1={startScreen.y} x2={endScreen.x} y2={endScreen.y} stroke="#3B82F6" strokeWidth={2} strokeDasharray="6 3" vectorEffect="non-scaling-stroke" />
-                <rect x={startScreen.x - 7} y={startScreen.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-move" onMouseDown={(e) => handleMouseDown(e, 'start')} />
-                <rect x={endScreen.x - 7} y={endScreen.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-move" onMouseDown={(e) => handleMouseDown(e, 'end')} />
+                <rect x={startScreen.x - 5} y={startScreen.y - 5} width={10} height={10} fill="white" stroke="#3b82f6" strokeWidth={1.5} className="cursor-move" onMouseDown={(e) => handleMouseDown(e, 'start')} />
+                <rect x={endScreen.x - 5} y={endScreen.y - 5} width={10} height={10} fill="white" stroke="#3b82f6" strokeWidth={1.5} className="cursor-move" onMouseDown={(e) => handleMouseDown(e, 'end')} />
             </g>
         );
     }
@@ -712,9 +712,9 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                 <line x1={ss.x} y1={ss.y} x2={es.x} y2={es.y} stroke="#3B82F6" strokeWidth={2} vectorEffect="non-scaling-stroke" />
                 <line x1={cs.x} y1={cs.y} x2={rp.x} y2={rp.y} stroke="#3B82F6" strokeWidth={2} vectorEffect="non-scaling-stroke" />
                 {/* For straight lines, these handles still scale the whole item relative to center/opposite */}
-                <rect x={ss.x - 7} y={ss.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-pointer" onMouseDown={(e) => handleMouseDown(e, 'w')} />
-                <rect x={es.x - 7} y={es.y - 7} width={14} height={14} fill="white" stroke="#3b82f6" strokeWidth={2} className="cursor-pointer" onMouseDown={(e) => handleMouseDown(e, 'e')} />
-                <circle cx={rp.x} cy={rp.y} r={7} fill="white" stroke="#3B82F6" strokeWidth={2} className="cursor-grab" onMouseDown={(e) => handleMouseDown(e, 'rotate')} />
+                <rect x={ss.x - 5} y={ss.y - 5} width={10} height={10} fill="white" stroke="#3b82f6" strokeWidth={1.5} className="cursor-pointer" onMouseDown={(e) => handleMouseDown(e, 'w')} />
+                <rect x={es.x - 5} y={es.y - 5} width={10} height={10} fill="white" stroke="#3b82f6" strokeWidth={1.5} className="cursor-pointer" onMouseDown={(e) => handleMouseDown(e, 'e')} />
+                <circle cx={rp.x} cy={rp.y} r={5} fill="white" stroke="#3B82F6" strokeWidth={1.5} className="cursor-grab" onMouseDown={(e) => handleMouseDown(e, 'rotate')} />
             </g>
         );
     }
@@ -867,9 +867,9 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                 return (
                     <rect 
                         key={h} 
-                        x={pos.x - 7} y={pos.y - 7} 
-                        width={14} height={14} 
-                        fill="white" stroke="#3b82f6" strokeWidth={2} 
+                        x={pos.x - 5} y={pos.y - 5} 
+                        width={10} height={10} 
+                        fill="white" stroke="#3b82f6" strokeWidth={1.5} 
                         style={{ cursor: `${cursors[h]}-resize` }}
                         onMouseDown={(e) => handleMouseDown(e, h)} 
                         transform={`rotate(${effectiveRotation} ${pos.x} ${pos.y})`} 

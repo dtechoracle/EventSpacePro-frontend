@@ -22,7 +22,7 @@ export default function AssetHandles({
     return null;
   }
 
-  const handleSize = 12;
+  const handleSize = 8;
   
   // Calculate handle positions directly in pixel coordinates relative to asset center
   const assetCenterPx = { x: leftPx, y: topPx };

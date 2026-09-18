@@ -25,6 +25,16 @@ const formatLabel = (text: string) =>
 export default function AssetsSidebar({ isOpen, onClose }: AssetsSidebarProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(new Set());
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+
+  const toggleCategory = (cat: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
 
   const normalizedSearch = searchTerm.toLowerCase();
 
@@ -173,21 +183,34 @@ export default function AssetsSidebar({ isOpen, onClose }: AssetsSidebarProps) {
             )}
           </div>
         ) : (
-          Array.from(assetsByCategory.entries()).map(([category, assets]) => (
-            <section key={category} className="space-y-1.5">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-0.5">
-                <h3 className="text-[11px] font-bold text-slate-700 tracking-wide">
-                  {formatLabel(category)}
-                </h3>
-                <span className="text-[9px] text-slate-400 font-medium">
-                  {assets.length} items
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-1.5 pt-0.5">
-                {assets.map(renderAsset)}
-              </div>
-            </section>
-          ))
+          Array.from(assetsByCategory.entries()).map(([category, assets]) => {
+            const isCollapsed = collapsedCategories.has(category);
+            return (
+              <section key={category} className="space-y-1.5">
+                <button
+                  onClick={() => toggleCategory(category)}
+                  className="w-full flex items-center justify-between border-b border-slate-100 pb-0.5 hover:bg-slate-50 rounded px-0.5 -mx-0.5 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-slate-400 transition-transform duration-150">
+                      {isCollapsed ? '▶' : '▼'}
+                    </span>
+                    <h3 className="text-[11px] font-bold text-slate-700 tracking-wide">
+                      {formatLabel(category)}
+                    </h3>
+                  </div>
+                  <span className="text-[9px] text-slate-400 font-medium">
+                    {assets.length} items
+                  </span>
+                </button>
+                {!isCollapsed && (
+                  <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                    {assets.map(renderAsset)}
+                  </div>
+                )}
+              </section>
+            );
+          })
         )}
       </div>
     </div>

@@ -30,7 +30,7 @@ export function createClientToCanvasMM(
 }
 
 export function getAssetCornerPosition(asset: AssetInstance, handleType: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') {
-    const handleSize = 12;
+    const handleSize = 8;
 
     if (asset.type === "square" || asset.type === "circle") {
         const width = (asset.width ?? 50) * asset.scale;
