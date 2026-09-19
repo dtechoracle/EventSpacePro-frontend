@@ -72,14 +72,16 @@ export default function WorkspaceScrollIndicators() {
   const worldViewW = viewW / zoom;
   const worldViewH = viewH / zoom;
 
-  // Virtual workspace = how far you can see at zoom 1 (i.e. the viewport at zoom=1)
-  // Thumb maps the current pan position relative to the viewport
-  // When panX=0, viewport shows world 0..worldViewW. When panX=-5000, it shows 5000..5000+worldViewW.
-  // We need a reference range. Use the viewport size at zoom 1 as the "document size".
-  const refSizeW = viewW; // world units at zoom 1
-  const refSizeH = viewH;
+  // Virtual workspace grows based on how far user has panned
+  // Minimum = 3x viewport, but expands as panning increases
+  const absPanW = Math.abs(panX);
+  const absPanH = Math.abs(panY);
+  const totalRangeW = viewW + absPanW + viewW; // viewport + pan distance + buffer
+  const totalRangeH = viewH + absPanH + viewH;
+  const refSizeW = Math.max(viewW * 3, totalRangeW);
+  const refSizeH = Math.max(viewH * 3, totalRangeH);
 
-  // Thumb size = fraction of track (viewport / reference)
+  // Thumb size = fraction of track (viewport / total range)
   const thumbSizeW = trackLens.w > 0 ? Math.max(20, (worldViewW / refSizeW) * trackLens.w) : 0;
   const thumbSizeH = trackLens.h > 0 ? Math.max(20, (worldViewH / refSizeH) * trackLens.h) : 0;
 
@@ -90,6 +92,21 @@ export default function WorkspaceScrollIndicators() {
   const thumbLeft = Math.max(0, Math.min(trackLens.w - thumbSizeW, fractionX * (trackLens.w - thumbSizeW)));
   const thumbTop = Math.max(0, Math.min(trackLens.h - thumbSizeH, fractionY * (trackLens.h - thumbSizeH)));
 
+  const handleTrackClick = useCallback((axis: "h" | "v", e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const trackLen = axis === "h" ? rect.width : rect.height;
+    const thumbPx = axis === "h" ? thumbSizeW : thumbSizeH;
+    const ratio = axis === "h"
+      ? (e.clientX - rect.left) / trackLen
+      : (e.clientY - rect.top) / trackLen;
+    const range = axis === "h" ? refSizeW : refSizeH;
+    const newPan = -(ratio * range);
+    const store = useEditorStore.getState();
+    if (axis === "h") useEditorStore.setState({ panX: Math.max(-range, Math.min(0, newPan)) });
+    else useEditorStore.setState({ panY: Math.max(-range, Math.min(0, newPan)) });
+    handleMouseDown(axis, e);
+  }, [thumbSizeW, thumbSizeH, refSizeW, refSizeH, handleMouseDown]);
+
   return (
     <>
       <div
@@ -97,7 +114,7 @@ export default function WorkspaceScrollIndicators() {
         ref={hRef}
         className="absolute bottom-0 left-0 right-0 z-40"
         style={{ height: BAR_SIZE, cursor: "default" }}
-        onMouseDown={(e) => { stopProp(e); handleMouseDown("h", e); }}
+        onMouseDown={(e) => { stopProp(e); handleTrackClick("h", e); }}
         onMouseMove={stopProp}
       >
         {trackLens.w > 0 && (
@@ -123,7 +140,7 @@ export default function WorkspaceScrollIndicators() {
         ref={vRef}
         className="absolute top-0 right-0 bottom-0 z-40"
         style={{ width: BAR_SIZE, cursor: "default" }}
-        onMouseDown={(e) => { stopProp(e); handleMouseDown("v", e); }}
+        onMouseDown={(e) => { stopProp(e); handleTrackClick("v", e); }}
         onMouseMove={stopProp}
       >
         {trackLens.h > 0 && (
