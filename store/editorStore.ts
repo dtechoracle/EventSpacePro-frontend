@@ -195,33 +195,31 @@ export const useEditorStore = create<EditorState>()(
 
       // Zoom methods
       // Zoom methods - "Infinity" zoom (very wide range)
-      setZoom: (zoom) => set({ zoom: Math.max(0.000001, Math.min(1000000, zoom)) }),
+      setZoom: (zoom) => set({ zoom: Math.max(0.05, Math.min(20, zoom)) }),
 
       zoomIn: () => {
         const state = get();
-        set({ zoom: Math.min(1000000, state.zoom * 1.2) });
+        set({ zoom: Math.min(20, state.zoom * 1.2) });
       },
 
       zoomOut: () => {
         const state = get();
-        set({ zoom: Math.max(0.000001, state.zoom / 1.2) });
+        set({ zoom: Math.max(0.05, state.zoom / 1.2) });
       },
 
       resetZoom: () => set({ zoom: 1 }),
 
       // Pan methods
-      setPan: (x, y) => set({ panX: Math.max(-16000, Math.min(0, x)), panY: Math.max(-12000, Math.min(0, y)) }),
+      setPan: (x, y) => set({ panX: x, panY: y }),
       setViewportTransform: (zoom, panX, panY) => set({
-        zoom: Math.max(0.000001, Math.min(1000000, zoom)),
-        panX: Math.max(-16000, Math.min(0, panX)),
-        panY: Math.max(-12000, Math.min(0, panY)),
+        zoom: Math.max(0.05, Math.min(20, zoom)),
+        panX,
+        panY,
       }),
 
       panBy: (dx, dy) => {
         const state = get();
-        const newPanX = state.panX + dx;
-        const newPanY = state.panY + dy;
-        set({ panX: Math.max(-16000, Math.min(0, newPanX)), panY: Math.max(-12000, Math.min(0, newPanY)) });
+        set({ panX: state.panX + dx, panY: state.panY + dy });
       },
 
       resetPan: () => set({ panX: 0, panY: 0 }),

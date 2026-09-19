@@ -7,10 +7,6 @@ const BAR_SIZE = 8;
 const THUMB_COLOR = "rgba(150,150,150,0.5)";
 const THUMB_ACTIVE_COLOR = "rgba(100,100,100,0.7)";
 
-// Fixed virtual canvas size in pixels (like Figma)
-const CANVAS_W = 16000;
-const CANVAS_H = 12000;
-
 export default function WorkspaceScrollIndicators() {
   const zoom = useEditorStore(s => s.zoom);
   const panX = useEditorStore(s => s.panX);
@@ -19,6 +15,7 @@ export default function WorkspaceScrollIndicators() {
   const [trackLens, setTrackLens] = useState({ w: 0, h: 0 });
   const dragRef = useRef({ startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
 
+  // Measure tracks on mount + resize
   const hRef = useCallback((el: HTMLDivElement | null) => {
     if (el) setTrackLens(prev => ({ ...prev, w: el.clientWidth }));
   }, []);
@@ -47,13 +44,13 @@ export default function WorkspaceScrollIndicators() {
       me.preventDefault();
       const dx = me.clientX - dragRef.current.startX;
       const dy = me.clientY - dragRef.current.startY;
-
+      const s = useEditorStore.getState();
       if (axis === "h") {
         const newPan = dragRef.current.startPanX + dx;
-        useEditorStore.setState({ panX: Math.max(-CANVAS_W, Math.min(0, newPan)) });
+        useEditorStore.setState({ panX: newPan });
       } else {
         const newPan = dragRef.current.startPanY + dy;
-        useEditorStore.setState({ panY: Math.max(-CANVAS_H, Math.min(0, newPan)) });
+        useEditorStore.setState({ panY: newPan });
       }
     };
 
@@ -69,36 +66,46 @@ export default function WorkspaceScrollIndicators() {
 
   const stopProp = useCallback((e: React.MouseEvent) => e.stopPropagation(), []);
 
+  // Compute thumb info
   const viewW = typeof window !== 'undefined' ? window.innerWidth : 1200;
   const viewH = typeof window !== 'undefined' ? window.innerHeight : 800;
   const worldViewW = viewW / zoom;
   const worldViewH = viewH / zoom;
 
-  // Thumb size = viewport fraction of fixed canvas
-  const thumbSizeW = trackLens.w > 0 ? Math.max(20, (worldViewW / CANVAS_W) * trackLens.w) : 0;
-  const thumbSizeH = trackLens.h > 0 ? Math.max(20, (worldViewH / CANVAS_H) * trackLens.h) : 0;
+  // Virtual workspace grows based on how far user has panned
+  // Minimum = 3x viewport, but expands as panning increases
+  const absPanW = Math.abs(panX);
+  const absPanH = Math.abs(panY);
+  const totalRangeW = viewW + absPanW + viewW; // viewport + pan distance + buffer
+  const totalRangeH = viewH + absPanH + viewH;
+  const refSizeW = Math.max(viewW * 3, totalRangeW);
+  const refSizeH = Math.max(viewH * 3, totalRangeH);
 
-  // Thumb position
-  const fractionX = trackLens.w > thumbSizeW ? -panX / CANVAS_W : 0;
-  const fractionY = trackLens.h > thumbSizeH ? -panY / CANVAS_H : 0;
+  // Thumb size = fraction of track (viewport / total range)
+  const thumbSizeW = trackLens.w > 0 ? Math.max(20, (worldViewW / refSizeW) * trackLens.w) : 0;
+  const thumbSizeH = trackLens.h > 0 ? Math.max(20, (worldViewH / refSizeH) * trackLens.h) : 0;
+
+  // Thumb position: panX is in world units (negative = panned left)
+  // Map pan to fraction of track
+  const fractionX = trackLens.w > thumbSizeW ? -panX / refSizeW : 0;
+  const fractionY = trackLens.h > thumbSizeH ? -panY / refSizeH : 0;
   const thumbLeft = Math.max(0, Math.min(trackLens.w - thumbSizeW, fractionX * (trackLens.w - thumbSizeW)));
   const thumbTop = Math.max(0, Math.min(trackLens.h - thumbSizeH, fractionY * (trackLens.h - thumbSizeH)));
 
   const handleTrackClick = useCallback((axis: "h" | "v", e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
     const trackLen = axis === "h" ? rect.width : rect.height;
     const thumbPx = axis === "h" ? thumbSizeW : thumbSizeH;
     const ratio = axis === "h"
       ? (e.clientX - rect.left) / trackLen
       : (e.clientY - rect.top) / trackLen;
-    const range = axis === "h" ? CANVAS_W : CANVAS_H;
+    const range = axis === "h" ? refSizeW : refSizeH;
     const newPan = -(ratio * range);
-    if (axis === "h") useEditorStore.setState({ panX: Math.max(-CANVAS_W, Math.min(0, newPan)) });
-    else useEditorStore.setState({ panY: Math.max(-CANVAS_H, Math.min(0, newPan)) });
+    const store = useEditorStore.getState();
+    if (axis === "h") useEditorStore.setState({ panX: Math.max(-range, Math.min(0, newPan)) });
+    else useEditorStore.setState({ panY: Math.max(-range, Math.min(0, newPan)) });
     handleMouseDown(axis, e);
-  }, [thumbSizeW, thumbSizeH, handleMouseDown]);
+  }, [thumbSizeW, thumbSizeH, refSizeW, refSizeH, handleMouseDown]);
 
   return (
     <>

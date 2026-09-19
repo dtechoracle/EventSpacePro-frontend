@@ -3354,7 +3354,7 @@ export default function Workspace2D({
       // Zoom Handling (mouse wheel + trackpad pinch)
       const current = wheelTransformRef.current;
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      const newZoom = Math.max(0.000001, Math.min(1000000, current.zoom * delta));
+      const newZoom = Math.max(0.05, Math.min(20, current.zoom * delta));
 
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
