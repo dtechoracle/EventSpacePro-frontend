@@ -210,16 +210,18 @@ export const useEditorStore = create<EditorState>()(
       resetZoom: () => set({ zoom: 1 }),
 
       // Pan methods
-      setPan: (x, y) => set({ panX: x, panY: y }),
+      setPan: (x, y) => set({ panX: Math.max(-16000, Math.min(0, x)), panY: Math.max(-12000, Math.min(0, y)) }),
       setViewportTransform: (zoom, panX, panY) => set({
         zoom: Math.max(0.000001, Math.min(1000000, zoom)),
-        panX,
-        panY,
+        panX: Math.max(-16000, Math.min(0, panX)),
+        panY: Math.max(-12000, Math.min(0, panY)),
       }),
 
       panBy: (dx, dy) => {
         const state = get();
-        set({ panX: state.panX + dx, panY: state.panY + dy });
+        const newPanX = state.panX + dx;
+        const newPanY = state.panY + dy;
+        set({ panX: Math.max(-16000, Math.min(0, newPanX)), panY: Math.max(-12000, Math.min(0, newPanY)) });
       },
 
       resetPan: () => set({ panX: 0, panY: 0 }),
