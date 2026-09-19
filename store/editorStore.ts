@@ -195,16 +195,16 @@ export const useEditorStore = create<EditorState>()(
 
       // Zoom methods
       // Zoom methods - "Infinity" zoom (very wide range)
-      setZoom: (zoom) => set({ zoom: Math.max(0.05, Math.min(20, zoom)) }),
+      setZoom: (zoom) => set({ zoom: Math.max(0.0001, Math.min(64, zoom)) }),
 
       zoomIn: () => {
         const state = get();
-        set({ zoom: Math.min(20, state.zoom * 1.2) });
+        set({ zoom: Math.min(64, state.zoom * 1.2) });
       },
 
       zoomOut: () => {
         const state = get();
-        set({ zoom: Math.max(0.05, state.zoom / 1.2) });
+        set({ zoom: Math.max(0.0001, state.zoom / 1.2) });
       },
 
       resetZoom: () => set({ zoom: 1 }),
@@ -212,7 +212,7 @@ export const useEditorStore = create<EditorState>()(
       // Pan methods
       setPan: (x, y) => set({ panX: x, panY: y }),
       setViewportTransform: (zoom, panX, panY) => set({
-        zoom: Math.max(0.05, Math.min(20, zoom)),
+        zoom: Math.max(0.0001, Math.min(64, zoom)),
         panX,
         panY,
       }),

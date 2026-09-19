@@ -2185,6 +2185,10 @@ export default function Workspace2D({
 
       const { x: worldX, y: worldY } = screenToWorld(e.clientX, e.clientY);
 
+      // Skip if click originated from scrollbar indicators
+      const target = e.target as HTMLElement;
+      if (target?.closest('[id="sb-h"], [id="sb-v"]')) return;
+
       if (e.button === 1 || (e.button === 0 && activeTool === 'pan')) {
         setPanning(true);
         // Use clientX/clientY to match handleMouseMove coordinate system
@@ -3354,7 +3358,7 @@ export default function Workspace2D({
       // Zoom Handling (mouse wheel + trackpad pinch)
       const current = wheelTransformRef.current;
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      const newZoom = Math.max(0.05, Math.min(20, current.zoom * delta));
+      const newZoom = Math.max(0.0001, Math.min(64, current.zoom * delta));
 
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;

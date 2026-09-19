@@ -77,7 +77,7 @@ export default function Canvas({
   // Workspace (viewport) transform
   const MM_TO_PX = 2; 
   const ZOOM_SENSITIVITY = 0.001;
-  const MIN_ZOOM_BASE = 0.05;
+  const MIN_ZOOM_BASE = 0.0001;
   const MIN_ZOOM_PADDING = 1; 
   const EDGE_PADDING_MM = 10;
 
@@ -222,7 +222,7 @@ export default function Canvas({
         const sceneX = (cursor.x - targetOffset.current.x) / targetZoom.current;
         const sceneY = (cursor.y - targetOffset.current.y) / targetZoom.current;
         const delta = -e.deltaY * 0.001;
-        const newZoom = Math.min(20, Math.max(MIN_ZOOM_BASE, targetZoom.current + delta));
+        const newZoom = Math.min(64, Math.max(MIN_ZOOM_BASE, targetZoom.current + delta));
         
         targetZoom.current = newZoom;
         targetOffset.current = clampOffset({

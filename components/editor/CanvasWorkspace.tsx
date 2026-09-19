@@ -13,8 +13,8 @@ type EventDataResponse =
 
 const MM_TO_PX = 2; // must match the constant used in Canvas for mm -> px
 const ZOOM_SENSITIVITY = 0.001;
-const MAX_ZOOM = 20;
-const MIN_ZOOM_BASE = 0.05;
+const MAX_ZOOM = 64;
+const MIN_ZOOM_BASE = 0.0001;
 const MIN_ZOOM_PADDING = 1.0; // Remove padding factor restriction
 const OVERSCROLL_MAX = 120; // px maximum visual overscroll
 const OVERSCROLL_RESIST = 0.45; // resistance factor for overscroll movement
@@ -153,7 +153,7 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
         const delta = -e.deltaY * ZOOM_SENSITIVITY;
         const desired = targetZoom.current + delta;
         const minZoom = computeMinZoom();
-        const newZoom = Math.min(20, Math.max(minZoom, desired));
+        const newZoom = Math.min(64, Math.max(minZoom, desired));
         const newOffset = {
           x: cursor.x - sceneX * newZoom,
           y: cursor.y - sceneY * newZoom,
@@ -191,7 +191,7 @@ export default function CanvasWorkspace({ eventData }: CanvasWorkspaceProps) {
       const minW = rect.width / canvasPxWNoZoom;
       const minH = rect.height / canvasPxHNoZoom;
       const minZoom = Math.min(minW, minH) * MIN_ZOOM_PADDING;
-      const clampedMin = Math.min(20, Math.max(MIN_ZOOM_BASE, minZoom));
+      const clampedMin = Math.min(64, Math.max(MIN_ZOOM_BASE, minZoom));
       if (targetZoom.current < clampedMin) {
         targetZoom.current = clampedMin;
         // center the canvas in viewport at this zoom and clamp to bounds
