@@ -6,7 +6,6 @@ import { useEditorStore } from "@/store/editorStore";
 const BAR_SIZE = 8;
 const THUMB_COLOR = "rgba(150,150,150,0.5)";
 const THUMB_ACTIVE_COLOR = "rgba(100,100,100,0.7)";
-const TRACK_COLOR = "rgba(0,0,0,0.04)";
 
 export default function WorkspaceScrollIndicators() {
   const zoom = useEditorStore(s => s.zoom);
@@ -97,7 +96,7 @@ export default function WorkspaceScrollIndicators() {
         id="sb-h"
         ref={hRef}
         className="absolute bottom-0 left-0 right-0 z-40"
-        style={{ height: BAR_SIZE, background: TRACK_COLOR, cursor: "default" }}
+        style={{ height: BAR_SIZE, cursor: "default" }}
         onMouseDown={(e) => { stopProp(e); handleMouseDown("h", e); }}
         onMouseMove={stopProp}
       >
@@ -123,7 +122,7 @@ export default function WorkspaceScrollIndicators() {
         id="sb-v"
         ref={vRef}
         className="absolute top-0 right-0 bottom-0 z-40"
-        style={{ width: BAR_SIZE, background: TRACK_COLOR, cursor: "default" }}
+        style={{ width: BAR_SIZE, cursor: "default" }}
         onMouseDown={(e) => { stopProp(e); handleMouseDown("v", e); }}
         onMouseMove={stopProp}
       >
