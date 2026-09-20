@@ -263,22 +263,20 @@ export default function WorkspaceScrollIndicators() {
     [scrollRange, handleMouseDown]
   );
 
-  const showH = scrollRange?.needsScrollH && trackLens.w > 0 && thumbCalc.thumbW > 0;
-  const showV = scrollRange?.needsScrollV && trackLens.h > 0 && thumbCalc.thumbH > 0;
-
-  if (!showH && !showV) return null;
+  const showH = !!scrollRange?.needsScrollH && trackLens.w > 0 && thumbCalc.thumbW > 0;
+  const showV = !!scrollRange?.needsScrollV && trackLens.h > 0 && thumbCalc.thumbH > 0;
 
   return (
     <>
-      {showH && (
-        <div
-          id="sb-h"
-          ref={hRef}
-          className="absolute bottom-0 left-0 right-0 z-40"
-          style={{ height: BAR_SIZE, cursor: "default" }}
-          onMouseDown={(e) => { stopProp(e); handleTrackClick("h", e); }}
-          onMouseMove={stopProp}
-        >
+      <div
+        id="sb-h"
+        ref={hRef}
+        className="absolute bottom-0 left-0 right-0 z-40"
+        style={{ height: BAR_SIZE, cursor: showH ? "default" : "default", opacity: showH ? 1 : 0, pointerEvents: showH ? "auto" : "none" }}
+        onMouseDown={(e) => { stopProp(e); handleTrackClick("h", e); }}
+        onMouseMove={stopProp}
+      >
+        {showH && (
           <div
             style={{
               position: "absolute",
@@ -293,18 +291,18 @@ export default function WorkspaceScrollIndicators() {
             }}
             onMouseDown={(e) => { stopProp(e); handleMouseDown("h", e); }}
           />
-        </div>
-      )}
+        )}
+      </div>
 
-      {showV && (
-        <div
-          id="sb-v"
-          ref={vRef}
-          className="absolute top-0 right-0 bottom-0 z-40"
-          style={{ width: BAR_SIZE, cursor: "default" }}
-          onMouseDown={(e) => { stopProp(e); handleTrackClick("v", e); }}
-          onMouseMove={stopProp}
-        >
+      <div
+        id="sb-v"
+        ref={vRef}
+        className="absolute top-0 right-0 bottom-0 z-40"
+        style={{ width: BAR_SIZE, cursor: showV ? "default" : "default", opacity: showV ? 1 : 0, pointerEvents: showV ? "auto" : "none" }}
+        onMouseDown={(e) => { stopProp(e); handleTrackClick("v", e); }}
+        onMouseMove={stopProp}
+      >
+        {showV && (
           <div
             style={{
               position: "absolute",
@@ -319,8 +317,8 @@ export default function WorkspaceScrollIndicators() {
             }}
             onMouseDown={(e) => { stopProp(e); handleMouseDown("v", e); }}
           />
-        </div>
-      )}
+        )}
+      </div>
     </>
   );
 }
