@@ -6,21 +6,21 @@
             <!-- Block Reference: 1200mm X 600mm Coffee Table / entities: 8 -->
         <g>
             <!-- Line -->
-            <path d="M32.0541,575.7071 L1172.0541,575.7071 " style="stroke:#000000;stroke-width:0.5;"/>
+            <path d="M32.0541,575.7071 L1172.0541,575.7071 " style="stroke:#000000;stroke-width:0.1;"/>
             <!-- Line -->
-            <path d="M2.0541,605.7071 L1202.0541,605.7071 " style="stroke:#000000;stroke-width:0.5;"/>
+            <path d="M2.0541,605.7071 L1202.0541,605.7071 " style="stroke:#000000;stroke-width:0.1;"/>
             <!-- Line -->
-            <path d="M1172.0541,35.7071 L32.0541,35.7071 " style="stroke:#000000;stroke-width:0.5;"/>
+            <path d="M1172.0541,35.7071 L32.0541,35.7071 " style="stroke:#000000;stroke-width:0.1;"/>
             <!-- Line -->
-            <path d="M1202.0541,5.7071 L2.0541,5.7071 " style="stroke:#000000;stroke-width:0.5;"/>
+            <path d="M1202.0541,5.7071 L2.0541,5.7071 " style="stroke:#000000;stroke-width:0.1;"/>
             <!-- Line -->
-            <path d="M32.0541,35.7071 L32.0541,575.7071 " style="stroke:#000000;stroke-width:0.5;"/>
+            <path d="M32.0541,35.7071 L32.0541,575.7071 " style="stroke:#000000;stroke-width:0.1;"/>
             <!-- Line -->
-            <path d="M1172.0541,575.7071 L1172.0541,35.7071 " style="stroke:#000000;stroke-width:0.5;"/>
+            <path d="M1172.0541,575.7071 L1172.0541,35.7071 " style="stroke:#000000;stroke-width:0.1;"/>
             <!-- Line -->
-            <path d="M2.0541,5.7071 L2.0541,605.7071 " style="stroke:#000000;stroke-width:0.5;"/>
+            <path d="M2.0541,5.7071 L2.0541,605.7071 " style="stroke:#000000;stroke-width:0.1;"/>
             <!-- Line -->
-            <path d="M1202.0541,605.7071 L1202.0541,5.7071 " style="stroke:#000000;stroke-width:0.5;"/>
+            <path d="M1202.0541,605.7071 L1202.0541,5.7071 " style="stroke:#000000;stroke-width:0.1;"/>
         </g>
     </g>
 </svg>

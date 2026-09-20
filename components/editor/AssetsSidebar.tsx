@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { ASSET_LIBRARY, AssetDef, ASSET_CATEGORIES } from "@/lib/assets";
 import { motion } from "framer-motion";
 import { InlineSvg } from "@/components/tools/InlineSvg";
+import { getRasterAssetPath } from "@/utils/assetRasterPath";
 
 type AssetsSidebarProps = {
   isOpen: boolean;
@@ -17,6 +18,7 @@ const formatLabel = (text: string) =>
 
 export default function AssetsSidebar({ isOpen, onClose }: AssetsSidebarProps) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(new Set());
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
   const toggleCategory = (cat: string) => {
@@ -48,7 +50,15 @@ export default function AssetsSidebar({ isOpen, onClose }: AssetsSidebarProps) {
     return map;
   }, []);
 
+  const getThumbnailPath = (asset: AssetDef): string | null => {
+    if (!asset.path) return null;
+    return getRasterAssetPath(asset.path);
+  };
+
   const renderAsset = (asset: AssetDef) => {
+    const thumbnailSrc = getThumbnailPath(asset);
+    const useFallback = !thumbnailSrc || failedThumbnails.has(asset.id);
+
     return (
       <motion.button
         key={asset.id}
@@ -90,14 +100,30 @@ export default function AssetsSidebar({ isOpen, onClose }: AssetsSidebarProps) {
         className="w-full h-16 flex flex-col items-center justify-center p-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-400 transition-all text-slate-800 hover:text-slate-950 group shadow-none"
       >
         <div className="w-8 h-8 flex items-center justify-center overflow-hidden mb-0.5">
-          <InlineSvg
-            key={asset.path}
-            src={asset.path}
-            fill="none"
-            stroke="#1e293b"
-            strokeWidth={0.8}
-            category={asset.category}
-          />
+          {!useFallback ? (
+            <img
+              src={thumbnailSrc!}
+              alt={asset.label}
+              className="w-full h-full object-contain pointer-events-none"
+              loading="lazy"
+              onError={() => {
+                setFailedThumbnails(prev => {
+                  const next = new Set(prev);
+                  next.add(asset.id);
+                  return next;
+                });
+              }}
+            />
+          ) : (
+            <InlineSvg
+              key={asset.path}
+              src={asset.path}
+              fill="none"
+              stroke="#1e293b"
+              strokeWidth={0.8}
+              category={asset.category}
+            />
+          )}
         </div>
         <span className="text-[0.6rem] text-center font-medium leading-none truncate w-full px-0.5 text-slate-700 group-hover:text-slate-900 transition-colors">
           {formatLabel(asset.label)}

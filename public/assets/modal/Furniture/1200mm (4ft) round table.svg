@@ -5,9 +5,9 @@
         <!-- Block Reference: table 2 / entities: 2 -->
         <g>
             <!-- Circle -->
-            <circle cx="626.7078070607531" cy="622.1403976706933" r="605" style="stroke:#000000;stroke-width:0.5;"/>
+            <circle cx="626.7078070607531" cy="622.1403976706933" r="605" style="stroke:#000000;stroke-width:0.1;"/>
             <!-- Circle -->
-            <circle cx="626.7078070607531" cy="622.1403976706933" r="625" style="stroke:#000000;stroke-width:0.5;"/>
+            <circle cx="626.7078070607531" cy="622.1403976706933" r="625" style="stroke:#000000;stroke-width:0.1;"/>
         </g>
     </g>
 </svg>
