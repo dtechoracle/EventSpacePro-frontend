@@ -27,6 +27,7 @@ import DuplicateDistributeModal from './ui/DuplicateDistributeModal';
 import { AnchorType, getAnchorsForObject, snapToObjects, calculateShapeAnchors, calculateAssetAnchors, calculateWallAnchors } from '@/utils/snapAnchors';
 import { findClosestSnapPointFromList, findSnapPointInShapes, getSnapPoints } from '@/utils/snapToDrawing';
 import { getMarqueeVertices } from '@/utils/assetUtils';
+import { getEffectiveGridSize } from '@/utils/grid';
 
 // Safe UUID generator with fallback for non-secure contexts
 const generateId = (): string => {
@@ -1272,12 +1273,13 @@ export default function Workspace2D({
   const snapToGridFn = useCallback(
     (pos: { x: number; y: number }) => {
       if (!snapToGridEnabled) return pos;
+      const effectiveGrid = getEffectiveGridSize(gridSize, zoom);
       return {
-        x: Math.round(pos.x / gridSize) * gridSize,
-        y: Math.round(pos.y / gridSize) * gridSize,
+        x: Math.round(pos.x / effectiveGrid) * effectiveGrid,
+        y: Math.round(pos.y / effectiveGrid) * effectiveGrid,
       };
     },
-    [snapToGridEnabled, gridSize]
+    [snapToGridEnabled, gridSize, zoom]
   );
 
   // Use ResizeObserver to track layout changes (size AND position shifts)
@@ -1628,7 +1630,7 @@ export default function Workspace2D({
               }
             }
           }
-        } else if (snapToObjectsEnabled && selectedIds.length >= 1) {
+        } else if (selectedIds.length >= 1) {
           // Compute bounds — for single items use item bounds, for multi-selection use combined bounding box
           let itemBounds: any = null;
 
@@ -1832,71 +1834,64 @@ export default function Workspace2D({
               })
             ];
 
-            // Use our new smart snapping calc.
-            // Cap the snap threshold at 200 world-units to avoid snapping across
-            // the whole canvas when zoomed out.
-            const snapThreshold = Math.min(10 / zoom, 200);
-            const result = calculateSmartSnap(itemBounds, targets as any[], snapThreshold);
+            if (snapToGridEnabled) {
+              const effectiveGrid = getEffectiveGridSize(gridSize, zoom);
+              const proposedLeft = itemBounds.x - itemBounds.width / 2;
+              const proposedTop = itemBounds.y - itemBounds.height / 2;
+              const snappedLeft = Math.round(proposedLeft / effectiveGrid) * effectiveGrid;
+              const snappedTop = Math.round(proposedTop / effectiveGrid) * effectiveGrid;
+              const snappedCenterX = snappedLeft + itemBounds.width / 2;
+              const snappedCenterY = snappedTop + itemBounds.height / 2;
+              const initialCenterX = itemBounds.x - (worldX - dragOrigin.x);
+              const initialCenterY = itemBounds.y - (worldY - dragOrigin.y);
+              finalX = dragOrigin.x + (snappedCenterX - initialCenterX);
+              finalY = dragOrigin.y + (snappedCenterY - initialCenterY);
+              guides = [];
+            } else {
+              const snapThreshold = Math.min(10 / zoom, 200);
+              const result = calculateSmartSnap(itemBounds, targets as any[], snapThreshold);
+              finalX = worldX + result.dx;
+              finalY = worldY + result.dy;
+              guides = result.guides;
 
-            // result.dx/dy are the adjustments to the PROPOSED position (itemBounds)
-            // So final position = itemBounds.x + result.dx
-            // We need to set finalX such that finalX - draggedItemStart.x = itemBounds.x + result.dx - shape.x
-            // finalX = itemBounds.x + result.dx - shape.x + draggedItemStart.x
-            // Substituting itemBounds.x:
-            // finalX = (shape.x + worldX - draggedItemStart.x) + result.dx - shape.x + draggedItemStart.x
-            // finalX = worldX + result.dx
+              const itemHalfW = itemBounds.width / 2;
+              const itemHalfH = itemBounds.height / 2;
+              const itemSnaps = [
+                { x: finalX, y: finalY },
+                { x: finalX - itemHalfW, y: finalY },
+                { x: finalX + itemHalfW, y: finalY },
+                { x: finalX, y: finalY - itemHalfH },
+                { x: finalX, y: finalY + itemHalfH }
+              ];
 
-            finalX = worldX + result.dx;
-            finalY = worldY + result.dy;
-            guides = result.guides;
+              let bestWallSnap: any = null;
+              let minWallDist = 20 / zoom;
 
-            // Prioritize snapping to wall faces/edges while moving
-            // Check multiple potential snap anchors on the moved item (Center + 4 Edges)
-            const itemHalfW = itemBounds.width / 2;
-            const itemHalfH = itemBounds.height / 2;
-            const itemSnaps = [
-              { x: finalX, y: finalY }, // Center
-              { x: finalX - itemHalfW, y: finalY }, // Left edge
-              { x: finalX + itemHalfW, y: finalY }, // Right edge
-              { x: finalX, y: finalY - itemHalfH }, // Top edge
-              { x: finalX, y: finalY + itemHalfH }  // Bottom edge
-            ];
-
-            let bestWallSnap: any = null;
-            let minWallDist = 20 / zoom;
-
-            itemSnaps.forEach(p => {
-              const ws = findWallSnapPoint(p, walls, 20 / zoom);
-              if (ws.snapped) {
-                const dist = Math.hypot(p.x - ws.x, p.y - ws.y);
-                if (dist < minWallDist) {
-                  minWallDist = dist;
-                  bestWallSnap = { ...ws, sourcePt: p };
-                }
-              }
-            });
-
-            if (bestWallSnap) {
-              finalX = finalX + (bestWallSnap.x - bestWallSnap.sourcePt.x);
-              finalY = finalY + (bestWallSnap.y - bestWallSnap.sourcePt.y);
-            }
-
-            // Fallback to grid snap if no object snap was found
-            if (guides.length === 0 && snapToGridEnabled) {
-              const gridSnapped = snapToGridFn({ x: worldX, y: worldY });
-              finalX = gridSnapped.x;
-              finalY = gridSnapped.y;
-            }
-
-            // Marquee Vertex Snapping Integration (skip for multi-selection)
-            if (selectedIds.length === 1) {
-              const marqueeVertices = verticesMap[selectedIds[0]] || [];
-              if (marqueeVertices.length > 0) {
-                  const snapPoint = findSnapPointInShapes({ x: worldX, y: worldY }, nearbyAssets, 20 / zoom, verticesMap);
-                  if (snapPoint) {
-                      finalX = worldX + (snapPoint.x - worldX);
-                      finalY = worldY + (snapPoint.y - worldY);
+              itemSnaps.forEach(p => {
+                const ws = findWallSnapPoint(p, walls, 20 / zoom);
+                if (ws.snapped) {
+                  const dist = Math.hypot(p.x - ws.x, p.y - ws.y);
+                  if (dist < minWallDist) {
+                    minWallDist = dist;
+                    bestWallSnap = { ...ws, sourcePt: p };
                   }
+                }
+              });
+
+              if (bestWallSnap) {
+                finalX = finalX + (bestWallSnap.x - bestWallSnap.sourcePt.x);
+                finalY = finalY + (bestWallSnap.y - bestWallSnap.sourcePt.y);
+              }
+
+              if (selectedIds.length === 1) {
+                const marqueeVertices = verticesMap[selectedIds[0]] || [];
+                if (marqueeVertices.length > 0) {
+                    const snapPoint = findSnapPointInShapes({ x: worldX, y: worldY }, nearbyAssets, 20 / zoom, verticesMap);
+                    if (snapPoint) {
+                        finalX = worldX + (snapPoint.x - worldX);
+                        finalY = worldY + (snapPoint.y - worldY);
+                    }
+                }
               }
             }
           }

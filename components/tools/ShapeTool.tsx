@@ -7,6 +7,7 @@ import { useSceneStore } from '@/store/sceneStore';
 import { useProjectStore, Shape } from '@/store/projectStore';
 import { snapTo90Degrees } from '@/lib/wallGeometry';
 import { findSnapPointInShapes, SnapPoint } from '@/utils/snapToDrawing';
+import { getEffectiveGridSize } from '@/utils/grid';
 import { ASSET_LIBRARY } from '@/lib/assets';
 
 interface ShapeToolProps {
@@ -125,11 +126,11 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         const { snapToObjects, zoom } = useEditorStore.getState();
 
         let snapped = snapToGridEnabled
-            ? { x: Math.round(worldPos.x / gridSize) * gridSize, y: Math.round(worldPos.y / gridSize) * gridSize }
+            ? { x: Math.round(worldPos.x / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom), y: Math.round(worldPos.y / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom) }
             : worldPos;
 
         // Apply Smart Snapping on Click
-        if (snapToObjects) {
+        if (snapToObjects && !snapToGridEnabled) {
             const snapResult = findSnapPointInShapes(worldPos, drawingSnapTargets, 20 / zoom);
             if (snapResult) {
                 snapped = { x: snapResult.x, y: snapResult.y };
@@ -148,12 +149,12 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         const { zoom, snapToObjects } = useEditorStore.getState();
 
         let snapped = snapToGridEnabled
-            ? { x: Math.round(worldPos.x / gridSize) * gridSize, y: Math.round(worldPos.y / gridSize) * gridSize }
+            ? { x: Math.round(worldPos.x / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom), y: Math.round(worldPos.y / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom) }
             : worldPos;
 
         // Enhanced snap-to-objects
         let currentSnapPoint: SnapPoint | null = null;
-        if (snapToObjects) {
+        if (snapToObjects && !snapToGridEnabled) {
             const snapResult = findSnapPointInShapes(worldPos, drawingSnapTargets, 20 / zoom);
             if (snapResult) {
                 snapped = { x: snapResult.x, y: snapResult.y };
@@ -374,7 +375,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
         let snapped = snapToGridEnabled
-            ? { x: Math.round(worldPos.x / gridSize) * gridSize, y: Math.round(worldPos.y / gridSize) * gridSize }
+            ? { x: Math.round(worldPos.x / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom), y: Math.round(worldPos.y / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom) }
             : worldPos;
 
         // Snapping logic (existing)
@@ -458,7 +459,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             const worldPos = screenToWorld(e.clientX, e.clientY);
             // Re-calculate snap
             let snapped = snapToGridEnabled
-                ? { x: Math.round(worldPos.x / gridSize) * gridSize, y: Math.round(worldPos.y / gridSize) * gridSize }
+                ? { x: Math.round(worldPos.x / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom), y: Math.round(worldPos.y / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom) }
                 : worldPos;
 
             // Snap logic again for accuracy... or typically we rely on mousemove's previewPoint?

@@ -7,6 +7,7 @@ import { useProjectStore, WallNode, WallEdge, Wall } from '@/store/projectStore'
 import { findWallIntersection, findWallIntersectionsAlongExtendedSegment, findWallIntersectionsAlongSegment } from '@/utils/wallSplitting';
 
 import { findClosestSnapPointFromList, findSnapPointInShapes, getSnapPoints } from '@/utils/snapToDrawing';
+import { getEffectiveGridSize } from '@/utils/grid';
 import { ASSET_LIBRARY } from '@/lib/assets';
 
 interface WallToolProps {
@@ -255,14 +256,16 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
 
         let snapped = snapToGridEnabled
             ? {
-                x: Math.round(worldPos.x / gridSize) * gridSize,
-                y: Math.round(worldPos.y / gridSize) * gridSize
+                x: Math.round(worldPos.x / getEffectiveGridSize(gridSize, zoom)) * getEffectiveGridSize(gridSize, zoom),
+                y: Math.round(worldPos.y / getEffectiveGridSize(gridSize, zoom)) * getEffectiveGridSize(gridSize, zoom)
             }
             : worldPos;
 
         let snappedXToGuide = false;
         let snappedYToGuide = false;
-        const snapTol = SNAP_PIXELS / zoom;
+
+        if (!snapToGridEnabled) {
+            const snapTol = SNAP_PIXELS / zoom;
         const alignmentReference = worldPos;
         const interestingX: number[] = [];
         const interestingY: number[] = [];
@@ -314,6 +317,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
             if (snapResult) {
                 snapped = { x: snapResult.x, y: snapResult.y };
             }
+        }
         }
 
         let closingLoop = false;

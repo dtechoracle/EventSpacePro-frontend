@@ -54,12 +54,6 @@ export function calculateSmartSnap(
         const oBottom = obj.y + obj.height / 2;
         const oCenterX = obj.x;
         const oCenterY = obj.y;
-        // Quarter points along each axis
-        const oQ1X = oLeft + obj.width * 0.25;  // 25% from left
-        const oQ3X = oLeft + obj.width * 0.75;  // 75% from left
-        const oQ1Y = oTop + obj.height * 0.25;  // 25% from top
-        const oQ3Y = oTop + obj.height * 0.75;  // 75% from top
-
         // --- X AXIS SNAPPING (Vertical Guides) ---
         const checkX = (currentVal: number, targetVal: number, type: string) => {
             const dist = Math.abs(currentVal - targetVal);
@@ -83,16 +77,6 @@ export function calculateSmartSnap(
         checkX(cLeft,    oRight,   'left-right');
         checkX(cRight,   oRight,   'right-right');
         checkX(cRight,   oLeft,    'right-left');
-        checkX(cCenterX, oLeft,    'center-left');
-        checkX(cCenterX, oRight,   'center-right');
-        // Quarter-point guide lines (X axis)
-        checkX(cLeft,    oQ1X, 'left-q1');
-        checkX(cCenterX, oQ1X, 'center-q1');
-        checkX(cRight,   oQ1X, 'right-q1');
-        checkX(cLeft,    oQ3X, 'left-q3');
-        checkX(cCenterX, oQ3X, 'center-q3');
-        checkX(cRight,   oQ3X, 'right-q3');
-
 
         // --- Y AXIS SNAPPING (Horizontal Guides) ---
         const checkY = (currentVal: number, targetVal: number, type: string) => {
@@ -117,15 +101,6 @@ export function calculateSmartSnap(
         checkY(cTop,     oBottom,  'top-bottom');
         checkY(cBottom,  oBottom,  'bottom-bottom');
         checkY(cBottom,  oTop,     'bottom-top');
-        checkY(cCenterY, oTop,     'center-top');
-        checkY(cCenterY, oBottom,  'center-bottom');
-        // Quarter-point guide lines (Y axis)
-        checkY(cTop,     oQ1Y, 'top-q1');
-        checkY(cCenterY, oQ1Y, 'center-q1');
-        checkY(cBottom,  oQ1Y, 'bottom-q1');
-        checkY(cTop,     oQ3Y, 'top-q3');
-        checkY(cCenterY, oQ3Y, 'center-q3');
-        checkY(cBottom,  oQ3Y, 'bottom-q3');
     }
 
     return {

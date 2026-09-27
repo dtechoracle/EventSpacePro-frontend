@@ -4,6 +4,7 @@ import { useSceneStore } from '@/store/sceneStore';
 import { useProjectStore, Dimension } from '@/store/projectStore';
 import { DimensionRenderer } from '../renderers/DimensionRenderer';
 import { findSnapPointInShapes } from '@/utils/snapToDrawing';
+import { getEffectiveGridSize } from '@/utils/grid';
 import { ASSET_LIBRARY } from '@/lib/assets';
 
 interface DimensionToolProps {
@@ -75,8 +76,8 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
         if (!snapToGridEnabled) return { point: pos, elementId: null };
         return {
             point: {
-                x: Math.round(pos.x / gridSize) * gridSize,
-                y: Math.round(pos.y / gridSize) * gridSize,
+                x: Math.round(pos.x / getEffectiveGridSize(gridSize, zoom)) * getEffectiveGridSize(gridSize, zoom),
+                y: Math.round(pos.y / getEffectiveGridSize(gridSize, zoom)) * getEffectiveGridSize(gridSize, zoom),
             },
             elementId: null,
         };

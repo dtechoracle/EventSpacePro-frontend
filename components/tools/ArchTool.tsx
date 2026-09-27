@@ -3,6 +3,7 @@ import { useEditorStore } from '@/store/editorStore';
 import { useSceneStore } from '@/store/sceneStore';
 import { useProjectStore, Shape } from '@/store/projectStore';
 import { findSnapPointInShapes } from '@/utils/snapToDrawing';
+import { getEffectiveGridSize } from '@/utils/grid';
 import { ASSET_LIBRARY } from '@/lib/assets';
 
 interface ArchToolProps {
@@ -54,16 +55,18 @@ export default function ArchTool({ isActive }: ArchToolProps) {
     }), [canvasOffset, zoom, panX, panY]);
 
     const snap = useCallback((pos: { x: number; y: number }) => {
+        if (snapToGridEnabled) {
+            return {
+                x: Math.round(pos.x / getEffectiveGridSize(gridSize, zoom)) * getEffectiveGridSize(gridSize, zoom),
+                y: Math.round(pos.y / getEffectiveGridSize(gridSize, zoom)) * getEffectiveGridSize(gridSize, zoom),
+            };
+        }
         if (snapToObjects) {
             const allElements = [...shapes, ...walls, ...assets];
             const snapResult = findSnapPointInShapes(pos, allElements, 20 / zoom);
             if (snapResult) return { x: snapResult.x, y: snapResult.y };
         }
-        if (!snapToGridEnabled) return pos;
-        return {
-            x: Math.round(pos.x / gridSize) * gridSize,
-            y: Math.round(pos.y / gridSize) * gridSize,
-        };
+        return pos;
     }, [snapToGridEnabled, gridSize, snapToObjects, shapes, walls, assets, zoom]);
 
     // Quadratic bezier path string from start→control→end

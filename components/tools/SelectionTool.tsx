@@ -1,5 +1,6 @@
 import { useSceneStore } from '@/store/sceneStore';
 import { calculateSmartSnap, Bounds } from '@/utils/smartSnapping';
+import { getEffectiveGridSize } from '@/utils/grid';
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { useProjectStore, Shape, Wall, Asset, Dimension, TextAnnotation, LabelArrow } from '@/store/projectStore';
@@ -333,22 +334,34 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                     }),
                 ];
 
-                const snap = calculateSmartSnap(currentBounds, others as any, 10 / zoom);
-                finalDx = dx + snap.dx;
-                finalDy = dy + snap.dy;
-                setSnapGuides(snap.guides);
-                // If smart snap found no guides, fall back to grid snap
-                if (snap.guides.length === 0 && snapToGridEnabled) {
-                    const newX = Math.round((initialState.groupBounds.x + dx) / gridSize) * gridSize;
-                    const newY = Math.round((initialState.groupBounds.y + dy) / gridSize) * gridSize;
+                if (snapToGridEnabled) {
+                    const effectiveGrid = getEffectiveGridSize(gridSize, zoom);
+                    const proposedLeft = (initialState.groupBounds.x - initialState.groupBounds.width / 2) + dx;
+                    const proposedTop = (initialState.groupBounds.y - initialState.groupBounds.height / 2) + dy;
+                    const snappedLeft = Math.round(proposedLeft / effectiveGrid) * effectiveGrid;
+                    const snappedTop = Math.round(proposedTop / effectiveGrid) * effectiveGrid;
+                    const newX = snappedLeft + initialState.groupBounds.width / 2;
+                    const newY = snappedTop + initialState.groupBounds.height / 2;
                     finalDx = newX - initialState.groupBounds.x;
                     finalDy = newY - initialState.groupBounds.y;
+                    setSnapGuides([]);
+                } else {
+                    const snap = calculateSmartSnap(currentBounds, others as any, 10 / zoom);
+                    finalDx = dx + snap.dx;
+                    finalDy = dy + snap.dy;
+                    setSnapGuides(snap.guides);
                 }
             } else if (snapToGridEnabled) {
-                const newX = Math.round((initialState.groupBounds.x + dx) / gridSize) * gridSize;
-                const newY = Math.round((initialState.groupBounds.y + dy) / gridSize) * gridSize;
+                const effectiveGrid = getEffectiveGridSize(gridSize, zoom);
+                const proposedLeft = (initialState.groupBounds.x - initialState.groupBounds.width / 2) + dx;
+                const proposedTop = (initialState.groupBounds.y - initialState.groupBounds.height / 2) + dy;
+                const snappedLeft = Math.round(proposedLeft / effectiveGrid) * effectiveGrid;
+                const snappedTop = Math.round(proposedTop / effectiveGrid) * effectiveGrid;
+                const newX = snappedLeft + initialState.groupBounds.width / 2;
+                const newY = snappedTop + initialState.groupBounds.height / 2;
                 finalDx = newX - initialState.groupBounds.x;
                 finalDy = newY - initialState.groupBounds.y;
+                setSnapGuides([]);
             }
 
             const batchUpdates: any[] = [];
@@ -451,8 +464,9 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
 
         const { snapToGridEnabled: resizeSnapGrid, gridSize: resizeGridSize } = useSceneStore.getState();
         if (resizeSnapGrid) {
-            finalDx = Math.round(dx / resizeGridSize) * resizeGridSize;
-            finalDy = Math.round(dy / resizeGridSize) * resizeGridSize;
+            const effectiveGrid = getEffectiveGridSize(resizeGridSize, zoom);
+            finalDx = Math.round(dx / effectiveGrid) * effectiveGrid;
+            finalDy = Math.round(dy / effectiveGrid) * effectiveGrid;
         }
 
         initialState.items.forEach(item => {
