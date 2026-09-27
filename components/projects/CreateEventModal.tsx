@@ -242,8 +242,7 @@ export default function CreateEventModal({
               rotation: 0,
               zIndex: 1,
               fillColor: "none",
-              strokeColor: "#000000",
-              strokeWidth: 2
+              strokeColor: "#000000"
             }
           ],
           canvas: { width, height, color: '#ffffff' }

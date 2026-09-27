@@ -67,8 +67,9 @@ export default function App({ Component, pageProps }: AppProps) {
         <Toaster
           position="top-center"
           reverseOrder={false}
+          containerStyle={{ top: 12 }}
           toastOptions={{
-            style: { marginTop: '80px' },
+            style: { marginTop: 0 },
           }}
         />
         <Component {...pageProps} />

@@ -1021,6 +1021,9 @@ export default function Workspace2D({
       if (viewportTransformRafRef.current !== null) {
         cancelAnimationFrame(viewportTransformRafRef.current);
       }
+      if (panRafRef.current !== null) {
+        cancelAnimationFrame(panRafRef.current);
+      }
     };
   }, []);
 
@@ -1040,6 +1043,44 @@ export default function Workspace2D({
   }, [setViewportTransform]);
 
   const wallIdSet = useMemo(() => new Set(walls.map((wall) => wall.id)), [walls]);
+
+  // Pan is coalesced to one store write per animation frame, mirroring the
+  // wheel-zoom path below. Without this, panning writes the (persisted)
+  // editorStore on every raw mousemove — the single biggest source of drag
+  // jank on large scenes.
+  const panLastRef = useRef<{ x: number; y: number } | null>(null);
+  const pendingPanRef = useRef({ dx: 0, dy: 0 });
+  const panRafRef = useRef<number | null>(null);
+  const schedulePan = useCallback(() => {
+    if (panRafRef.current !== null) return;
+    panRafRef.current = requestAnimationFrame(() => {
+      panRafRef.current = null;
+      const { dx, dy } = pendingPanRef.current;
+      pendingPanRef.current.dx = 0;
+      pendingPanRef.current.dy = 0;
+      if (dx !== 0 || dy !== 0) panBy(dx, dy);
+    });
+  }, [panBy]);
+
+  const resetPanTracking = useCallback(() => {
+    // Flush any deltas still waiting for the next frame so the final pan
+    // position isn't lost, then cancel the scheduled frame.
+    if (panRafRef.current !== null) {
+      cancelAnimationFrame(panRafRef.current);
+      panRafRef.current = null;
+    }
+    const { dx, dy } = pendingPanRef.current;
+    pendingPanRef.current.dx = 0;
+    pendingPanRef.current.dy = 0;
+    if (dx !== 0 || dy !== 0) panBy(dx, dy);
+    panLastRef.current = null;
+  }, [panBy]);
+
+  // Clear per-gesture pan tracking whenever a pan gesture starts or ends so
+  // the next gesture re-baselines from dragStart instead of a stale pointer.
+  useEffect(() => {
+    if (!isPanning) resetPanTracking();
+  }, [isPanning, resetPanTracking]);
 
   const shouldUseDragPreviewForIds = useCallback((ids: string[]) => {
     // Always use drag preview for any non-empty selection.
@@ -1318,14 +1359,17 @@ export default function Workspace2D({
       if (isPanning && dragStart) {
         const currentX = e.clientX;
         const currentY = e.clientY;
-        const dx = currentX - dragStart.x;
-        const dy = currentY - dragStart.y;
+        const last = panLastRef.current || dragStart;
+        const dx = currentX - last.x;
+        const dy = currentY - last.y;
 
-        // Update dragStart FIRST to prevent delta accumulation/jumping
-        setDragStart({ x: currentX, y: currentY });
-
-        // Apply pan with natural direction
-        panBy(dx, dy);
+        // Track the pointer position in a ref (not state) so panning never
+        // triggers a React re-render, and accumulate deltas until the next
+        // animation frame so we write to the store at most once per frame.
+        panLastRef.current = { x: currentX, y: currentY };
+        pendingPanRef.current.dx += dx;
+        pendingPanRef.current.dy += dy;
+        schedulePan();
         return; // Don't process hover when panning
       }
 
@@ -2029,7 +2073,7 @@ export default function Workspace2D({
         }
       }
     },
-    [activeTool, panX, panY, zoom, isPanning, dragStart, panBy, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, walls, textAnnotations, labelArrows, dimensions, batchUpdateShapes, batchUpdateAssets, batchUpdateWalls, scheduleDragPreview, snapToGridFn, selectionRect, updateCursor, setHoveredId, draggedPoint, screenToWorld, setMouseWorldPos, canvasOffset, snapToObjectsEnabled, snapToGridEnabled, gridSize, updateTextAnnotation, updateLabelArrow, updateDimension, setSnapGuides, visibleRenderables, verticesMap, findTopAssetAtPoint, assetSpatialIndex, placementMode.active, updateShape]
+    [activeTool, panX, panY, zoom, isPanning, dragStart, panBy, schedulePan, isDraggingItem, draggedItemStart, selectedIds, shapes, assets, walls, textAnnotations, labelArrows, dimensions, batchUpdateShapes, batchUpdateAssets, batchUpdateWalls, scheduleDragPreview, snapToGridFn, selectionRect, updateCursor, setHoveredId, draggedPoint, screenToWorld, setMouseWorldPos, canvasOffset, snapToObjectsEnabled, snapToGridEnabled, gridSize, updateTextAnnotation, updateLabelArrow, updateDimension, setSnapGuides, visibleRenderables, verticesMap, findTopAssetAtPoint, assetSpatialIndex, placementMode.active, updateShape]
   );
 
   const handleDoubleClick = useCallback(
@@ -2379,7 +2423,6 @@ export default function Workspace2D({
             const expandedIds = resolveIdsWithGroups(ids);
 
             if ((activeTool as string) === 'trim-to-blend') {
-              setPendingBlend(null);
               const validShapeIds = expandedIds.filter(id => shapes.some(s => s.id === id));
               if (validShapeIds.length === 0) {
                 toast.error("Please select a valid shape.");
@@ -2409,16 +2452,21 @@ export default function Workspace2D({
               setSelectedIds(newSelection);
 
               if (newSelection.length === 1) {
-                  toast("Now select the second object to be trimmed relative to the first.", { icon: '✨', duration: 4000 });
+                setPendingBlend(null);
+                toast("Now select the second object to be trimmed relative to the first.", { icon: '✨', duration: 4000 });
               } else if (newSelection.length === 2) {
                 const shapesToBlend = [
                   shapes.find(s => s.id === newSelection[0]),
                   shapes.find(s => s.id === newSelection[1])
-                ].filter(Boolean) as any[];
+                ].filter(Boolean) as Shape[];
 
                 if (shapesToBlend.length === 2) {
                   setPendingBlend({ shapes: shapesToBlend, clickPoint });
+                } else {
+                  setPendingBlend(null);
                 }
+              } else {
+                setPendingBlend(null);
               }
               return;
             }
@@ -4834,6 +4882,26 @@ export default function Workspace2D({
                     vectorEffect="non-scaling-stroke"
                     pointerEvents="none"
                   />
+                ) : shape.type === 'path' && shape.svgPath ? (
+                  <path
+                    d={shape.svgPath}
+                    fill="rgba(34, 197, 94, 0.1)"
+                    stroke="#22c55e"
+                    strokeWidth={2}
+                    strokeDasharray={`${6 / zoom},${4 / zoom}`}
+                    vectorEffect="non-scaling-stroke"
+                    pointerEvents="none"
+                  />
+                ) : shape.points && shape.points.length >= 3 ? (
+                  <polygon
+                    points={shape.points.map(p => `${p.x},${p.y}`).join(' ')}
+                    fill="rgba(34, 197, 94, 0.1)"
+                    stroke="#22c55e"
+                    strokeWidth={2}
+                    strokeDasharray={`${6 / zoom},${4 / zoom}`}
+                    vectorEffect="non-scaling-stroke"
+                    pointerEvents="none"
+                  />
                 ) : (
                   <rect
                     x={-shape.width / 2}
@@ -4909,7 +4977,9 @@ export default function Workspace2D({
           initial={{ y: 30, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 30, opacity: 0 }}
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl shadow-lg border border-gray-200 z-50"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className="fixed bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl shadow-lg border border-gray-200 z-[10000]"
         >
           <span className="text-xs font-medium text-gray-600">Keep which part?</span>
           <button

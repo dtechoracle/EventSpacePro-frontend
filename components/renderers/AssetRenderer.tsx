@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useSceneStore } from '@/store/sceneStore';
 import { Asset, useProjectStore } from '@/store/projectStore';
+import { useEditorStore } from '@/store/editorStore';
 import { ASSET_LIBRARY } from '@/lib/assets';
 import { PRELOADED_VENUES } from '@/lib/preloadedVenues';
 import { DEFAULT_ASSET_STROKE_WIDTH, canRenderAssetAsImage } from '@/utils/assetRenderMode';
@@ -14,6 +14,7 @@ const svgCache: Record<string, string> = {};
 const pendingSvgCache: Record<string, Promise<string>> = {};
 const processedSvgCache: Record<string, string> = {};
 const svgMetricsCache: Record<string, SvgMetrics> = {};
+const elementMetricsCache = new WeakMap<Element, { cx: number; cy: number; width: number; height: number }>();
 
 type SvgMetrics = {
     artboardWidth: number | null;
@@ -35,12 +36,16 @@ function getSvgMetrics(svgText: string): SvgMetrics {
     let height = heightMatch ? parseFloat(heightMatch[1]) : null;
     let viewBoxX = 0;
     let viewBoxY = 0;
+    let viewBoxW: number | null = null;
+    let viewBoxH: number | null = null;
 
     if (viewBoxMatch) {
         const parts = viewBoxMatch[1].split(/\s+/).map(parseFloat);
         if (parts.length === 4) {
             viewBoxX = parts[0];
             viewBoxY = parts[1];
+            viewBoxW = parts[2];
+            viewBoxH = parts[3];
             width = width || parts[2];
             height = height || parts[3];
         }
@@ -57,6 +62,18 @@ function getSvgMetrics(svgText: string): SvgMetrics {
     };
 
     if (typeof document === 'undefined') {
+        return result;
+    }
+
+    // mm width/height vs user-unit viewBox are different scales. Comparing
+    // getBBox content to the width attr always looked uncropped-full, which
+    // forced shouldCrop and then updateAsset() down to raw user units —
+    // items shrank or vanished. Skip DOM measurement when scales differ.
+    const unitScaleMismatch =
+        !!width &&
+        !!viewBoxW &&
+        Math.abs(width / viewBoxW - 1) > 0.05;
+    if (unitScaleMismatch) {
         return result;
     }
 
@@ -135,13 +152,17 @@ function getSvgMetrics(svgText: string): SvgMetrics {
         const contentWidth = bbox.width;
         const contentHeight = bbox.height;
 
-        const widthRatio = width ? contentWidth / width : null;
-        const heightRatio = height ? contentHeight / height : null;
-        const xOffset = width ? Math.abs(contentX - viewBoxX) / width : 0;
-        const yOffset = height ? Math.abs(contentY - viewBoxY) / height : 0;
+        // Compare content to viewBox (same user units), not width/height attrs
+        // which may be physical mm.
+        const refW = viewBoxW || width;
+        const refH = viewBoxH || height;
+        const widthRatio = refW ? contentWidth / refW : null;
+        const heightRatio = refH ? contentHeight / refH : null;
+        const xOffset = refW ? Math.abs(contentX - viewBoxX) / refW : 0;
+        const yOffset = refH ? Math.abs(contentY - viewBoxY) / refH : 0;
         const shouldCropToContent =
-            !width ||
-            !height ||
+            !refW ||
+            !refH ||
             xOffset > 0.01 ||
             yOffset > 0.01 ||
             (widthRatio !== null && widthRatio < 0.95) ||
@@ -226,25 +247,29 @@ function getPathPoints(d: string): {x: number, y: number}[] {
 }
 
 function getElementMetrics(el: Element) {
+    const cachedMetrics = elementMetricsCache.get(el);
+    if (cachedMetrics) return cachedMetrics;
+
     const tag = el.tagName.toLowerCase();
-    
+    let result: { cx: number; cy: number; width: number; height: number } | null = null;
+
     if (tag === 'circle') {
         const cx = parseFloat(el.getAttribute('cx') || '0');
         const cy = parseFloat(el.getAttribute('cy') || '0');
         const r = parseFloat(el.getAttribute('r') || '0');
-        return { cx, cy, width: r * 2, height: r * 2 };
+        result = { cx, cy, width: r * 2, height: r * 2 };
     } else if (tag === 'ellipse') {
         const cx = parseFloat(el.getAttribute('cx') || '0');
         const cy = parseFloat(el.getAttribute('cy') || '0');
         const rx = parseFloat(el.getAttribute('rx') || '0');
         const ry = parseFloat(el.getAttribute('ry') || '0');
-        return { cx, cy, width: rx * 2, height: ry * 2 };
+        result = { cx, cy, width: rx * 2, height: ry * 2 };
     } else if (tag === 'rect') {
         const x = parseFloat(el.getAttribute('x') || '0');
         const y = parseFloat(el.getAttribute('y') || '0');
         const w = parseFloat(el.getAttribute('width') || '0');
         const h = parseFloat(el.getAttribute('height') || '0');
-        return { cx: x + w / 2, cy: y + h / 2, width: w, height: h };
+        result = { cx: x + w / 2, cy: y + h / 2, width: w, height: h };
     } else if (tag === 'path') {
         const d = el.getAttribute('d') || '';
         const points = getPathPoints(d);
@@ -256,7 +281,7 @@ function getElementMetrics(el: Element) {
                 minY = Math.min(minY, p.y);
                 maxY = Math.max(maxY, p.y);
             });
-            return {
+            result = {
                 cx: (minX + maxX) / 2,
                 cy: (minY + maxY) / 2,
                 width: maxX - minX,
@@ -264,7 +289,9 @@ function getElementMetrics(el: Element) {
             };
         }
     }
-    return null;
+
+    if (result) elementMetricsCache.set(el, result);
+    return result;
 }
 
 function getGDepth(el: Element): number {
@@ -294,7 +321,14 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const [rawSvgContent, setRawSvgContent] = useState<string | null>(null);
     const [rasterImageFailed, setRasterImageFailed] = useState(false);
     const [dwgSvgData, setDwgSvgData] = useState<string | null>(null);
-    const updateAsset = useSceneStore(s => s.updateAsset);
+    // Workspace reads assets from projectStore — dimension repair must write
+    // there too. Writing to sceneStore left project dimensions stale and marked
+    // scene dirty, so autosave could merge stale scene fields over live work.
+    const updateAsset = useProjectStore(s => s.updateAsset);
+
+    // View-only toggle: one stroke width for every venue layer. Exports build
+    // their own SVG (ExportPanel.processVenueSvgForExport) and are unaffected.
+    const equalVenueStrokeWidth = useEditorStore(s => s.equalVenueStrokeWidth);
 
     // Global numbering settings from store
     const globalPos = useProjectStore(s => s.globalTableNumberingPosition);
@@ -328,10 +362,6 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // Only use SVG processing when the asset has custom fill/stroke colors that
     // need CSS variable overrides. Default-styled assets use the fast raster
     // path so their original SVG appearance (fills, strokes) is preserved.
-    // Previously, prefersLiveSvgAtDefaultStroke blocked the fast path for ALL
-    // assets with default strokeWidth, forcing them through SVG processing that
-    // stripped original fills and replaced them with CSS vars resolving to
-    // "transparent" — making assets invisible until save.
     // In the workspace (not preview), an SVG asset without a raster renders as a
     // plain <image> so its internal strokes scale proportionally with the asset
     // size — preloaded venues/marquees keep a visible outline. Only the small
@@ -340,14 +370,20 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // outline legible at tiny zoom).
     const isVenueAsset = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
     const isCad = !!definition?.path && (definition.path.toLowerCase().endsWith('.dwg') || definition.path.toLowerCase().endsWith('.dxf'));
+    const isRasterFile = !!definition?.path && /\.(png|jpe?g|webp|gif|avif)$/i.test(definition.path);
+    // Stroke width control requires the SVG-processing path: the raster fast path
+    // bakes a fixed outline (0.9% of artboard + 5% viewBox padding) and ignores
+    // asset.strokeWidth entirely, making 0.6 look thick+small vs hairline SVG at
+    // 0.5/0.7+. Only previews/thumbnails (isPreview) may use the raster.
     const canUseFastImage =
+        isPreview &&
         !!assetPath &&
         !asset.isExploded &&
         !disableFastImageForAsset &&
         !hasCustomColors &&
         !isVenueAsset &&
         canRenderAssetAsImage(asset, isPreview) &&
-        (isPreview ? !!rasterAssetPath : true);
+        !!rasterAssetPath;
     const fastImageHref = canUseFastImage && rasterAssetPath && !rasterImageFailed ? rasterAssetPath : assetPath;
 
     useEffect(() => {
@@ -357,23 +393,14 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // Fetch SVG content
     useEffect(() => {
         if (!definition?.path) return;
-        if (isCad) {
+        if (isCad || isRasterFile) {
             setRawSvgContent(null);
             return;
         }
 
         const currentW = asset.width;
         const currentH = asset.height;
-        const hasLegacyTwentySeaterSize =
-            asset.type === '20-seater-doughtnut-table' &&
-            currentW !== undefined &&
-            currentH !== undefined &&
-            (
-                (Math.abs(currentW - 23978) < 1 && Math.abs(currentH - 33854) < 1) ||
-                (Math.abs(currentW - 4600) < 1 && Math.abs(currentH - 4600) < 1)
-            );
-
-        const needsDimensionRepair = !currentW || !currentH || hasLegacyTwentySeaterSize;
+        const needsDimensionRepair = !currentW || !currentH;
 
         if (canUseFastImage && !needsDimensionRepair) {
             setRawSvgContent(null);
@@ -381,9 +408,9 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         }
 
         const handleSvgText = (text: string) => {
-            const metrics = getSvgMetrics(text);
+            const metrics = svgMetricsCache[definition.path] || getSvgMetrics(text);
             svgMetricsCache[definition.path] = metrics;
-            setRawSvgContent(text);
+            setRawSvgContent(prev => (prev === text ? prev : text));
 
             const svgWidth = (metrics.shouldCropToContent && metrics.contentWidth) ? metrics.contentWidth : metrics.artboardWidth;
             const svgHeight = (metrics.shouldCropToContent && metrics.contentHeight) ? metrics.contentHeight : metrics.artboardHeight;
@@ -398,23 +425,14 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                     !!metrics.artboardHeight &&
                     Math.abs(currentW - metrics.artboardWidth) / metrics.artboardWidth < 0.05 &&
                     Math.abs(currentH - metrics.artboardHeight) / metrics.artboardHeight < 0.05;
-                const hasLegacyTwentySeaterSize =
-                    asset.type === '20-seater-doughtnut-table' &&
-                    currentW !== undefined &&
-                    currentH !== undefined &&
-                    (
-                        (Math.abs(currentW - 23978) < 1 && Math.abs(currentH - 33854) < 1) ||
-                        (Math.abs(currentW - 4600) < 1 && Math.abs(currentH - 4600) < 1)
-                    );
                 const needsUpdate =
                     !currentW ||
                     !currentH ||
-                    hasLegacyTwentySeaterSize ||
                     (metrics.shouldCropToContent && currentMatchesArtboard);
 
                 if (needsUpdate && !isVenueAsset) {
                     setTimeout(() => {
-                        updateAsset(asset.id, { width: svgWidth, height: svgHeight });
+                        updateAsset(asset.id, { width: svgWidth, height: svgHeight }, true);
                     }, 0);
                 }
             }
@@ -443,7 +461,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         pendingSvgCache[definition.path]
             .then(handleSvgText)
             .catch(err => console.error("Failed to load SVG", err));
-    }, [assetPath, definition?.path, definition?.width, definition?.height, asset.id, asset.width, asset.height, asset.type, canUseFastImage, updateAsset]);
+    }, [assetPath, definition?.path, definition?.width, definition?.height, asset.id, asset.width, asset.height, asset.type, canUseFastImage, isCad, isRasterFile, updateAsset]);
 
     // Fetch CAD file (DWG/DXF) and parse to SVG
     useEffect(() => {
@@ -463,7 +481,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         if (canUseFastImage) return null;
         if (!rawSvgContent || typeof window === 'undefined' || !definition?.path) return null;
 
-        const cacheKey = `${definition.path}_workspace_v50_cleaned`;
+        const cacheKey = `${definition.path}_workspace_v53_${equalVenueStrokeWidth ? 'equal' : 'layered'}_eko_individual_strokes`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
@@ -556,6 +574,9 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             // so circles / auto-fill paths still render as unfilled.
             // Remove inherited fill/stroke blockers from containers only.
             const isVenueAsset = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
+            // False when the "Equal stroke width" view toggle is on: the venue then
+            // follows the exact same uniform-width path as every other asset.
+            const preserveVenueStrokes = isVenueAsset && !equalVenueStrokeWidth;
 
             // For venue assets, remove the baked-in optimize-venues style that forces
             // uniform stroke-width on all elements — we want to preserve per-element strokes.
@@ -569,7 +590,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 container.removeAttribute("stroke");
                 // Preserve per-element stroke-width for venue assets so different
                 // architectural layers (walls, doors, stairs) keep their distinct widths.
-                if (!isVenueAsset) {
+                if (!preserveVenueStrokes) {
                     container.removeAttribute("stroke-width");
                 }
 
@@ -578,7 +599,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                     let cleaned = styleAttr
                         .replace(/fill\s*:[^;]+;?/gi, "")
                         .replace(/stroke\s*:[^;]+;?/gi, "");
-                    if (!isVenueAsset) {
+                    if (!preserveVenueStrokes) {
                         cleaned = cleaned.replace(/stroke-width\s*:[^;]+;?/gi, "");
                     }
                     if (cleaned.trim()) container.setAttribute("style", cleaned);
@@ -592,9 +613,9 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             if (!doc.getElementById(styleId)) {
                 const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
                 styleEl.setAttribute("id", styleId);
-                const isLayoutAsset = definition?.category === "Layout";
-                const vectorEffectRule = isLayoutAsset ? "" : isVenueAsset ? "" : "svg path, svg circle, svg rect, svg line, svg polyline, svg ellipse { vector-effect: non-scaling-stroke !important; }";
-                const strokeWidthInheritRule = isVenueAsset ? "" : "stroke-width: inherit !important;";
+                const isLayoutAsset = definition?.category === "Layout" || definition?.category === "Dance Floor";
+                const vectorEffectRule = isLayoutAsset ? "" : "svg path, svg circle, svg rect, svg line, svg polyline, svg ellipse { vector-effect: non-scaling-stroke !important; }";
+                const strokeWidthInheritRule = preserveVenueStrokes ? "" : "stroke-width: inherit !important;";
                 styleEl.textContent = `${vectorEffectRule} svg .fill-none-el { fill: none !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .fill-inherit-el { fill: inherit !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .auto-fill-el { fill: inherit !important; stroke: none !important; } svg .stroke-top-layer { pointer-events: none; } svg .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } svg .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
                 svg.prepend(styleEl);
             }
@@ -686,6 +707,11 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 const isOpenPath = tag === 'path' && !isClosed;
                 const isVenue = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
                 const isBgFill = isVenue && (tag === 'rect' || tag === 'path') && (() => {
+                    // Only a solid-filled element can be a background; stroke-only line-work never qualifies
+                    const fillAttrVal = (fillAttr || "").trim().toLowerCase();
+                    const styleFillMatch = styleAttr && styleAttr.match(/fill\s*:\s*([^;]+)/i);
+                    const fillVal = (fillAttrVal || (styleFillMatch ? styleFillMatch[1].trim().toLowerCase() : ""));
+                    if (!fillVal || fillVal === "none") return false;
                     const m = getElementMetrics(el);
                     if (!m) return false;
                     const area = m.width * m.height;
@@ -717,7 +743,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                     let cleaned = styleAttr
                         .replace(/fill\s*:[^;]+;?/gi, "")
                         .replace(/stroke\s*:[^;]+;?/gi, "");
-                    if (!isVenueAsset) {
+                    if (!preserveVenueStrokes) {
                         cleaned = cleaned.replace(/stroke-width\s*:[^;]+;?/gi, "");
                     }
                     // For background elements, strip stroke definitions from inline styles so stroke='none' takes effect
@@ -734,7 +760,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 el.removeAttribute("fill");
                 el.removeAttribute("stroke");
                 // Preserve per-element stroke-width for venue assets
-                if (!isVenueAsset) {
+                if (!preserveVenueStrokes) {
                     el.removeAttribute("stroke-width");
                 }
 
@@ -747,8 +773,10 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
 
                 if (shouldBeNone && !hasFillRule && !isAutoFill) {
                     el.classList.add("fill-none-el");
-                    el.setAttribute("stroke", "none");
-                    (el as HTMLElement).style.stroke = "none";
+                    if (!isVenue || isBgFill) {
+                        el.setAttribute("stroke", "none");
+                        (el as HTMLElement).style.stroke = "none";
+                    }
                 } else if (isMultiSeater) {
                     const elMetrics = getElementMetrics(el);
                     let isTable = false;
@@ -780,26 +808,46 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             // Venue SVGs use mm-scale stroke-widths (0.5 for exterior walls, 0.35 for
             // interior walls, 0.25 for doors, etc.) that are too thin at display size.
             // Scale them up by a factor so the relative differences are clearly visible.
+            // Eko Individual Halls ships micro widths (0.001–0.0197); *10 leaves them
+            // sub-pixel under non-scaling-stroke, so that file gets a larger factor.
+            let venueUniformStrokeWidth = NaN;
             if (isVenueAsset) {
-                const STROKE_SCALE = 10;
+                const isEkoIndividualHalls = definition?.path?.toLowerCase().includes('individual halls');
+                const STROKE_SCALE = isEkoIndividualHalls ? 300 : 10;
                 const allEls = doc.querySelectorAll('path, circle, rect, line, polyline, ellipse');
+                let widestSource = NaN;
                 allEls.forEach(el => {
-                    const currentSW = el.getAttribute('stroke-width');
-                    if (currentSW) {
-                        const parsed = parseFloat(currentSW);
-                        if (!isNaN(parsed) && parsed > 0) {
-                            el.setAttribute('stroke-width', String(parsed * STROKE_SCALE));
+                    // Resolve the source width from the presentation attribute or inline style.
+                    let parsed = NaN;
+                    const attrSW = el.getAttribute('stroke-width');
+                    if (attrSW) parsed = parseFloat(attrSW);
+                    if (isNaN(parsed)) {
+                        const styleSW = el.getAttribute('style');
+                        const m = styleSW && styleSW.match(/stroke-width\s*:\s*([\d.]+)/i);
+                        if (m) parsed = parseFloat(m[1]);
+                    }
+                    if (!isNaN(parsed) && parsed > 0) {
+                        if (preserveVenueStrokes) {
+                            // Written as an inline !important declaration: other SVGs on the
+                            // same page (furniture, thumbnails) inject document-wide
+                            // `stroke-width: inherit !important` rules for their fill-none-el
+                            // elements, which would otherwise override these per-path widths
+                            // and flatten the whole venue to a single inherited width.
+                            (el as SVGElement).style.setProperty('stroke-width', String(parsed * STROKE_SCALE), 'important');
+                            el.removeAttribute('stroke-width');
+                        } else if (isNaN(widestSource) || parsed > widestSource) {
+                            widestSource = parsed;
                         }
                     }
-                    const styleSW = el.getAttribute('style');
-                    if (styleSW && /stroke-width\s*:/i.test(styleSW)) {
-                        const newStyle = styleSW.replace(/stroke-width\s*:\s*([\d.]+)/gi, (_m, val) => {
-                            const parsed = parseFloat(val);
-                            return isNaN(parsed) ? _m : `stroke-width: ${parsed * STROKE_SCALE}`;
-                        });
-                        el.setAttribute('style', newStyle);
-                    }
                 });
+                // Equal-stroke view: one width for every layer. Widest source layer
+                // (exterior walls) scaled exactly like the layered view scales it, so
+                // the venue keeps its visual weight - just uniform.
+                if (!preserveVenueStrokes) {
+                    venueUniformStrokeWidth = isNaN(widestSource)
+                        ? (asset.strokeWidth !== undefined ? asset.strokeWidth : DEFAULT_ASSET_STROKE_WIDTH)
+                        : widestSource * STROKE_SCALE;
+                }
             }
             // ────────────────────────────────────────────────────────────────────────
 
@@ -824,6 +872,11 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             if (!isVenueAsset) {
                 svg.removeAttribute("stroke-width");
             }
+            // Equal-stroke view: stamp the single width on the root so every layer
+            // inherits it through the `stroke-width: inherit` rules above.
+            if (isVenueAsset && !preserveVenueStrokes && isFinite(venueUniformStrokeWidth)) {
+                svg.setAttribute("stroke-width", String(venueUniformStrokeWidth));
+            }
             svg.removeAttribute("width");
             svg.removeAttribute("height");
             if (metrics.shouldCropToContent && metrics.contentX !== null && metrics.contentY !== null && metrics.contentWidth && metrics.contentHeight) {
@@ -846,7 +899,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             console.error("Error processing base SVG in AssetRenderer", e);
             return rawSvgContent;
         }
-    }, [rawSvgContent, definition?.path, asset.type, canUseFastImage]);
+    }, [rawSvgContent, definition?.path, asset.type, canUseFastImage, equalVenueStrokeWidth]);
 
     // 2. Fill resolution logic
     const currentFill = useMemo(() => {
@@ -1006,6 +1059,16 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                     {isCad && dwgSvgData ? (
                         <image
                             href={dwgSvgData}
+                            x={-displayWidth / 2}
+                            y={-displayHeight / 2}
+                            width={displayWidth}
+                            height={displayHeight}
+                            preserveAspectRatio="xMidYMid meet"
+                            style={{ outline: 'none', filter: 'none', pointerEvents: 'none' }}
+                        />
+                    ) : isRasterFile && assetPath ? (
+                        <image
+                            href={assetPath}
                             x={-displayWidth / 2}
                             y={-displayHeight / 2}
                             width={displayWidth}

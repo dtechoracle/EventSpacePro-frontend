@@ -104,6 +104,11 @@ const getImage = (path: string, displayWidth: number, displayHeight: number, onR
     if (oldestKey && oldestKey !== cacheKey) imageCache.delete(oldestKey);
   }
 
+  if (!/\.svg($|\?)/i.test(path)) {
+    image.src = encodeURI(path);
+    return image;
+  }
+
   loadSvgText(path)
     .then((svgText) => {
       const normalizedSvg = normalizeSvgForCanvas(svgText, displayWidth, displayHeight);

@@ -151,34 +151,88 @@ function processVenueSvgForExport(svgText: string): string {
     const svgEl = doc.querySelector('svg');
     if (!svgEl) return svgText;
 
-    // 1. Remove hardcoded root width/height attributes (e.g. height="26970.07mm")
-    // so intrinsic aspect ratio is strictly driven by the viewBox coordinates.
-    svgEl.removeAttribute('width');
-    svgEl.removeAttribute('height');
-    svgEl.removeAttribute('xmlns:qs');
-    svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-
-    // 2. Determine viewBox max dimension and expand viewBox padding so outer wall strokes are not clipped at edges
-    const viewBoxAttr = svgEl.getAttribute('viewBox') || '';
-    const parts = viewBoxAttr.trim().split(/[\s,]+/).map(Number);
-    let maxDim = 1000;
-    if (parts.length === 4 && parts[2] && parts[3]) {
-      const [vx, vy, vw, vh] = parts;
-      maxDim = Math.max(Math.abs(vw), Math.abs(vh));
-      const pad = maxDim * 0.03;
-      svgEl.setAttribute('viewBox', `${vx - pad} ${vy - pad} ${vw + pad * 2} ${vh + pad * 2}`);
+    // 1. Ensure a viewBox exists before stripping width/height.
+    // Balmoral/Monarch ship width/height only (no viewBox); removing them
+    // leaves the SVG with no intrinsic size → <img> rasterizes at ~300×150
+    // and the export looks blocky.
+    let viewBoxAttr = svgEl.getAttribute('viewBox') || '';
+    let vbParts = viewBoxAttr.trim().split(/[\s,]+/).map(Number);
+    if (!(vbParts.length === 4 && vbParts.every(n => Number.isFinite(n)) && vbParts[2] && vbParts[3])) {
+      const wNum = parseFloat(svgEl.getAttribute('width') || '');
+      const hNum = parseFloat(svgEl.getAttribute('height') || '');
+      if (Number.isFinite(wNum) && Number.isFinite(hNum) && wNum > 0 && hNum > 0) {
+        vbParts = [0, 0, wNum, hNum];
+        svgEl.setAttribute('viewBox', `0 0 ${wNum} ${hNum}`);
+        viewBoxAttr = `0 0 ${wNum} ${hNum}`;
+      }
     }
 
-    // 3. Define target stroke widths in viewBox units based on CAD layer hierarchy:
-    // Exterior Wall (w=0.5): ~0.0035 * maxDim (~10.5px on 3000px paper canvas)
-    // Interior Wall (w=0.35): ~0.0026 * maxDim (~7.8px on 3000px paper canvas)
-    // Doors / Tent Wall (w=0.2-0.25): ~0.0018 * maxDim (~5.4px on 3000px paper canvas)
-    // Stairs / Details (w=0.05-0.13): ~0.0010 * maxDim (~3.0px on 3000px paper canvas)
-    // Windows / Annotations / Hairlines (w<=0.01): ~0.0006 * maxDim (~1.8px floor minimum on paper canvas)
-    const minStroke = maxDim * 0.0006;
-    const maxWallStroke = maxDim * 0.0035;
+    // 2. Match workspace AssetRenderer: preserveAspectRatio="none" and exact
+    // viewBox (no padding). Padding + "meet" letterboxes the venue inside the
+    // export <image> so it no longer lines up with the workspace footprint.
+    svgEl.removeAttribute('xmlns:qs');
+    svgEl.setAttribute('preserveAspectRatio', 'none');
+
+    let maxDim = 1000;
+    if (vbParts.length === 4 && vbParts[2] && vbParts[3]) {
+      const [vx, vy, vw, vh] = vbParts;
+      maxDim = Math.max(Math.abs(vw), Math.abs(vh));
+      svgEl.setAttribute('viewBox', `${vx} ${vy} ${vw} ${vh}`);
+      svgEl.setAttribute('width', String(Math.round(Math.abs(vw))));
+      svgEl.setAttribute('height', String(Math.round(Math.abs(vh))));
+    } else {
+      svgEl.removeAttribute('width');
+      svgEl.removeAttribute('height');
+    }
+
+    // 3. Stroke scaling depends on viewBox size:
+    // - Paper-sized SVGs (Balmoral/Monarch ~3508): simple *10 matching
+    //   AssetRenderer STROKE_SCALE — this is what looked correct before.
+    // - CAD SVGs (~1e5 viewBox): non-linear maxDim-relative mapping so
+    //   strokes survive rasterization into the display box. *10 alone is
+    //   microscopic at 115000-unit scale.
+    // - Micro-stroke CAD files (Eko Individual Halls: 0.001–0.0197): the default
+    //   0.005–0.5 input window collapses every line onto minStroke. Detect the
+    //   file's real range and interpolate across minStroke→maxWallStroke instead.
+    const isCadScale = maxDim > 10000;
+    const minStroke = isCadScale ? maxDim * 0.0006 : 0.05;
+    const maxWallStroke = isCadScale ? maxDim * 0.0035 : 5;
+
+    // Collect ALL positive widths (not just sub-0.05 ones). The previous
+    // filter only gathered micro values, so any CAD file containing a single
+    // hairline (e.g. Palm Imperial's 0.001 layer alongside 0.13–0.6 walls)
+    // was misdetected as an all-micro file. Its mixed widths then collapsed
+    // onto minStroke (microInMin === microInMax → span 0 → t always 0),
+    // stamping one default width over every path. Only files whose maximum
+    // width is still micro (Eko's 0.001–0.0197) may use that mapping.
+    let microInMin = Infinity;
+    let microInMax = -Infinity;
+    if (isCadScale) {
+      doc.querySelectorAll('path, circle, rect, line, polyline, ellipse').forEach(el => {
+        const attr = parseFloat(el.getAttribute('stroke-width') || '');
+        const styleMatch = (el.getAttribute('style') || '').match(/stroke-width\s*:\s*([\d.]+)/i);
+        const styleVal = styleMatch ? parseFloat(styleMatch[1]) : NaN;
+        const w = !isNaN(attr) && attr > 0 ? attr : styleVal;
+        if (!isNaN(w) && w > 0) {
+          if (w < microInMin) microInMin = w;
+          if (w > microInMax) microInMax = w;
+        }
+      });
+    }
+    const isMicroStrokeFile = isCadScale && microInMax > 0 && microInMax < 0.05;
 
     const getScaledStrokeWidth = (w: number | null | undefined): number => {
+      if (!isCadScale) {
+        if (w === null || w === undefined || isNaN(w) || w <= 0) return minStroke;
+        return w * 10;
+      }
+      if (isMicroStrokeFile) {
+        if (w === null || w === undefined || isNaN(w) || w <= 0) return minStroke;
+        const clamped = Math.min(Math.max(w, microInMin), microInMax);
+        const span = microInMax - microInMin;
+        const t = span > 0 ? (clamped - microInMin) / span : 0;
+        return minStroke + t * (maxWallStroke - minStroke);
+      }
       if (w === null || w === undefined || isNaN(w) || w <= 0.005) {
         return minStroke;
       }
@@ -220,6 +274,20 @@ function processVenueSvgForExport(svgText: string): string {
         } else {
           el.setAttribute('style', `${styleAttr}; stroke-width: ${finalSW}`);
         }
+      }
+
+      // Darken strokes for paper — faint CAD colors vanish on export.
+      // Runs here (not on the snapshot clone) because venue groups are replaced
+      // with <image> elements before the clone darken pass.
+      const strokeAttr = el.getAttribute('stroke');
+      if (strokeAttr && strokeAttr !== 'none' && strokeAttr !== 'transparent') {
+        el.setAttribute('stroke', '#000000');
+      }
+      if (styleAttr && /stroke\s*:/i.test(styleAttr)) {
+        el.setAttribute('style', (el.getAttribute('style') || '').replace(/stroke\s*:\s*[^;]+;?/gi, 'stroke: #000000;'));
+      }
+      if (!el.getAttribute('stroke') && !(el.getAttribute('style') || '').includes('stroke')) {
+        el.setAttribute('stroke', '#000000');
       }
     });
 
@@ -285,6 +353,22 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
       // Prefer the pre-rasterized WebP for non-venue assets.
       // For venue assets, always use processed SVG to ensure crisp, stroke-hierarchical rendering.
       if (!isVenue) {
+        // Native raster assets (Trees, Flowers & Plants): load the PNG directly.
+        if (definition.path && /\.(png|jpe?g|webp|gif|avif)$/i.test(definition.path)) {
+          const rasterImg = new Image();
+          const rasterOk = await new Promise<boolean>((resolve) => {
+            const timer = setTimeout(() => resolve(false), 5000);
+            rasterImg.onload = () => { clearTimeout(timer); resolve(rasterImg.naturalWidth > 0); };
+            rasterImg.onerror = () => { clearTimeout(timer); resolve(false); };
+            rasterImg.src = encodeURI(definition.path);
+          });
+          if (rasterOk) {
+            loadedImages.set(asset.id, rasterImg);
+            if (!typeIconCache[asset.type]) typeIconCache[asset.type] = rasterImg;
+            return;
+          }
+        }
+
         const rasterPath = definition.path ? getRasterAssetPath(definition.path) : null;
         if (rasterPath) {
           const rasterImg = new Image();
@@ -316,7 +400,10 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
       let processedSvg = svg;
       const fill = asset.fillColor || 'transparent';
       const stroke = asset.strokeColor || (isVenue ? 'inherit' : '#000000');
-      const exportStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : (isVenue ? 'inherit' : 0.5);
+      // Venues never take a root stroke-width from the asset — the workspace
+      // omits it so per-path stroke-widths from the source SVG stay authoritative
+      // (asset.strokeWidth is a legacy 0.6 import default, not a venue setting).
+      const exportStrokeWidth = isVenue ? 'inherit' : (asset.strokeWidth !== undefined ? asset.strokeWidth : 0.5);
 
       if (isVenue) {
         processedSvg = processVenueSvgForExport(processedSvg);
@@ -332,6 +419,34 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
         if (isOk) {
           loadedImages.set(asset.id, img);
           return;
+        }
+        URL.revokeObjectURL(url);
+        // DXF/DWG or unparseable venue text — try sibling .svg before giving up.
+        if (/\.(dxf|dwg)$/i.test(definition.path)) {
+          const svgAlt = definition.path.replace(/\.(dxf|dwg)$/i, '.svg');
+          try {
+            const altRes = await fetch(encodeURI(svgAlt));
+            if (altRes.ok) {
+              const altText = await altRes.text();
+              if (/<svg[\s>]/i.test(altText)) {
+                const altProcessed = processVenueSvgForExport(altText);
+                const altBlob = new Blob([altProcessed], { type: 'image/svg+xml' });
+                const altUrl = URL.createObjectURL(altBlob);
+                const altImg = new Image();
+                const altOk = await new Promise<boolean>((resolve) => {
+                  const t = setTimeout(() => resolve(false), 5000);
+                  altImg.onload = () => { clearTimeout(t); resolve(true); };
+                  altImg.onerror = () => { clearTimeout(t); resolve(false); };
+                  altImg.src = altUrl;
+                });
+                if (altOk) {
+                  loadedImages.set(asset.id, altImg);
+                  return;
+                }
+                URL.revokeObjectURL(altUrl);
+              }
+            }
+          } catch { /* fall through */ }
         }
       }
 
@@ -711,27 +826,68 @@ export default function ExportPanel() {
         const cloneVenue = cloneVenueGroups[i];
         if (!cloneVenue || bbox.width === 0 || bbox.height === 0) return;
 
-        // Find which venue asset this is from the asset list
-        const cx = bbox.x + bbox.width / 2;
-        const cy = bbox.y + bbox.height / 2;
+        // Match by the outer asset group's data-id — getBBox() is in the asset's
+        // local space (near 0,0), so comparing it to world a.x/a.y only worked
+        // for venues parked at the origin and left everyone else microscopic.
         let venueDef: any = null;
-        for (const a of assets) {
-          const isVenue = PRELOADED_VENUES.some(v => v.id === a.type || v.name === a.type);
-          if (!isVenue) continue;
-          const w = (a.width || 0) * (a.scale || 1);
-          const h = (a.height || 0) * (a.scale || 1);
-          if (Math.abs(a.x - cx) < w && Math.abs(a.y - cy) < h) {
-            venueDef = PRELOADED_VENUES.find(v => v.id === a.type || v.name === a.type);
-            break;
+        let matched: any = null;
+        const outerG = workspaceVenue.closest('g[data-id]');
+        const assetId = outerG?.getAttribute('data-id');
+        matched = assetId ? assets.find(a => a.id === assetId) : undefined;
+        if (matched && PRELOADED_VENUES.some(v => v.id === matched.type || v.name === matched.type)) {
+          venueDef = PRELOADED_VENUES.find(v => v.id === matched.type || v.name === matched.type);
+        }
+        if (!venueDef?.path) {
+          // Fallback: world-space center of the asset vs venue bounds
+          const cx = bbox.x + bbox.width / 2;
+          const cy = bbox.y + bbox.height / 2;
+          for (const a of assets) {
+            const isVenue = PRELOADED_VENUES.some(v => v.id === a.type || v.name === a.type);
+            if (!isVenue) continue;
+            const w = (a.width || 0) * (a.scale || 1);
+            const h = (a.height || 0) * (a.scale || 1);
+            if (Math.abs(a.x - cx) < w && Math.abs(a.y - cy) < h) {
+              matched = a;
+              venueDef = PRELOADED_VENUES.find(v => v.id === a.type || v.name === a.type);
+              break;
+            }
           }
         }
         if (!venueDef?.path) return;
 
-        let base64 = venueBase64Cache.get(venueDef.path);
+        // Paper-sized venues (Balmoral/Monarch): keep the workspace clone as-is.
+        // Workspace uses non-scaling-stroke so wall lines stay thin and separate.
+        // Replacing with a processed <image> strips that and bakes scaled strokes
+        // into viewBox units — parallel walls merge into one thick bar.
+        const nested = workspaceVenue.querySelector('svg');
+        const vbAttr = nested?.getAttribute('viewBox') || '';
+        const vbNums = vbAttr.trim().split(/[\s,]+/).map(Number);
+        const nestedMaxDim = (vbNums.length === 4 && vbNums[2] && vbNums[3])
+          ? Math.max(Math.abs(vbNums[2]), Math.abs(vbNums[3]))
+          : 0;
+        const widthAttr = parseFloat(nested?.getAttribute('width') || '0');
+        const heightAttr = parseFloat(nested?.getAttribute('height') || '0');
+        const intrinsicMax = Math.max(widthAttr || 0, heightAttr || 0);
+        const isCadVenue = nestedMaxDim > 10000 || intrinsicMax > 10000 || /\.(dxf|dwg)$/i.test(venueDef.path);
+        if (!isCadVenue) return;
+
+        // Prefer a sibling .svg when the registered path is CAD (DXF/DWG) —
+        // processVenueSvgForExport cannot parse binary/text DXF as SVG.
+        let fetchPath: string = venueDef.path;
+        if (/\.(dxf|dwg)$/i.test(fetchPath)) {
+          const svgAlt = fetchPath.replace(/\.(dxf|dwg)$/i, '.svg');
+          try {
+            const head = await fetch(encodeURI(svgAlt), { method: 'HEAD' });
+            if (head.ok) fetchPath = svgAlt;
+          } catch { /* keep original; CAD canvas path handles it */ }
+        }
+
+        let base64 = venueBase64Cache.get(fetchPath);
         if (!base64) {
-          const resp = await fetch(encodeURI(venueDef.path));
+          const resp = await fetch(encodeURI(fetchPath));
           if (!resp.ok) return;
           const svgText = await resp.text();
+          if (!/<svg[\s>]/i.test(svgText)) return;
           const processed = processVenueSvgForExport(svgText);
           const blob = new Blob([processed], { type: 'image/svg+xml' });
           base64 = await new Promise<string>((resolve) => {
@@ -739,17 +895,25 @@ export default function ExportPanel() {
             reader.onloadend = () => resolve(reader.result as string);
             reader.readAsDataURL(blob);
           });
-          venueBase64Cache.set(venueDef.path, base64);
+          venueBase64Cache.set(fetchPath, base64);
         }
 
+        // Size from the asset's display box (matches AssetRenderer:
+        // x=-w/2, y=-h/2, width=w, height=h). getBBox() returns tight geometry
+        // bounds whose aspect can differ from the declared footprint — that was
+        // stretching non-Balmoral venues in the export.
+        const dispW = (matched?.width || venueDef.width || bbox.width);
+        const dispH = (matched?.height || venueDef.height || bbox.height);
         const ns = 'http://www.w3.org/2000/svg';
         const imgEl = document.createElementNS(ns, 'image');
         imgEl.setAttribute('href', base64);
-        imgEl.setAttribute('x', String(bbox.x));
-        imgEl.setAttribute('y', String(bbox.y));
-        imgEl.setAttribute('width', String(bbox.width));
-        imgEl.setAttribute('height', String(bbox.height));
-        imgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        imgEl.setAttribute('x', String(-dispW / 2));
+        imgEl.setAttribute('y', String(-dispH / 2));
+        imgEl.setAttribute('width', String(dispW));
+        imgEl.setAttribute('height', String(dispH));
+        // Workspace venues use preserveAspectRatio="none" — match so the
+        // footprint fills the same box instead of letterboxing.
+        imgEl.setAttribute('preserveAspectRatio', 'none');
         imgEl.setAttribute('data-venue-image', 'true');
         cloneVenue.parentNode?.replaceChild(imgEl, cloneVenue);
       } catch (e) {

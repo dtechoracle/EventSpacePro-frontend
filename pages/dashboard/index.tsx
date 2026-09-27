@@ -16,6 +16,7 @@ import EventCard from "@/components/dashboard/EventCard";
 import { TEMPLATES } from "@/lib/templates";
 import TemplatePreview from "@/components/dashboard/TemplatePreview";
 import { withPreviewableCanvasAssets } from "@/lib/canvasAssets";
+import DashboardTourGuide from "@/components/dashboard/DashboardTourGuide";
 
 interface EventData {
   _id: string;
@@ -137,10 +138,12 @@ const Dashboard = () => {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      <DashboardSidebar />
+      <div data-tour="dash-sidebar" className="flex">
+        <DashboardSidebar />
+      </div>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="bg-white border-b border-gray-200 px-8 py-5">
+        <div className="bg-white border-b border-gray-200 px-8 py-5" data-tour="dash-header">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
@@ -163,6 +166,7 @@ const Dashboard = () => {
                 onClick={() => {
                   setShowCreateEventModal(true);
                 }}
+                data-tour="dash-new-event"
                 className="px-4 py-2 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-500 flex items-center gap-1.5 transition-colors"
               >
                 <FaPlus size={12} />
@@ -195,7 +199,7 @@ const Dashboard = () => {
             />
           )}
 
-          <section className="mb-16">
+          <section className="mb-16" data-tour="dash-recent-events">
             {!isLoading && (filteredProjects.length === 0) && recentEvents.length === 0 && !searchQuery ? (
               <div className="w-full bg-white rounded-xl border border-gray-200 p-8 my-4">
                 <div className="max-w-2xl">
@@ -324,7 +328,7 @@ const Dashboard = () => {
             )}
           </section>
 
-          <section>
+          <section data-tour="dash-templates">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-800">Templates</h2>
               <button
@@ -382,6 +386,7 @@ const Dashboard = () => {
 
 
       </div>
+      <DashboardTourGuide />
     </div>
   );
 };

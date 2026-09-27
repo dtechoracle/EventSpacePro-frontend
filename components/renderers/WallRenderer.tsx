@@ -5,7 +5,7 @@ import { Wall } from '@/store/projectStore';
 import { calculateNodeJunctions, Point } from '@/utils/geometry';
 import { useEditorStore } from '@/store/editorStore';
 import { useProjectStore } from '@/store/projectStore';
-import { calculateAllCutouts, getCutoutsForEdge, isCutoutAsset } from '@/utils/wallCutouts';
+import { calculateAllCutouts, getCutoutsForEdge, getCutoutAssetsCached, getAllCutoutsCached } from '@/utils/wallCutouts';
 import * as polygonClipping from 'polygon-clipping';
 
 interface WallRendererProps {
@@ -313,15 +313,25 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
     const isDragging = useEditorStore(s => s.isDragging);
     const currentDrawingWallId = useEditorStore(s => s.currentDrawingWallId);
     
-    // Keep the store selector cheap; filtering every store update gets expensive with large asset counts.
-    const assets = useProjectStore(s => s.assets);
-    const cutoutAssets = useMemo(() => assets.filter(isCutoutAsset), [assets]);
+    // Only re-render this wall when the cutout subset (doors/windows) or walls
+    // change — dragging chairs must not re-render every wall on the canvas.
+    // getCutoutAssetsCached returns a stable reference when the subset is
+    // unchanged, so this selector is cheap and skips the render entirely.
+    const cutoutAssets = useProjectStore(s => getCutoutAssetsCached(s.assets));
     const allWalls = useProjectStore(s => s.walls);
 
-    // Calculate all cutouts for doors/windows
-    const wallCutouts = useMemo(() => {
-        return calculateAllCutouts(cutoutAssets, allWalls);
-    }, [cutoutAssets, allWalls]);
+    // calculateAllCutouts is O(cutoutAssets × walls); the shared cache computes
+    // it once per (assets, walls) pair instead of once per mounted wall.
+    const wallCutouts = useMemo(
+        () => getAllCutoutsCached(cutoutAssets, allWalls),
+        [cutoutAssets, allWalls]
+    );
+
+    const cutoutAssetTypeById = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const asset of cutoutAssets) map.set(asset.id, asset.type || '');
+        return map;
+    }, [cutoutAssets]);
 
     const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
 
@@ -366,9 +376,16 @@ const WallRenderer = ({ wall, isSelected = false, isHovered = false, isHighlight
 
             let surface = polygonClipping.union(wallPolygons[0], ...wallPolygons.slice(1));
             
-            // Filter cutouts: Doors/gates subtract fully, but windows leave faint lines passing through
-            const doorCutouts = wallCutouts.filter(c => !c.assetId.toLowerCase().includes('window') && !assets.find(a => a.id === c.assetId)?.type.toLowerCase().includes('window'));
-            const windowCutouts = wallCutouts.filter(c => c.assetId.toLowerCase().includes('window') || !!assets.find(a => a.id === c.assetId)?.type.toLowerCase().includes('window'));
+            // Filter cutouts: Doors/gates subtract fully, but windows leave faint lines passing through.
+            // Cutout assets only (not the full scene), so a Map lookup replaces the old
+            // full-asset-array .find() that ran per cutout per wall.
+            const isWindow = (assetId: string) => {
+                if (assetId.toLowerCase().includes('window')) return true;
+                const type = cutoutAssetTypeById.get(assetId);
+                return !!type && type.toLowerCase().includes('window');
+            };
+            const doorCutouts = wallCutouts.filter(c => !isWindow(c.assetId));
+            const windowCutouts = wallCutouts.filter(c => isWindow(c.assetId));
             
             const doorCutoutPolygons = getCutoutPolygonsForGroup(connectedWalls, doorCutouts);
             if (doorCutoutPolygons.length > 0) {

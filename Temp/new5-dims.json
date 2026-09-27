@@ -1,0 +1,47 @@
+[
+  {
+    "name": "8 seater Crescent Table.svg",
+    "W": 3600,
+    "H": 1823,
+    "vb": "261.75 264.68 221.63 112.26",
+    "aspect": "1.9743",
+    "finalAspect": "1.9748",
+    "bytes": 1698354
+  },
+  {
+    "name": "10 seater Crescent Table.svg",
+    "W": 4000,
+    "H": 2135,
+    "vb": "318.81 277.09 129.16 68.94",
+    "aspect": "1.8735",
+    "finalAspect": "1.8735",
+    "bytes": 1676862
+  },
+  {
+    "name": "20 seater Oval Table.svg",
+    "W": 5000,
+    "H": 2670,
+    "vb": "281.86 240.21 195.04 104.15",
+    "aspect": "1.8727",
+    "finalAspect": "1.8727",
+    "bytes": 3391159
+  },
+  {
+    "name": "20 seater Intertwined Crescent Table.svg",
+    "W": 4200,
+    "H": 3294,
+    "vb": "267.67 250.38 116.05 91.01",
+    "aspect": "1.2751",
+    "finalAspect": "1.2750",
+    "bytes": 2919141
+  },
+  {
+    "name": "40 seater Figure 8 Donut Table.svg",
+    "W": 7500,
+    "H": 4003,
+    "vb": "165.12 260.28 227.38 121.37",
+    "aspect": "1.8734",
+    "finalAspect": "1.8736",
+    "bytes": 6223732
+  }
+]

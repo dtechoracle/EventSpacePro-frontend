@@ -137,10 +137,10 @@ type SceneState = {
   // New draft state (nodes-only while drawing)
   wallDraftNodes?: { x: number; y: number }[];
 
-  // Chair placement settings
+  // Chair placement settings (radius kept for backward-compat; UI no longer exposes it)
   chairSettings: {
     numChairs: number;
-    radius: number;
+    radius?: number;
   };
 
   // Copy/paste state
@@ -226,8 +226,8 @@ type SceneState = {
   setWallType: (type: 'partition-75' | 'partition-100' | 'enclosure-150' | 'enclosure-225' | 'thin' | 'standard' | 'thick' | 'extra-thick') => void;
   setWallTool: (tool: 'wall' | 'cross') => void;
   getCurrentWallThickness: () => number;
-  setChairSettings: (settings: { numChairs: number; radius: number }) => void;
-  getChairSettings: () => { numChairs: number; radius: number };
+  setChairSettings: (settings: { numChairs: number; radius?: number }) => void;
+  getChairSettings: () => { numChairs: number; radius?: number };
   setShapeMode: (mode: 'rectangle' | 'ellipse' | 'line' | null) => void;
   startShape: (start: { x: number; y: number }) => void;
   updateShapeTempEnd: (end: { x: number; y: number }) => void;
@@ -313,6 +313,52 @@ type SceneState = {
 };
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
+// Persist storage that DEFERs JSON.stringify + localStorage write.
+// zustand persist calls storage.setItem synchronously after EVERY store set();
+// sceneStore's persisted slice includes canvas + all assets, and setSnapGuides
+// fires on every mousemove — so the default JSON storage stringified the
+// entire event on every mouse move (multi-MB → the big-event lag). This
+// batches the stringify/write to run once ~300ms after activity settles.
+const createDeferredJsonStorage = () => {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let pending: { name: string; value: unknown } | null = null;
+  return {
+    getItem: (name: string) => {
+      if (typeof localStorage === "undefined") return null;
+      try {
+        const raw = localStorage.getItem(name);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    },
+    setItem: (name: string, value: unknown) => {
+      if (typeof localStorage === "undefined") return;
+      pending = { name, value };
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        if (!pending) return;
+        try {
+          localStorage.setItem(pending.name, JSON.stringify(pending.value));
+        } catch {}
+        pending = null;
+        timeout = null;
+      }, 300);
+    },
+    removeItem: (name: string) => {
+      if (typeof localStorage === "undefined") return;
+      try {
+        localStorage.removeItem(name);
+      } catch {}
+    },
+  };
+};
+
+// Identity of the last assets array pushed to scene history — lets
+// saveToHistory skip duplicate saves without stringifying all assets twice.
+let lastHistoryAssetsRef: unknown = null;
+
 export const useSceneStore = create<SceneState>()(
   persist(
     (set, get) => ({
@@ -362,7 +408,7 @@ export const useSceneStore = create<SceneState>()(
       wallDraftNodes: [],
       chairSettings: {
         numChairs: 8,
-        radius: 80
+        radius: 50
       },
       clipboard: null,
       history: [[]],
@@ -830,7 +876,7 @@ export const useSceneStore = create<SceneState>()(
         return wallTypeConfig.thickness;
       },
 
-      setChairSettings: (settings: { numChairs: number; radius: number }) => {
+      setChairSettings: (settings: { numChairs: number; radius?: number }) => {
         set({ chairSettings: settings });
       },
 
@@ -2068,13 +2114,15 @@ export const useSceneStore = create<SceneState>()(
           const MAX_HISTORY_SIZE = 20;
           const newHistory = state.history.slice(0, state.historyIndex + 1);
 
-          // Only save if assets have actually changed
+          // Only save if assets have actually changed. Array identity is a
+          // safe check: zustand replaces the array on every update. The old
+          // check JSON.stringify'd ALL assets twice on every call (~15
+          // mutation paths call this) which froze large events.
           const currentAssets = state.assets;
-          const lastAssets = newHistory[newHistory.length - 1];
-
-          if (lastAssets && JSON.stringify(currentAssets) === JSON.stringify(lastAssets)) {
+          if (currentAssets === lastHistoryAssetsRef) {
             return; // No changes, don't save
           }
+          lastHistoryAssetsRef = currentAssets;
 
           // Add current state
           // Add deep copy of assets to prevent mutation of nested arrays (like wallNodes) from affecting history
@@ -2736,6 +2784,7 @@ export const useSceneStore = create<SceneState>()(
     }),
     {
       name: "scene-storage-v2",
+      storage: createDeferredJsonStorage(),
       partialize: (state) => ({
         // Only persist essential data, not the full history
         canvas: state.canvas,

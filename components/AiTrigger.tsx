@@ -176,6 +176,35 @@ export default function AiTrigger() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesRef = useRef<HTMLDivElement | null>(null);
 
+  const FLOW_STATE_KEY = "esp-ai-flow-state";
+  const flowStateRef = useRef<any>(undefined);
+  const flowStateInitialized = useRef(false);
+  const readFlowState = () => {
+    if (!flowStateInitialized.current) {
+      flowStateInitialized.current = true;
+      if (typeof sessionStorage !== "undefined") {
+        try {
+          const raw = sessionStorage.getItem(FLOW_STATE_KEY);
+          flowStateRef.current = raw ? JSON.parse(raw) : undefined;
+        } catch {
+          flowStateRef.current = undefined;
+        }
+      }
+    }
+    return flowStateRef.current;
+  };
+  const writeFlowState = (next: any) => {
+    flowStateRef.current = next;
+    if (typeof sessionStorage !== "undefined") {
+      try {
+        if (next) sessionStorage.setItem(FLOW_STATE_KEY, JSON.stringify(next));
+        else sessionStorage.removeItem(FLOW_STATE_KEY);
+      } catch {
+        // storage unavailable — keep in-memory only
+      }
+    }
+  };
+
   useEffect(() => {
     const optionPaths = Array.from(
       new Set(
@@ -1018,7 +1047,7 @@ export default function AiTrigger() {
 
     const tableSpecs: TableSpec[] = [];
     const CHAIR_SIZE = 450;
-    const CHAIR_GAP = 600; // required AI spacing between seating elements
+    const CHAIR_GAP = 50; // default gap: chair sits 50mm from table edge
     let fallbackTableNumber = 1;
     const rotateLocalOffset = (dx: number, dy: number, rotationDeg: number) => {
       const rad = (rotationDeg * Math.PI) / 180;
@@ -1056,7 +1085,7 @@ export default function AiTrigger() {
         return {
           x: t * spread,
           y: frontY,
-          rotation: facingSide === 'top' ? 180 : 0,
+          rotation: facingSide === 'top' ? 0 : 180,
         };
       });
     };
@@ -1093,7 +1122,7 @@ export default function AiTrigger() {
         return {
           x: t * spread,
           y,
-          rotation: worldSide === 'top' ? 180 : 0,
+          rotation: worldSide === 'top' ? 0 : 180,
         };
       });
     };
@@ -1114,7 +1143,7 @@ export default function AiTrigger() {
     const assetHasBuiltInSeating = (assetId: string, assetLabel?: string) => {
       const label = `${assetLabel || ''} ${assetId}`.toLowerCase();
       return (
-        /\b\d+\s*seater\b/.test(label) ||
+        label.includes('seater') ||
         label.includes('executive table') ||
         label.includes('curve sofa') ||
         label.includes('serpentine table') ||
@@ -1416,10 +1445,10 @@ export default function AiTrigger() {
                 }
               };
 
-              addRow(topCount, topChairY, 180);
-              addRow(botCount, botChairY, 0);
-              if (leftCount > 0) addCol(leftCount, leftChairX, 90);
-              if (rightCount > 0) addCol(rightCount, rightChairX, 270);
+              addRow(topCount, topChairY, 0);
+              addRow(botCount, botChairY, 180);
+              if (leftCount > 0) addCol(leftCount, leftChairX, 270);
+              if (rightCount > 0) addCol(rightCount, rightChairX, 90);
             }
           }
         }
@@ -1501,7 +1530,7 @@ export default function AiTrigger() {
 
       // If AI explicitly provided X/Y, build the exact circle right away, no grid
       if (typeof spec.centerX === 'number' && typeof spec.centerY === 'number') {
-        const radius = spec.radiusMm || (tw / 2 + CHAIR_GAP + CHAIR_SIZE / 2);
+        const radius = tw / 2 + CHAIR_GAP + CHAIR_SIZE / 2;
         const margin = 200;
         const outR = radius + CHAIR_SIZE / 2; // the entire footprint including chairs
 
@@ -1929,10 +1958,10 @@ export default function AiTrigger() {
               }
             };
 
-            addRow(topCount, topChairY, 180);
-            addRow(botCount, botChairY, 0);
-            if (leftCount > 0) addCol(leftCount, leftChairX, 90);
-            if (rightCount > 0) addCol(rightCount, rightChairX, 270);
+            addRow(topCount, topChairY, 0);
+            addRow(botCount, botChairY, 180);
+            if (leftCount > 0) addCol(leftCount, leftChairX, 270);
+            if (rightCount > 0) addCol(rightCount, rightChairX, 90);
           }
         }
       });
@@ -3586,6 +3615,7 @@ export default function AiTrigger() {
           messages: conversationHistory,
           prompt,
           canvas,
+          state: readFlowState(),
           obstacles: obstacles.length > 0 ? obstacles : undefined,
           selectedAssets: selectedAssets.length > 0 ? selectedAssets.map((a: any) => ({
             id: a.id,
@@ -3598,6 +3628,7 @@ export default function AiTrigger() {
         }),
       });
       const data = await res.json();
+      if (data?.state) writeFlowState(data.state);
 
       // Workspace operations (tool switch, align, distribute, undo/redo, zoom,
       // grid/snap, delete, duplicate, layers, select, export/import) are executed
@@ -3777,6 +3808,7 @@ export default function AiTrigger() {
                         // 1. Clear Chat History
                         setMessages([]);
                         setInputValue("");
+                        writeFlowState(undefined);
 
                         // 2. Clear Scene Store Selection (Legacy Editor)
                         const scene = useSceneStore.getState();

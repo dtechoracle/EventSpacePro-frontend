@@ -1,9 +1,7 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { ASSET_LIBRARY, AssetDef, ASSET_CATEGORIES } from "@/lib/assets";
-import { motion } from "framer-motion";
-import { InlineSvg } from "@/components/tools/InlineSvg";
 import { getRasterAssetPath } from "@/utils/assetRasterPath";
 
 type AssetsSidebarProps = {
@@ -11,33 +9,140 @@ type AssetsSidebarProps = {
   onClose: () => void;
 };
 
+const SEARCH_RESULT_LIMIT = 40;
+
 const formatLabel = (text: string) =>
   text
     .toLowerCase()
     .replace(/\b\w/g, c => c.toUpperCase());
 
+const thumbCache = new Map<string, string | null>();
+const getThumbnailPath = (asset: AssetDef): string | null => {
+  const cached = thumbCache.get(asset.id);
+  if (cached !== undefined) return cached;
+  let result: string | null = null;
+  if (asset.path) {
+    if (asset.category === "Venue") {
+      result = asset.path
+        .replace('/assets/preloaded-venues/', '/assets/thumbnails/preloaded-venues/')
+        .replace(/\.(svg|dwg|dxf)$/i, '.png');
+      if (result) result = `${result}?v=svgo5`;
+    } else if (asset.path.toLowerCase().endsWith(".svg")) {
+      const rasterPath = getRasterAssetPath(asset.path);
+      result = rasterPath ? `${rasterPath}?v=svgo9` : null;
+    } else {
+      result = encodeURI(asset.path);
+    }
+  }
+  thumbCache.set(asset.id, result);
+  return result;
+};
+
+const AssetCard = React.memo(function AssetCard({ asset }: { asset: AssetDef }) {
+  const thumbnailSrc = getThumbnailPath(asset);
+  const [imgFailed, setImgFailed] = useState(false);
+  const useFallback = !thumbnailSrc || imgFailed;
+
+  const handleDragStart = useCallback(
+    (e: React.DragEvent<HTMLButtonElement>) => {
+      e.dataTransfer.setData("assetType", asset.id);
+      const dimMatch = asset.label.match(
+        /(\d+(?:\.\d+)?)\s*(mm|cm|m|ft)?\s*[xX]\s*(\d+(?:\.\d+)?)\s*(mm|cm|m|ft)?/i
+      );
+      if (dimMatch) {
+        const val1 = parseFloat(dimMatch[1]);
+        const unit1 = dimMatch[2]?.toLowerCase() || "mm";
+        const val2 = parseFloat(dimMatch[3]);
+        const unit2 = dimMatch[4]?.toLowerCase() || unit1 || "mm";
+        const toMm = (val: number, unit: string) => {
+          switch (unit) {
+            case "m": return val * 1000;
+            case "cm": return val * 10;
+            case "ft": return val * 304.8;
+            default: return val;
+          }
+        };
+        const width = Math.round(toMm(val1, unit1));
+        const height = Math.round(toMm(val2, unit2));
+        if (width > 10 && height > 10) {
+          e.dataTransfer.setData("assetWidth", width.toString());
+          e.dataTransfer.setData("assetHeight", height.toString());
+        }
+      }
+    },
+    [asset.id, asset.label]
+  );
+
+  const handleClick = useCallback(() => {
+    window.dispatchEvent(
+      new CustomEvent("esp-add-asset", { detail: { assetId: asset.id } })
+    );
+  }, [asset.id]);
+
+  const handleImgError = useCallback(() => {
+    setImgFailed(true);
+  }, []);
+
+  return (
+    <button
+      draggable
+      title={asset.label}
+      onClick={handleClick}
+      onDragStartCapture={handleDragStart}
+      className="w-full h-16 flex flex-col items-center justify-center p-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-400 transition-all text-slate-800 hover:text-slate-950 group shadow-none"
+    >
+      <div className="w-8 h-8 flex items-center justify-center overflow-hidden mb-0.5">
+        {!useFallback ? (
+          <img
+            src={thumbnailSrc!}
+            alt={asset.label}
+            className="w-full h-full object-contain pointer-events-none"
+            loading="lazy"
+            onError={handleImgError}
+          />
+        ) : (
+          <div className="w-7 h-7 flex items-center justify-center rounded bg-slate-100 text-slate-400 text-[10px] font-bold pointer-events-none select-none">
+            {asset.label.slice(0, 2).toUpperCase()}
+          </div>
+        )}
+      </div>
+      <span className="text-[0.6rem] text-center font-medium leading-none truncate w-full px-0.5 text-slate-700 group-hover:text-slate-900 transition-colors">
+        {formatLabel(asset.label)}
+      </span>
+    </button>
+  );
+});
+
 export default function AssetsSidebar({ isOpen, onClose }: AssetsSidebarProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(new Set());
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const toggleCategory = (cat: string) => {
-    setCollapsedCategories(prev => {
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(searchTerm), 150);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchTerm]);
+
+  const toggleCategory = useCallback((cat: string) => {
+    setExpandedCategories(prev => {
       const next = new Set(prev);
       if (next.has(cat)) next.delete(cat);
       else next.add(cat);
       return next;
     });
-  };
+  }, []);
 
-  const normalizedSearch = searchTerm.toLowerCase();
+  const normalizedSearch = debouncedSearch.toLowerCase();
 
   const searchResults = useMemo(() => {
-    if (!searchTerm) return [];
-    return ASSET_LIBRARY.filter(a =>
+    if (!debouncedSearch) return [];
+    const matches = ASSET_LIBRARY.filter(a =>
       `${a.label} ${a.category}`.toLowerCase().includes(normalizedSearch)
     );
-  }, [searchTerm, normalizedSearch]);
+    return matches.slice(0, SEARCH_RESULT_LIMIT);
+  }, [debouncedSearch, normalizedSearch]);
 
   const assetsByCategory = useMemo(() => {
     const map = new Map<string, AssetDef[]>();
@@ -49,88 +154,6 @@ export default function AssetsSidebar({ isOpen, onClose }: AssetsSidebarProps) {
     });
     return map;
   }, []);
-
-  const getThumbnailPath = (asset: AssetDef): string | null => {
-    if (!asset.path) return null;
-    return getRasterAssetPath(asset.path);
-  };
-
-  const renderAsset = (asset: AssetDef) => {
-    const thumbnailSrc = getThumbnailPath(asset);
-    const useFallback = !thumbnailSrc || failedThumbnails.has(asset.id);
-
-    return (
-      <motion.button
-        key={asset.id}
-        draggable
-        title={asset.label}
-        onClick={() => {
-          window.dispatchEvent(new CustomEvent("esp-add-asset", { detail: { assetId: asset.id } }));
-        }}
-        onDragStartCapture={(e: React.DragEvent<HTMLButtonElement>) => {
-          e.dataTransfer.setData("assetType", asset.id);
-
-          const dimMatch = asset.label.match(/(\d+(?:\.\d+)?)\s*(mm|cm|m|ft)?\s*[xX]\s*(\d+(?:\.\d+)?)\s*(mm|cm|m|ft)?/i);
-          if (dimMatch) {
-            const val1 = parseFloat(dimMatch[1]);
-            const unit1 = dimMatch[2]?.toLowerCase() || 'mm';
-            const val2 = parseFloat(dimMatch[3]);
-            const unit2 = dimMatch[4]?.toLowerCase() || unit1 || 'mm';
-
-            const toMm = (val: number, unit: string) => {
-              switch (unit) {
-                case 'm': return val * 1000;
-                case 'cm': return val * 10;
-                case 'ft': return val * 304.8;
-                default: return val;
-              }
-            };
-
-            const width = Math.round(toMm(val1, unit1));
-            const height = Math.round(toMm(val2, unit2));
-
-            if (width > 10 && height > 10) {
-              e.dataTransfer.setData("assetWidth", width.toString());
-              e.dataTransfer.setData("assetHeight", height.toString());
-            }
-          }
-        }}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        className="w-full h-16 flex flex-col items-center justify-center p-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-400 transition-all text-slate-800 hover:text-slate-950 group shadow-none"
-      >
-        <div className="w-8 h-8 flex items-center justify-center overflow-hidden mb-0.5">
-          {!useFallback ? (
-            <img
-              src={thumbnailSrc!}
-              alt={asset.label}
-              className="w-full h-full object-contain pointer-events-none"
-              loading="lazy"
-              onError={() => {
-                setFailedThumbnails(prev => {
-                  const next = new Set(prev);
-                  next.add(asset.id);
-                  return next;
-                });
-              }}
-            />
-          ) : (
-            <InlineSvg
-              key={asset.path}
-              src={asset.path}
-              fill="none"
-              stroke="#1e293b"
-              strokeWidth={0.8}
-              category={asset.category}
-            />
-          )}
-        </div>
-        <span className="text-[0.6rem] text-center font-medium leading-none truncate w-full px-0.5 text-slate-700 group-hover:text-slate-900 transition-colors">
-          {formatLabel(asset.label)}
-        </span>
-      </motion.button>
-    );
-  };
 
   if (!isOpen) return null;
 
@@ -158,24 +181,26 @@ export default function AssetsSidebar({ isOpen, onClose }: AssetsSidebarProps) {
         />
       </div>
 
-      {/* Content - Scrollable Sections */}
+      {/* Content */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-4">
-        {searchTerm ? (
+        {debouncedSearch ? (
           <div>
             <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-              Search Results ({searchResults.length})
+              Search Results
             </h3>
             {searchResults.length === 0 ? (
               <p className="text-[11px] text-slate-400 italic">No matching assets found.</p>
             ) : (
               <div className="grid grid-cols-3 gap-1.5">
-                {searchResults.map(renderAsset)}
+                {searchResults.map(a => (
+                  <AssetCard key={a.id} asset={a} />
+                ))}
               </div>
             )}
           </div>
         ) : (
           Array.from(assetsByCategory.entries()).map(([category, assets]) => {
-            const isCollapsed = collapsedCategories.has(category);
+            const isExpanded = expandedCategories.has(category);
             return (
               <section key={category} className="space-y-1.5">
                 <button
@@ -184,7 +209,7 @@ export default function AssetsSidebar({ isOpen, onClose }: AssetsSidebarProps) {
                 >
                   <div className="flex items-center gap-1">
                     <span className="text-[10px] text-slate-400 transition-transform duration-150">
-                      {isCollapsed ? '▶' : '▼'}
+                      {isExpanded ? '▼' : '▶'}
                     </span>
                     <h3 className="text-[11px] font-bold text-slate-700 tracking-wide">
                       {formatLabel(category)}
@@ -194,9 +219,11 @@ export default function AssetsSidebar({ isOpen, onClose }: AssetsSidebarProps) {
                     {assets.length} items
                   </span>
                 </button>
-                {!isCollapsed && (
+                {isExpanded && (
                   <div className="grid grid-cols-3 gap-1.5 pt-0.5">
-                    {assets.map(renderAsset)}
+                    {assets.map(a => (
+                      <AssetCard key={a.id} asset={a} />
+                    ))}
                   </div>
                 )}
               </section>

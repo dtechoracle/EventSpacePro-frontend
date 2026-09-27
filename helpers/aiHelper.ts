@@ -376,9 +376,9 @@ export const convertPlanToCanvasData = (plan: any, canvasWidth = 10000, canvasHe
             }
 
             const count = spec.count || 1;
-            const radius = spec.radiusMm || 1000;
-            const tableSize = spec.tableSizePx || (radius * 0.8); // heuristic
+            const tableSize = spec.tableSizePx || 1000;
             const chairSize = spec.chairSizePx || 500;
+            const radius = tableSize / 2 + 50 + chairSize / 2;
 
             // Table
             if (spec.tableAsset) {
@@ -396,24 +396,28 @@ export const convertPlanToCanvasData = (plan: any, canvasWidth = 10000, canvasHe
                 });
             }
 
-            // Chairs
-            for (let i = 0; i < count; i++) {
-                const angle = (i / count) * Math.PI * 2;
-                const x = cx + Math.cos(angle) * radius;
-                const y = cy + Math.sin(angle) * radius;
+            // Chairs — skip if the table already has built-in seating (seater tables)
+            const tableAssetId = String(spec.tableAsset || '').toLowerCase();
+            const tableHasBuiltInSeating = tableAssetId.includes('seater');
+            if (!tableHasBuiltInSeating) {
+                for (let i = 0; i < count; i++) {
+                    const angle = (i / count) * Math.PI * 2;
+                    const x = cx + Math.cos(angle) * radius;
+                    const y = cy + Math.sin(angle) * radius;
 
-                addAsset({
-                    id: `chair-grp-${idx}-${i}`,
-                    type: spec.chairAsset || "normal-chair",
-                    x,
-                    y,
-                    width: chairSize,
-                    height: chairSize,
-                    rotation: (angle * 180 / Math.PI) + 90,
-                    scale: 1,
-                    zIndex: 1,
-                    backgroundColor: "transparent"
-                });
+                    addAsset({
+                        id: `chair-grp-${idx}-${i}`,
+                        type: spec.chairAsset || "normal-chair",
+                        x,
+                        y,
+                        width: chairSize,
+                        height: chairSize,
+                        rotation: (angle * 180 / Math.PI) + 90,
+                        scale: 1,
+                        zIndex: 1,
+                        backgroundColor: "transparent"
+                    });
+                }
             }
         });
     }

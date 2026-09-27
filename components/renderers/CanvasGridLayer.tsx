@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from 'react';
+import { getGridStepMultiplier } from '@/utils/grid';
 
 interface CanvasGridLayerProps {
   show: boolean;
@@ -71,17 +72,7 @@ export default function CanvasGridLayer({
       if (!show || gridSize <= 0 || zoom <= 0) return;
 
       // Calculate adaptive step multiplier so minor grid lines never collapse below 25px spacing on screen
-      let stepMultiplier = 1;
-      const minPixelSpacing = 25;
-      const multipliers = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
-      for (const mult of multipliers) {
-        if (gridSize * zoom * mult >= minPixelSpacing) {
-          stepMultiplier = mult;
-          break;
-        }
-        stepMultiplier = mult;
-      }
-
+      const stepMultiplier = getGridStepMultiplier(gridSize, zoom);
       const worldStep = gridSize * stepMultiplier;
       let minorStep = worldStep * zoom;
 
@@ -119,7 +110,7 @@ export default function CanvasGridLayer({
         ctx.stroke();
       }
 
-      const label = `Grid: ${formatGridSize(gridSize, unitSystem)}${stepMultiplier > 1 ? ` (${stepMultiplier}x)` : ''}`;
+      const label = `Grid: ${formatGridSize(worldStep, unitSystem)}`;
       ctx.font = '600 12px Inter, system-ui, sans-serif';
       const labelWidth = Math.ceil(ctx.measureText(label).width) + 16;
       ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';

@@ -1,0 +1,11 @@
+const fs = require('fs');
+const t = fs.readFileSync('public/assets/modal/Furniture/Sofa set with coffe table 01.svg', 'utf8');
+console.log('root:', (t.match(/<svg[^>]*>/i) || [''])[0]);
+const paths = t.match(/<path\b[^>]*>/gi) || [];
+console.log('path count', paths.length);
+paths.forEach((p, i) => console.log(i, p.slice(0, 300)));
+const fills = [...t.matchAll(/\sfill="([^"]*)"/gi)].map(m => m[1]);
+const strokes = [...t.matchAll(/\sstroke="([^"]*)"/gi)].map(m => m[1]);
+console.log('fills', fills);
+console.log('strokes', strokes);
+console.log('fill-rule', (t.match(/fill-rule/gi) || []).length);

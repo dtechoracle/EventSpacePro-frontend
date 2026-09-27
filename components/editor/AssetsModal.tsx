@@ -8,9 +8,9 @@ import { InlineSvg } from "@/components/tools/InlineSvg"
 import { getRasterAssetPath } from "@/utils/assetRasterPath"
 
 function deriveVenuePngPath(assetPath: string): string {
-  return assetPath
+  return `${assetPath
     .replace('/assets/preloaded-venues/', '/assets/thumbnails/preloaded-venues/')
-    .replace(/\.(svg|dwg|dxf)$/i, '.png');
+    .replace(/\.(svg|dwg|dxf)$/i, '.png')}?v=svgo5`;
 }
 
 type AssetsModalProps = {
@@ -54,7 +54,11 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
     if (asset.category === "Venue") {
       return deriveVenuePngPath(asset.path);
     }
-    return getRasterAssetPath(asset.path);
+    if (!asset.path.toLowerCase().endsWith(".svg")) {
+      return encodeURI(asset.path);
+    }
+    const rasterPath = getRasterAssetPath(asset.path);
+    return rasterPath ? `${rasterPath}?v=svgo8` : null;
   };
 
   const renderAsset = (asset: AssetDef) => {
@@ -118,7 +122,7 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
                 });
               }}
             />
-          ) : (
+          ) : asset.path && asset.path.toLowerCase().endsWith(".svg") ? (
             <InlineSvg
               key={asset.path}
               src={asset.path}
@@ -127,6 +131,10 @@ export default function AssetsModal({ isOpen, onClose }: AssetsModalProps) {
               strokeWidth={0.8}
               category={asset.category}
             />
+          ) : (
+            <div className="w-12 h-12 flex items-center justify-center rounded bg-slate-100 text-slate-400 text-xs font-bold">
+              {asset.label.slice(0, 2).toUpperCase()}
+            </div>
           )}
         </div>
         <span className="text-[0.6rem] text-center font-medium leading-[1.1] truncate w-full px-1 opacity-70 group-hover:opacity-100 transition-opacity">

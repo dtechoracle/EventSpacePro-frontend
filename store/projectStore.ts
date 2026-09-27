@@ -5,6 +5,7 @@ import { findContainingObjects, findNearestObject, getAnchorsForObject, AnchorTy
 import { apiRequest } from "@/helpers/Config";
 import { isCollabAuthoritative } from "@/lib/collabAuthority";
 import { isStandaloneSlug } from "@/lib/standaloneEvent";
+import { PRELOADED_VENUES } from "@/lib/preloadedVenues";
 import {
   canvasDataFromCollaborationAssets,
   isCollaborationCanvasShape,
@@ -361,6 +362,7 @@ export type ProjectState = {
     projectId: string | null;
     projectName: string;
     setProjectName: (name: string) => void;
+    setProjectId: (id: string | null) => void;
     setEventName?: (name: string) => void; // Added for flexibility
 
     // Canvas
@@ -671,6 +673,57 @@ const getBlendedWallGroupIds = (walls: Wall[], seedIds: string[]) => {
     }
 
     return visited;
+};
+
+// Deep clone for history snapshots. structuredClone is native and several
+// times faster than a JSON round-trip; JSON kept as fallback for any
+// non-cloneable values (it silently drops them, matching old behavior).
+const fastClone = <T>(value: T): T => {
+    try {
+        return structuredClone(value);
+    } catch {
+        return JSON.parse(JSON.stringify(value));
+    }
+};
+
+// History snapshots used to deep-clone the ENTIRE scene synchronously inside
+// saveToHistory() — which every mutation calls — so a heavy event paid a
+// multi-hundred-ms structuredClone on drag start, on every property edit, etc.
+// Store updates are immutable (map/filter/spread), so capturing the current
+// array references is O(1) and already yields the correct pre-update state.
+// The deep clone is then deferred to idle time (coalesced into one batch)
+// purely to freeze each snapshot against any future in-place mutation.
+const materializeSnapshot = (snap: ProjectSnapshot) => {
+    const cloned = fastClone(snap);
+    // Patch the entry in place (by identity) only if it is still parked in
+    // history; undo/redo may already have consumed or discarded it.
+    const state = useProjectStore.getState();
+    const pastIdx = state.history.past.indexOf(snap);
+    const futureIdx = state.history.future.indexOf(snap);
+    if (pastIdx === -1 && futureIdx === -1) return;
+    const nextPast = pastIdx === -1 ? state.history.past : state.history.past.slice();
+    const nextFuture = futureIdx === -1 ? state.history.future : state.history.future.slice();
+    if (pastIdx !== -1) nextPast[pastIdx] = cloned;
+    if (futureIdx !== -1) nextFuture[futureIdx] = cloned;
+    // Only touch history — not part of the persisted slice, no asset/wall/shape
+    // reference changes, so neither collaborators nor autosave react to it.
+    useProjectStore.setState({ history: { past: nextPast, future: nextFuture } });
+};
+
+const pendingSnapshots = new Set<ProjectSnapshot>();
+let snapshotFlushScheduled = false;
+const flushSnapshotClones = () => {
+    snapshotFlushScheduled = false;
+    const batch = [...pendingSnapshots];
+    pendingSnapshots.clear();
+    for (const snap of batch) materializeSnapshot(snap);
+};
+const scheduleSnapshotMaterialize = (snap: ProjectSnapshot) => {
+    pendingSnapshots.add(snap);
+    if (snapshotFlushScheduled) return;
+    snapshotFlushScheduled = true;
+    if (typeof requestIdleCallback !== 'undefined') requestIdleCallback(flushSnapshotClones, { timeout: 1000 });
+    else setTimeout(flushSnapshotClones, 250);
 };
 
 const createDebouncedStorage = () => {
@@ -2065,10 +2118,13 @@ export const useProjectStore = create<ProjectState>()(
             // Asset methods
             addAsset: (asset: Asset, skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
-                // Apply default strokeWidth of 2 if not already set
+                // Default stroke width of 0.6 — but never stamp it on preloaded
+                // venues: their SVGs carry per-path stroke-widths (walls 0.6,
+                // doors 0.25, …) and a baked default overrides them downstream.
+                const isVenueType = PRELOADED_VENUES.some(v => v.id === asset.type || v.name === asset.type);
                 const assetWithDefaults = {
                     ...asset,
-                    strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : 0.6
+                    strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : (isVenueType ? undefined : 0.6)
                 };
                 set((state) => ({
                     assets: [...state.assets, assetWithDefaults],
@@ -2078,10 +2134,13 @@ export const useProjectStore = create<ProjectState>()(
 
             addAssetBatch: (newAssets: Asset[], skipHistory = false) => {
                 if (!skipHistory) get().saveToHistory();
-                const assetsWithDefaults = newAssets.map(asset => ({
-                    ...asset,
-                    strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : 0.6
-                }));
+                const assetsWithDefaults = newAssets.map(asset => {
+                    const isVenueType = PRELOADED_VENUES.some(v => v.id === asset.type || v.name === asset.type);
+                    return {
+                        ...asset,
+                        strokeWidth: asset.strokeWidth !== undefined ? asset.strokeWidth : (isVenueType ? undefined : 0.6)
+                    };
+                });
                 set((state) => ({
                     assets: [...state.assets, ...assetsWithDefaults],
                     hasUnsavedChanges: !skipHistory || state.hasUnsavedChanges,
@@ -2196,21 +2255,23 @@ export const useProjectStore = create<ProjectState>()(
                 const previous = history.past[history.past.length - 1];
                 const newPast = history.past.slice(0, history.past.length - 1);
 
-                // Create a snapshot of CURRENT state before rolling back
+                // Snapshot of CURRENT state before rolling back — reference
+                // capture, cloned at idle (see scheduleSnapshotMaterialize).
                 const currentSnapshot: ProjectSnapshot = {
-                    walls: JSON.parse(JSON.stringify(state.walls)),
-                    wallSegments: JSON.parse(JSON.stringify(state.wallSegments)),
-                    shapes: JSON.parse(JSON.stringify(state.shapes)),
-                    assets: JSON.parse(JSON.stringify(state.assets)),
-                    textAnnotations: JSON.parse(JSON.stringify(state.textAnnotations)),
-                    labelArrows: JSON.parse(JSON.stringify(state.labelArrows)),
-                    dimensions: JSON.parse(JSON.stringify(state.dimensions)),
-                    groups: JSON.parse(JSON.stringify(state.groups)),
-                    layers: JSON.parse(JSON.stringify(state.layers)),
+                    walls: state.walls,
+                    wallSegments: state.wallSegments,
+                    shapes: state.shapes,
+                    assets: state.assets,
+                    textAnnotations: state.textAnnotations,
+                    labelArrows: state.labelArrows,
+                    dimensions: state.dimensions,
+                    groups: state.groups,
+                    layers: state.layers,
                     activeLayerId: state.activeLayerId,
-                    comments: JSON.parse(JSON.stringify(state.comments)),
-                    canvas: JSON.parse(JSON.stringify(state.canvas)),
+                    comments: state.comments,
+                    canvas: state.canvas,
                 };
+                scheduleSnapshotMaterialize(currentSnapshot);
 
                 set({
                     walls: previous.walls || [],
@@ -2246,21 +2307,23 @@ export const useProjectStore = create<ProjectState>()(
                 const next = history.future[0];
                 const newFuture = history.future.slice(1);
 
-                // Create a snapshot of CURRENT state before rolling forward
+                // Snapshot of CURRENT state before rolling forward — reference
+                // capture, cloned at idle (see scheduleSnapshotMaterialize).
                 const currentSnapshot: ProjectSnapshot = {
-                    walls: JSON.parse(JSON.stringify(state.walls)),
-                    wallSegments: JSON.parse(JSON.stringify(state.wallSegments)),
-                    shapes: JSON.parse(JSON.stringify(state.shapes)),
-                    assets: JSON.parse(JSON.stringify(state.assets)),
-                    textAnnotations: JSON.parse(JSON.stringify(state.textAnnotations)),
-                    labelArrows: JSON.parse(JSON.stringify(state.labelArrows)),
-                    dimensions: JSON.parse(JSON.stringify(state.dimensions)),
-                    groups: JSON.parse(JSON.stringify(state.groups)),
-                    layers: JSON.parse(JSON.stringify(state.layers)),
+                    walls: state.walls,
+                    wallSegments: state.wallSegments,
+                    shapes: state.shapes,
+                    assets: state.assets,
+                    textAnnotations: state.textAnnotations,
+                    labelArrows: state.labelArrows,
+                    dimensions: state.dimensions,
+                    groups: state.groups,
+                    layers: state.layers,
                     activeLayerId: state.activeLayerId,
-                    comments: JSON.parse(JSON.stringify(state.comments)),
-                    canvas: JSON.parse(JSON.stringify(state.canvas)),
+                    comments: state.comments,
+                    canvas: state.canvas,
                 };
+                scheduleSnapshotMaterialize(currentSnapshot);
 
                 set({
                     walls: next.walls || [],
@@ -2285,19 +2348,21 @@ export const useProjectStore = create<ProjectState>()(
 
             saveToHistory: () => {
                 const { walls, wallSegments, shapes, assets, textAnnotations, labelArrows, dimensions, groups, layers, activeLayerId, comments, canvas, history } = get();
+                // O(1) reference capture — see scheduleSnapshotMaterialize. The
+                // deep clone happens at idle instead of blocking this call.
                 const snapshot: ProjectSnapshot = {
-                    walls: JSON.parse(JSON.stringify(walls)),
-                    wallSegments: JSON.parse(JSON.stringify(wallSegments)),
-                    shapes: JSON.parse(JSON.stringify(shapes)),
-                    assets: JSON.parse(JSON.stringify(assets)),
-                    textAnnotations: JSON.parse(JSON.stringify(textAnnotations)),
-                    labelArrows: JSON.parse(JSON.stringify(labelArrows)),
-                    dimensions: JSON.parse(JSON.stringify(dimensions)),
-                    groups: JSON.parse(JSON.stringify(groups)),
-                    layers: JSON.parse(JSON.stringify(layers)),
-                    activeLayerId: activeLayerId,
-                    comments: JSON.parse(JSON.stringify(comments)),
-                    canvas: JSON.parse(JSON.stringify(canvas)),
+                    walls,
+                    wallSegments,
+                    shapes,
+                    assets,
+                    textAnnotations,
+                    labelArrows,
+                    dimensions,
+                    groups,
+                    layers,
+                    activeLayerId,
+                    comments,
+                    canvas,
                 };
                 const newPast = [...history.past, snapshot].slice(-50);
                 set({
@@ -2306,6 +2371,7 @@ export const useProjectStore = create<ProjectState>()(
                         future: [],
                     },
                 });
+                scheduleSnapshotMaterialize(snapshot);
             },
 
             clearHistory: () => {

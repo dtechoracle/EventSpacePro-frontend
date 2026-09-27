@@ -1,6 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getCompactAssetList, findAssetByName, searchAssetsByTags } from '@/lib/aiAssetLibrary';
 import { WALL_TYPES, findWallType, TOOLBAR_OPERATIONS, LAYOUT_OPERATIONS, detectWorkspaceOperation, getOperationsContext } from '@/lib/aiOperations';
+import type { FlowState } from '@/lib/aiFlow/types';
+import { emptyState, mergeSlots, normalizeFlowState, deriveStateFromHistory, computePhase, recordQuestion } from '@/lib/aiFlow/state';
+import { getMissingSlots, extractTurn, buildPendingQuestion } from '@/lib/aiFlow/questions';
+import { detectLocalIntent } from '@/lib/aiFlow/intent';
+import { getRulesContext } from '@/lib/aiFlow/rules';
 
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
 
@@ -22,12 +27,13 @@ type SelectedAsset = {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
-    const { prompt, messages, canvas, selectedAssets, obstacles } = (req.body || {}) as {
+    const { prompt, messages, canvas, selectedAssets, obstacles, state: inboundState } = (req.body || {}) as {
       prompt?: string;
       messages?: ChatMessage[];
       canvas?: Canvas;
       selectedAssets?: SelectedAsset[];
       obstacles?: SelectedAsset[];
+      state?: unknown;
     };
 
     // ─── Build asset list ──────────────────────────────────────────────────────
@@ -220,10 +226,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         null
       );
     })();
+    const stripFlowStateKey = (content: string): string => {
+      if (typeof content !== 'string') return content;
+      const trimmed = content.trim();
+      if (!trimmed.startsWith('{')) return content;
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'state' in parsed) {
+          delete parsed.state;
+          return JSON.stringify(parsed);
+        }
+      } catch {
+        // not JSON — pass through
+      }
+      return content;
+    };
     const conversationHistory = Array.isArray(messages)
       ? messages
         .filter((m) => m.role === 'user' || m.role === 'assistant')
-        .map((m) => ({ role: m.role, content: m.content }))
+        .map((m) => ({ role: m.role, content: stripFlowStateKey(m.content) }))
       : [];
     const userHistory = conversationHistory.filter((m) => m.role === 'user');
     const assistantHistory = conversationHistory.filter((m) => m.role === 'assistant');
@@ -231,6 +252,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const userHistoryText = `${userHistory.map((m) => m.content || '').join('\n')}\n${commandText || ''}`;
     const lowerHistoryText = combinedHistoryText.toLowerCase();
     const lowerUserHistoryText = userHistoryText.toLowerCase();
+
+    let flowState: FlowState = (() => {
+      const derived = deriveStateFromHistory(conversationHistory);
+      const inbound = normalizeFlowState(inboundState);
+      return mergeSlots(derived, inbound);
+    })();
     const parseDimensionPair = (text: string) => {
       const raw = String(text || '');
       const patterns = [
@@ -1050,7 +1077,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const selectedStagePlacement = stagePlacementFromCurrentInput || stagePlacementFromHistory || stagePlacementFromBriefText;
     const tableNeedsLooseChairs = (tableName: string) => {
       const lower = String(tableName || '').toLowerCase();
-      return !/\b\d+\s*seater\b/i.test(lower);
+      return !lower.includes('seater');
     };
     const getSuggestedChairCountForTable = (tableName: string) => {
       const lower = String(tableName || '').toLowerCase();
@@ -1829,38 +1856,58 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         followUp: 'I’m with you. What would you like to set up next: the space, the guest count, the furniture, or the extras?',
       };
     };
-    const isNewLayoutIntent =
-      normalizedCommand === 'i want to create a new layout' ||
-      normalizedCommand === 'create a new layout' ||
-      normalizedCommand === 'new layout' ||
-      normalizedCommand === 'start a new layout' ||
-      normalizedCommand === 'create layout' ||
-      normalizedCommand === 'start a plan' ||
-      normalizedCommand === 'create a space' ||
-      normalizedCommand === 'design an event';
+    const buildFlowState = (): Partial<FlowState> => {
+      const patch: Partial<FlowState> = {};
+      if (selectedSpaceChoice) patch.spaceType = selectedSpaceChoice;
+      if (selectedMarqueeForFlow) patch.marqueeAsset = selectedMarqueeForFlow.name;
+      if (activeSpaceWidthMm && activeSpaceHeightMm) {
+        patch.widthMm = activeSpaceWidthMm;
+        patch.heightMm = activeSpaceHeightMm;
+      }
+      if (hasLayoutBrief && layoutBriefText) patch.layoutSummary = layoutBriefText;
+      if (chairOnlySeatingSelectedFromHistory || userChoseSingleSeater) patch.seatingMode = 'chairs';
+      else if (userChoseTableChairs) patch.seatingMode = 'tables';
+      if (effectiveGuestCount) patch.guestCount = effectiveGuestCount;
+      if (selectedTableForFlow) patch.tableType = selectedTableForFlow.name;
+      if (selectedChairForFlow) patch.chairType = selectedChairForFlow.name;
+      if (chairsPerTableForFlow) patch.chairsPerTable = chairsPerTableForFlow;
+      if (arrangementAlreadyKnown) patch.arrangement = arrangementType;
+      if (stageDeclinedForFlow) patch.stage = { wanted: false };
+      else if (stageStillRequested || stageAcceptedForFlow) {
+        patch.stage = {
+          wanted: true,
+          ...(selectedStageForFlow?.width && selectedStageForFlow?.height
+            ? { spec: { name: selectedStageForFlow.name, width: selectedStageForFlow.width, height: selectedStageForFlow.height } }
+            : {}),
+          ...(selectedStagePlacement ? { placement: selectedStagePlacement } : {}),
+        };
+      }
+      if (extrasDecisionKnown) patch.extras = noExtrasReply ? 'none' : 'listed';
+      if (layoutScaleModeForFlow) patch.layoutScale = layoutScaleModeForFlow;
+      if (orientationValue) patch.orientation = orientationValue;
+      if (proceedReply) patch.confirmation = 'confirmed';
+      return patch;
+    };
 
-    if (isNewLayoutIntent) {
-      return res.status(200).json({
-        followUp: 'Would you like to use one of our event location and space options?',
-        choices: ['Custom', 'Marquee', 'Grassy field', 'Parking lot', 'Beach'],
-      });
-    }
-
-    if (normalizedCommand === 'custom') {
-      return res.status(200).json({
-        followUp: 'Great choice! What are the dimensions of your custom space? Please provide the width and height in meters, millimeters, or feet.',
-      });
-    }
-
-    if (
-      normalizedCommand === 'grassy field' ||
-      normalizedCommand === 'grassy' ||
-      normalizedCommand === 'field'
-    ) {
-      return res.status(200).json({
-        followUp: 'Great choice! What are the dimensions of the grassy field space you want to use? Please provide the width and height in meters, millimeters, or feet.',
-      });
-    }
+    const respond = (payload: any, fresh = false) => {
+      if (fresh) {
+        flowState = emptyState();
+      } else {
+        flowState = mergeSlots(flowState, buildFlowState());
+      }
+      const questionText =
+        (typeof payload?.followUp === 'string' && payload.followUp) ||
+        (typeof payload?.message === 'string' && payload.message) ||
+        (typeof payload?.assetSelection?.message === 'string' && payload.assetSelection.message) ||
+        '';
+      if (payload?.plan || payload?.message) {
+        flowState = { ...flowState, pendingQuestion: null };
+      } else if (!payload?.operation && questionText) {
+        flowState = recordQuestion(flowState, questionText, payload?.choices);
+      }
+      flowState = { ...flowState, phase: computePhase(flowState) };
+      return res.status(200).json({ ...payload, state: flowState });
+    };
 
     const parseLShapeDimensions = (text: string) => {
       const lower = String(text || '').toLowerCase();
@@ -1880,32 +1927,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
     };
 
-    if (
-      normalizedCommand === 'parking lot' ||
-      normalizedCommand === 'parking' ||
-      normalizedCommand === 'car park' ||
-      normalizedCommand === 'park'
-    ) {
-      return res.status(200).json({
-        followUp: 'Great choice! What are the dimensions of the parking lot space you want to use? Please provide the width and height in meters, millimeters, or feet.',
-      });
-    }
-
-    if (normalizedCommand === 'beach') {
-      return res.status(200).json({
-        followUp: 'Great choice! What are the dimensions of the beach space you want to use? Please provide the width and height in meters, millimeters, or feet.',
-      });
-    }
-
-    if (normalizedCommand === 'marquee' || normalizedCommand === 'tent') {
-      const marqueeOptions = assetList.filter((a) => a.category === 'Marquee');
-      return res.status(200).json({
-        assetSelection: {
-          category: 'marquee',
-          message: 'Excellent! Which marquee would you like to use for your event?',
-          options: marqueeOptions,
-        },
-      });
+    const localIntentResult = detectLocalIntent(normalizedCommand, assetList);
+    if (localIntentResult) {
+      if (localIntentResult.slots) flowState = mergeSlots(flowState, localIntentResult.slots);
+      return respond(localIntentResult.payload, Boolean(localIntentResult.reset));
     }
 
     // Handle seating type choice after space is drafted
@@ -1917,7 +1942,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       );
     if (assistantAskedForSeatingType && /table\s*(?:and|&|\+)\s*chair/i.test(exactCommandText)) {
       // User chose "Table and chairs" — ask for layout description
-      return res.status(200).json({
+      return respond({
         followUp: roomSummaryPrompt,
         preview: buildRoomShellPreview(),
       });
@@ -1936,7 +1961,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       !userPickedSingleSeater &&
       !userPickedTableChairs
     ) {
-      return res.status(200).json({
+      return respond({
         followUp: `I've drafted a ${roomDraftLabel} for you. How would you like to set up seating?`,
         choices: ['Single seater chairs', 'Table and chairs'],
         preview: buildRoomShellPreview(),
@@ -2306,7 +2331,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (activeSpaceWidthMm && activeSpaceHeightMm && structuredSpaceConversation && (hasLayoutBrief || isMarqueeFlow)) {
       const structuredResponse = buildStructuredFlowResponse();
       if (structuredResponse) {
-        return res.status(200).json(structuredResponse);
+        return respond(structuredResponse);
       }
     }
 
@@ -2371,7 +2396,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           };
 
       if (effectiveGuestCount && isCoffeeTable && effectiveGuestCount > 8 && !selectedChairForFlow) {
-        return res.status(200).json({
+        return respond({
           followUp: `The ${selectedMentionedAsset.name} reads more like a lounge or side table than a main guest dining table for ${effectiveGuestCount} guests. Do you want to use it for the smaller side zone instead, or would you like to choose a larger main guest table first?`,
           assetSelection: {
             category: 'table',
@@ -2383,14 +2408,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (!effectiveGuestCount) {
-        return res.status(200).json({
+        return respond({
           followUp: `How many guests should I plan for with the ${selectedMentionedAsset.name}?`,
           preview,
         });
       }
 
       if (standaloneTableNeedsChairs && !selectedChairForFlow) {
-        return res.status(200).json({
+        return respond({
           followUp: `What chair would you like to pair with the ${selectedMentionedAsset.name}?`,
           assetSelection: {
             category: 'chair',
@@ -2403,7 +2428,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (standaloneTableNeedsChairs && !chairsPerTableForFlow) {
         const suggestedChairCount = getSuggestedChairCountForTable(selectedMentionedAsset.name);
-        return res.status(200).json({
+        return respond({
           followUp: `How many chairs should I place around each table? I can suggest ${suggestedChairCount} for the ${selectedMentionedAsset.name} unless you want a different number.`,
           preview: activeSpaceWidthMm && activeSpaceHeightMm
             ? (() => {
@@ -2428,7 +2453,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (!arrangementAlreadyKnown) {
-        return res.status(200).json({
+        return respond({
           followUp: `Great choice! With ${selectedMentionedAsset.name}, I’ll use ${inferredTableCount || 1} table${(inferredTableCount || 1) > 1 ? 's' : ''} for ${effectiveGuestCount} guests. How would you like them arranged?`,
           choices: ["Grid", "Linear", "Circular", "Perimeter", "U-Shape", "Boardroom", "Classroom", "Chevron"],
           preview,
@@ -2436,7 +2461,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (secondaryZoneNeedsTableSelection) {
-        return res.status(200).json({
+        return respond({
           followUp: `You also mentioned the ${secondaryZoneLabelForPrompt}. What table should I use there?`,
           assetSelection: {
             category: 'table',
@@ -2451,7 +2476,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (secondaryZoneNeedsChairSelection) {
-        return res.status(200).json({
+        return respond({
           followUp: `What chair should I pair with the ${secondaryZoneLabelForPrompt}?`,
           assetSelection: {
             category: 'chair',
@@ -2466,7 +2491,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (secondaryZoneNeedsChairCount) {
-        return res.status(200).json({
+        return respond({
           followUp: `How many chairs should I place around the ${secondaryZoneLabelForPrompt}?`,
           preview: {
             ...preview,
@@ -2476,7 +2501,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (stageStillRequested && !selectedStageForFlow) {
-        return res.status(200).json({
+        return respond({
           followUp: 'You mentioned a stage. What size would you like it to be? You can reply like 3000mm x 2000mm, 3m x 2m, or 10ft x 8ft.',
           preview: {
             ...preview,
@@ -2486,7 +2511,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (!stageDecisionKnown) {
-        return res.status(200).json({
+        return respond({
           followUp: 'Would you like to add a stage to your layout?',
           choices: ['Yes, add a stage', 'No stage'],
           preview: {
@@ -2497,7 +2522,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (!extrasDecisionKnown && !comprehensiveBrief) {
-        return res.status(200).json({
+        return respond({
           followUp: 'Would you like to include any additional features like a dance floor, entrance doors, or a VIP area before I generate the layout?',
           preview: {
             ...preview,
@@ -2508,7 +2533,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (matchingTableCandidates.length > 0 && (activeSpaceWidthMm || activeSpaceHeightMm || normalizedCommand.includes('table'))) {
-      return res.status(200).json({
+      return respond({
         followUp: `I found a few tables matching what you described — which one did you want?`,
         assetSelection: {
           category: 'table',
@@ -2527,11 +2552,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } else {
       const detectedOp = detectWorkspaceOperation(commandText || '');
       if (detectedOp) {
-        return res.status(200).json({ operation: detectedOp });
+        return respond({ operation: detectedOp });
       }
     }
 
     if (!DEEPSEEK_API_KEY) return res.status(500).json({ error: 'DEEPSEEK_API_KEY not configured' });
+
+    // ─── Pending-question gate: if we asked something and this turn doesn't
+    // answer it, re-ask instead of calling the LLM. Long freeform turns are
+    // passed to the LLM so their content isn't swallowed by the re-ask. ────────
+    if (flowState.pendingQuestion && exactCommandText && !exactCommandText.includes('?')) {
+      const pendingTurn = extractTurn(exactCommandText, flowState);
+      const wordCount = normalizedIntentText.split(' ').filter(Boolean).length;
+      if (pendingTurn.found) {
+        flowState = mergeSlots(flowState, pendingTurn.slots);
+        flowState = { ...flowState, pendingQuestion: null, phase: computePhase(flowState) };
+      } else if (wordCount <= 4) {
+        const pendingQ = buildPendingQuestion(flowState);
+        if (pendingQ) {
+          return respond({
+            followUp: pendingQ.followUp,
+            ...(pendingQ.choices ? { choices: pendingQ.choices } : {}),
+            ...(pendingQ.assetSelection ? { assetSelection: pendingQ.assetSelection } : {}),
+          });
+        }
+      }
+    }
 
     const assetContext = assetList.map(a => `"${a.name}" (${a.category})`).join(', ');
 
@@ -2884,7 +2930,8 @@ USE THE AVAILABLE ASSETS LIST TO FULFILL ALL REQUESTS.
     → Arrow annotations generate line shapes with an arrowhead marker.
 
 12. CIRCULAR / RADIAL ARRANGEMENTS
-    → plan.chairsAround: [{ centerX, centerY, radiusMm, count, chairAsset, tableAsset, chairSizePx, tableSizePx, fillColor, strokeColor, strokeWidth }]
+    → plan.chairsAround: [{ centerX, centerY, count, chairAsset, tableAsset, chairSizePx, tableSizePx, fillColor, strokeColor, strokeWidth }]
+    → Do not set radiusMm; chairs are placed 50mm from the table edge automatically (round and rectangular).
 
 13. WALLS / ROOMS
     → plan.walls: [{ widthMm, heightMm, centerX?, centerY?, wallType? }]
@@ -3040,7 +3087,7 @@ ${obstaclesContext}`;
     const history = Array.isArray(messages)
       ? messages
         .filter((m) => m.role === 'user' || m.role === 'assistant')
-        .map((m) => ({ role: m.role, content: m.content }))
+        .map((m) => ({ role: m.role, content: stripFlowStateKey(m.content) }))
       : [];
 
     const isNewSession = !history.some(m => m.role === 'assistant');
@@ -3050,7 +3097,14 @@ ${obstaclesContext}`;
 
     const userContent = commandText || 'Help me create an event layout.';
     console.log(`[AI PLAN] Session Status: ${isNewSession ? 'NEW' : 'CONTINUING'}, History Length: ${history.length}`);
-    const finalSystemPrompt = system + sessionContext + selectedContext + obstaclesContext;
+    flowState = mergeSlots(flowState, buildFlowState());
+    flowState = { ...flowState, phase: computePhase(flowState) };
+    const missingSlots = getMissingSlots(flowState);
+    const flowContext =
+      `\nSTRUCTURED FLOW STATE (server-tracked; the client echoes it back each turn):\n${JSON.stringify(flowState)}\n` +
+      `MISSING REQUIRED SLOTS (ask for these one at a time, narrowest first): ${missingSlots.length ? missingSlots.join(', ') : 'none — all required info collected'}\n` +
+      (getRulesContext(flowState) ? `RULES / GUEST MATH:\n${getRulesContext(flowState)}\n` : '');
+    const finalSystemPrompt = system + sessionContext + selectedContext + obstaclesContext + flowContext;
 
     const r = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
@@ -3184,7 +3238,7 @@ ${obstaclesContext}`;
     }
 
     if (parsed.message && !parsed.plan && !parsed.followUp && !parsed.operation && !parsed.assetSelection) {
-      return res.status(200).json({ message: parsed.message });
+      return respond({ message: parsed.message });
     }
 
       if (parsed.followUp && !parsed.assetSelection && !structuredSpaceConversation) {
@@ -3359,7 +3413,7 @@ ${obstaclesContext}`;
       }
     }
 
-    return res.status(200).json(parsed);
+    return respond(parsed);
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || 'AI error' });
   }

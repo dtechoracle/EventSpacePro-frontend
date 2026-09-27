@@ -7,7 +7,6 @@ import { useEditorStore } from "@/store/editorStore"; // NEW STORE
 import { useProjectStore } from "@/store/projectStore";
 import { toast } from "react-hot-toast";
 import { mergeAllWallIntersections } from "@/utils/mergeWalls";
-import { trimToBlendShapes } from "@/utils/shapeBoolean";
 import PdfPagePicker, { type PageData, type SvgPageData, loadPdfJs } from "@/components/PdfPagePicker";
 
 /**

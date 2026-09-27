@@ -1,8 +1,11 @@
 export type AssetCategory =
   | "Furniture"
   | "Layout"
+  | "Dance Floor"
   | "Sitting_Styles"
   | "Space_Elements"
+  | "Flowers & Plants"
+  | "Trees"
   | "Marquee"
   | "Venue";
 
@@ -16,7 +19,10 @@ export type AssetDef = {
   height?: number
 }
 
-export const ASSET_CATEGORIES: AssetCategory[] = ["Furniture", "Layout", "Sitting_Styles", "Space_Elements", "Marquee", "Venue"];
+export const ASSET_CATEGORIES: AssetCategory[] = ["Furniture", "Layout", "Dance Floor", "Sitting_Styles", "Space_Elements", "Flowers & Plants", "Trees", "Marquee", "Venue"];
+
+/** PNG/image assets — no SVG fill/stroke controls; free-resizable on canvas. */
+export const IMAGE_ASSET_CATEGORIES: readonly AssetCategory[] = ["Flowers & Plants", "Trees"];
 
 import { MARQUEES } from './marquees';
 import { PRELOADED_VENUES } from './preloadedVenues';
@@ -24,10 +30,13 @@ import { PRELOADED_VENUES } from './preloadedVenues';
 const CATEGORY_SORT_ORDER: Record<AssetCategory, number> = {
   Furniture: 0,
   Layout: 1,
-  Sitting_Styles: 2,
-  Space_Elements: 3,
-  Marquee: 4,
-  Venue: 5,
+  "Dance Floor": 2,
+  Sitting_Styles: 3,
+  Space_Elements: 4,
+  "Flowers & Plants": 5,
+  Trees: 6,
+  Marquee: 7,
+  Venue: 8,
 };
 
 const getAssetArea = (asset: AssetDef) => (asset.width || 0) * (asset.height || 0);
@@ -84,7 +93,7 @@ export const compareAssetsForDisplay = (a: AssetDef, b: AssetDef) => {
     return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' });
   }
 
-  if (a.category === "Marquee" || a.category === "Layout") {
+  if (a.category === "Marquee" || a.category === "Layout" || a.category === "Dance Floor") {
     const aDims = getNormalizedDims(a);
     const bDims = getNormalizedDims(b);
     const shortSideDelta = aDims.shortSide - bDims.shortSide;
@@ -178,6 +187,15 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "width": 2577,
     "height": 2631,
     "name": "10 seater square table"
+  },
+  {
+    "id": "10-seater-crescent-table",
+    "label": "10 seater Crescent Table",
+    "path": "/assets/modal/Furniture/10 seater Crescent Table.svg",
+    "category": "Furniture",
+    "width": 4000,
+    "height": 2135,
+    "name": "10 seater Crescent Table"
   },
   {
     "id": "1000mm-cocktail-table",
@@ -333,6 +351,24 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "name": "20 seater doughtnut table"
   },
   {
+    "id": "20-seater-oval-table",
+    "label": "20 seater Oval Table",
+    "path": "/assets/modal/Furniture/20 seater Oval Table.svg",
+    "category": "Furniture",
+    "width": 5000,
+    "height": 2670,
+    "name": "20 seater Oval Table"
+  },
+  {
+    "id": "20-seater-intertwined-crescent-table",
+    "label": "20 seater Intertwined Crescent Table",
+    "path": "/assets/modal/Furniture/20 seater Intertwined Crescent Table.svg",
+    "category": "Furniture",
+    "width": 4200,
+    "height": 3294,
+    "name": "20 seater Intertwined Crescent Table"
+  },
+  {
     "id": "2400mm-(8ft)-round-table",
     "label": "2400mm (8ft) round table",
     "path": "/assets/modal/Furniture/2400mm (8ft) round table.svg",
@@ -378,6 +414,15 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "name": "3 Seater Sofa with pillows"
   },
   {
+    "id": "40-seater-figure-8-donut-table",
+    "label": "40 seater Figure 8 Donut Table",
+    "path": "/assets/modal/Furniture/40 seater Figure 8 Donut Table.svg",
+    "category": "Furniture",
+    "width": 7500,
+    "height": 4003,
+    "name": "40 seater Figure 8 Donut Table"
+  },
+  {
     "id": "4-seater-cocktail-table",
     "label": "4 seater cocktail table",
     "path": "/assets/modal/Furniture/4 seater cocktail table.svg",
@@ -403,6 +448,33 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "width": 2500,
     "height": 1409,
     "name": "4 seater VIP table"
+  },
+  {
+    "id": "4000mm-x-1470mm-oval-table",
+    "label": "4000mm X 1470mm Oval Table",
+    "path": "/assets/modal/Furniture/4000mm X 1470mm Oval Table.svg",
+    "category": "Furniture",
+    "width": 4000,
+    "height": 1470,
+    "name": "4000mm X 1470mm Oval Table"
+  },
+  {
+    "id": "4300mm-x-2150mm-crescent-table",
+    "label": "4300mm X 2150mm Crescent Table",
+    "path": "/assets/modal/Furniture/4300mm X 2150mm Crescent Table.svg",
+    "category": "Furniture",
+    "width": 4300,
+    "height": 2150,
+    "name": "4300mm X 2150mm Crescent Table"
+  },
+  {
+    "id": "2150mm-x-2150mm-crescent-table",
+    "label": "2150mm X 2150mm Crescent Table",
+    "path": "/assets/modal/Furniture/2150mm X 2150mm Crescent Table.svg",
+    "category": "Furniture",
+    "width": 2150,
+    "height": 2150,
+    "name": "2150mm X 2150mm Crescent Table"
   },
   {
     "id": "5-seater-curve-sofa",
@@ -531,6 +603,15 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "name": "8 seater round table 02"
   },
   {
+    "id": "8-seater-crescent-table",
+    "label": "8 seater Crescent Table",
+    "path": "/assets/modal/Furniture/8 seater Crescent Table.svg",
+    "category": "Furniture",
+    "width": 3600,
+    "height": 1823,
+    "name": "8 seater Crescent Table"
+  },
+  {
     "id": "8ft-by-2.5ft-rectangular-table",
     "label": "8ft by 2.5ft Rectangular Table",
     "path": "/assets/modal/Furniture/8ft by 2.5ft Rectangular Table.svg",
@@ -583,15 +664,6 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "width": 482,
     "height": 517,
     "name": "Event Chair 1"
-  },
-  {
-    "id": "event-chair-1_recover",
-    "label": "Event Chair 1_recover",
-    "path": "/assets/modal/Furniture/Event Chair 1_recover.svg",
-    "category": "Furniture",
-    "width": 482,
-    "height": 517,
-    "name": "Event Chair 1_recover"
   },
   {
     "id": "event-chair-2",
@@ -763,6 +835,69 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "width": 826,
     "height": 826,
     "name": "500mm X 500mm Modular Stage"
+  },
+  {
+    "id": "24ft-by-12ft-stage",
+    "label": "24ft by 12ft Stage",
+    "path": "/assets/modal/Layout/24ft by 12ft Stage.svg",
+    "category": "Layout",
+    "width": 7200,
+    "height": 3600,
+    "name": "24ft by 12ft Stage"
+  },
+  {
+    "id": "36ft-by-12ft-stage",
+    "label": "36ft by 12ft Stage",
+    "path": "/assets/modal/Layout/36ft by 12ft Stage.svg",
+    "category": "Layout",
+    "width": 10800,
+    "height": 3600,
+    "name": "36ft by 12ft Stage"
+  },
+  {
+    "id": "40ft-by-12ft-stage",
+    "label": "40ft by 12ft Stage",
+    "path": "/assets/modal/Layout/40ft by 12ft Stage.svg",
+    "category": "Layout",
+    "width": 12000,
+    "height": 3600,
+    "name": "40ft by 12ft Stage"
+  },
+  {
+    "id": "16ft-by-16ft-dance-floor",
+    "label": "16ft by 16ft Dance Floor",
+    "path": "/assets/modal/Dance Floor/16ft by 16ft Dance Floor.svg",
+    "category": "Dance Floor",
+    "width": 4800,
+    "height": 4800,
+    "name": "16ft by 16ft Dance Floor"
+  },
+  {
+    "id": "16ft-by-16ft-round-dance-floor",
+    "label": "16ft by 16ft Round Dance Floor",
+    "path": "/assets/modal/Dance Floor/16ft by 16ft Round Dance Floor.svg",
+    "category": "Dance Floor",
+    "width": 4800,
+    "height": 4800,
+    "name": "16ft by 16ft Round Dance Floor"
+  },
+  {
+    "id": "20ft-by-20ft-dance-floor",
+    "label": "20ft by 20ft Dance Floor",
+    "path": "/assets/modal/Dance Floor/20ft by 20ft Dance Floor.svg",
+    "category": "Dance Floor",
+    "width": 6000,
+    "height": 6000,
+    "name": "20ft by 20ft Dance Floor"
+  },
+  {
+    "id": "20ft-by-20ft-round-dance-floor",
+    "label": "20ft by 20ft Round Dance Floor",
+    "path": "/assets/modal/Dance Floor/20ft by 20ft Round Dance Floor.svg",
+    "category": "Dance Floor",
+    "width": 6000,
+    "height": 6000,
+    "name": "20ft by 20ft Round Dance Floor"
   },
   {
     "id": "banquet",
@@ -1006,6 +1141,213 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "width": 900,
     "height": 200,
     "name": "900mm Window"
+  },
+  {
+    "id": "grass-patch",
+    "label": "Grass patch",
+    "path": "/assets/modal/Flowers & Plants/Grass patch.png",
+    "category": "Flowers & Plants",
+    "width": 805,
+    "height": 731,
+    "name": "Grass patch"
+  },
+  {
+    "id": "plant-01",
+    "label": "Plant 01",
+    "path": "/assets/modal/Flowers & Plants/Plant 01.png",
+    "category": "Flowers & Plants",
+    "width": 774,
+    "height": 740,
+    "name": "Plant 01"
+  },
+  {
+    "id": "plant-02",
+    "label": "Plant 02",
+    "path": "/assets/modal/Flowers & Plants/Plant 02.png",
+    "category": "Flowers & Plants",
+    "width": 750,
+    "height": 703,
+    "name": "Plant 02"
+  },
+  {
+    "id": "plant-03",
+    "label": "Plant 03",
+    "path": "/assets/modal/Flowers & Plants/Plant 03.png",
+    "category": "Flowers & Plants",
+    "width": 778,
+    "height": 725,
+    "name": "Plant 03"
+  },
+  {
+    "id": "plant-04",
+    "label": "Plant 04",
+    "path": "/assets/modal/Flowers & Plants/Plant 04.png",
+    "category": "Flowers & Plants",
+    "width": 733,
+    "height": 725,
+    "name": "Plant 04"
+  },
+  {
+    "id": "plant-05",
+    "label": "Plant 05",
+    "path": "/assets/modal/Flowers & Plants/Plant 05.png",
+    "category": "Flowers & Plants",
+    "width": 667,
+    "height": 750,
+    "name": "Plant 05"
+  },
+  {
+    "id": "plant-06",
+    "label": "Plant 06",
+    "path": "/assets/modal/Flowers & Plants/Plant 06.png",
+    "category": "Flowers & Plants",
+    "width": 720,
+    "height": 679,
+    "name": "Plant 06"
+  },
+  {
+    "id": "plant-07",
+    "label": "Plant 07",
+    "path": "/assets/modal/Flowers & Plants/Plant 07.png",
+    "category": "Flowers & Plants",
+    "width": 748,
+    "height": 708,
+    "name": "Plant 07"
+  },
+  {
+    "id": "plant-08",
+    "label": "Plant 08",
+    "path": "/assets/modal/Flowers & Plants/Plant 08.png",
+    "category": "Flowers & Plants",
+    "width": 707,
+    "height": 742,
+    "name": "Plant 08"
+  },
+  {
+    "id": "plant-09",
+    "label": "Plant 09",
+    "path": "/assets/modal/Flowers & Plants/Plant 09.png",
+    "category": "Flowers & Plants",
+    "width": 655,
+    "height": 685,
+    "name": "Plant 09"
+  },
+  {
+    "id": "plant-10",
+    "label": "Plant 10",
+    "path": "/assets/modal/Flowers & Plants/Plant 10.png",
+    "category": "Flowers & Plants",
+    "width": 714,
+    "height": 708,
+    "name": "Plant 10"
+  },
+  {
+    "id": "plant-11",
+    "label": "Plant 11",
+    "path": "/assets/modal/Flowers & Plants/Plant 11.png",
+    "category": "Flowers & Plants",
+    "width": 859,
+    "height": 864,
+    "name": "Plant 11"
+  },
+  {
+    "id": "plant-12",
+    "label": "Plant 12",
+    "path": "/assets/modal/Flowers & Plants/Plant 12.png",
+    "category": "Flowers & Plants",
+    "width": 831,
+    "height": 815,
+    "name": "Plant 12"
+  },
+  {
+    "id": "plant-13",
+    "label": "Plant 13",
+    "path": "/assets/modal/Flowers & Plants/Plant 13.png",
+    "category": "Flowers & Plants",
+    "width": 850,
+    "height": 925,
+    "name": "Plant 13"
+  },
+  {
+    "id": "plant-14",
+    "label": "Plant 14",
+    "path": "/assets/modal/Flowers & Plants/Plant 14.png",
+    "category": "Flowers & Plants",
+    "width": 719,
+    "height": 785,
+    "name": "Plant 14"
+  },
+  {
+    "id": "plant-15",
+    "label": "Plant 15",
+    "path": "/assets/modal/Flowers & Plants/Plant 15.png",
+    "category": "Flowers & Plants",
+    "width": 779,
+    "height": 751,
+    "name": "Plant 15"
+  },
+  {
+    "id": "plant-16",
+    "label": "Plant 16",
+    "path": "/assets/modal/Flowers & Plants/Plant 16.png",
+    "category": "Flowers & Plants",
+    "width": 791,
+    "height": 747,
+    "name": "Plant 16"
+  },
+  {
+    "id": "shrubs",
+    "label": "Shrubs",
+    "path": "/assets/modal/Flowers & Plants/Shrubs.png",
+    "category": "Flowers & Plants",
+    "width": 1612,
+    "height": 571,
+    "name": "Shrubs"
+  },
+  {
+    "id": "tree-01",
+    "label": "Tree 01",
+    "path": "/assets/modal/Trees/Tree 01.png",
+    "category": "Trees",
+    "width": 1053,
+    "height": 1099,
+    "name": "Tree 01"
+  },
+  {
+    "id": "tree-02",
+    "label": "Tree 02",
+    "path": "/assets/modal/Trees/Tree 02.png",
+    "category": "Trees",
+    "width": 1104,
+    "height": 1129,
+    "name": "Tree 02"
+  },
+  {
+    "id": "tree-03",
+    "label": "Tree 03",
+    "path": "/assets/modal/Trees/Tree 03.png",
+    "category": "Trees",
+    "width": 1066,
+    "height": 1111,
+    "name": "Tree 03"
+  },
+  {
+    "id": "tree-04",
+    "label": "Tree 04",
+    "path": "/assets/modal/Trees/Tree 04.png",
+    "category": "Trees",
+    "width": 977,
+    "height": 958,
+    "name": "Tree 04"
+  },
+  {
+    "id": "tree-05",
+    "label": "Tree 05",
+    "path": "/assets/modal/Trees/Tree 05.png",
+    "category": "Trees",
+    "width": 1064,
+    "height": 983,
+    "name": "Tree 05"
   }
 ];
 

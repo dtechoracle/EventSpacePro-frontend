@@ -76,6 +76,7 @@ export const AI_ASSET_KNOWLEDGE: AIAssetKnowledge[] = ASSET_LIBRARY.map((asset) 
     if (asset.category === 'Sitting_Styles') tags.push('chair', 'seating', 'seat', 'furniture', 'sitting');
     if (asset.category === 'Furniture') tags.push('table', 'desk', 'surface', 'furniture');
     if (asset.category === 'Layout') tags.push('arrangement', 'layout', 'seating style', 'configuration');
+    if (asset.category === 'Dance Floor') tags.push('dance', 'dance floor', 'floor', 'entertainment');
     if (asset.category === 'Space_Elements') tags.push('door', 'window', 'wall', 'opening', 'entrance', 'exit');
 
     return {

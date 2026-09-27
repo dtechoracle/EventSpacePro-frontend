@@ -163,6 +163,13 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
   const isInitializedRef = useRef(false);
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
   const isRemoteUpdatingRef = useRef(false);
+  // BroadcastChannel has no peer list, so we track liveness ourselves: any
+  // inbound message marks the peer as seen, and we heartbeat while a peer is
+  // alive. Full-state JSON.stringify + postMessage only runs while another
+  // tab is actually connected (see flushLocalChanges) — solo editing used to
+  // serialize the entire scene on every flush for nobody.
+  const bcPeerSeenRef = useRef(0);
+  const BC_PEER_TTL_MS = 15000;
 
   const user = useUserStore((s) => s.user);
   const router = useRouter();
@@ -327,7 +334,10 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       const nextComments = readYCollection(yComments);
       const nextCanvas = toPlainYValue(yCanvas.get("config"));
 
-      const hasRoomContent =
+      // Canvas config alone is NOT room content. A room that only has
+      // yCanvas (or is empty after a bad flush) used to count as "content"
+      // and wholesale-replace the store, wiping draft-restored items.
+      const hasRoomItems =
         nextShapes.length > 0 ||
         nextAssets.length > 0 ||
         nextWalls.length > 0 ||
@@ -336,28 +346,71 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         nextLabelArrows.length > 0 ||
         nextGroups.length > 0 ||
         nextWallSegments.length > 0 ||
-        nextComments.length > 0 ||
-        !!nextCanvas;
+        nextComments.length > 0;
 
-      if (!hasRoomContent) {
+      if (!hasRoomItems) {
         return false;
       }
+
+      const local = useProjectStore.getState();
+      const localHasItems =
+        local.shapes.length > 0 ||
+        local.assets.length > 0 ||
+        local.walls.length > 0 ||
+        local.textAnnotations.length > 0 ||
+        local.dimensions.length > 0 ||
+        local.labelArrows.length > 0 ||
+        local.groups.length > 0 ||
+        local.wallSegments.length > 0 ||
+        local.comments.length > 0;
+
+      // Local is dirty (draft restore, unsaved edits): union by id so the
+      // room never deletes items the user just recovered. Local wins on id
+      // conflicts — that work is newer than a possibly stale room snapshot.
+      const mergeById = <T extends { id?: string }>(roomList: T[], localList: T[]): T[] => {
+        if (localList.length === 0) return roomList;
+        if (roomList.length === 0) return localList;
+        const byId = new Map<string, T>();
+        for (const item of roomList) {
+          if (item && item.id != null) byId.set(String(item.id), item);
+        }
+        for (const item of localList) {
+          if (!item) continue;
+          const key = item.id != null ? String(item.id) : null;
+          if (key == null) continue;
+          byId.set(key, item);
+        }
+        return Array.from(byId.values());
+      };
+
+      const shouldMerge = localHasItems && local.hasUnsavedChanges;
+      const nextShapesM = shouldMerge ? mergeById(nextShapes, local.shapes) : nextShapes;
+      const nextAssetsM = shouldMerge ? mergeById(nextAssets, local.assets) : nextAssets;
+      const nextWallsM = shouldMerge ? mergeById(nextWalls, local.walls) : nextWalls;
+      const nextTextM = shouldMerge ? mergeById(nextTextAnnotations, local.textAnnotations) : nextTextAnnotations;
+      const nextDimM = shouldMerge ? mergeById(nextDimensions, local.dimensions) : nextDimensions;
+      const nextArrowsM = shouldMerge ? mergeById(nextLabelArrows, local.labelArrows) : nextLabelArrows;
+      const nextGroupsM = shouldMerge ? mergeById(nextGroups, local.groups) : nextGroups;
+      const nextSegsM = shouldMerge ? mergeById(nextWallSegments, local.wallSegments) : nextWallSegments;
+      const nextCommentsM = shouldMerge ? mergeById(nextComments, local.comments) : nextComments;
 
       isRemoteUpdating.current = true;
       try {
         useProjectStore.setState((state) => ({
           ...state,
-          shapes: nextShapes,
-          assets: nextAssets,
-          walls: nextWalls,
-          textAnnotations: nextTextAnnotations,
-          dimensions: nextDimensions,
-          labelArrows: nextLabelArrows,
-          groups: nextGroups,
-          wallSegments: nextWallSegments,
-          comments: nextComments,
+          shapes: nextShapesM,
+          assets: nextAssetsM,
+          walls: nextWallsM,
+          textAnnotations: nextTextM,
+          dimensions: nextDimM,
+          labelArrows: nextArrowsM,
+          groups: nextGroupsM,
+          wallSegments: nextSegsM,
+          comments: nextCommentsM,
           ...(nextCanvas ? { canvas: nextCanvas } : {}),
-          hasUnsavedChanges: false,
+          // Dirty local work merged in → stay dirty so draft/auto-save still run.
+          // Clean local + server content → server wins and we are saved.
+          hasUnsavedChanges: shouldMerge ? true : false,
         }));
       } finally {
         isRemoteUpdating.current = false;
@@ -708,9 +761,12 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
 
       if (!hasChanges) return;
 
-      // BroadcastChannel: always broadcast (doesn't need backend join)
+      // BroadcastChannel: only when another tab is known to be listening.
+      // Peer liveness is tracked by the hello/heartbeat messages in the
+      // channel effect below; without a peer this stringify of the whole
+      // scene would run on every flush for nobody.
       const bc = broadcastChannelRef.current;
-      if (bc) {
+      if (bc && Date.now() - bcPeerSeenRef.current < BC_PEER_TTL_MS) {
         try {
           const payload = JSON.stringify({
             type: "state-update",
@@ -1211,6 +1267,21 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
 
       if (!msg.type) return;
 
+      // Any inbound message means a peer tab is alive.
+      bcPeerSeenRef.current = Date.now();
+
+      if (msg.type === "hello") {
+        // Another tab just came up (we may have gone quiet after it opened,
+        // or we opened first). Ack so it marks us as seen too, and answer
+        // with current state so it does not have to wait for a full round.
+        try { channel.postMessage(JSON.stringify({ type: "hello-ack" })); } catch {}
+        return;
+      }
+
+      if (msg.type === "hello-ack") {
+        return;
+      }
+
       if (msg.type === "request-state") {
         const store = useProjectStore.getState();
         try {
@@ -1255,9 +1326,18 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     };
 
     channel.postMessage(JSON.stringify({ type: "request-state" }));
+    // Announce ourselves, then keep the peer-liveness window topped up while
+    // somebody answers. flushLocalChanges only serializes the full scene when
+    // this window is fresh (bcPeerSeenRef), so a solo tab goes quiet.
+    channel.postMessage(JSON.stringify({ type: "hello" }));
+    const heartbeat = setInterval(() => {
+      if (Date.now() - bcPeerSeenRef.current > BC_PEER_TTL_MS) return;
+      try { channel.postMessage(JSON.stringify({ type: "hello" })); } catch {}
+    }, 5000);
 
     return () => {
       console.log("[BroadcastChannel] Closing channel:", channelName);
+      clearInterval(heartbeat);
       channel.close();
       broadcastChannelRef.current = null;
     };

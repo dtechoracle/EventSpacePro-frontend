@@ -96,6 +96,491 @@ const getAssetCountBucket = (label: string) => {
   return "other assets";
 };
 
+// The Elements pane derives its row list on every store write (a drag rewrites
+// the assets array once per frame). These two caches keep the derived objects
+// reference-stable so the memoized rows below can bail out of re-rendering.
+const EMPTY_ARRAY: any[] = [];
+
+let childShapesCache: { shapes: any[]; map: Record<string, any[]> } | null = null;
+const getAssetChildrenMap = (shapes: any[]): Record<string, any[]> => {
+  if (childShapesCache && childShapesCache.shapes === shapes) return childShapesCache.map;
+  const map: Record<string, any[]> = {};
+  shapes.forEach((s) => {
+    const sourceId = (s as any).sourceAssetId as string | undefined;
+    if (!sourceId) return;
+    if (!map[sourceId]) map[sourceId] = [];
+    map[sourceId].push(s);
+  });
+  childShapesCache = { shapes, map };
+  return map;
+};
+
+type ElementCacheEntry = { src: any; deps: any[]; item: any };
+const elementItemCache = new Map<string, ElementCacheEntry>();
+const reuseElementItem = (id: string, src: any, deps: any[], build: () => any) => {
+  const hit = elementItemCache.get(id);
+  if (hit && hit.src === src && hit.deps.length === deps.length && hit.deps.every((d, i) => Object.is(d, deps[i]))) {
+    return hit.item;
+  }
+  const item = build();
+  elementItemCache.set(id, { src, deps, item });
+  return item;
+};
+
+type ElementRowProps = {
+  item: any;
+  plClass?: string;
+  isSelected: boolean;
+  isExpanded: boolean;
+  isRenaming: boolean;
+  renameValue: string;
+  onSelect: (payload: { id: string; x: number; y: number; childIds?: string[] }, e?: React.MouseEvent) => void;
+  onToggleExpand: (id: string) => void;
+  onHide: (id: string, hidden: boolean, type: string) => void;
+  onStartRename: (id: string, label: string) => void;
+  onRenameTextChange: (text: string) => void;
+  onCommitRename: (id: string, name: string, type: string) => void;
+  onCancelRename: () => void;
+};
+
+const renderMiniPreview = (item: any) => {
+  const assetDef: any = item.type === "Asset" && item.asset
+    ? (elementAssetDefinitionById.get(item.asset.type) || PRELOADED_VENUE_MAP.get(item.asset.type))
+    : null;
+
+  return (
+    <div className="w-7 h-7 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
+      {item.type === "Asset" && item.asset && (
+        assetDef?.path ? (
+          !assetDef.path.toLowerCase().endsWith(".svg") ? (
+            <img
+              src={encodeURI(assetDef.path)}
+              alt=""
+              className="w-full h-full object-contain p-0.5"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full p-1">
+              <InlineSvg
+                src={assetDef.path}
+                fill={item.asset.tableColor || item.asset.chairColor || item.asset.fillColor || (item.asset as any).fill || "none"}
+                stroke={item.asset.strokeColor || (item.asset as any).stroke || "currentColor"}
+                strokeWidth={0.6}
+                category={assetDef.category}
+              />
+            </div>
+          )
+        ) : (
+          <div className="text-[8px] text-gray-400 text-center px-1">
+            {item.asset.type}
+          </div>
+        )
+      )}
+      {item.type === "Shape" && item.shape && (
+        <svg width={24} height={24} viewBox="0 0 24 24">
+          {item.shape.type === "rectangle" && (
+            <rect
+              x={!item.shape.fillType || item.shape.fillType === 'solid' ? 4 : 2}
+              y={!item.shape.fillType || item.shape.fillType === 'solid' ? 7 : 5}
+              width={!item.shape.fillType || item.shape.fillType === 'solid' ? 16 : 20}
+              height={!item.shape.fillType || item.shape.fillType === 'solid' ? 10 : 14}
+              fill={(() => {
+                if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
+                  if (item.shape.fillTexture) {
+                    return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1}-rot-${item.shape.hatchRotation || 0})`;
+                  }
+                }
+                return item.shape.fill || "transparent";
+              })()}
+              stroke={item.shape.stroke || "#9CA3AF"}
+              strokeWidth={0.6}
+              rx={2}
+              ry={2}
+            />
+          )}
+          {item.shape.type === "ellipse" && (
+            <ellipse
+              cx={12}
+              cy={12}
+              rx={!item.shape.fillType || item.shape.fillType === 'solid' ? 8 : 10}
+              ry={!item.shape.fillType || item.shape.fillType === 'solid' ? 9 : 11}
+              fill={(() => {
+                if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
+                  if (item.shape.fillTexture) {
+                    return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1}-rot-${item.shape.hatchRotation || 0})`;
+                  }
+                }
+                return item.shape.fill || "transparent";
+              })()}
+              stroke={item.shape.stroke || "#9CA3AF"}
+              strokeWidth={0.6}
+            />
+          )}
+          {item.shape.type === "line" && (
+            <line
+              x1={4}
+              y1={12}
+              x2={20}
+              y2={12}
+              stroke={item.shape.stroke || "#9CA3AF"}
+              strokeWidth={1.5}
+              strokeLinecap="round"
+            />
+          )}
+          {item.shape.type === "polygon" && (
+            <polygon
+              points={(() => {
+                const sides =
+                  item.shape.polygonSides ||
+                  (item.shape.points ? item.shape.points.length : 4);
+                const s = Math.max(3, Math.min(12, sides || 4));
+                const cx = 12;
+                const cy = 12;
+                const r = !item.shape.fillType || item.shape.fillType === 'solid' ? 8 : 10;
+                const pts: string[] = [];
+                for (let i = 0; i < s; i++) {
+                  const angle = ((Math.PI * 2) / s) * i - Math.PI / 2;
+                  const x = cx + r * Math.cos(angle);
+                  const y = cy + r * Math.sin(angle);
+                  pts.push(`${x},${y}`);
+                }
+                return pts.join(" ");
+              })()}
+              fill={(() => {
+                if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
+                  if (item.shape.fillTexture) {
+                    return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1}-rot-${item.shape.hatchRotation || 0})`;
+                  }
+                }
+                return item.shape.fill || "transparent";
+              })()}
+              stroke={item.shape.stroke || "#9CA3AF"}
+              strokeWidth={0.6}
+              strokeLinejoin="round"
+            />
+          )}
+          {item.shape.type === "path" && item.shape.svgPath && (
+            <path
+              d={item.shape.svgPath}
+              fill={item.shape.fill || "transparent"}
+              stroke={item.shape.stroke || "#9CA3AF"}
+              strokeWidth={0.6}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+              transform={`translate(12, 12) scale(${20 / Math.max(item.shape.width || 1, item.shape.height || 1)})`}
+            />
+          )}
+        </svg>
+      )}
+      {item.type === "Group" && (
+        <svg width={24} height={24} viewBox="0 0 24 24">
+          <rect x={4} y={4} width={7} height={7} rx={1.5} fill="#2563eb" fillOpacity={0.15} stroke="#2563eb" strokeWidth={1.2} />
+          <rect x={13} y={4} width={7} height={7} rx={1.5} fill="#2563eb" fillOpacity={0.15} stroke="#2563eb" strokeWidth={1.2} />
+          <rect x={4} y={13} width={7} height={7} rx={1.5} fill="#2563eb" fillOpacity={0.15} stroke="#2563eb" strokeWidth={1.2} />
+          <rect x={13} y={13} width={7} height={7} rx={1.5} fill="#2563eb" fillOpacity={0.15} stroke="#2563eb" strokeWidth={1.2} />
+        </svg>
+      )}
+      {item.type === "Wall" && (
+        <svg width={24} height={24} viewBox="0 0 24 24">
+          <rect
+            x={4}
+            y={8}
+            width={16}
+            height={8}
+            fill={(() => {
+              const w = (item as any).wall || item.wall;
+              if (!w) return "#cbd5e1";
+              if ((w.fillType === 'texture' || w.fillType === 'hatch' || w.fillType === 'hash') && w.fillTexture) {
+                return `url(#${w.fillTexture}-scale-${w.fillTextureScale || 1}-thick-${w.fillTextureThickness || 1}-rot-${w.hatchRotation || 0})`;
+              }
+              return w.fill || "#cbd5e1";
+            })()}
+            stroke={(item as any).wall?.stroke || item.wall?.stroke || "#94a3b8"}
+            strokeWidth={0.6}
+            rx={1}
+          />
+          <line x1={4} y1={12} x2={20} y2={12} stroke="currentColor" strokeWidth={0.5} strokeOpacity={0.3} />
+        </svg>
+      )}
+      {item.type === "Text" && (
+        <svg width={24} height={24} viewBox="0 0 24 24">
+          <text
+            x={12}
+            y={14}
+            textAnchor="middle"
+            fontSize={12}
+            fill="#111827"
+            fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          >
+            T
+          </text>
+        </svg>
+      )}
+      {item.type === "Dimension" && (
+        <svg width={24} height={24} viewBox="0 0 24 24">
+          <line
+            x1={4}
+            y1={12}
+            x2={20}
+            y2={12}
+            stroke={item.dimension?.color || "#111827"}
+            strokeWidth={1}
+            strokeLinecap="round"
+          />
+          <polyline
+            points="6,10 4,12 6,14"
+            fill="none"
+            stroke={item.dimension?.color || "#111827"}
+            strokeWidth={0.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <polyline
+            points="18,10 20,12 18,14"
+            fill="none"
+            stroke={item.dimension?.color || "#111827"}
+            strokeWidth={0.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
+      {item.type === "Label" && (
+        <svg width={24} height={24} viewBox="0 0 24 24">
+          <line
+            x1={6}
+            y1={16}
+            x2={18}
+            y2={16}
+            stroke={item.labelArrow?.color || "#111827"}
+            strokeWidth={0.6}
+            strokeLinecap="round"
+          />
+          <polyline
+            points="16,14 18,16 16,18"
+            fill="none"
+            stroke={item.labelArrow?.color || "#111827"}
+            strokeWidth={0.6}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <rect
+            x={5}
+            y={5}
+            width={14}
+            height={7}
+            rx={2}
+            ry={2}
+            fill="#F3F4F6"
+            stroke={item.labelArrow?.color || "#9CA3AF"}
+            strokeWidth={0.8}
+          />
+        </svg>
+      )}
+    </div>
+  );
+};
+
+const ElementRow = React.memo(function ElementRow({
+  item,
+  plClass = "px-3",
+  isSelected,
+  isExpanded,
+  isRenaming,
+  renameValue,
+  onSelect,
+  onToggleExpand,
+  onHide,
+  onStartRename,
+  onRenameTextChange,
+  onCommitRename,
+  onCancelRename,
+  }: ElementRowProps) {
+  const isAsset = item.type === "Asset";
+  const childShapes = (item as any).childShapes as any[] | undefined;
+  const hasChildren = isAsset && childShapes && childShapes.length > 0;
+  const isHidden = Boolean(item.hidden);
+
+  return (
+    <div key={item.id} className={`group relative ${isSelected ? "bg-blue-50" : ""}`}>
+      <button
+        onClick={(e) =>
+          isAsset && hasChildren
+            ? onToggleExpand(item.id)
+            : onSelect({
+              id: item.id,
+              x: item.x,
+              y: item.y,
+              childIds: (item as any).childIds || (hasChildren ? childShapes.map(s => s.id) : undefined),
+            }, e)
+        }
+        className={`w-full flex items-center gap-1.5 ${plClass} pr-7 py-1.5 text-[11px] hover:bg-blue-100 border-b border-gray-100 transition-colors ${isSelected ? "text-blue-700 bg-blue-50 font-medium" : "text-gray-700 hover:bg-gray-100"} ${isHidden ? "opacity-40" : ""}`}
+      >
+        {renderMiniPreview(item)}
+
+        <div 
+          className="flex-1 min-w-0 text-left" 
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            onStartRename(item.id, item.label);
+          }}
+        >
+          {isRenaming ? (
+            <input
+              autoFocus
+              className="w-full text-[11px] px-1 py-0.5 border border-blue-400 rounded outline-none bg-white"
+              value={renameValue}
+              onChange={(e) => onRenameTextChange(e.target.value)}
+              onBlur={() => onCommitRename(item.id, renameValue, item.type)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onCommitRename(item.id, renameValue, item.type);
+                if (e.key === 'Escape') onCancelRename();
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <>
+              <div className="truncate text-gray-700 leading-tight font-medium">{item.label}</div>
+              <div className="text-[0.6rem] text-gray-400 mt-0.5">
+                {isAsset && hasChildren ? "Asset (exploded)" : item.type}
+              </div>
+            </>
+          )}
+        </div>
+      </button>
+
+      {/* Eye Icon (Hide / Show Toggle) */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onHide(item.id, isHidden, item.type);
+        }}
+        title={isHidden ? "Show element" : "Hide element"}
+        className={`absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-slate-200/60 transition-all ${
+          isHidden
+            ? "opacity-100 text-blue-600 font-bold"
+            : "opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-700"
+        }`}
+      >
+        {isHidden ? (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+            <line x1="1" y1="1" x2="23" y2="23" />
+          </svg>
+        ) : (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        )}
+      </button>
+
+      {isAsset && hasChildren && isExpanded && (
+        <div className="ml-6 border-l border-gray-200">
+          {childShapes!.map((s) => (
+            <button
+              key={s.id}
+              onClick={(e) => onSelect({ id: s.id, x: s.x, y: s.y }, e)}
+              className="w-full flex items-center gap-1 px-1.5 py-1 text-[10px] hover:bg-gray-50 border-b border-gray-100"
+            >
+              <div className="w-5 h-5 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
+                <svg width={18} height={18} viewBox="0 0 24 24">
+                  {s.type === "rectangle" && (
+                    <rect
+                      x={!s.fillType || s.fillType === 'solid' ? 4 : 2}
+                      y={!s.fillType || s.fillType === 'solid' ? 7 : 5}
+                      width={!s.fillType || s.fillType === 'solid' ? 16 : 20}
+                      height={!s.fillType || s.fillType === 'solid' ? 10 : 14}
+                      fill={(() => {
+                        if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
+                          if (s.fillTexture) {
+                            return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
+                          }
+                        }
+                        return s.fill || "transparent";
+                      })()}
+                      stroke={s.stroke || "#9CA3AF"}
+                      strokeWidth={1}
+                      rx={1.5}
+                      ry={1.5}
+                    />
+                  )}
+                  {s.type === "ellipse" && (
+                    <ellipse
+                      cx={12}
+                      cy={12}
+                      rx={!s.fillType || s.fillType === 'solid' ? 8 : 10}
+                      ry={!s.fillType || s.fillType === 'solid' ? 9 : 11}
+                      fill={(() => {
+                        if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
+                          if (s.fillTexture) {
+                            return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
+                          }
+                        }
+                        return s.fill || "transparent";
+                      })()}
+                      stroke={s.stroke || "#9CA3AF"}
+                      strokeWidth={1}
+                    />
+                  )}
+                  {s.type === "line" && (
+                    <line
+                      x1={4}
+                      y1={12}
+                      x2={20}
+                      y2={12}
+                      stroke={s.stroke || "#9CA3AF"}
+                      strokeWidth={0.6}
+                      strokeLinecap="round"
+                    />
+                  )}
+                  {s.type === "polygon" && (
+                    <polygon
+                      points={(() => {
+                        const sides =
+                          s.polygonSides ||
+                          (s.points ? s.points.length : 4);
+                        const cnt = Math.max(3, Math.min(12, sides || 4));
+                        const cx = 12;
+                        const cy = 12;
+                        const r = !s.fillType || s.fillType === 'solid' ? 8 : 10;
+                        const pts: string[] = [];
+                        for (let i = 0; i < cnt; i++) {
+                          const angle = ((Math.PI * 2) / cnt) * i - Math.PI / 2;
+                          const x = cx + r * Math.cos(angle);
+                          const y = cy + r * Math.sin(angle);
+                          pts.push(`${x},${y}`);
+                        }
+                        return pts.join(" ");
+                      })()}
+                      fill={(() => {
+                        if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
+                          if (s.fillTexture) {
+                            return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
+                          }
+                        }
+                        return s.fill || "transparent";
+                      })()}
+                      stroke={s.stroke || "#9CA3AF"}
+                      strokeWidth={1}
+                      strokeLinejoin="round"
+                    />
+                  )}
+                </svg>
+              </div>
+              <div className="flex-1 text-left truncate ml-1">
+                <div className="truncate text-gray-500">{s.type}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+ });
+
 // Lightweight pane listing all elements on the workspace (walls, shapes, assets)
 function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean; onToggleCollapse?: () => void }) {
   const walls = useProjectStore(s => s.walls);
@@ -113,8 +598,8 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
     venue: true,
     walls: true,
     shapes: true,
-    chairs: true,
-    tables: true,
+    chairs: false,
+    tables: false,
     stools: false,
     sofas: false,
     "other assets": false,
@@ -123,7 +608,7 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renamingText, setRenamingText] = React.useState("");
 
-  const handleToggleHide = (id: string, currentlyHidden: boolean, type: string) => {
+  const handleToggleHide = React.useCallback((id: string, currentlyHidden: boolean, type: string) => {
     const store = useProjectStore.getState();
     const updates = { hidden: !currentlyHidden };
 
@@ -134,9 +619,9 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
     else if (type === "Dimension") store.updateDimension(id, updates);
     else if (type === "Label") store.updateLabelArrow(id, updates);
     else if (type === "Group") store.updateGroup(id, updates);
-  };
+  }, []);
 
-  const handleRename = (id: string, newName: string, type: string) => {
+  const handleRename = React.useCallback((id: string, newName: string, type: string) => {
     const store = useProjectStore.getState();
     const updates = { name: newName };
 
@@ -149,32 +634,47 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
     else if (type === "Group") store.updateGroup(id, updates);
 
     setRenamingId(null);
-  };
+  }, []);
+
+  const handleToggleExpand = React.useCallback((id: string) => {
+    setExpandedAssets(prev => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+  const handleStartRename = React.useCallback((id: string, label: string) => {
+    setRenamingId(id);
+    setRenamingText(label);
+  }, []);
+  const handleRenameTextChange = React.useCallback((text: string) => setRenamingText(text), []);
+  const handleCancelRename = React.useCallback(() => setRenamingId(null), []);
 
   const items = React.useMemo(() => {
-    // Group shapes by exploded asset (sourceAssetId)
-    const assetChildrenMap: Record<string, typeof shapes> = {};
+    // Group shapes by exploded asset (sourceAssetId). The children map is
+    // identity-cached on `shapes`, so childShapes arrays — and the derived
+    // item objects below — stay reference-stable while an unrelated asset
+    // is dragged (the assets array is rewritten every frame during a drag).
+    const assetChildrenMap = getAssetChildrenMap(shapes);
     const independentShapes: typeof shapes = [];
-
     shapes.forEach((s) => {
-      // Show all shapes including background-texture if it exists
-      // if (s.id === 'background-texture') return;
-
-      const sourceId = (s as any).sourceAssetId as string | undefined;
-      if (sourceId) {
-        if (!assetChildrenMap[sourceId]) assetChildrenMap[sourceId] = [];
-        assetChildrenMap[sourceId].push(s);
-      } else {
-        independentShapes.push(s);
-      }
+      if (!(s as any).sourceAssetId) independentShapes.push(s);
     });
 
     // Only exclude items whose groupId references an existing group
     const existingGroupIds = new Set(groups.map(g => g.id));
+    const listed = (groupId?: string) => !groupId || !existingGroupIds.has(groupId);
+
+    // One id -> entity index, so group centers cost O(items) instead of
+    // O(groups x items) `.includes` scans.
+    const byId = new Map<string, any>();
+    const index = (list: any[]) => list.forEach(entity => byId.set(entity.id, entity));
+    index(walls);
+    index(shapes);
+    index(assets);
+    index(textAnnotations);
+    index(dimensions);
+    index(labelArrows);
 
     return [
     // Filter out items that belong to an existing group
-    ...walls.filter(w => !w.groupId || !existingGroupIds.has(w.groupId)).map((w) => {
+    ...walls.filter(w => listed(w.groupId)).map((w) => reuseElementItem(w.id, w, EMPTY_ARRAY, () => {
       if (!w.nodes || w.nodes.length === 0) {
         return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: 0, y: 0, wall: w, hidden: Boolean(w.hidden) };
       }
@@ -183,8 +683,8 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
       const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
       const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
       return { id: w.id, label: w.name || "Wall", type: "Wall" as const, x: centerX, y: centerY, wall: w, hidden: Boolean(w.hidden) };
-    }),
-    ...independentShapes.filter(s => !s.groupId || !existingGroupIds.has(s.groupId)).map((s) => ({
+    })),
+    ...independentShapes.filter(s => listed(s.groupId)).map((s) => reuseElementItem(s.id, s, EMPTY_ARRAY, () => ({
       id: s.id,
       label: s.name || s.type,
       type: "Shape" as const,
@@ -192,18 +692,18 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
       y: s.y,
       shape: s,
       hidden: Boolean(s.hidden),
-    })),
-    ...assets.filter(a => !a.groupId || !existingGroupIds.has(a.groupId)).map((a) => ({
+    }))),
+    ...assets.filter(a => listed(a.groupId)).map((a) => reuseElementItem(a.id, a, [assetChildrenMap[a.id] || EMPTY_ARRAY], () => ({
       id: a.id,
       label: a.name || (a.metadata as any)?.label || a.type || "Asset",
       type: "Asset" as const,
       x: a.x,
       y: a.y,
       asset: a,
-      childShapes: assetChildrenMap[a.id] || [],
+      childShapes: assetChildrenMap[a.id] || EMPTY_ARRAY,
       hidden: Boolean(a.hidden),
-    })),
-    ...textAnnotations.filter(t => !t.groupId || !existingGroupIds.has(t.groupId)).map((t) => ({
+    }))),
+    ...textAnnotations.filter(t => listed(t.groupId)).map((t) => reuseElementItem(t.id, t, EMPTY_ARRAY, () => ({
       id: t.id,
       label: t.name || t.text || "Text",
       type: "Text" as const,
@@ -211,8 +711,8 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
       y: t.y,
       text: t,
       hidden: Boolean(t.hidden),
-    })),
-    ...dimensions.filter(d => !d.groupId || !existingGroupIds.has(d.groupId)).map((d) => ({
+    }))),
+    ...dimensions.filter(d => listed(d.groupId)).map((d) => reuseElementItem(d.id, d, EMPTY_ARRAY, () => ({
       id: d.id,
       label: d.name || ((d.type as string) === "wall" ? "Wall Dimension" : "Dimension"),
       type: "Dimension" as const,
@@ -220,8 +720,8 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
       y: (d.startPoint.y + d.endPoint.y) / 2,
       dimension: d,
       hidden: Boolean(d.hidden),
-    })),
-    ...labelArrows.filter(la => !la.groupId || !existingGroupIds.has(la.groupId)).map((la) => ({
+    }))),
+    ...labelArrows.filter(la => listed(la.groupId)).map((la) => reuseElementItem(la.id, la, EMPTY_ARRAY, () => ({
       id: la.id,
       label: la.name || la.label || "Label",
       type: "Label" as const,
@@ -229,18 +729,10 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
       y: (la.startPoint.y + la.endPoint.y) / 2,
       labelArrow: la,
       hidden: Boolean(la.hidden),
-    })),
-    // Groups
+    }))),
+    // Groups are rebuilt every pass: their center moves when a child moves.
     ...groups.map(g => {
-      // Find children to compute center
-      const children = [
-        ...shapes.filter(s => g.itemIds.includes(s.id)),
-        ...assets.filter(a => g.itemIds.includes(a.id)),
-        ...walls.filter(w => g.itemIds.includes(w.id)),
-        ...textAnnotations.filter(t => g.itemIds.includes(t.id)),
-        ...dimensions.filter(d => g.itemIds.includes(d.id)),
-        ...labelArrows.filter(la => g.itemIds.includes(la.id)),
-      ];
+      const children = g.itemIds.map(id => byId.get(id)).filter(Boolean);
 
       const getCenter = (item: any) => {
         if (item.nodes) { // Wall
@@ -279,6 +771,21 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
 
   const assetSummary = React.useMemo(() => {
     const enclosureWalls = walls.filter((wall) => wall.nodes && wall.nodes.length >= 3);
+    // Precomputed bounds reject out-of-range assets with four comparisons
+    // instead of a full ray-cast against every enclosure wall.
+    const wallBounds = enclosureWalls.map((wall) => {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      wall.nodes.forEach((n) => {
+        if (n.x < minX) minX = n.x;
+        if (n.y < minY) minY = n.y;
+        if (n.x > maxX) maxX = n.x;
+        if (n.y > maxY) maxY = n.y;
+      });
+      return { minX, minY, maxX, maxY, nodes: wall.nodes };
+    });
     const counts = new Map<string, number>();
 
     assets.forEach((asset) => {
@@ -287,8 +794,15 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
       if (assetDef.category === "Space_Elements" || assetDef.category === "Marquee") return;
 
       const isInsideWall =
-        enclosureWalls.length === 0 ||
-        enclosureWalls.some((wall) => isPointInClosedPolygon(asset.x, asset.y, wall.nodes));
+        wallBounds.length === 0 ||
+        wallBounds.some(
+          (bounds) =>
+            asset.x >= bounds.minX &&
+            asset.x <= bounds.maxX &&
+            asset.y >= bounds.minY &&
+            asset.y <= bounds.maxY &&
+            isPointInClosedPolygon(asset.x, asset.y, bounds.nodes)
+        );
 
       if (!isInsideWall) return;
 
@@ -366,7 +880,7 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
     "other assets": "Other Assets",
   };
 
-  const handleSelect = (item: { id: string; x: number; y: number; childIds?: string[] }, e?: React.MouseEvent) => {
+  const handleSelect = React.useCallback((item: { id: string; x: number; y: number; childIds?: string[] }, e?: React.MouseEvent) => {
     const idsToSelect = item.childIds && item.childIds.length > 0 ? item.childIds : [item.id];
 
     if (e?.shiftKey) {
@@ -392,430 +906,36 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
       const targetPanY = availableHeight / 2 - item.y * zoom;
       setPan(targetPanX, targetPanY);
     }
+  }, [setPan, setSelectedIds]);
+
+  const selectedIdSet = React.useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  // Props for a single row. Everything here is either a stable callback or a
+  // primitive, so unchanged rows bail out of re-rendering inside ElementRow
+  // even though the pane itself re-renders on every store write.
+  const rowProps = (item: any, plClass: string) => {
+    const childIds = item.childIds as string[] | undefined;
+    const isSelected = childIds
+      ? childIds.length > 0 && childIds.every(cid => selectedIdSet.has(cid))
+      : selectedIdSet.has(item.id);
+
+    return {
+      item,
+      plClass,
+      isSelected,
+      isExpanded: item.type === "Asset" && Boolean(expandedAssets[item.id]),
+      isRenaming: renamingId === item.id,
+      renameValue: renamingId === item.id ? renamingText : "",
+      onSelect: handleSelect,
+      onToggleExpand: handleToggleExpand,
+      onHide: handleToggleHide,
+      onStartRename: handleStartRename,
+      onRenameTextChange: handleRenameTextChange,
+      onCommitRename: handleRename,
+      onCancelRename: handleCancelRename,
+    };
   };
 
-  const renderMiniPreview = (item: any) => {
-    const assetDef: any = item.type === "Asset" && item.asset
-      ? (ASSET_LIBRARY.find(a => a.id === item.asset.type) || PRELOADED_VENUES.find(v => v.id === item.asset.type))
-      : null;
-
-    return (
-      <div className="w-7 h-7 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
-        {item.type === "Asset" && item.asset && (
-          assetDef?.path ? (
-            <div className="w-full h-full p-1">
-              <InlineSvg
-                src={assetDef.path}
-                fill={item.asset.tableColor || item.asset.chairColor || item.asset.fillColor || (item.asset as any).fill || "none"}
-                stroke={item.asset.strokeColor || (item.asset as any).stroke || "currentColor"}
-                strokeWidth={0.6}
-                category={assetDef.category}
-              />
-            </div>
-          ) : (
-            <div className="text-[8px] text-gray-400 text-center px-1">
-              {item.asset.type}
-            </div>
-          )
-        )}
-        {item.type === "Shape" && item.shape && (
-          <svg width={24} height={24} viewBox="0 0 24 24">
-            {item.shape.type === "rectangle" && (
-              <rect
-                x={!item.shape.fillType || item.shape.fillType === 'solid' ? 4 : 2}
-                y={!item.shape.fillType || item.shape.fillType === 'solid' ? 7 : 5}
-                width={!item.shape.fillType || item.shape.fillType === 'solid' ? 16 : 20}
-                height={!item.shape.fillType || item.shape.fillType === 'solid' ? 10 : 14}
-                fill={(() => {
-                  if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
-                    if (item.shape.fillTexture) {
-                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1}-rot-${item.shape.hatchRotation || 0})`;
-                    }
-                  }
-                  return item.shape.fill || "transparent";
-                })()}
-                stroke={item.shape.stroke || "#9CA3AF"}
-                strokeWidth={0.6}
-                rx={2}
-                ry={2}
-              />
-            )}
-            {item.shape.type === "ellipse" && (
-              <ellipse
-                cx={12}
-                cy={12}
-                rx={!item.shape.fillType || item.shape.fillType === 'solid' ? 8 : 10}
-                ry={!item.shape.fillType || item.shape.fillType === 'solid' ? 9 : 11}
-                fill={(() => {
-                  if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
-                    if (item.shape.fillTexture) {
-                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1}-rot-${item.shape.hatchRotation || 0})`;
-                    }
-                  }
-                  return item.shape.fill || "transparent";
-                })()}
-                stroke={item.shape.stroke || "#9CA3AF"}
-                strokeWidth={0.6}
-              />
-            )}
-            {item.shape.type === "line" && (
-              <line
-                x1={4}
-                y1={12}
-                x2={20}
-                y2={12}
-                stroke={item.shape.stroke || "#9CA3AF"}
-                strokeWidth={1.5}
-                strokeLinecap="round"
-              />
-            )}
-            {item.shape.type === "polygon" && (
-              <polygon
-                points={(() => {
-                  const sides =
-                    item.shape.polygonSides ||
-                    (item.shape.points ? item.shape.points.length : 4);
-                  const s = Math.max(3, Math.min(12, sides || 4));
-                  const cx = 12;
-                  const cy = 12;
-                  const r = !item.shape.fillType || item.shape.fillType === 'solid' ? 8 : 10;
-                  const pts: string[] = [];
-                  for (let i = 0; i < s; i++) {
-                    const angle = ((Math.PI * 2) / s) * i - Math.PI / 2;
-                    const x = cx + r * Math.cos(angle);
-                    const y = cy + r * Math.sin(angle);
-                    pts.push(`${x},${y}`);
-                  }
-                  return pts.join(" ");
-                })()}
-                fill={(() => {
-                  if (item.shape.fillType === 'texture' || item.shape.fillType === 'hatch' || item.shape.fillType === 'hash') {
-                    if (item.shape.fillTexture) {
-                      return `url(#${item.shape.fillTexture}-scale-${item.shape.fillTextureScale || 1}-thick-${item.shape.fillTextureThickness || 1}-rot-${item.shape.hatchRotation || 0})`;
-                    }
-                  }
-                  return item.shape.fill || "transparent";
-                })()}
-                stroke={item.shape.stroke || "#9CA3AF"}
-                strokeWidth={0.6}
-                strokeLinejoin="round"
-              />
-            )}
-            {item.shape.type === "path" && item.shape.svgPath && (
-              <path
-                d={item.shape.svgPath}
-                fill={item.shape.fill || "transparent"}
-                stroke={item.shape.stroke || "#9CA3AF"}
-                strokeWidth={0.6}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-                transform={`translate(12, 12) scale(${20 / Math.max(item.shape.width || 1, item.shape.height || 1)})`}
-              />
-            )}
-          </svg>
-        )}
-        {item.type === "Group" && (
-          <svg width={24} height={24} viewBox="0 0 24 24">
-            <rect x={4} y={4} width={7} height={7} rx={1.5} fill="#2563eb" fillOpacity={0.15} stroke="#2563eb" strokeWidth={1.2} />
-            <rect x={13} y={4} width={7} height={7} rx={1.5} fill="#2563eb" fillOpacity={0.15} stroke="#2563eb" strokeWidth={1.2} />
-            <rect x={4} y={13} width={7} height={7} rx={1.5} fill="#2563eb" fillOpacity={0.15} stroke="#2563eb" strokeWidth={1.2} />
-            <rect x={13} y={13} width={7} height={7} rx={1.5} fill="#2563eb" fillOpacity={0.15} stroke="#2563eb" strokeWidth={1.2} />
-          </svg>
-        )}
-        {item.type === "Wall" && (
-          <svg width={24} height={24} viewBox="0 0 24 24">
-            <rect
-              x={4}
-              y={8}
-              width={16}
-              height={8}
-              fill={(() => {
-                const w = (item as any).wall || item.wall;
-                if (!w) return "#cbd5e1";
-                if ((w.fillType === 'texture' || w.fillType === 'hatch' || w.fillType === 'hash') && w.fillTexture) {
-                  return `url(#${w.fillTexture}-scale-${w.fillTextureScale || 1}-thick-${w.fillTextureThickness || 1}-rot-${w.hatchRotation || 0})`;
-                }
-                return w.fill || "#cbd5e1";
-              })()}
-              stroke={(item as any).wall?.stroke || item.wall?.stroke || "#94a3b8"}
-              strokeWidth={0.6}
-              rx={1}
-            />
-            <line x1={4} y1={12} x2={20} y2={12} stroke="currentColor" strokeWidth={0.5} strokeOpacity={0.3} />
-          </svg>
-        )}
-        {item.type === "Text" && (
-          <svg width={24} height={24} viewBox="0 0 24 24">
-            <text
-              x={12}
-              y={14}
-              textAnchor="middle"
-              fontSize={12}
-              fill="#111827"
-              fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-            >
-              T
-            </text>
-          </svg>
-        )}
-        {item.type === "Dimension" && (
-          <svg width={24} height={24} viewBox="0 0 24 24">
-            <line
-              x1={4}
-              y1={12}
-              x2={20}
-              y2={12}
-              stroke={item.dimension?.color || "#111827"}
-              strokeWidth={1}
-              strokeLinecap="round"
-            />
-            <polyline
-              points="6,10 4,12 6,14"
-              fill="none"
-              stroke={item.dimension?.color || "#111827"}
-              strokeWidth={0.8}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <polyline
-              points="18,10 20,12 18,14"
-              fill="none"
-              stroke={item.dimension?.color || "#111827"}
-              strokeWidth={0.8}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        )}
-        {item.type === "Label" && (
-          <svg width={24} height={24} viewBox="0 0 24 24">
-            <line
-              x1={6}
-              y1={16}
-              x2={18}
-              y2={16}
-              stroke={item.labelArrow?.color || "#111827"}
-              strokeWidth={0.6}
-              strokeLinecap="round"
-            />
-            <polyline
-              points="16,14 18,16 16,18"
-              fill="none"
-              stroke={item.labelArrow?.color || "#111827"}
-              strokeWidth={0.6}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <rect
-              x={5}
-              y={5}
-              width={14}
-              height={7}
-              rx={2}
-              ry={2}
-              fill="#F3F4F6"
-              stroke={item.labelArrow?.color || "#9CA3AF"}
-              strokeWidth={0.8}
-            />
-          </svg>
-        )}
-      </div>
-    );
-  };
-
-  const renderItemRow = (item: any, plClass = "px-3") => {
-    const isAsset = item.type === "Asset";
-    const childShapes = (item as any).childShapes as any[] | undefined;
-    const hasChildren = isAsset && childShapes && childShapes.length > 0;
-    const isExpanded = isAsset && expandedAssets[item.id];
-
-    const itemChildIds = (item as any).childIds as string[] | undefined;
-    const isSelected = itemChildIds
-      ? itemChildIds.length > 0 && itemChildIds.every(cid => selectedIds.includes(cid))
-      : selectedIds.includes(item.id);
-
-    const isHidden = Boolean(item.hidden);
-
-    return (
-      <div key={item.id} className={`group relative ${isSelected ? "bg-blue-50" : ""}`}>
-        <button
-          onClick={(e) =>
-            isAsset && hasChildren
-              ? setExpandedAssets(prev => ({ ...prev, [item.id]: !prev[item.id] }))
-              : handleSelect({
-                id: item.id,
-                x: item.x,
-                y: item.y,
-                childIds: (item as any).childIds || (hasChildren ? childShapes.map(s => s.id) : undefined),
-              }, e)
-          }
-          className={`w-full flex items-center gap-1.5 ${plClass} pr-7 py-1.5 text-[11px] hover:bg-blue-100 border-b border-gray-100 transition-colors ${isSelected ? "text-blue-700 bg-blue-50 font-medium" : "text-gray-700 hover:bg-gray-100"} ${isHidden ? "opacity-40" : ""}`}
-        >
-          {renderMiniPreview(item)}
-
-          <div 
-            className="flex-1 min-w-0 text-left" 
-            onDoubleClick={(e) => {
-              e.stopPropagation();
-              setRenamingId(item.id);
-              setRenamingText(item.label);
-            }}
-          >
-            {renamingId === item.id ? (
-              <input
-                autoFocus
-                className="w-full text-[11px] px-1 py-0.5 border border-blue-400 rounded outline-none bg-white"
-                value={renamingText}
-                onChange={(e) => setRenamingText(e.target.value)}
-                onBlur={() => handleRename(item.id, renamingText, item.type)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleRename(item.id, renamingText, item.type);
-                  if (e.key === 'Escape') setRenamingId(null);
-                }}
-                onClick={(e) => e.stopPropagation()}
-              />
-            ) : (
-              <>
-                <div className="truncate text-gray-700 leading-tight font-medium">{item.label}</div>
-                <div className="text-[0.6rem] text-gray-400 mt-0.5">
-                  {isAsset && hasChildren ? "Asset (exploded)" : item.type}
-                </div>
-              </>
-            )}
-          </div>
-        </button>
-
-        {/* Eye Icon (Hide / Show Toggle) */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleToggleHide(item.id, isHidden, item.type);
-          }}
-          title={isHidden ? "Show element" : "Hide element"}
-          className={`absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-slate-200/60 transition-all ${
-            isHidden
-              ? "opacity-100 text-blue-600 font-bold"
-              : "opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-700"
-          }`}
-        >
-          {isHidden ? (
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-              <line x1="1" y1="1" x2="23" y2="23" />
-            </svg>
-          ) : (
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          )}
-        </button>
-
-        {isAsset && hasChildren && isExpanded && (
-          <div className="ml-6 border-l border-gray-200">
-            {childShapes!.map((s) => (
-              <button
-                key={s.id}
-                onClick={(e) => handleSelect({ id: s.id, x: s.x, y: s.y }, e)}
-                className="w-full flex items-center gap-1 px-1.5 py-1 text-[10px] hover:bg-gray-50 border-b border-gray-100"
-              >
-                <div className="w-5 h-5 rounded border border-gray-200 bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
-                  <svg width={18} height={18} viewBox="0 0 24 24">
-                    {s.type === "rectangle" && (
-                      <rect
-                        x={!s.fillType || s.fillType === 'solid' ? 4 : 2}
-                        y={!s.fillType || s.fillType === 'solid' ? 7 : 5}
-                        width={!s.fillType || s.fillType === 'solid' ? 16 : 20}
-                        height={!s.fillType || s.fillType === 'solid' ? 10 : 14}
-                        fill={(() => {
-                          if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
-                            if (s.fillTexture) {
-                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
-                            }
-                          }
-                          return s.fill || "transparent";
-                        })()}
-                        stroke={s.stroke || "#9CA3AF"}
-                        strokeWidth={1}
-                        rx={1.5}
-                        ry={1.5}
-                      />
-                    )}
-                    {s.type === "ellipse" && (
-                      <ellipse
-                        cx={12}
-                        cy={12}
-                        rx={!s.fillType || s.fillType === 'solid' ? 8 : 10}
-                        ry={!s.fillType || s.fillType === 'solid' ? 9 : 11}
-                        fill={(() => {
-                          if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
-                            if (s.fillTexture) {
-                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
-                            }
-                          }
-                          return s.fill || "transparent";
-                        })()}
-                        stroke={s.stroke || "#9CA3AF"}
-                        strokeWidth={1}
-                      />
-                    )}
-                    {s.type === "line" && (
-                      <line
-                        x1={4}
-                        y1={12}
-                        x2={20}
-                        y2={12}
-                        stroke={s.stroke || "#9CA3AF"}
-                        strokeWidth={0.6}
-                        strokeLinecap="round"
-                      />
-                    )}
-                    {s.type === "polygon" && (
-                      <polygon
-                        points={(() => {
-                          const sides =
-                            s.polygonSides ||
-                            (s.points ? s.points.length : 4);
-                          const cnt = Math.max(3, Math.min(12, sides || 4));
-                          const cx = 12;
-                          const cy = 12;
-                          const r = !s.fillType || s.fillType === 'solid' ? 8 : 10;
-                          const pts: string[] = [];
-                          for (let i = 0; i < cnt; i++) {
-                            const angle = ((Math.PI * 2) / cnt) * i - Math.PI / 2;
-                            const x = cx + r * Math.cos(angle);
-                            const y = cy + r * Math.sin(angle);
-                            pts.push(`${x},${y}`);
-                          }
-                          return pts.join(" ");
-                        })()}
-                        fill={(() => {
-                          if (s.fillType === 'texture' || s.fillType === 'hatch' || s.fillType === 'hash') {
-                            if (s.fillTexture) {
-                              return `url(#${s.fillTexture}-scale-${s.fillTextureScale || 1}-thick-${s.fillTextureThickness || 1}-rot-${s.hatchRotation || 0})`;
-                            }
-                          }
-                          return s.fill || "transparent";
-                        })()}
-                        stroke={s.stroke || "#9CA3AF"}
-                        strokeWidth={1}
-                        strokeLinejoin="round"
-                      />
-                    )}
-                  </svg>
-                </div>
-                <div className="flex-1 text-left truncate ml-1">
-                  <div className="truncate text-gray-500">{s.type}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const renderItemGroup = (
     groupLabel: string,
@@ -841,7 +961,7 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
         </button>
         {isExpanded && (
           <div>
-            {groupItems.map((item) => renderItemRow(item, "pl-5"))}
+            {groupItems.map((item) => <ElementRow key={item.id} {...rowProps(item, "pl-5")} />)}
           </div>
         )}
       </div>
@@ -925,7 +1045,7 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
           e.stopPropagation();
         }}
       >
-        {groupedElementItems.nonAssetItems.map((item) => renderItemRow(item, "px-3"))}
+        {groupedElementItems.nonAssetItems.map((item) => <ElementRow key={item.id} {...rowProps(item, "px-3")} />)}
         {/* Groups section — collapsible */}
         {renderItemGroup('Groups', 'groups', groupedElementItems.groupItems, expandedAssetGroups, setExpandedAssetGroups)}
         {/* Venue section */}
@@ -1287,6 +1407,41 @@ export default function Editor() {
     }
   }, [id, slug]);
 
+  // The draft write JSON.stringifys the whole scene into localStorage, and the
+  // dirty/history effect below used to call it synchronously on every
+  // history-index change — one full serialization per edit on heavy events.
+  // Coalesce those into a single trailing write instead.
+  //
+  // IMPORTANT: the timer is intentionally NOT cancelled by effect cleanup.
+  // The auto-save flips hasUnsavedChanges to clean, which re-runs (and cleans
+  // up) that effect — cancelling the pending draft here is exactly how the
+  // draft used to vanish before it ever landed. Save/unload paths flush the
+  // timer immediately instead (see flushLocalWorkspaceDraft).
+  const draftWriteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushLocalWorkspaceDraft = useCallback(() => {
+    if (draftWriteTimerRef.current) {
+      clearTimeout(draftWriteTimerRef.current);
+      draftWriteTimerRef.current = null;
+    }
+    writeLocalWorkspaceDraft();
+  }, [writeLocalWorkspaceDraft]);
+
+  const scheduleLocalWorkspaceDraft = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (draftWriteTimerRef.current) return; // trailing coalesce
+    draftWriteTimerRef.current = setTimeout(() => {
+      draftWriteTimerRef.current = null;
+      const project = useProjectStore.getState();
+      const scene = useSceneStore.getState();
+      // Save/unload already checkpointed a draft before marking clean, so a
+      // clean schedule has nothing new to write.
+      if (project.hasUnsavedChanges || scene.hasUnsavedChanges) {
+        writeLocalWorkspaceDraft();
+      }
+    }, 800);
+  }, [writeLocalWorkspaceDraft]);
+
   // Mutation to save canvas assets
   const saveCanvasAssets = useMutation({
     mutationFn: async (
@@ -1524,25 +1679,30 @@ export default function Editor() {
         const projectStore = useProjectStore.getState();
         projectStore.reset();
         projectStore.clearWorkspace();
-      } else if (!prevEventIdRef.current) {
-        // First load / page refresh — clear stale persisted data but don't clearWorkspace
-        // (clearWorkspace is slow and unnecessary on first load since data loading effect handles it)
-        console.log(`[Editor] First load for ${eventId}, resetting project store`);
-        const projectStore = useProjectStore.getState();
-        projectStore.reset();
       }
+      // First load / page refresh: do NOT reset yet. Rehydrated persist
+      // state stays as a fallback until the DB load or draft restore
+      // proves it can replace it.
       prevEventIdRef.current = eventId;
 
       console.log(`[Editor] Route changed to: ${eventSlug}/${eventId}`);
 
-      // Clear current event data so the data loading effect triggers
-      setCurrentEventData(null);
+      const prev = prevEventIdRef.current;
+      const isEventSwitch = !!prev && prev !== eventId;
 
-      // Clear the query cache for this specific event to force fresh fetch
-      queryClient.removeQueries({ queryKey: ["event", eventSlug, eventId] });
+      // Only drop currentEventData when actually switching events. Nulling it
+      // on every effect re-run made the next DB load treat a same-event
+      // refresh as a switch and wipe unsaved local work mid-edit.
+      if (isEventSwitch) {
+        setCurrentEventData(null);
+        queryClient.removeQueries({ queryKey: ["event", eventSlug, eventId] });
+        queryClient.invalidateQueries({ queryKey: ["event", eventSlug, eventId] });
+      } else if (!prev) {
+        // First load for this editor mount — force a fetch if cache is cold.
+        queryClient.invalidateQueries({ queryKey: ["event", eventSlug, eventId] });
+      }
 
-      // Invalidate and refetch the query to ensure fresh data from database
-      queryClient.invalidateQueries({ queryKey: ["event", eventSlug, eventId] });
+      prevEventIdRef.current = eventId;
     }
   }, [isRouterReady, id, slug, queryClient]);
 
@@ -1584,19 +1744,6 @@ export default function Editor() {
         // Always clear workspace when loading a different event to prevent localStorage pollution
         const isDifferentEvent = !currentId || currentId !== eventId;
 
-        if (isDifferentEvent) {
-          // If the collab room has already synced (isCollabAuthoritative), the
-          // Yjs room data is the source of truth. Do NOT reset() here — it
-          // would empty the store that yjs-sync just populated, creating a
-          // window where saveEvent or flushLocalChanges could wipe the DB.
-          if (!isCollabAuthoritative(eventId)) {
-            console.log(`[Editor] Clearing workspace before loading event ${eventId}`);
-            projectStore.reset();
-            projectStore.clearWorkspace();
-          }
-          projectStore.setProjectName(eventData.name);
-        }
-
         const hasCanvasDataWorkspaceItems = !!eventData.canvasData && [
           eventData.canvasData.walls,
           eventData.canvasData.shapes,
@@ -1606,10 +1753,73 @@ export default function Editor() {
           eventData.canvasData.labelArrows,
         ].some((collection) => Array.isArray(collection) && collection.length > 0);
 
+        const hasDbContent =
+          hasCanvasDataWorkspaceItems ||
+          (Array.isArray(eventData.canvasAssets) && eventData.canvasAssets.length > 0);
+
+        // True only when we already had a different event loaded. On a cold
+        // load currentId is null — that must NOT be treated as a switch,
+        // or the store gets wiped after the user has already started editing.
+        const isActualEventSwitch = !!currentId && currentId !== eventId;
+
+        if (isDifferentEvent) {
+          // If the collab room has already synced (isCollabAuthoritative), the
+          // Yjs room data is the source of truth. Do NOT reset() here — it
+          // would empty the store that yjs-sync just populated, creating a
+          // window where saveEvent or flushLocalChanges could wipe the DB.
+          if (!isCollabAuthoritative(eventId)) {
+            const localNow = useProjectStore.getState();
+            const localDirty = localNow.hasUnsavedChanges;
+            const persistedEventId = localNow.projectId;
+            const draftKey = typeof slug === "string" && typeof id === "string"
+              ? getLocalDraftKey(slug, id)
+              : null;
+            const hasDraft = !!(draftKey && window.localStorage.getItem(draftKey));
+            const isOtherPersistedEvent = !!persistedEventId && persistedEventId !== eventId;
+
+            if (isActualEventSwitch) {
+              console.log(`[Editor] Clearing workspace for event switch → ${eventId}`);
+              projectStore.reset();
+              projectStore.clearWorkspace();
+            } else if (isOtherPersistedEvent) {
+              console.log(`[Editor] Clearing workspace — persist belongs to ${persistedEventId}`);
+              projectStore.reset();
+              projectStore.clearWorkspace();
+            } else if (hasDbContent && !localDirty) {
+              // Cold load, store is clean: safe to replace rehydrated state
+              // with the DB snapshot.
+              console.log(`[Editor] Clearing workspace before loading event ${eventId}`);
+              projectStore.reset();
+              projectStore.clearWorkspace();
+            } else {
+              // Local is dirty (user already editing) or DB is empty — keep
+              // local work. Skip the full DB replace below.
+              console.log(`[Editor] Keeping local workspace (dirty=${localDirty}, db=${hasDbContent}, draft=${hasDraft})`);
+            }
+          }
+          projectStore.setProjectName(eventData.name);
+          projectStore.setProjectId(eventId);
+        }
+
+        // When local work is preserved on a cold load, do not re-hydrate from
+        // DB (that would either duplicate or overwrite the dirty store).
+        const localPreserved =
+          isDifferentEvent &&
+          !isCollabAuthoritative(eventId) &&
+          !isActualEventSwitch &&
+          (() => {
+            const s = useProjectStore.getState();
+            const otherPersist = !!s.projectId && s.projectId !== eventId;
+            return !otherPersist && (s.hasUnsavedChanges || !hasDbContent);
+          })();
+
+        if (localPreserved) {
+          console.log(`[Editor] Skipping DB item hydrate — local preserved for ${eventId}`);
+        }
         // PRIORITY 1: Load from canvasData (preferred format from DATABASE).
         // If an older backend response has an empty canvasData object but populated
         // canvasAssets, fall through so dimensions/arrows/walls can still restore.
-        if (eventData.canvasData && (hasCanvasDataWorkspaceItems || !eventData.canvasAssets?.length)) {
+        if (!localPreserved && eventData.canvasData && (hasCanvasDataWorkspaceItems || !eventData.canvasAssets?.length)) {
           const {
             walls = [],
             shapes = [],
@@ -1703,7 +1913,7 @@ export default function Editor() {
           }
         }
         // PRIORITY 2: Fallback to canvasAssets (most events use this format)
-        else if (eventData.canvasAssets && Array.isArray(eventData.canvasAssets) && eventData.canvasAssets.length > 0) {
+        else if (!localPreserved && eventData.canvasAssets && Array.isArray(eventData.canvasAssets) && eventData.canvasAssets.length > 0) {
           console.log(`[Editor] Loading from canvasAssets for event ${eventId} from DATABASE:`, {
             canvasAssetsCount: eventData.canvasAssets.length,
             assetTypes: eventData.canvasAssets.map((a: any) => a.type),
@@ -1984,7 +2194,7 @@ export default function Editor() {
           projectStore.markAsSaved();
         }
         // PRIORITY 3: Fall back to localStorage backup if both canvasData and canvasAssets are empty
-        else if (!eventData.collaborationState?.version) {
+        else if (!localPreserved && !eventData.collaborationState?.version) {
           try {
             const raw = localStorage.getItem(`event-canvas-${eventId}`);
             if (raw) {
@@ -2334,6 +2544,12 @@ export default function Editor() {
           assets: assets.length,
         });
 
+        // Checkpoint the draft BEFORE saveEvent can flip hasUnsavedChanges
+        // false. The scheduled draft timer only writes while dirty, so without
+        // this flush the draft never landed and a failed/collab-skipped save
+        // left nothing on reload.
+        flushLocalWorkspaceDraft();
+
         // Mark that we're saving to prevent reload
         isAutoSavingRef.current = true;
         pendingAutoSaveRef.current = false;
@@ -2379,7 +2595,7 @@ export default function Editor() {
     }, 180); // Auto-save right after the action settles
 
     return () => clearTimeout(timeoutId);
-  }, [projectHasUnsavedChanges, hasUnsavedChanges, currentEventData, id, slug, projectHistoryIndex, sceneHistoryIndex]);
+  }, [projectHasUnsavedChanges, hasUnsavedChanges, currentEventData, id, slug, projectHistoryIndex, sceneHistoryIndex, writeLocalWorkspaceDraft, flushLocalWorkspaceDraft]);
 
   // Restore local draft for this exact event if a recent unsaved checkpoint exists
   useEffect(() => {
@@ -2407,48 +2623,98 @@ export default function Editor() {
       }
 
       const parsed = JSON.parse(raw) as LocalWorkspaceDraft;
-      const backendUpdatedAt = currentEventData?.updatedAt ? new Date(currentEventData.updatedAt).getTime() : 0;
       if (
         !parsed ||
         parsed.version !== LOCAL_DRAFT_VERSION ||
         parsed.eventId !== id ||
         parsed.slug !== slug ||
-        !parsed.data ||
-        (backendUpdatedAt && parsed.savedAt <= backendUpdatedAt)
+        !parsed.data
       ) {
-        if (backendUpdatedAt && parsed?.savedAt <= backendUpdatedAt) {
-          clearLocalWorkspaceDraft();
+        restoredLocalDraftRef.current = draftKey;
+        return;
+      }
+
+      // Merge draft with whatever is already in the store (DB or live).
+      // Never replace wholesale — that is how partial refreshes lost items.
+      const mergeById = <T extends { id?: string }>(liveList: T[], draftList: T[] | undefined): T[] => {
+        if (!Array.isArray(draftList) || draftList.length === 0) return liveList;
+        const byId = new Map<string, T>();
+        for (const item of liveList) {
+          if (item && item.id != null) byId.set(String(item.id), item);
         }
+        const merged: T[] = [...liveList];
+        for (const item of draftList) {
+          if (!item) continue;
+          const key = item.id != null ? String(item.id) : null;
+          if (key == null) {
+            merged.push(item);
+            continue;
+          }
+          if (byId.has(key)) {
+            // Draft is newer local work — prefer draft fields over live.
+            const idx = merged.findIndex((x) => x && String((x as any).id) === key);
+            if (idx >= 0) merged[idx] = { ...merged[idx], ...item };
+          } else {
+            byId.set(key, item);
+            merged.push(item);
+          }
+        }
+        return merged;
+      };
+
+      const live = useProjectStore.getState();
+      const draftData = parsed.data;
+
+      const nextWalls = mergeById(live.walls, draftData.walls);
+      const nextWallSegments = mergeById(live.wallSegments, draftData.wallSegments);
+      const nextShapes = mergeById(live.shapes, draftData.shapes);
+      const nextAssets = mergeById(live.assets, draftData.assets);
+      const nextDimensions = mergeById(live.dimensions, draftData.dimensions);
+      const nextTextAnnotations = mergeById(live.textAnnotations, draftData.textAnnotations);
+      const nextLabelArrows = mergeById(live.labelArrows, draftData.labelArrows);
+      const nextGroups = mergeById(live.groups, draftData.groups);
+      const nextLayers = mergeById(live.layers as any[], draftData.layers as any[]);
+      const nextComments = mergeById(live.comments as any[], draftData.comments as any[]);
+
+      const addedCount =
+        nextAssets.length - live.assets.length +
+        nextShapes.length - live.shapes.length +
+        nextWalls.length - live.walls.length;
+
+      // Only mark dirty / toast when the draft actually contributed something.
+      if (addedCount <= 0 && !live.hasUnsavedChanges) {
         restoredLocalDraftRef.current = draftKey;
         return;
       }
 
       useProjectStore.setState((state) => ({
         ...state,
-        canvas: parsed.data.canvas || state.canvas,
-        walls: parsed.data.walls || [],
-        wallSegments: parsed.data.wallSegments || [],
-        shapes: parsed.data.shapes || [],
-        assets: parsed.data.assets || [],
-        layers: parsed.data.layers || state.layers,
-        dimensions: parsed.data.dimensions || [],
-        textAnnotations: parsed.data.textAnnotations || [],
-        labelArrows: parsed.data.labelArrows || [],
-        groups: parsed.data.groups || [],
-        activeLayerId: parsed.data.activeLayerId || state.activeLayerId,
-        comments: parsed.data.comments || [],
+        canvas: draftData.canvas || state.canvas,
+        walls: nextWalls,
+        wallSegments: nextWallSegments,
+        shapes: nextShapes,
+        assets: nextAssets,
+        layers: (nextLayers.length ? nextLayers : state.layers) as typeof state.layers,
+        dimensions: nextDimensions,
+        textAnnotations: nextTextAnnotations,
+        labelArrows: nextLabelArrows,
+        groups: nextGroups,
+        activeLayerId: draftData.activeLayerId || state.activeLayerId,
+        comments: nextComments as typeof state.comments,
         hasUnsavedChanges: true,
       }));
 
       useSceneStore.setState((state) => ({
         ...state,
-        assets: parsed.data.assets || [],
-        canvas: parsed.data.canvas || state.canvas,
+        assets: nextAssets,
+        canvas: draftData.canvas || state.canvas,
         hasUnsavedChanges: true,
       }));
 
       restoredLocalDraftRef.current = draftKey;
-      toast.success("Recovered unsaved workspace draft");
+      if (addedCount > 0) {
+        toast.success(`Recovered ${addedCount} unsaved item${addedCount === 1 ? "" : "s"} from local draft`);
+      }
     } catch (error) {
       console.warn("[Editor] Failed to restore local workspace draft", error);
       restoredLocalDraftRef.current = draftKey;
@@ -2461,21 +2727,28 @@ export default function Editor() {
 
     const hasAnyUnsavedChanges = projectHasUnsavedChanges || hasUnsavedChanges;
     if (!hasAnyUnsavedChanges) {
-      clearLocalWorkspaceDraft();
+      // Do not clear here — a clean load races with draft restore and
+      // was wiping checkpoints before the DB confirmed newer content.
+      // Drafts clear only on successful save or when restore sees a
+      // newer DB payload with content.
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
-      writeLocalWorkspaceDraft();
-    }, 350);
-
-    return () => window.clearTimeout(timeoutId);
+    // Trailing schedule instead of a synchronous write: this effect fires on
+    // every history-index change, and each write serializes the whole scene
+    // into localStorage. The save path flushes it synchronously before
+    // marking clean (flushLocalWorkspaceDraft), so nothing is lost to the
+    // 180ms auto-save race the old comment described.
+    scheduleLocalWorkspaceDraft();
   }, [
     projectHasUnsavedChanges,
     hasUnsavedChanges,
+    projectHistoryIndex,
+    sceneHistoryIndex,
     currentEventData,
     id,
     slug,
+    scheduleLocalWorkspaceDraft,
     writeLocalWorkspaceDraft,
     clearLocalWorkspaceDraft,
   ]);
@@ -2487,11 +2760,27 @@ export default function Editor() {
     const flushDraft = () => {
       const projectStore = useProjectStore.getState();
       const sceneStore = useSceneStore.getState();
-      if (projectStore.hasUnsavedChanges || sceneStore.hasUnsavedChanges) {
-        writeLocalWorkspaceDraft();
+      const dirty = projectStore.hasUnsavedChanges || sceneStore.hasUnsavedChanges;
+      const hasItems =
+        projectStore.assets.length > 0 ||
+        projectStore.shapes.length > 0 ||
+        projectStore.walls.length > 0 ||
+        projectStore.dimensions.length > 0 ||
+        projectStore.textAnnotations.length > 0 ||
+        projectStore.labelArrows.length > 0 ||
+        sceneStore.assets.length > 0;
+      // Always checkpoint when the workspace has content — hasUnsavedChanges
+      // can be false after a collab-skipped save that never wrote the canvas.
+      if (dirty || hasItems) {
+        // flush, not schedule: unload must not leave a pending timer behind
+        flushLocalWorkspaceDraft();
+        if (dirty && id && slug && typeof id === 'string' && typeof slug === 'string') {
+          projectStore.saveEvent(id, slug).catch(() => {
+            // Offline / aborted - local draft already written above.
+          });
+        }
       }
     };
-
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         flushDraft();
@@ -2507,44 +2796,13 @@ export default function Editor() {
       window.removeEventListener("pagehide", flushDraft);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [writeLocalWorkspaceDraft]);
+  }, [writeLocalWorkspaceDraft, flushLocalWorkspaceDraft, id, slug]);
 
   // Save functionality is handled by PropertiesSidebar
-
-  // On unmount with unsaved changes, revert the DB to the last known good backup
-  // instead of potentially saving partial/empty state.
-  useEffect(() => {
-    const eventId = id;
-    const eventSlug = slug;
-    return () => {
-      if (!eventId || !eventSlug) return;
-      const projectState = useProjectStore.getState();
-      if (!projectState.hasUnsavedChanges) return;
-      try {
-        const raw = window.localStorage.getItem(`event-canvas-${eventId}`);
-        if (!raw) return;
-        const backup = JSON.parse(raw);
-        if (!backup?.canvasData && !backup?.canvasAssets) return;
-        const standalone = isStandaloneSlug(eventSlug);
-        const eventUrl = standalone
-          ? `/events/${eventId}`
-          : `/projects/${eventSlug}/events/${eventId}`;
-        console.warn('[Editor] Unmounting with unsaved changes — reverting DB to last saved backup');
-        apiRequest(eventUrl, 'GET', null, true).then((currentEvent: any) => {
-          const event = currentEvent.data || currentEvent;
-          return apiRequest(eventUrl, 'PUT', {
-            name: event.name || 'Untitled Event',
-            type: event.type || 'custom venue',
-            canvases: event.canvases || [],
-            canvasData: backup.canvasData,
-            canvasAssets: backup.canvasAssets,
-          }, true);
-        }).catch((e: any) => console.warn('[Editor] Failed to revert DB on unmount:', e));
-      } catch (e) {
-        console.warn('[Editor] Could not revert DB on unmount:', e);
-      }
-    };
-  }, [id, slug]);
+  //
+  // NOTE: Do NOT revert the DB to `event-canvas-*` on unmount. On refresh,
+  // pagehide already fires flushDraft → saveEvent with the live store; this
+  // cleanup then raced that PUT with a stale backup and could wipe the save.
 
   // State for collapsible Elements Pane
   const [isElementsCollapsed, setIsElementsCollapsed] = useState(false);

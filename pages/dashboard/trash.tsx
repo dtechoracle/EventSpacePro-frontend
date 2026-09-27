@@ -118,6 +118,9 @@ const Trash = () => {
               <p className="text-xs text-gray-500 mt-0.5">
                 {trashedEvents.length} item{trashedEvents.length !== 1 ? "s" : ""} in trash
               </p>
+              <p className="text-xs text-amber-600 mt-1">
+                Items in trash are automatically deleted after 30 days.
+              </p>
             </div>
           </div>
         </div>

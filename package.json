@@ -9,6 +9,7 @@
     "verify": "npm run typecheck && for f in scripts/verify*.mjs; do node \"$f\" || exit 1; done",
     "assets:repair-gaps": "node scripts/repair-asset-fill-gaps.js",
     "assets:webp": "node scripts/generate-asset-webp.js",
+    "assets:compress-svgs": "node scripts/compress-svgs.mjs",
     "start": "next start",
     "lint": "next lint"
   },
@@ -52,6 +53,7 @@
     "eslint-config-next": "^16.1.6",
     "playwright": "^1.63.0",
     "sharp": "^0.34.5",
+    "svgo": "^4.1.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

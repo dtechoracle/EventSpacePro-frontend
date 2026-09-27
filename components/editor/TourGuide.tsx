@@ -275,7 +275,18 @@ export default function TourGuide() {
     if (stepIdx > 0) setStepIdx((i) => i - 1);
   };
 
-  if (completed && !active) return null;
+  if (completed && !active) {
+    return (
+      <button
+        onClick={startTour}
+        data-tour="help-btn"
+        title="Revisit the tour guide"
+        className="fixed bottom-6 left-36 z-[9999] w-10 h-10 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+      >
+        <FaQuestionCircle className="w-5 h-5" />
+      </button>
+    );
+  }
 
   return (
     <>
@@ -284,7 +295,7 @@ export default function TourGuide() {
         onClick={startTour}
         data-tour="help-btn"
         title="Take a tour of the workspace"
-        className="fixed bottom-6 left-20 z-[9999] w-10 h-10 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+        className="fixed bottom-6 left-36 z-[9999] w-10 h-10 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
       >
         <FaQuestionCircle className="w-5 h-5" />
       </button>

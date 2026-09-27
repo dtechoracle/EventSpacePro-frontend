@@ -5,6 +5,7 @@ const svgCache: Record<string, string> = {};
 const processedSvgCache: Record<string, string> = {};
 const failedSvgCache: Record<string, true> = {};
 const svgMetricsCache: Record<string, SvgMetrics> = {};
+const elementMetricsCache = new WeakMap<Element, { cx: number; cy: number; width: number; height: number }>();
 
 type SvgMetrics = {
     artboardWidth: number | null;
@@ -15,7 +16,6 @@ type SvgMetrics = {
     contentHeight: number | null;
     shouldCropToContent: boolean;
 };
-
 const getSvgMetrics = (svgText: string): SvgMetrics => {
     const widthMatch = svgText.match(/width=["']([\d.]+)[a-z%]*["']/i);
     const heightMatch = svgText.match(/height=["']([\d.]+)[a-z%]*["']/i);
@@ -25,12 +25,16 @@ const getSvgMetrics = (svgText: string): SvgMetrics => {
     let height = heightMatch ? parseFloat(heightMatch[1]) : null;
     let viewBoxX = 0;
     let viewBoxY = 0;
+    let viewBoxW: number | null = null;
+    let viewBoxH: number | null = null;
 
     if (viewBoxMatch) {
         const parts = viewBoxMatch[1].trim().split(/[\s,]+/).map(parseFloat);
         if (parts.length === 4 && parts.every(Number.isFinite)) {
             viewBoxX = parts[0];
             viewBoxY = parts[1];
+            viewBoxW = parts[2];
+            viewBoxH = parts[3];
             width = width || parts[2];
             height = height || parts[3];
         }
@@ -47,6 +51,19 @@ const getSvgMetrics = (svgText: string): SvgMetrics => {
     };
 
     if (typeof document === "undefined") {
+        return result;
+    }
+
+    // Physical size in mm (3600) vs viewBox user units (~220) are different
+    // scales. Comparing getBBox() content to the width attr always looked
+    // like "content doesn't fill the artboard", which forced shouldCrop and
+    // then resized assets down to raw user units (items vanished/shrunk).
+    // Skip the expensive DOM getBBox entirely in that case.
+    const unitScaleMismatch =
+        !!width &&
+        !!viewBoxW &&
+        Math.abs(width / viewBoxW - 1) > 0.05;
+    if (unitScaleMismatch) {
         return result;
     }
 
@@ -95,6 +112,7 @@ const getSvgMetrics = (svgText: string): SvgMetrics => {
                 try {
                     const box = node.getBBox();
                     if (box.width <= 0 && box.height <= 0) return;
+
                     minX = Math.min(minX, box.x);
                     minY = Math.min(minY, box.y);
                     maxX = Math.max(maxX, box.x + box.width);
@@ -122,10 +140,14 @@ const getSvgMetrics = (svgText: string): SvgMetrics => {
         const contentY = bbox.y;
         const contentWidth = bbox.width;
         const contentHeight = bbox.height;
-        const widthRatio = width ? contentWidth / width : null;
-        const heightRatio = height ? contentHeight / height : null;
-        const xOffset = width ? Math.abs(contentX - viewBoxX) / width : 0;
-        const yOffset = height ? Math.abs(contentY - viewBoxY) / height : 0;
+        // Both content bbox and viewBox are in user units — compare those,
+        // never the width/height attrs (may be mm).
+        const refW = viewBoxW || width;
+        const refH = viewBoxH || height;
+        const widthRatio = refW ? contentWidth / refW : null;
+        const heightRatio = refH ? contentHeight / refH : null;
+        const xOffset = refW ? Math.abs(contentX - viewBoxX) / refW : 0;
+        const yOffset = refH ? Math.abs(contentY - viewBoxY) / refH : 0;
 
         return {
             artboardWidth: width,
@@ -135,8 +157,8 @@ const getSvgMetrics = (svgText: string): SvgMetrics => {
             contentWidth,
             contentHeight,
             shouldCropToContent:
-                !width ||
-                !height ||
+                !refW ||
+                !refH ||
                 xOffset > 0.01 ||
                 yOffset > 0.01 ||
                 (widthRatio !== null && widthRatio < 0.95) ||
@@ -211,25 +233,29 @@ function getPathPoints(d: string): { x: number; y: number }[] {
 }
 
 function getElementMetrics(el: Element) {
+    const cachedMetrics = elementMetricsCache.get(el);
+    if (cachedMetrics) return cachedMetrics;
+
     const tag = el.tagName.toLowerCase();
-    
+    let result: { cx: number; cy: number; width: number; height: number } | null = null;
+
     if (tag === 'circle') {
         const cx = parseFloat(el.getAttribute('cx') || '0');
         const cy = parseFloat(el.getAttribute('cy') || '0');
         const r = parseFloat(el.getAttribute('r') || '0');
-        return { cx, cy, width: r * 2, height: r * 2 };
+        result = { cx, cy, width: r * 2, height: r * 2 };
     } else if (tag === 'ellipse') {
         const cx = parseFloat(el.getAttribute('cx') || '0');
         const cy = parseFloat(el.getAttribute('cy') || '0');
         const rx = parseFloat(el.getAttribute('rx') || '0');
         const ry = parseFloat(el.getAttribute('ry') || '0');
-        return { cx, cy, width: rx * 2, height: ry * 2 };
+        result = { cx, cy, width: rx * 2, height: ry * 2 };
     } else if (tag === 'rect') {
         const x = parseFloat(el.getAttribute('x') || '0');
         const y = parseFloat(el.getAttribute('y') || '0');
         const w = parseFloat(el.getAttribute('width') || '0');
         const h = parseFloat(el.getAttribute('height') || '0');
-        return { cx: x + w / 2, cy: y + h / 2, width: w, height: h };
+        result = { cx: x + w / 2, cy: y + h / 2, width: w, height: h };
     } else if (tag === 'path') {
         const d = el.getAttribute('d') || '';
         const points = getPathPoints(d);
@@ -241,10 +267,12 @@ function getElementMetrics(el: Element) {
                 minY = Math.min(minY, p.y);
                 maxY = Math.max(maxY, p.y);
             });
-            return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY };
+            result = { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY };
         }
     }
-    return null;
+
+    if (result) elementMetricsCache.set(el, result);
+    return result;
 }
 
 export const isKnownMissingSvg = (src: string) => Boolean(failedSvgCache[src]);
@@ -360,7 +388,7 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
             const styleId = "dynamic-inline-style";
             const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
             styleEl.setAttribute("id", styleId);
-            styleEl.textContent = `.fill-none-el { fill: none !important; stroke: inherit !important; stroke-width: inherit !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } .auto-fill-el { fill: inherit !important; stroke: none !important; } .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
+            styleEl.textContent = `.fill-none-el { fill: none !important; stroke: inherit !important; stroke-width: inherit !important; } .fill-inherit-el { fill: inherit !important; stroke: inherit !important; stroke-width: inherit !important; } .auto-fill-el { fill: inherit !important; stroke: none !important; } .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; stroke-width: inherit !important; } .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; } .fill-rule-el { fill: var(--chair-color, var(--table-color, #000000)) !important; stroke: inherit !important; stroke-width: inherit !important; }`;
             svg.prepend(styleEl);
 
 
@@ -459,7 +487,9 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
                     }
                 }
 
-                if (shouldBeNone && !hasFillRule && !isAutoFill) {
+                if (hasFillRule) {
+                    el.classList.add("fill-rule-el");
+                } else if (shouldBeNone && !isAutoFill) {
                     el.classList.add("fill-none-el");
                     el.setAttribute("stroke", "none");
                     (el as HTMLElement).style.stroke = "none";

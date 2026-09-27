@@ -1,6 +1,46 @@
 // editorStore.ts - Manages viewport and interaction state
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
+
+// persist() writes synchronously (JSON.stringify + localStorage.setItem) after
+// EVERY set() — and editorStore is written on every mousemove (mouseWorldPos),
+// every pan tick, and every hover change. localStorage is a synchronous main-
+// thread API, so at 60 Hz that's a steady stream of jank. Batch it: keep the
+// latest value in memory and flush once activity settles.
+// NOTE: paired with createJSONStorage, so values arrive/leave as JSON strings.
+const createDeferredStorage = () => {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let pending: { name: string; value: string } | null = null;
+  return {
+    getItem: (name: string) => {
+      if (typeof localStorage === "undefined") return null;
+      try {
+        return localStorage.getItem(name);
+      } catch {
+        return null;
+      }
+    },
+    setItem: (name: string, value: string) => {
+      if (typeof localStorage === "undefined") return;
+      pending = { name, value };
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        if (!pending) return;
+        try {
+          localStorage.setItem(pending.name, pending.value);
+        } catch {}
+        pending = null;
+        timeout = null;
+      }, 300);
+    },
+    removeItem: (name: string) => {
+      if (typeof localStorage === "undefined") return;
+      try {
+        localStorage.removeItem(name);
+      } catch {}
+    },
+  };
+};
 
 export type Tool =
   | 'select'
@@ -83,6 +123,12 @@ export type EditorState = {
   // Arc Tool State
   archWaveMode: boolean;
   toggleArchWaveMode: () => void;
+
+  // View-only: render the preloaded venue with a single stroke width instead of
+  // its per-layer widths (walls 0.5, doors 0.25, ...). Display only — exports
+  // run their own pipeline and keep the per-layer widths.
+  equalVenueStrokeWidth: boolean;
+  toggleEqualVenueStrokeWidth: () => void;
 
   // Methods
   setZoom: (zoom: number) => void;
@@ -192,6 +238,10 @@ export const useEditorStore = create<EditorState>()(
       // Arc Wave Mode
       archWaveMode: false,
       toggleArchWaveMode: () => set((state) => ({ archWaveMode: !state.archWaveMode })),
+
+      // Equal venue stroke width (view only)
+      equalVenueStrokeWidth: false,
+      toggleEqualVenueStrokeWidth: () => set((state) => ({ equalVenueStrokeWidth: !state.equalVenueStrokeWidth })),
 
       // Zoom methods
       // Zoom methods - "Infinity" zoom (very wide range)
@@ -322,6 +372,7 @@ export const useEditorStore = create<EditorState>()(
     }),
     {
       name: 'editor-storage',
+      storage: createJSONStorage(() => createDeferredStorage()),
       partialize: (state) => ({
         zoom: state.zoom,
         panX: state.panX,
@@ -330,6 +381,7 @@ export const useEditorStore = create<EditorState>()(
         gridSize: state.gridSize,
         snapToGrid: state.snapToGrid,
         dimensionType: state.dimensionType,
+        equalVenueStrokeWidth: state.equalVenueStrokeWidth,
         // Don't persist canvasOffset
       }),
     }

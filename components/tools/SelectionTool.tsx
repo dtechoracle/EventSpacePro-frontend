@@ -657,6 +657,18 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
     const isSingleDimension = selectedItems.length === 1 && selectedItems[0].type === 'dimension';
     const isSingleLabelArrow = selectedItems.length === 1 && selectedItems[0].type === 'labelArrow';
 
+    // Flowers & Plants and Trees are free-scalable image assets; other library
+    // assets keep the prior no-corner-handle behavior (move/rotate only via this tool).
+    const canShowResizeHandles = !selectedItems.some(it => {
+        if (it.type === 'shape') return Boolean((it.object as any).fixedSize);
+        if (it.type === 'asset') {
+            const asset = it.object as any;
+            const libDef = ASSET_LIBRARY.find((item: any) => item.id === asset.type);
+            return libDef?.category !== 'Flowers & Plants' && libDef?.category !== 'Trees';
+        }
+        return false;
+    });
+
     if (isSingleDimension) {
         const dim = selectedItems[0].object as Dimension;
         const start = dim.startPoint, end = dim.endPoint;
@@ -859,7 +871,7 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                 className="select-overlay-polygon"
             />
             
-            {!selectedItems.some(it => (it.type === 'shape' || it.type === 'asset') && (it.object as any).fixedSize) && ['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w'].map(h => {
+            {canShowResizeHandles && ['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w'].map(h => {
                 const px = h.includes('w') ? -halfW : (h.includes('e') ? halfW : 0);
                 const py = h.includes('n') ? -halfH : (h.includes('s') ? halfH : 0);
                 const pos = worldToScreenPoint(rotatePoint(px, py).x, rotatePoint(px, py).y);

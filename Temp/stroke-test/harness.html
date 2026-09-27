@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body>
+<div id="host" style="width:1400px;height:1400px;position:relative;background:#fff"></div>
+<pre id="report" style="white-space:pre-wrap;font:11px monospace"></pre>
+<script>
+const svgCache = {};
+const pendingSvgCache = {};
+const processedSvgCache = {};
+const svgMetricsCache = {};
+const elementMetricsCache = new WeakMap();
+// Helper to extract dimensions from SVG string
+function getSvgMetrics(svgText) {
+    const widthMatch = svgText.match(/width=["']([\d.]+)[a-z%]*["']/i);
+    const heightMatch = svgText.match(/height=["']([\d.]+)[a-z%]*["']/i);
+    const viewBoxMatch = svgText.match(/viewBox=["']([\d\s.-]+)["']/);
+    let width = widthMatch ? parseFloat(widthMatch[1]) : null;
+    let height = heightMatch ? parseFloat(heightMatch[1]) : null;
+    let viewBoxX = 0;
+    let viewBoxY = 0;
+    let viewBoxW = null;
+    let viewBoxH = null;
+    if (viewBoxMatch) {
+        const parts = viewBoxMatch[1].split(/\s+/).map(parseFloat);
+        if (parts.length === 4) {
+            viewBoxX = parts[0];
+            viewBoxY = parts[1];
+            viewBoxW = parts[2];
+            viewBoxH = parts[3];
+            width = width || parts[2];
+            height = height || parts[3];
+        }
+    }
+    const result = {
+        artboardWidth: width,
+        artboardHeight: height,
+        contentX: null,
+        contentY: null,
+        contentWidth: null,
+        contentHeight: null,
+        shouldCropToContent: false,
+    };
+    if (typeof document === 'undefined') {
+        return result;
+    }
+    // mm width/height vs user-unit viewBox are different scales. Comparing
+    // getBBox content to the width attr always looked uncropped-full, which
+    // forced shouldCrop and then updateAsset() down to raw user units —
+    // items shrank or vanished. Skip DOM measurement when scales differ.
+    const unitScaleMismatch = !!width &&
+        !!viewBoxW &&
+        Math.abs(width / viewBoxW - 1) > 0.05;
+    if (unitScaleMismatch) {
+        return result;
+    }
+    const tempHost = document.createElement('div');
+    tempHost.style.position = 'absolute';
+    tempHost.style.left = '-100000px';
+    tempHost.style.top = '-100000px';
+    tempHost.style.width = '0';
+    tempHost.style.height = '0';
+    tempHost.style.opacity = '0';
+    tempHost.style.pointerEvents = 'none';
+    tempHost.style.overflow = 'hidden';
+    tempHost.innerHTML = svgText;
+    document.body.appendChild(tempHost);
+    try {
+        const tempSvg = tempHost.querySelector('svg');
+        if (!tempSvg) {
+            return result;
+        }
+        let bbox = null;
+        try {
+            const rootBox = tempSvg.getBBox();
+            if (rootBox.width > 0 && rootBox.height > 0) {
+                bbox = rootBox;
+            }
+        }
+        catch {
+            bbox = null;
+        }
+        if (!bbox) {
+            let minX = Number.POSITIVE_INFINITY;
+            let minY = Number.POSITIVE_INFINITY;
+            let maxX = Number.NEGATIVE_INFINITY;
+            let maxY = Number.NEGATIVE_INFINITY;
+            const graphics = Array.from(tempSvg.querySelectorAll('*')).filter((node) => {
+                if (!(node instanceof SVGGraphicsElement))
+                    return false;
+                if (node.closest('defs, clipPath, mask, pattern, marker, symbol, title, desc, style, script'))
+                    return false;
+                return true;
+            });
+            graphics.forEach(node => {
+                try {
+                    const box = node.getBBox();
+                    if (box.width <= 0 && box.height <= 0)
+                        return;
+                    minX = Math.min(minX, box.x);
+                    minY = Math.min(minY, box.y);
+                    maxX = Math.max(maxX, box.x + box.width);
+                    maxY = Math.max(maxY, box.y + box.height);
+                }
+                catch {
+                    // Ignore nodes that cannot report bounds
+                }
+            });
+            if (Number.isFinite(minX) && Number.isFinite(minY) && Number.isFinite(maxX) && Number.isFinite(maxY)) {
+                bbox = {
+                    x: minX,
+                    y: minY,
+                    width: maxX - minX,
+                    height: maxY - minY,
+                };
+            }
+        }
+        if (!bbox || bbox.width <= 0 || bbox.height <= 0) {
+            return result;
+        }
+        const contentX = bbox.x;
+        const contentY = bbox.y;
+        const contentWidth = bbox.width;
+        const contentHeight = bbox.height;
+        // Compare content to viewBox (same user units), not width/height attrs
+        // which may be physical mm.
+        const refW = viewBoxW || width;
+        const refH = viewBoxH || height;
+        const widthRatio = refW ? contentWidth / refW : null;
+        const heightRatio = refH ? contentHeight / refH : null;
+        const xOffset = refW ? Math.abs(contentX - viewBoxX) / refW : 0;
+        const yOffset = refH ? Math.abs(contentY - viewBoxY) / refH : 0;
+        const shouldCropToContent = !refW ||
+            !refH ||
+            xOffset > 0.01 ||
+            yOffset > 0.01 ||
+            (widthRatio !== null && widthRatio < 0.95) ||
+            (heightRatio !== null && heightRatio < 0.95);
+        return {
+            artboardWidth: width,
+            artboardHeight: height,
+            contentX,
+            contentY,
+            contentWidth,
+            contentHeight,
+            shouldCropToContent,
+        };
+    }
+    finally {
+        tempHost.remove();
+    }
+}
+function getPathPoints(d) {
+    const points = [];
+    const commands = d.match(/[a-df-z][^a-df-z]*/ig);
+    if (!commands)
+        return points;
+    let cx = 0, cy = 0;
+    commands.forEach(cmdStr => {
+        const cmd = cmdStr[0];
+        const args = (cmdStr.slice(1).match(/-?[\d.]+/g) || []).map(Number);
+        if (cmd.toUpperCase() === 'M' || cmd.toUpperCase() === 'L') {
+            for (let i = 0; i < args.length; i += 2) {
+                if (args[i] !== undefined && args[i + 1] !== undefined) {
+                    cx = args[i];
+                    cy = args[i + 1];
+                    points.push({ x: cx, y: cy });
+                }
+            }
+        }
+        else if (cmd.toUpperCase() === 'A') {
+            for (let i = 0; i < args.length; i += 7) {
+                const x = args[i + 5];
+                const y = args[i + 6];
+                if (x !== undefined && y !== undefined) {
+                    cx = x;
+                    cy = y;
+                    points.push({ x: cx, y: cy });
+                }
+            }
+        }
+        else if (cmd.toUpperCase() === 'C') {
+            for (let i = 0; i < args.length; i += 6) {
+                const x = args[i + 4];
+                const y = args[i + 5];
+                if (x !== undefined && y !== undefined) {
+                    cx = x;
+                    cy = y;
+                    points.push({ x: cx, y: cy });
+                }
+            }
+        }
+        else if (cmd.toUpperCase() === 'S' || cmd.toUpperCase() === 'Q') {
+            for (let i = 0; i < args.length; i += 4) {
+                const x = args[i + 2];
+                const y = args[i + 3];
+                if (x !== undefined && y !== undefined) {
+                    cx = x;
+                    cy = y;
+                    points.push({ x: cx, y: cy });
+                }
+            }
+        }
+        else if (cmd.toUpperCase() === 'H') {
+            for (let i = 0; i < args.length; i++) {
+                cx = args[i];
+                points.push({ x: cx, y: cy });
+            }
+        }
+        else if (cmd.toUpperCase() === 'V') {
+            for (let i = 0; i < args.length; i++) {
+                cy = args[i];
+                points.push({ x: cx, y: cy });
+            }
+        }
+    });
+    return points;
+}
+function getElementMetrics(el) {
+    const cachedMetrics = elementMetricsCache.get(el);
+    if (cachedMetrics)
+        return cachedMetrics;
+    const tag = el.tagName.toLowerCase();
+    let result = null;
+    if (tag === 'circle') {
+        const cx = parseFloat(el.getAttribute('cx') || '0');
+        const cy = parseFloat(el.getAttribute('cy') || '0');
+        const r = parseFloat(el.getAttribute('r') || '0');
+        result = { cx, cy, width: r * 2, height: r * 2 };
+    }
+    else if (tag === 'ellipse') {
+        const cx = parseFloat(el.getAttribute('cx') || '0');
+        const cy = parseFloat(el.getAttribute('cy') || '0');
+        const rx = parseFloat(el.getAttribute('rx') || '0');
+        const ry = parseFloat(el.getAttribute('ry') || '0');
+        result = { cx, cy, width: rx * 2, height: ry * 2 };
+    }
+    else if (tag === 'rect') {
+        const x = parseFloat(el.getAttribute('x') || '0');
+        const y = parseFloat(el.getAttribute('y') || '0');
+        const w = parseFloat(el.getAttribute('width') || '0');
+        const h = parseFloat(el.getAttribute('height') || '0');
+        result = { cx: x + w / 2, cy: y + h / 2, width: w, height: h };
+    }
+    else if (tag === 'path') {
+        const d = el.getAttribute('d') || '';
+        const points = getPathPoints(d);
+        if (points.length > 0) {
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            points.forEach(p => {
+                minX = Math.min(minX, p.x);
+                maxX = Math.max(maxX, p.x);
+                minY = Math.min(minY, p.y);
+                maxY = Math.max(maxY, p.y);
+            });
+            result = {
+                cx: (minX + maxX) / 2,
+                cy: (minY + maxY) / 2,
+                width: maxX - minX,
+                height: maxY - minY
+            };
+        }
+    }
+    if (result)
+        elementMetricsCache.set(el, result);
+    return result;
+}
+function getGDepth(el) {
+    let depth = 0;
+    let parent = el.parentElement;
+    while (parent) {
+        if (parent.tagName.toLowerCase() === 'g') {
+            depth++;
+        }
+        parent = parent.parentElement;
+    }
+    return depth;
+}
+
+function runBase(rawSvgContent, definition, asset) {
+  const canUseFastImage = false;
+  const updateAsset = function(){};
+  if (canUseFastImage)
+    return null;
+if (!rawSvgContent || typeof window === 'undefined' || !definition?.path)
+    return null;
+const cacheKey = `${definition.path}_workspace_v52_eko_individual_strokes`;
+if (processedSvgCache[cacheKey])
+    return processedSvgCache[cacheKey];
+try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(rawSvgContent, "image/svg+xml");
+    const svg = doc.querySelector("svg");
+    if (!svg)
+        return rawSvgContent;
+    const metrics = svgMetricsCache[definition.path] || getSvgMetrics(rawSvgContent);
+    svgMetricsCache[definition.path] = metrics;
+    const artboardWidth = metrics.artboardWidth || 1000;
+    const artboardHeight = metrics.artboardHeight || 1000;
+    const viewBoxMatch = rawSvgContent.match(/viewBox=["']([\d\s.-]+)["']/);
+    let viewBoxX = 0;
+    let viewBoxY = 0;
+    if (viewBoxMatch) {
+        const parts = viewBoxMatch[1].trim().split(/\s+/).map(parseFloat);
+        if (parts.length === 4) {
+            viewBoxX = parts[0];
+            viewBoxY = parts[1];
+        }
+    }
+    const artboardCenterX = viewBoxX + artboardWidth / 2;
+    const artboardCenterY = viewBoxY + artboardHeight / 2;
+    const isMultiSeater = definition.path.toLowerCase().includes('seater') || definition.path.toLowerCase().includes('sofa') || definition.path.toLowerCase().includes('doughtnut');
+    const isSixSeaterLShapedSofa = definition.path.toLowerCase().includes('6 seater l shaped sofa.svg');
+    if (isSixSeaterLShapedSofa) {
+        const svgNs = "http://www.w3.org/2000/svg";
+        const outlineSource = Array.from(doc.querySelectorAll("path")).find(path => {
+            const fill = (path.getAttribute("fill") || "").trim().toLowerCase();
+            return fill === "#402e2e";
+        });
+        if (outlineSource) {
+            const normalizedDoc = document.implementation.createDocument(svgNs, "svg", null);
+            const normalizedSvg = normalizedDoc.documentElement;
+            normalizedSvg.setAttribute("xmlns", svgNs);
+            normalizedSvg.setAttribute("version", "1.1");
+            normalizedSvg.setAttribute("width", "3506.0661mm");
+            normalizedSvg.setAttribute("height", "2746.0339mm");
+            normalizedSvg.setAttribute("viewBox", "165 100 1165 915");
+            const defs = normalizedDoc.createElementNS(svgNs, "defs");
+            const outlinePath = normalizedDoc.createElementNS(svgNs, "path");
+            outlinePath.setAttribute("id", "sofa-shape");
+            outlinePath.setAttribute("d", outlineSource.getAttribute("d") || "");
+            const transform = outlineSource.getAttribute("transform");
+            if (transform)
+                outlinePath.setAttribute("transform", transform);
+            outlinePath.setAttribute("fill-rule", "evenodd");
+            outlinePath.setAttribute("clip-rule", "evenodd");
+            defs.appendChild(outlinePath);
+            const autoFillGroup = normalizedDoc.createElementNS(svgNs, "g");
+            autoFillGroup.setAttribute("id", "auto-fill");
+            autoFillGroup.setAttribute("class", "auto-fill");
+            autoFillGroup.setAttribute("data-auto-fill", "true");
+            const fillUse = normalizedDoc.createElementNS(svgNs, "use");
+            fillUse.setAttribute("href", "#sofa-shape");
+            fillUse.setAttribute("fill", "inherit");
+            fillUse.setAttribute("stroke", "none");
+            autoFillGroup.appendChild(fillUse);
+            const strokeUse = normalizedDoc.createElementNS(svgNs, "use");
+            strokeUse.setAttribute("href", "#sofa-shape");
+            strokeUse.setAttribute("fill", "none");
+            strokeUse.setAttribute("stroke", "inherit");
+            strokeUse.setAttribute("stroke-width", "inherit");
+            strokeUse.setAttribute("stroke-linejoin", "round");
+            strokeUse.setAttribute("stroke-linecap", "round");
+            normalizedSvg.appendChild(defs);
+            normalizedSvg.appendChild(autoFillGroup);
+            normalizedSvg.appendChild(strokeUse);
+            const result = new XMLSerializer().serializeToString(normalizedDoc);
+            processedSvgCache[cacheKey] = result;
+            return result;
+        }
+    }
+    // IMPORTANT:
+    // Some QCAD SVGs put fill="none" on a parent <g>.
+    // If we only set fill on the outer <svg>, that inner group blocks the fill,
+    // so circles / auto-fill paths still render as unfilled.
+    // Remove inherited fill/stroke blockers from containers only.
+    const isVenueAsset = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
+    // For venue assets, remove the baked-in optimize-venues style that forces
+    // uniform stroke-width on all elements — we want to preserve per-element strokes.
+    if (isVenueAsset) {
+        const bakedStyle = doc.getElementById('preloaded-venue-style');
+        if (bakedStyle)
+            bakedStyle.remove();
+    }
+    doc.querySelectorAll("svg, g").forEach(container => {
+        container.removeAttribute("fill");
+        container.removeAttribute("stroke");
+        // Preserve per-element stroke-width for venue assets so different
+        // architectural layers (walls, doors, stairs) keep their distinct widths.
+        if (!isVenueAsset) {
+            container.removeAttribute("stroke-width");
+        }
+        const styleAttr = container.getAttribute("style");
+        if (styleAttr) {
+            let cleaned = styleAttr
+                .replace(/fill\s*:[^;]+;?/gi, "")
+                .replace(/stroke\s*:[^;]+;?/gi, "");
+            if (!isVenueAsset) {
+                cleaned = cleaned.replace(/stroke-width\s*:[^;]+;?/gi, "");
+            }
+            if (cleaned.trim())
+                container.setAttribute("style", cleaned);
+            else
+                container.removeAttribute("style");
+        }
+    });
+    let hasExplicitAutoFill = !!doc.querySelector('[id="auto-fill"], .auto-fill, [data-auto-fill="true"]');
+    const styleId = "dynamic-asset-style";
+    if (!doc.getElementById(styleId)) {
+        const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
+        styleEl.setAttribute("id", styleId);
+        const isLayoutAsset = definition?.category === "Layout" || definition?.category === "Dance Floor";
+        const vectorEffectRule = isLayoutAsset ? "" : "svg path, svg circle, svg rect, svg line, svg polyline, svg ellipse { vector-effect: non-scaling-stroke !important; }";
+        const strokeWidthInheritRule = isVenueAsset ? "" : "stroke-width: inherit !important;";
+        styleEl.textContent = `${vectorEffectRule} svg .fill-none-el { fill: none !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .fill-inherit-el { fill: inherit !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .auto-fill-el { fill: inherit !important; stroke: none !important; } svg .stroke-top-layer { pointer-events: none; } svg .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } svg .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
+        svg.prepend(styleEl);
+    }
+    // Auto-generate auto-fill rect for SVGs that have no fillable elements
+    // (e.g. QCAD wireframe exports with only open paths). Adds a fillable
+    // background rect so fill/stroke controls work without editing the SVG.
+    if (!hasExplicitAutoFill && definition?.path && (definition.path.toLowerCase().includes('curve'))) {
+        const vb = svg.getAttribute('viewBox');
+        if (vb) {
+            const parts = vb.trim().split(/\s+/).map(parseFloat);
+            if (parts.length === 4) {
+                const [vbX, vbY, vbW, vbH] = parts;
+                const autoFillRect = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
+                autoFillRect.setAttribute("id", "auto-fill");
+                autoFillRect.setAttribute("class", "auto-fill");
+                autoFillRect.setAttribute("data-auto-fill", "true");
+                autoFillRect.setAttribute("x", String(vbX));
+                autoFillRect.setAttribute("y", String(vbY));
+                autoFillRect.setAttribute("width", String(vbW));
+                autoFillRect.setAttribute("height", String(vbH));
+                const cornerR = Math.min(vbW, vbH) * 0.08;
+                autoFillRect.setAttribute("rx", String(cornerR));
+                autoFillRect.setAttribute("ry", String(cornerR));
+                svg.insertBefore(autoFillRect, svg.firstChild);
+                hasExplicitAutoFill = true;
+            }
+        }
+    }
+    const children = Array.from(doc.querySelectorAll('path, circle, rect, line, polyline, ellipse')).filter(el => !el.closest('defs, clipPath'));
+    const circles = Array.from(doc.querySelectorAll('circle'));
+    const innerCircles = new Set();
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    children.forEach(el => {
+        const m = getElementMetrics(el);
+        if (m) {
+            minX = Math.min(minX, m.cx - m.width / 2);
+            maxX = Math.max(maxX, m.cx + m.width / 2);
+            minY = Math.min(minY, m.cy - m.height / 2);
+            maxY = Math.max(maxY, m.cy + m.height / 2);
+        }
+    });
+    const contentWidth = isFinite(maxX - minX) ? (maxX - minX) : 1000;
+    const contentHeight = isFinite(maxY - minY) ? (maxY - minY) : 1000;
+    const contentCenterX = isFinite(minX) ? (minX + contentWidth / 2) : 500;
+    const contentCenterY = isFinite(minY) ? (minY + contentHeight / 2) : 500;
+    if (circles.length > 1) {
+        const sorted = [...circles].sort((a, b) => parseFloat(a.getAttribute("r") || "0") - parseFloat(b.getAttribute("r") || "0"));
+        for (let i = 0; i < sorted.length - 1; i++) {
+            innerCircles.add(sorted[i]);
+        }
+    }
+    children.forEach(el => {
+        const tag = el.tagName.toLowerCase();
+        const dAttr = el.getAttribute("d") || "";
+        const fillAttr = el.getAttribute("fill");
+        const styleAttr = el.getAttribute("style");
+        const wasExplicitlyNone = fillAttr === 'none' || (styleAttr && /fill\s*:\s*none/i.test(styleAttr));
+        const isLineElement = tag === 'line' || tag === 'polyline';
+        const hasFillRule = el.hasAttribute("fill-rule") || (styleAttr && /fill-rule/i.test(styleAttr));
+        const dClean = dAttr.trim();
+        const isZClosed = dClean.toLowerCase().includes('z');
+        let isCoordClosed = false;
+        if (!isZClosed && dClean.startsWith('M')) {
+            const firstMatch = dClean.match(/^M\s*(-?[\d.]+)\s*[, \s]\s*(-?[\d.]+)/i);
+            const lastMatch = dClean.match(/(-?[\d.]+)\s*[, \s]\s*(-?[\d.]+)\s*$/);
+            if (firstMatch && lastMatch) {
+                const startX = parseFloat(firstMatch[1]);
+                const startY = parseFloat(firstMatch[2]);
+                const endX = parseFloat(lastMatch[1]);
+                const endY = parseFloat(lastMatch[2]);
+                isCoordClosed = Math.abs(startX - endX) < 1.0 && Math.abs(startY - endY) < 1.0;
+            }
+        }
+        const isClosed = isZClosed || isCoordClosed;
+        const isOpenPath = tag === 'path' && !isClosed;
+        const isVenue = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
+        const isBgFill = isVenue && (tag === 'rect' || tag === 'path') && (() => {
+            // Only a solid-filled element can be a background; stroke-only line-work never qualifies
+            const fillAttrVal = (fillAttr || "").trim().toLowerCase();
+            const styleFillMatch = styleAttr && styleAttr.match(/fill\s*:\s*([^;]+)/i);
+            const fillVal = (fillAttrVal || (styleFillMatch ? styleFillMatch[1].trim().toLowerCase() : ""));
+            if (!fillVal || fillVal === "none")
+                return false;
+            const m = getElementMetrics(el);
+            if (!m)
+                return false;
+            const area = m.width * m.height;
+            const canvasArea = contentWidth * contentHeight;
+            // Any element covering more than 75% of the floorplan bounds is likely a solid background rectangle
+            return area > canvasArea * 0.75;
+        })();
+        const autoFillContainer = el.closest('[id="auto-fill"], .auto-fill, [data-auto-fill="true"]');
+        const isAutoFill = el.getAttribute("id") === "auto-fill" ||
+            el.classList.contains("auto-fill") ||
+            el.getAttribute("data-auto-fill") === "true" ||
+            !!autoFillContainer;
+        // On workspace, we determine if it's furniture by checking the path/type
+        // But for simplicity, we treat workspace assets with categories from the library
+        const category = definition.category || "";
+        const catLower = category.toLowerCase();
+        const isFurniture = catLower === 'furniture' || catLower === 'structure' || catLower === 'furniture asset' || asset.type.includes('chair') || asset.type.includes('table');
+        let shouldBeNone = wasExplicitlyNone || isLineElement || (isOpenPath && !isMultiSeater) || isBgFill;
+        if (hasExplicitAutoFill && tag === 'path' && !isAutoFill && !isFurniture) {
+            shouldBeNone = true;
+        }
+        if (styleAttr) {
+            let cleaned = styleAttr
+                .replace(/fill\s*:[^;]+;?/gi, "")
+                .replace(/stroke\s*:[^;]+;?/gi, "");
+            if (!isVenueAsset) {
+                cleaned = cleaned.replace(/stroke-width\s*:[^;]+;?/gi, "");
+            }
+            // For background elements, strip stroke definitions from inline styles so stroke='none' takes effect
+            if (isBgFill) {
+                const bgCleaned = cleaned.replace(/stroke\s*:[^;]+;?/gi, "").replace(/stroke-width\s*:[^;]+;?/gi, "");
+                if (bgCleaned.trim())
+                    el.setAttribute("style", bgCleaned);
+                else
+                    el.removeAttribute("style");
+            }
+            else {
+                if (cleaned.trim())
+                    el.setAttribute("style", cleaned);
+                else
+                    el.removeAttribute("style");
+            }
+        }
+        el.removeAttribute("fill");
+        el.removeAttribute("stroke");
+        // Preserve per-element stroke-width for venue assets
+        if (!isVenueAsset) {
+            el.removeAttribute("stroke-width");
+        }
+        if (!isFurniture) {
+            const isConsentricOuter = tag === 'circle' && circles.length > 1 && !innerCircles.has(el);
+            if (isConsentricOuter) {
+                shouldBeNone = true;
+            }
+        }
+        if (shouldBeNone && !hasFillRule && !isAutoFill) {
+            el.classList.add("fill-none-el");
+            if (!isVenue || isBgFill) {
+                el.setAttribute("stroke", "none");
+                el.style.stroke = "none";
+            }
+        }
+        else if (isMultiSeater) {
+            const elMetrics = getElementMetrics(el);
+            let isTable = false;
+            let isVeryLarge = false;
+            if (elMetrics) {
+                const distToCenter = Math.hypot(elMetrics.cx - contentCenterX, elMetrics.cy - contentCenterY);
+                const isCentral = distToCenter < contentWidth * 0.15;
+                isVeryLarge = elMetrics.width > contentWidth * 0.4 || elMetrics.height > contentHeight * 0.4;
+                isTable = isCentral && getGDepth(el) < 3;
+            }
+            if (isTable) {
+                el.classList.add(isAutoFill ? "table-auto-fill-el" : "table-fill-el");
+            }
+            else {
+                el.classList.add(isAutoFill ? "chair-auto-fill-el" : "chair-fill-el");
+            }
+            if (isVeryLarge && !isTable) {
+                el.setAttribute("stroke", "none");
+                el.removeAttribute("stroke-width");
+                el.style.stroke = "none";
+            }
+        }
+        else if (isAutoFill) {
+            el.classList.add("auto-fill-el");
+        }
+        else {
+            el.classList.add("fill-inherit-el");
+        }
+    });
+    // ── VENUE STROKE-WIDTH SCALING ────────────────────────────────────────
+    // Venue SVGs use mm-scale stroke-widths (0.5 for exterior walls, 0.35 for
+    // interior walls, 0.25 for doors, etc.) that are too thin at display size.
+    // Scale them up by a factor so the relative differences are clearly visible.
+    // Eko Individual Halls ships micro widths (0.001–0.0197); *10 leaves them
+    // sub-pixel under non-scaling-stroke, so that file gets a larger factor.
+    if (isVenueAsset) {
+        const isEkoIndividualHalls = definition?.path?.toLowerCase().includes('individual halls');
+        const STROKE_SCALE = isEkoIndividualHalls ? 300 : 10;
+        const allEls = doc.querySelectorAll('path, circle, rect, line, polyline, ellipse');
+        allEls.forEach(el => {
+            // Resolve the source width from the presentation attribute or inline style.
+            let parsed = NaN;
+            const attrSW = el.getAttribute('stroke-width');
+            if (attrSW)
+                parsed = parseFloat(attrSW);
+            if (isNaN(parsed)) {
+                const styleSW = el.getAttribute('style');
+                const m = styleSW && styleSW.match(/stroke-width\s*:\s*([\d.]+)/i);
+                if (m)
+                    parsed = parseFloat(m[1]);
+            }
+            if (!isNaN(parsed) && parsed > 0) {
+                // Written as an inline !important declaration: other SVGs on the
+                // same page (furniture, thumbnails) inject document-wide
+                // `stroke-width: inherit !important` rules for their fill-none-el
+                // elements, which would otherwise override these per-path widths
+                // and flatten the whole venue to a single inherited width.
+                el.style.setProperty('stroke-width', String(parsed * STROKE_SCALE), 'important');
+                el.removeAttribute('stroke-width');
+            }
+        });
+    }
+    // ────────────────────────────────────────────────────────────────────────
+    // ── Z-ORDER FIX ─────────────────────────────────────────────────────────
+    // Move details to top layer
+    const rootGroup = svg.querySelector('g');
+    if (rootGroup) {
+        const strokeOnlyEls = Array.from(rootGroup.querySelectorAll('.fill-none-el'));
+        if (strokeOnlyEls.length > 0) {
+            const topLayer = doc.createElementNS("http://www.w3.org/2000/svg", "g");
+            topLayer.setAttribute("class", "stroke-top-layer");
+            strokeOnlyEls.forEach(el => topLayer.appendChild(el));
+            rootGroup.appendChild(topLayer);
+        }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+    svg.removeAttribute("style");
+    svg.removeAttribute("fill");
+    svg.removeAttribute("stroke");
+    svg.removeAttribute("xmlns:qs");
+    if (!isVenueAsset) {
+        svg.removeAttribute("stroke-width");
+    }
+    svg.removeAttribute("width");
+    svg.removeAttribute("height");
+    if (metrics.shouldCropToContent && metrics.contentX !== null && metrics.contentY !== null && metrics.contentWidth && metrics.contentHeight) {
+        svg.setAttribute("viewBox", `${metrics.contentX} ${metrics.contentY} ${metrics.contentWidth} ${metrics.contentHeight}`);
+    }
+    else if (!isVenueAsset) {
+        const existingVB = svg.getAttribute("viewBox");
+        if (existingVB) {
+            const parts = existingVB.trim().split(/[\s,]+/).map(parseFloat);
+            if (parts.length === 4 && parts.every(Number.isFinite)) {
+                const [vbX, vbY, vbW, vbH] = parts;
+                svg.setAttribute("viewBox", `${vbX} ${vbY} ${vbW} ${vbH}`);
+            }
+        }
+    }
+    const result = new XMLSerializer().serializeToString(doc);
+    processedSvgCache[cacheKey] = result;
+    return result;
+}
+catch (e) {
+    console.error("Error processing base SVG in AssetRenderer", e);
+    return rawSvgContent;
+}
+
+}
+function runFinal(baseSvg, definition, asset) {
+  const currentFill = asset.fillColor || 'transparent';
+  const rawStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : 0.6;
+  const currentStrokeWidth = rawStrokeWidth <= 0 ? 0 : rawStrokeWidth;
+  const currentStroke = rawStrokeWidth <= 0 ? 'none' : (asset.strokeColor || '#000000');
+  const displayWidth = asset.width;
+  const displayHeight = asset.height;
+  return baseSvg.replace(/<svg([^>]*)>/i, (_match, attrs) => {
+    const cleanAttrs = attrs
+        .replace(/\s+width\s*=\s*["'][^"']*["']/gi, '')
+        .replace(/\s+height\s*=\s*["'][^"']*["']/gi, '')
+        .replace(/\s+x\s*=\s*["'][^"']*["']/gi, '')
+        .replace(/\s+y\s*=\s*["'][^"']*["']/gi, '')
+        .replace(/\s+fill\s*=\s*["'][^"']*["']/gi, '')
+        .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '')
+        .replace(/\s+xmlns:\w+\s*=\s*["'][^"']*["']/gi, '');
+    // For venue assets, don't set a uniform stroke-width on the root SVG.
+    // Per-element stroke-widths are preserved from the original SVG so different
+    // architectural layers (walls 0.5, interior 0.35, doors 0.25, etc.) keep
+    // their distinct visual weights.
+    const isVenueFinal = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
+    if (isVenueFinal) {
+        return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" width="${displayWidth}" height="${displayHeight}" x="${-displayWidth / 2}" y="${-displayHeight / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none;">`;
+    }
+    return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="${displayWidth}" height="${displayHeight}" x="${-displayWidth / 2}" y="${-displayHeight / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none;">`;
+});
+
+}
+(async () => {
+  try {
+    const rawSvg = await (await fetch('/palm.svg')).text();
+    const asset = { type: '5-palm-imperial', width: 39844, height: 54594, strokeColor: '#000000', fillColor: 'transparent' };
+    const definition = { category: 'Venue', path: '/assets/preloaded-venues/5 Palm Imperial.svg', label: '5 Palm Imperial' };
+
+    // Trace getElementMetrics calls during processing
+    const origGet = getElementMetrics;
+    const trace = [];
+    getElementMetrics = function (el) {
+      const m = origGet(el);
+      trace.push({ tag: el.tagName, d: (el.getAttribute('d') || '').slice(0, 50), m });
+      return m;
+    };
+    const base = runBase(rawSvg, definition, asset);
+    getElementMetrics = origGet;
+
+    // Post-hoc isBgFill computation the way base does it
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    trace.forEach(t => { if (t.m) { minX = Math.min(minX, t.m.cx - t.m.width/2); maxX = Math.max(maxX, t.m.cx + t.m.width/2); minY = Math.min(minY, t.m.cy - t.m.height/2); maxY = Math.max(maxY, t.m.cy + t.m.height/2); } });
+    const cw = isFinite(maxX-minX) ? maxX-minX : 1000;
+    const ch = isFinite(maxY-minY) ? maxY-minY : 1000;
+    const canvasArea = cw * ch;
+    const traceReport = trace.map((t, i) => ({
+      i,
+      d: t.d,
+      m: t.m ? [+t.m.width.toFixed(1), +t.m.height.toFixed(1)] : null,
+      ratio: t.m ? +((t.m.width * t.m.height) / canvasArea).toFixed(3) : null,
+      isBgFill: t.m ? (t.m.width * t.m.height) > canvasArea * 0.75 : false
+    }));
+
+    const final = runFinal(base, definition, asset);
+    const host = document.getElementById('host');
+    host.innerHTML = final;
+    // Simulate the document-wide style leak from other SVGs on the workspace page
+    const leak = document.createElement('style');
+    leak.textContent = 'svg .fill-none-el { stroke-width: inherit !important; } svg .fill-inherit-el { stroke-width: inherit !important; } .fill-none-el { stroke-width: inherit !important; }';
+    document.head.appendChild(leak);
+    const paths = [...host.querySelectorAll('path')];
+    const report = paths.map(p => {
+      const cs = getComputedStyle(p);
+      return { style: p.getAttribute('style'), computedSW: cs.strokeWidth };
+    });
+    document.getElementById('report').textContent =
+      'CONTENT_BOUNDS: ' + JSON.stringify([minX, minY, maxX, maxY].map(n => +n.toFixed(1))) + ' canvasArea=' + canvasArea.toExponential(2) +
+      '\n\nTRACE(isBgFill calc):\n' + JSON.stringify(traceReport, null, 1) +
+      '\n\nPATHS(' + paths.length + '):\n' + JSON.stringify(report, null, 1);
+    window.__done = true;
+  } catch (e) {
+    document.getElementById('report').textContent = 'ERROR: ' + e.stack;
+    window.__done = true;
+  }
+})();
+</script>
+</body></html>

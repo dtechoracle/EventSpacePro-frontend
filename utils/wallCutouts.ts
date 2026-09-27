@@ -26,6 +26,18 @@ export function isCutoutAsset(asset: Partial<Asset>): boolean {
         id.includes('group-91');
 }
 
+// ASSET_LIBRARY.find is a linear scan; cutout passes run once per asset on
+// every scene change, so cache the verdict by id.
+const cutoutVerdictCache = new Map<string, boolean>();
+function cachedIsCutoutAsset(asset: Partial<Asset>): boolean {
+    const raw = (asset.type || asset.id || '').toLowerCase();
+    const hit = cutoutVerdictCache.get(raw);
+    if (hit !== undefined) return hit;
+    const verdict = isCutoutAsset(asset);
+    cutoutVerdictCache.set(raw, verdict);
+    return verdict;
+}
+
 export function detectWallCutout(
     asset: Asset,
     wall: Wall,
@@ -127,6 +139,39 @@ export function calculateAllCutouts(assets: Asset[], walls: Wall[]): WallCutout[
 
 export function getCutoutsForEdge(wallId: string, edgeId: string, cutouts: WallCutout[]): WallCutout[] {
     return cutouts.filter(c => c.wallId === wallId && c.edgeId === edgeId);
+}
+
+// Shared caches. WallRenderer mounts once PER WALL, and previously each instance
+// filtered assets + ran calculateAllCutouts (O(cutoutAssets × walls)) — so the
+// whole scene paid O(walls² × assets) on every asset change. The caches below
+// key on input identity: the first caller computes, every other wall gets the
+// same array reference back for free.
+let lastAssetsInput: Asset[] | null = null;
+let lastCutoutAssets: Asset[] = [];
+export function getCutoutAssetsCached(assets: Asset[]): Asset[] {
+    if (assets === lastAssetsInput) return lastCutoutAssets;
+    lastAssetsInput = assets;
+    const next = assets.filter(cachedIsCutoutAsset);
+    // Keep identity stable when the cutout subset didn't actually change
+    // (e.g. dragging a chair) so downstream selectors/memos skip work.
+    lastCutoutAssets =
+        lastCutoutAssets.length === next.length && lastCutoutAssets.every((a, i) => a === next[i])
+            ? lastCutoutAssets
+            : next;
+    return lastCutoutAssets;
+}
+
+let lastCutoutsInput: { assets: Asset[]; walls: Wall[] } | null = null;
+let lastCutoutsResult: WallCutout[] = [];
+export function getAllCutoutsCached(assets: Asset[], walls: Wall[]): WallCutout[] {
+    if (lastCutoutsInput && lastCutoutsInput.assets === assets && lastCutoutsInput.walls === walls) {
+        return lastCutoutsResult;
+    }
+    const cutoutAssets = getCutoutAssetsCached(assets);
+    lastCutoutsResult =
+        cutoutAssets.length === 0 || walls.length === 0 ? [] : calculateAllCutouts(cutoutAssets, walls);
+    lastCutoutsInput = { assets, walls };
+    return lastCutoutsResult;
 }
 
 function distanceToSegment(

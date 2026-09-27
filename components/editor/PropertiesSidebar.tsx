@@ -15,12 +15,13 @@ import { texturePatterns } from '@/utils/texturePatterns';
 import { useRouter } from "next/router";
 import { isStandaloneSlug } from "@/lib/standaloneEvent";
 import { useUserStore } from "@/store/userStore";
-import { ASSET_LIBRARY } from "@/lib/assets";
+import { ASSET_LIBRARY, IMAGE_ASSET_CATEGORIES } from "@/lib/assets";
 import toast from "react-hot-toast";
 import { convertAssetToShapes } from "@/utils/assetUtils";
 import LineTypeSelector from "@/components/ui/LineTypeSelector";
 import { fromStoreValue, toStoreValue, getUnitLabel, UnitSystem } from '@/lib/units';
 import { TEXT_STYLE_FONTS, ensureGoogleFontsLoaded, getFontDisplayName } from "@/utils/googleFonts";
+import { getEffectiveGridSize } from "@/utils/grid";
 
 type TableNumberingMode = 'manual' | 'auto';
 type TableNumberingPattern = 'linear' | 's-direction';
@@ -42,7 +43,38 @@ type NumberableTable = {
 
 const TABLE_NUMBERING_SETTINGS_KEY = 'eventspacepro-table-numbering-settings';
 
-const isTableLike = (item: any) => {
+const CHAIR_TABLE_GAP_MM = 50;
+
+// Predicates below are pure functions of an item's own fields, and the stores
+// replace items instead of mutating them — so results can be cached per object.
+// The numbering memo re-filters every asset on each store write (every frame of
+// a drag), which made string-building the dominant cost in that pass.
+const predicateCache = new WeakMap<object, Map<string, boolean>>();
+const memoPredicate = (key: string, fn: (item: any) => boolean) => (item: any): boolean => {
+  if (item === null || typeof item !== "object") return fn(item);
+  let bucket = predicateCache.get(item);
+  if (!bucket) {
+    bucket = new Map();
+    predicateCache.set(item, bucket);
+  }
+  const hit = bucket.get(key);
+  if (hit !== undefined) return hit;
+  const result = fn(item);
+  bucket.set(key, result);
+  return result;
+};
+
+const isRoundTable = memoPredicate('round', (item: any) => {
+  const haystack = [
+    item?.type,
+    item?.name,
+    item?.label,
+    item?.tableName,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return haystack.includes('round') || haystack.includes('circle') || haystack.includes('oval');
+});
+
+const isTableLike = memoPredicate('table', (item: any) => {
   const haystack = [
     item?.type,
     item?.name,
@@ -51,25 +83,34 @@ const isTableLike = (item: any) => {
   ].filter(Boolean).join(' ').toLowerCase();
   if (haystack.includes('sofa') || haystack.includes('couch')) return false;
   return haystack.includes('table');
-};
+});
 
-const isSofa = (item: any) => {
+const hasBuiltInSeating = memoPredicate('seating', (item: any) => {
+  const haystack = [
+    item?.type,
+    item?.name,
+    item?.label,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return haystack.includes('seater');
+});
+
+const isSofa = memoPredicate('sofa', (item: any) => {
   const haystack = [
     item?.type,
     item?.name,
     item?.label,
   ].filter(Boolean).join(' ').toLowerCase();
   return haystack.includes('sofa');
-};
+});
 
-const isStageLike = (item: any) => {
+const isStageLike = memoPredicate('stage', (item: any) => {
   const haystack = [
     item?.type,
     item?.name,
     item?.label,
   ].filter(Boolean).join(' ').toLowerCase();
   return haystack.includes('stage');
-};
+});
 
 const getTableLabel = (item: any, fallback: string) => {
   return item?.name || item?.label || item?.type || fallback;
@@ -171,8 +212,10 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const selectedIds = useEditorStore(s => s.selectedIds);
   const activeTool = useEditorStore(s => s.activeTool);
   const dimensionType = useEditorStore(s => s.dimensionType);
-  const toggleEditorGrid = useEditorStore(s => s.toggleGrid);
-  const setEditorGridSize = useEditorStore(s => s.setGridSize);
+const toggleEditorGrid = useEditorStore(s => s.toggleGrid);
+const setEditorGridSize = useEditorStore(s => s.setGridSize);
+const equalVenueStrokeWidth = useEditorStore(s => s.equalVenueStrokeWidth);
+const toggleEqualVenueStrokeWidth = useEditorStore(s => s.toggleEqualVenueStrokeWidth);
   const shapes = useProjectStore(s => s.shapes);
   const assets = useProjectStore(s => s.assets);
   const walls = useProjectStore(s => s.walls);
@@ -327,6 +370,11 @@ export default function PropertiesSidebar(): React.JSX.Element {
     if (!selectedAsset) return false;
     return ASSET_LIBRARY.find(item => item.id === selectedAsset.type)?.category === 'Venue';
   }, [selectedAsset]);
+  const isSelectedImageAsset = useMemo(() => {
+    if (!selectedAsset) return false;
+    const cat = ASSET_LIBRARY.find(item => item.id === selectedAsset.type)?.category;
+    return !!cat && IMAGE_ASSET_CATEGORIES.includes(cat);
+  }, [selectedAsset]);
   const selectedAssets = useMemo(
     () => assets.filter(a => selectedIdSet.has(a.id)),
     [assets, selectedIdSet]
@@ -343,6 +391,12 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const updateSceneAsset = useSceneStore((s) => s.updateAsset);
   const unitSystem = useSceneStore((s) => s.unitSystem) || 'metric-mm';
   const unitLabel = getUnitLabel(unitSystem);
+  const chairSettings = useSceneStore((s) => s.chairSettings) || { numChairs: 8 };
+  const [chairType, setChairType] = useState('event-chair-1');
+  const updateChairSettings = (settings: { numChairs: number }) => {
+    const state = useSceneStore.getState();
+    state.setChairSettings?.(settings);
+  };
 
   useEffect(() => {
     ensureGoogleFontsLoaded(textStyleFonts);
@@ -1071,27 +1125,12 @@ export default function PropertiesSidebar(): React.JSX.Element {
 
             {/* Grid Size */}
             {showGrid && (
-              <div className="py-2">
-                <label className="block text-xs text-gray-600 mb-1">Grid Size</label>
-                <select
-                  value={availableGridSizes?.[selectedGridSizeIndex] || 1000}
-                  onChange={(e) => {
-                    const selectedSize = Number(e.target.value);
-                    const index = availableGridSizes?.indexOf(selectedSize) ?? 2;
-                    handleSetGridSize(index);
-                  }}
-                  className="w-full text-xs border rounded px-2 py-1 bg-white"
-                >
-                  {(availableGridSizes || [100, 500, 1000, 2000, 5000]).map((size) => {
-                    const label = unitSystem === 'imperial-ft'
-                      ? `${(size / 304.8).toFixed(1)}ft`
-                      : unitSystem === 'metric-m'
-                        ? `${size / 1000}m`
-                        : `${size}mm`;
-                    return <option key={size} value={size}>{label}</option>;
-                  })}
-                </select>
-              </div>
+              <GridSizeField
+                sizes={availableGridSizes || [100, 500, 1000, 2000, 5000]}
+                selectedIndex={selectedGridSizeIndex}
+                onSelect={handleSetGridSize}
+                unitSystem={unitSystem}
+              />
             )}
 
             {showGrid && (
@@ -1159,7 +1198,17 @@ export default function PropertiesSidebar(): React.JSX.Element {
                   </div>
                 )}
 
-                {/* Fill Color for multiple items */}
+                {/* Fill Color for multiple items — hidden only when every selected item is an image asset (Trees/Flowers) */}
+                {(() => {
+                  const onlyImageAssets =
+                    selectedShapes.length === 0 &&
+                    selectedAssets.length > 0 &&
+                    selectedAssets.every(a => {
+                      const cat = ASSET_LIBRARY.find(item => item.id === a.type)?.category;
+                      return !!cat && IMAGE_ASSET_CATEGORIES.includes(cat);
+                    });
+                  if (onlyImageAssets) return null;
+                  return (
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-gray-500">Fill Color</span>
                   <div className="flex items-center gap-2">
@@ -1175,6 +1224,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
                     />
                   </div>
                 </div>
+                  );
+                })()}
 
                 {/* Stroke Color for multiple items */}
                 <div className="flex justify-between items-center mb-2">
@@ -1548,10 +1599,28 @@ export default function PropertiesSidebar(): React.JSX.Element {
                       </div>
                     )}
 
+                    {/* Venue: equal stroke width (view only) */}
+                    {isSelectedVenue && (
+                      <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center py-2">
+                        <div className="pr-3">
+                          <span className="text-xs text-gray-500">Equal stroke width</span>
+                          <p className="text-[10px] text-gray-400 leading-tight mt-0.5">
+                            Preview only - exports keep the per-layer stroke widths.
+                          </p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={equalVenueStrokeWidth}
+                          onChange={toggleEqualVenueStrokeWidth}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 flex-shrink-0"
+                        />
+                      </div>
+                    )}
+
                     {/* Relocated Appearance Section */}
                     {/* Appearance (Shape/Asset) - Hidden for preloaded venues */}
                 
-                  <div className="mt-3 pt-3 border-t border-gray-100" style={isSelectedVenue ? { display: 'none' } : undefined}>
+                  <div className="mt-3 pt-3 border-t border-gray-100" style={isSelectedVenue || isSelectedImageAsset ? { display: 'none' } : undefined}>
 
                     {/* Fill Type Selector - Only for Shapes currently */}
                     {itemType === 'shape' && (
@@ -2439,6 +2508,139 @@ step={1}
                       </div>
                     </div>
                   )}
+
+                {/* Chair Placement for Tables (skip seater tables — chairs are in the artwork) */}
+                {itemType === 'asset' && isTableLike(selectedItem) && !hasBuiltInSeating(selectedItem) && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="text-xs font-semibold mb-2 text-gray-600 uppercase tracking-tight">Chair Placement</div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500 text-xs">Number of Chairs</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="64"
+                        value={chairSettings.numChairs}
+                        onChange={(e) => updateChairSettings({ numChairs: Number(e.target.value) })}
+                        className="sidebar-input w-16 text-center"
+                      />
+                    </div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500 text-xs">Chair Type</span>
+                      <select
+                        value={chairType}
+                        onChange={(e) => setChairType(e.target.value)}
+                        className="sidebar-input w-32 text-xs"
+                      >
+                        {ASSET_LIBRARY.filter((a) => a.id.startsWith('event-chair-')).map((a) => (
+                          <option key={a.id} value={a.id}>{a.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mb-1">Chairs sit {CHAIR_TABLE_GAP_MM}mm from the table edge.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const table = selectedItem as any;
+                        const numChairs = Math.max(1, Math.min(64, Math.round(chairSettings.numChairs) || 8));
+                        const tableWidth = table.width || 1000;
+                        const tableHeight = table.height || 1000;
+                        const rotation = ((table.rotation || 0) * Math.PI) / 180;
+                        const cosR = Math.cos(rotation);
+                        const sinR = Math.sin(rotation);
+                        const libDef = ASSET_LIBRARY.find((a) => a.id === chairType);
+                        const baseChairW = libDef?.width || 482;
+                        const baseChairH = libDef?.height || 517;
+                        const tableMin = Math.min(tableWidth, tableHeight);
+                        const chairSize = Math.max(Math.min(tableMin * 0.3, Math.max(baseChairW, baseChairH)), 200);
+                        const scale = chairSize / Math.max(baseChairW, baseChairH);
+                        const chairW = baseChairW * scale;
+                        const chairH = baseChairH * scale;
+                        const nextZ = useProjectStore.getState().getNextZIndex();
+                        const now = Date.now();
+                        const gap = CHAIR_TABLE_GAP_MM;
+                        const toWorld = (lx: number, ly: number) => ({
+                          x: table.x + lx * cosR - ly * sinR,
+                          y: table.y + lx * sinR + ly * cosR,
+                        });
+
+                        let placements: Array<{ x: number; y: number; rotation: number }> = [];
+
+                        if (isRoundTable(table)) {
+                          const radius = Math.min(tableWidth, tableHeight) / 2 + gap + Math.max(chairW, chairH) / 2;
+                          placements = Array.from({ length: numChairs }, (_, i) => {
+                            const angleDeg = (360 / numChairs) * i;
+                            const angleRad = (angleDeg * Math.PI) / 180;
+                            const world = toWorld(Math.cos(angleRad) * radius, Math.sin(angleRad) * radius);
+                            return {
+                              x: world.x,
+                              y: world.y,
+                              rotation: (angleDeg + 90 + (table.rotation || 0)) % 360,
+                            };
+                          });
+                        } else {
+                          const tw = tableWidth;
+                          const th = tableHeight;
+                          const outX = tw / 2 + gap + chairW / 2;
+                          const outY = th / 2 + gap + chairH / 2;
+                          const perimeter = 2 * (tw + th);
+                          let topCount = Math.max(1, Math.round(numChairs * tw / perimeter));
+                          let botCount = Math.max(1, Math.round(numChairs * tw / perimeter));
+                          let leftCount = Math.max(0, Math.round(numChairs * th / perimeter));
+                          let rightCount = Math.max(0, numChairs - topCount - botCount - leftCount);
+                          if (topCount + botCount + leftCount + rightCount > numChairs) {
+                            rightCount = Math.max(0, numChairs - topCount - botCount - leftCount);
+                          }
+
+                          placements = [];
+                          const addRow = (count: number, ly: number, rot: number) => {
+                            for (let i = 0; i < count; i++) {
+                              const lx = -tw / 2 + (tw / (count + 1)) * (i + 1);
+                              const world = toWorld(lx, ly);
+                              placements.push({
+                                x: world.x,
+                                y: world.y,
+                                rotation: (rot + (table.rotation || 0)) % 360,
+                              });
+                            }
+                          };
+                          const addCol = (count: number, lx: number, rot: number) => {
+                            for (let i = 0; i < count; i++) {
+                              const ly = -th / 2 + (th / (count + 1)) * (i + 1);
+                              const world = toWorld(lx, ly);
+                              placements.push({
+                                x: world.x,
+                                y: world.y,
+                                rotation: (rot + (table.rotation || 0)) % 360,
+                              });
+                            }
+                          };
+                          addRow(topCount, -outY, 0);
+                          addRow(botCount, outY, 180);
+                          if (leftCount > 0) addCol(leftCount, -outX, 270);
+                          if (rightCount > 0) addCol(rightCount, outX, 90);
+                        }
+
+                        const chairs = placements.map((p, i) => ({
+                          id: `chair-${now}-${i}`,
+                          type: chairType,
+                          x: p.x,
+                          y: p.y,
+                          rotation: p.rotation,
+                          width: chairW,
+                          height: chairH,
+                          scale: 1,
+                          zIndex: nextZ + i,
+                          fillColor: table.chairColor || table.fillColor || undefined,
+                        }));
+                        useProjectStore.getState().addAssetBatch(chairs);
+                        toast.success(`${chairs.length} chair${chairs.length === 1 ? '' : 's'} added around table`);
+                      }}
+                      className="w-full mt-1 bg-[#0056A9] text-white text-xs font-medium py-1.5 rounded hover:bg-[#004a92] transition-colors"
+                    >
+                      Add Chairs
+                    </button>
+                  </div>
+                )}
 
                 {/* Text Annotation Properties */}
                 {itemType === 'text-annotation' && selectedTextAnnotation && (
@@ -3912,5 +4114,45 @@ step={1}
         <div data-tour="export-tab"><ExportPanel /></div>
       </div>
     </aside >
+  );
+}
+
+interface GridSizeFieldProps {
+  sizes: number[];
+  selectedIndex: number;
+  onSelect: (index: number) => void;
+  unitSystem?: string;
+}
+
+function GridSizeField({ sizes, selectedIndex, onSelect, unitSystem }: GridSizeFieldProps) {
+  const zoom = useEditorStore((s) => s.zoom);
+
+  const formatSize = (size: number) => {
+    if (unitSystem === "imperial-ft") {
+      return `${(size / 304.8).toFixed(1)}ft`;
+    }
+    if (unitSystem === "metric-m") {
+      return `${size / 1000}m`;
+    }
+    return `${size}mm`;
+  };
+
+  const selectedBase = sizes[selectedIndex] ?? sizes[0] ?? 1000;
+
+  return (
+    <div className="py-2">
+      <label className="block text-xs text-gray-600 mb-1">Grid Size</label>
+      <select
+        value={selectedBase}
+        onChange={(e) => onSelect(sizes.indexOf(Number(e.target.value)))}
+        className="w-full text-xs border rounded px-2 py-1 bg-white"
+      >
+        {sizes.map((size) => (
+          <option key={size} value={size}>
+            {formatSize(getEffectiveGridSize(size, zoom))}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
