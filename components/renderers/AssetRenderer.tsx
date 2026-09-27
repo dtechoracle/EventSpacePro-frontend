@@ -578,6 +578,33 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             // follows the exact same uniform-width path as every other asset.
             const preserveVenueStrokes = isVenueAsset && !equalVenueStrokeWidth;
 
+            // Equal-stroke view: measure the widest source layer (exterior walls) from
+            // the RAW source before the child loop below strips stroke-width from every
+            // element. Scaled exactly like the layered view scales it, so the venue keeps
+            // its visual weight - just uniform across walls, doors, stairs and windows.
+            let venueUniformStrokeWidth = NaN;
+            if (isVenueAsset && !preserveVenueStrokes) {
+                const isEkoIndividualHalls = definition?.path?.toLowerCase().includes('individual halls');
+                const EKO_STROKE_SCALE = isEkoIndividualHalls ? 300 : 10;
+                let widestSource = NaN;
+                doc.querySelectorAll('path, circle, rect, line, polyline, ellipse').forEach(el => {
+                    let parsed = NaN;
+                    const attrSW = el.getAttribute('stroke-width');
+                    if (attrSW) parsed = parseFloat(attrSW);
+                    if (isNaN(parsed)) {
+                        const styleSW = el.getAttribute('style');
+                        const m = styleSW && styleSW.match(/stroke-width\s*:\s*([\d.]+)/i);
+                        if (m) parsed = parseFloat(m[1]);
+                    }
+                    if (!isNaN(parsed) && parsed > 0 && (isNaN(widestSource) || parsed > widestSource)) {
+                        widestSource = parsed;
+                    }
+                });
+                venueUniformStrokeWidth = isNaN(widestSource)
+                    ? (asset.strokeWidth !== undefined ? asset.strokeWidth : DEFAULT_ASSET_STROKE_WIDTH)
+                    : widestSource * EKO_STROKE_SCALE;
+            }
+
             // For venue assets, remove the baked-in optimize-venues style that forces
             // uniform stroke-width on all elements — we want to preserve per-element strokes.
             if (isVenueAsset) {
@@ -810,12 +837,13 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             // Scale them up by a factor so the relative differences are clearly visible.
             // Eko Individual Halls ships micro widths (0.001–0.0197); *10 leaves them
             // sub-pixel under non-scaling-stroke, so that file gets a larger factor.
-            let venueUniformStrokeWidth = NaN;
-            if (isVenueAsset) {
+            // Equal-stroke view: measured from the raw source above (the child loop
+            // already stripped stroke-width from every element by this point), so this
+            // block only writes the per-layer widths when the toggle is off.
+            if (preserveVenueStrokes) {
                 const isEkoIndividualHalls = definition?.path?.toLowerCase().includes('individual halls');
                 const STROKE_SCALE = isEkoIndividualHalls ? 300 : 10;
                 const allEls = doc.querySelectorAll('path, circle, rect, line, polyline, ellipse');
-                let widestSource = NaN;
                 allEls.forEach(el => {
                     // Resolve the source width from the presentation attribute or inline style.
                     let parsed = NaN;
@@ -827,27 +855,15 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                         if (m) parsed = parseFloat(m[1]);
                     }
                     if (!isNaN(parsed) && parsed > 0) {
-                        if (preserveVenueStrokes) {
-                            // Written as an inline !important declaration: other SVGs on the
-                            // same page (furniture, thumbnails) inject document-wide
-                            // `stroke-width: inherit !important` rules for their fill-none-el
-                            // elements, which would otherwise override these per-path widths
-                            // and flatten the whole venue to a single inherited width.
-                            (el as SVGElement).style.setProperty('stroke-width', String(parsed * STROKE_SCALE), 'important');
-                            el.removeAttribute('stroke-width');
-                        } else if (isNaN(widestSource) || parsed > widestSource) {
-                            widestSource = parsed;
-                        }
+                        // Written as an inline !important declaration: other SVGs on the
+                        // same page (furniture, thumbnails) inject document-wide
+                        // `stroke-width: inherit !important` rules for their fill-none-el
+                        // elements, which would otherwise override these per-path widths
+                        // and flatten the whole venue to a single inherited width.
+                        (el as SVGElement).style.setProperty('stroke-width', String(parsed * STROKE_SCALE), 'important');
+                        el.removeAttribute('stroke-width');
                     }
                 });
-                // Equal-stroke view: one width for every layer. Widest source layer
-                // (exterior walls) scaled exactly like the layered view scales it, so
-                // the venue keeps its visual weight - just uniform.
-                if (!preserveVenueStrokes) {
-                    venueUniformStrokeWidth = isNaN(widestSource)
-                        ? (asset.strokeWidth !== undefined ? asset.strokeWidth : DEFAULT_ASSET_STROKE_WIDTH)
-                        : widestSource * STROKE_SCALE;
-                }
             }
             // ────────────────────────────────────────────────────────────────────────
 
