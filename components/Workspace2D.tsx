@@ -278,12 +278,10 @@ const StaticDrawingLayer = React.memo(({
   visibleRenderables,
   hiddenIds,
   selectedIds,
-  zoom
 }: {
   visibleRenderables: any[],
   hiddenIds?: Set<string>,
   selectedIds: string[],
-  zoom: number
 }) => {
   const selectedIdSet = React.useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -299,7 +297,7 @@ const StaticDrawingLayer = React.memo(({
             if (item.type === 'freehand') {
               return <FreehandRenderer key={item.id} shape={item} />;
             }
-            return <ShapeRenderer key={item.id} shape={item} zoom={zoom} />;
+            return <ShapeRenderer key={item.id} shape={item} />;
 
           case 'asset':
             if (canRenderAssetOnCanvas(item)) return null;
@@ -692,7 +690,7 @@ const RenderLayer = React.memo(({
 
   return (
     <>
-      <StaticDrawingLayer visibleRenderables={visibleRenderables} hiddenIds={previewHiddenIds} selectedIds={selectedIds} zoom={zoom} />
+      <StaticDrawingLayer visibleRenderables={visibleRenderables} hiddenIds={previewHiddenIds} selectedIds={selectedIds} />
       <AnnotationDrawingLayer visibleRenderables={visibleRenderables} zoom={zoom} hiddenIds={previewHiddenIds} />
       <DragPreviewLayer visibleRenderables={visibleRenderables} preview={dragPreview} zoom={zoom} groups={groups} allShapes={allShapes} allAssets={allAssets} allWalls={allWalls} allTextAnnotations={allTextAnnotations} />
       {!dragPreview && activeTool !== 'select' && (
@@ -1131,12 +1129,15 @@ export default function Workspace2D({
   );
 
   // Viewport Culling - Filter items that are actually visible to maximize performance with 100k+ assets
+  // Use a very large conservative margin so items near viewport edges are never incorrectly culled.
   const visibleRenderables = useMemo(() => {
-    const margin = Math.max(2000, 500 / Math.max(zoom, 0.01));
-    const worldLeft = -panX / zoom - margin;
-    const worldTop = -panY / zoom - margin;
-    const worldRight = (viewportSize.width - panX) / zoom + margin;
-    const worldBottom = (viewportSize.height - panY) / zoom + margin;
+    const safeZoom = Math.max(zoom, 0.001);
+    // Large base margin in world units: 4000px at normal zoom, grows as you zoom out
+    const margin = Math.max(4000, 2000 / safeZoom);
+    const worldLeft = -panX / safeZoom - margin;
+    const worldTop = -panY / safeZoom - margin;
+    const worldRight = (viewportSize.width - panX) / safeZoom + margin;
+    const worldBottom = (viewportSize.height - panY) / safeZoom + margin;
 
     // Always re-cull — the cost is low and stale results cause visible flickering
     const result = svgRenderables.filter((item: any) => {

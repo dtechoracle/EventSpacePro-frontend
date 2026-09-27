@@ -2116,7 +2116,7 @@ const toggleEqualVenueStrokeWidth = useEditorStore(s => s.toggleEqualVenueStroke
                           <span className="text-gray-500">Stroke Width</span>
                           <input
                             type="number"
-                            value={(selectedItem as any).strokeWidth || 0}
+                            value={(selectedItem as any).strokeWidth ?? (itemType === 'asset' ? 0.6 : 0)}
                             onChange={(e) => {
                               const val = Number(e.target.value);
                               if (itemType === 'shape') updateShape(selectedItem.id, { strokeWidth: val });

@@ -907,6 +907,20 @@ export const AssetRenderer = React.memo(({
       )}
     </div>
   );
+}, (prevProps, nextProps) => {
+  if (prevProps.isSelected !== nextProps.isSelected) return false;
+  if (prevProps.isMultiSelected !== nextProps.isMultiSelected) return false;
+  if (prevProps.isCopied !== nextProps.isCopied) return false;
+  if (prevProps.leftPx !== nextProps.leftPx) return false;
+  if (prevProps.topPx !== nextProps.topPx) return false;
+  if (prevProps.totalRotation !== nextProps.totalRotation) return false;
+  if (prevProps.workspaceZoom !== nextProps.workspaceZoom) return false;
+  if (prevProps.globalPos !== nextProps.globalPos) return false;
+  if (prevProps.globalOrientation !== nextProps.globalOrientation) return false;
+  if ((prevProps.editingTextId === prevProps.asset.id) !== (nextProps.editingTextId === nextProps.asset.id)) return false;
+  if (prevProps.asset !== nextProps.asset) return false;
+  return true;
 });
 
 export default AssetRenderer;
+

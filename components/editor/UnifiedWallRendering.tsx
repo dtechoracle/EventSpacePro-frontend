@@ -80,7 +80,7 @@ function polygonToPathD(geom: any, mmToPx: number): string {
   return d;
 }
 
-export default function UnifiedWallRendering({ mmToPx }: UnifiedWallRenderingProps) {
+export const UnifiedWallRendering = React.memo(function UnifiedWallRendering({ mmToPx }: UnifiedWallRenderingProps) {
   const assets = useSceneStore((s) => s.assets);
   const currentWallSegments = useSceneStore((s) => s.currentWallSegments);
   const currentWallStart = useSceneStore((s) => s.currentWallStart);
@@ -222,6 +222,11 @@ export default function UnifiedWallRendering({ mmToPx }: UnifiedWallRenderingPro
       {/* Crossing plugs removed at user request */}
     </svg>
   );
-}
+});
+
+UnifiedWallRendering.displayName = "UnifiedWallRendering";
+
+export default UnifiedWallRendering;
+
 
 

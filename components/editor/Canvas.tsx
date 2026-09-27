@@ -439,13 +439,22 @@ export default function Canvas({
   const globalPos = useProjectStore(s => s.globalTableNumberingPosition);
   const globalOrientation = useProjectStore(s => s.globalTableNumberingOrientation);
 
+  // Quantized culling keys to decouple micro-panning & zooming from React asset list recalculations
+  const quantizedOffsetX = Math.floor(offset.x / 500);
+  const quantizedOffsetY = Math.floor(offset.y / 500);
+  const quantizedZoom = Math.floor(zoom * 4); // 0.25 steps
+
   // Optimized asset list with culling
   const MemoizedAssetList = useMemo(() => {
-    const viewportPad = 1000;
-    const vLeft = (-offset.x / zoom) / mmToPx - viewportPad;
-    const vTop = (-offset.y / zoom) / mmToPx - viewportPad;
-    const vRight = ((-offset.x + (containerRef.current?.offsetWidth || 2000)) / zoom) / mmToPx + viewportPad;
-    const vBottom = ((-offset.y + (containerRef.current?.offsetHeight || 2000)) / zoom) / mmToPx + viewportPad;
+    const viewportPad = 2000;
+    const qX = quantizedOffsetX * 500;
+    const qY = quantizedOffsetY * 500;
+    const qZ = Math.max(0.1, quantizedZoom / 4);
+
+    const vLeft = (-qX / qZ) / mmToPx - viewportPad;
+    const vTop = (-qY / qZ) / mmToPx - viewportPad;
+    const vRight = ((-qX + (containerRef.current?.offsetWidth || 2000)) / qZ) / mmToPx + viewportPad;
+    const vBottom = ((-qY + (containerRef.current?.offsetHeight || 2000)) / qZ) / mmToPx + viewportPad;
 
     const visibleAssets = assets.filter(a => a.x > vLeft && a.x < vRight && a.y > vTop && a.y < vBottom);
 
@@ -502,7 +511,8 @@ export default function Canvas({
           </div>
         );
       });
-  }, [assets, offset, zoom, mmToPx, selectedAssetId, selectedAssetIds, copiedAssetId, isDrawingActive, assetHandlers, selectAsset, updateAsset, handleAssetContextMenu, globalPos, globalOrientation]);
+  }, [assets, quantizedOffsetX, quantizedOffsetY, quantizedZoom, mmToPx, selectedAssetId, selectedAssetIds, copiedAssetId, isDrawingActive, assetHandlers, selectAsset, updateAsset, handleAssetContextMenu, globalPos, globalOrientation]);
+
 
   return (
     <div
@@ -599,7 +609,7 @@ export default function Canvas({
       <div
         className="relative w-full h-full"
         ref={canvasRef}
-        style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`, transformOrigin: "0 0" }}
+        style={{ transform: `translate3d(${offset.x}px, ${offset.y}px, 0px) scale(${zoom})`, transformOrigin: "0 0", willChange: "transform" }}
       >
         <div className="relative" style={{ width: scenePxWNoZoom, height: scenePxHNoZoom }}>
           <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 1 }}>

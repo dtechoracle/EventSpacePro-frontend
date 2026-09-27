@@ -156,6 +156,15 @@ const GroupRenderer = React.memo(({
       )}
     </>
   );
+}, (prevProps, nextProps) => {
+  if (prevProps.isSelected !== nextProps.isSelected) return false;
+  if (prevProps.isMultiSelected !== nextProps.isMultiSelected) return false;
+  if (prevProps.leftPx !== nextProps.leftPx) return false;
+  if (prevProps.topPx !== nextProps.topPx) return false;
+  if (prevProps.workspaceZoom !== nextProps.workspaceZoom) return false;
+  if (prevProps.group !== nextProps.group) return false;
+  return true;
 });
 
 export default GroupRenderer;
+
