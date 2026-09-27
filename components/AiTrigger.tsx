@@ -1149,7 +1149,7 @@ export default function AiTrigger() {
         label.includes('serpentine table') ||
         label.includes('doughtnut table') ||
         label.includes('doughnut table') ||
-        label.includes('vip table')
+        label.includes('vip table') || label.includes('4000mm') || label.includes('4300mm') || label.includes('2150mm') || label.includes('crescent') || label.includes('oval')
       );
     };
 

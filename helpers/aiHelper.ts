@@ -398,7 +398,7 @@ export const convertPlanToCanvasData = (plan: any, canvasWidth = 10000, canvasHe
 
             // Chairs — skip if the table already has built-in seating (seater tables)
             const tableAssetId = String(spec.tableAsset || '').toLowerCase();
-            const tableHasBuiltInSeating = tableAssetId.includes('seater');
+            const tableHasBuiltInSeating = tableAssetId.includes('seater') || tableAssetId.includes('4000mm') || tableAssetId.includes('4300mm') || tableAssetId.includes('2150mm') || tableAssetId.includes('crescent') || tableAssetId.includes('oval');
             if (!tableHasBuiltInSeating) {
                 for (let i = 0; i < count; i++) {
                     const angle = (i / count) * Math.PI * 2;

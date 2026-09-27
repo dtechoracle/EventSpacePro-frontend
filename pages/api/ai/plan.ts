@@ -1081,6 +1081,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     };
     const getSuggestedChairCountForTable = (tableName: string) => {
       const lower = String(tableName || '').toLowerCase();
+      if (lower.includes('4000mm') || lower.includes('1470mm')) return 12;
+      if (lower.includes('4300mm')) return 10;
+      if (lower.includes('2150mm')) return 6;
       if (lower.includes('coffee table')) return 2;
       if (lower.includes('cocktail')) return 4;
       if (lower.includes('rectangular')) return 6;
@@ -1532,8 +1535,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return applyLayoutScalePreference(preview);
     };
     const getSeatCountForFlowTable = (tableName: string) => {
-      const seatCountMatch = tableName.toLowerCase().match(/(\d+)\s*seater/i);
-      return chairsPerTableForFlow || (seatCountMatch ? Number(seatCountMatch[1]) : null);
+      const lower = tableName.toLowerCase();
+      const seatCountMatch = lower.match(/(\d+)\s*seater/i);
+      if (chairsPerTableForFlow) return chairsPerTableForFlow;
+      if (seatCountMatch) return Number(seatCountMatch[1]);
+      if (lower.includes('4000mm') || lower.includes('1470mm')) return 12;
+      if (lower.includes('4300mm')) return 10;
+      if (lower.includes('2150mm')) return 6;
+      return null;
     };
     const getChairAssetNameForFlow = () => selectedChairForFlow?.name || undefined;
     const isWeakAssistantFallback = (text: string) => {

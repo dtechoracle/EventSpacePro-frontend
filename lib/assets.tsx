@@ -53,6 +53,9 @@ const getFurnitureSeatCount = (asset: AssetDef) => {
   const label = asset.label.toLowerCase();
   const explicitSeater = label.match(/(\d+)\s*seater/);
   if (explicitSeater) return Number(explicitSeater[1]);
+  if (label.includes('4000mm') || label.includes('1470mm')) return 12;
+  if (label.includes('4300mm')) return 10;
+  if (label.includes('2150mm')) return 6;
 
   if (
     label.includes('chair') ||
@@ -451,30 +454,30 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
   },
   {
     "id": "4000mm-x-1470mm-oval-table",
-    "label": "4000mm X 1470mm Oval Table",
+    "label": "12 seater 4000mm X 1470mm Oval Table",
     "path": "/assets/modal/Furniture/4000mm X 1470mm Oval Table.svg",
     "category": "Furniture",
     "width": 4000,
     "height": 1470,
-    "name": "4000mm X 1470mm Oval Table"
+    "name": "12 seater 4000mm X 1470mm Oval Table"
   },
   {
     "id": "4300mm-x-2150mm-crescent-table",
-    "label": "4300mm X 2150mm Crescent Table",
+    "label": "10 seater 4300mm X 2150mm Crescent Table",
     "path": "/assets/modal/Furniture/4300mm X 2150mm Crescent Table.svg",
     "category": "Furniture",
     "width": 4300,
     "height": 2150,
-    "name": "4300mm X 2150mm Crescent Table"
+    "name": "10 seater 4300mm X 2150mm Crescent Table"
   },
   {
     "id": "2150mm-x-2150mm-crescent-table",
-    "label": "2150mm X 2150mm Crescent Table",
+    "label": "6 seater 2150mm X 2150mm Crescent Table",
     "path": "/assets/modal/Furniture/2150mm X 2150mm Crescent Table.svg",
     "category": "Furniture",
     "width": 2150,
     "height": 2150,
-    "name": "2150mm X 2150mm Crescent Table"
+    "name": "6 seater 2150mm X 2150mm Crescent Table"
   },
   {
     "id": "5-seater-curve-sofa",

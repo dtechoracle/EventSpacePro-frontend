@@ -334,7 +334,9 @@ const QUESTION_TEXT: Record<FlowSlot, (state: FlowState) => NextQuestion> = {
 };
 
 export function tableNeedsLooseChairs(tableName: string): boolean {
-  return !String(tableName || '').toLowerCase().includes('seater');
+  const lower = String(tableName || '').toLowerCase();
+  if (lower.includes('4000mm') || lower.includes('4300mm') || lower.includes('2150mm') || lower.includes('crescent') || lower.includes('oval')) return false;
+  return !lower.includes('seater');
 }
 
 export function getMissingSlots(state: FlowState): FlowSlot[] {
