@@ -2550,11 +2550,8 @@ step={1}
                         const libDef = ASSET_LIBRARY.find((a) => a.id === chairType);
                         const baseChairW = libDef?.width || 482;
                         const baseChairH = libDef?.height || 517;
-                        const tableMin = Math.min(tableWidth, tableHeight);
-                        const chairSize = Math.max(Math.min(tableMin * 0.3, Math.max(baseChairW, baseChairH)), 200);
-                        const scale = chairSize / Math.max(baseChairW, baseChairH);
-                        const chairW = baseChairW * scale;
-                        const chairH = baseChairH * scale;
+                        const chairW = baseChairW;
+                        const chairH = baseChairH;
                         const nextZ = useProjectStore.getState().getNextZIndex();
                         const now = Date.now();
                         const gap = CHAIR_TABLE_GAP_MM;
@@ -2620,6 +2617,13 @@ step={1}
                           if (rightCount > 0) addCol(rightCount, outX, 90);
                         }
 
+                        const tableId = table.id as string;
+                        const existingAutoChairs = useProjectStore.getState().assets.filter(
+                          (a: any) => a._autoChairTableId === tableId
+                        );
+                        if (existingAutoChairs.length > 0) {
+                          useProjectStore.getState().removeItemsBatch(existingAutoChairs.map((a: any) => a.id));
+                        }
                         const chairs = placements.map((p, i) => ({
                           id: `chair-${now}-${i}`,
                           type: chairType,
@@ -2631,9 +2635,11 @@ step={1}
                           scale: 1,
                           zIndex: nextZ + i,
                           fillColor: table.chairColor || table.fillColor || undefined,
+                          _autoChairTableId: tableId,
                         }));
                         useProjectStore.getState().addAssetBatch(chairs);
-                        toast.success(`${chairs.length} chair${chairs.length === 1 ? '' : 's'} added around table`);
+                        const verb = existingAutoChairs.length > 0 ? 'updated' : 'added';
+                        toast.success(`${chairs.length} chair${chairs.length === 1 ? '' : 's'} ${verb} around table`);
                       }}
                       className="w-full mt-1 bg-[#0056A9] text-white text-xs font-medium py-1.5 rounded hover:bg-[#004a92] transition-colors"
                     >

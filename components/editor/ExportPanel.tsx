@@ -369,7 +369,8 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
           }
         }
 
-        const rasterPath = definition.path ? getRasterAssetPath(definition.path) : null;
+        // Skip pre-rasterized WebP for vector SVG assets so exports don't have 10% margins or baked thick strokes
+        const rasterPath = null;
         if (rasterPath) {
           const rasterImg = new Image();
           const rasterOk = await new Promise<boolean>((resolve) => {

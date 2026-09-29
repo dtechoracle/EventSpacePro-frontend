@@ -1312,8 +1312,8 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "label": "Tree 01",
     "path": "/assets/modal/Trees/Tree 01.png",
     "category": "Trees",
-    "width": 1053,
-    "height": 1099,
+    "width": 2106,
+    "height": 2198,
     "name": "Tree 01"
   },
   {
@@ -1321,8 +1321,8 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "label": "Tree 02",
     "path": "/assets/modal/Trees/Tree 02.png",
     "category": "Trees",
-    "width": 1104,
-    "height": 1129,
+    "width": 2208,
+    "height": 2258,
     "name": "Tree 02"
   },
   {
@@ -1330,8 +1330,8 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "label": "Tree 03",
     "path": "/assets/modal/Trees/Tree 03.png",
     "category": "Trees",
-    "width": 1066,
-    "height": 1111,
+    "width": 2132,
+    "height": 2222,
     "name": "Tree 03"
   },
   {
@@ -1339,8 +1339,8 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "label": "Tree 04",
     "path": "/assets/modal/Trees/Tree 04.png",
     "category": "Trees",
-    "width": 977,
-    "height": 958,
+    "width": 1954,
+    "height": 1916,
     "name": "Tree 04"
   },
   {
@@ -1348,10 +1348,20 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "label": "Tree 05",
     "path": "/assets/modal/Trees/Tree 05.png",
     "category": "Trees",
-    "width": 1064,
-    "height": 983,
+    "width": 2128,
+    "height": 1966,
     "name": "Tree 05"
   }
 ];
 
-export const ASSET_LIBRARY: AssetDef[] = [...RAW_ASSET_LIBRARY].sort(compareAssetsForDisplay);
+export const VENUE_ASSET_LIBRARY: AssetDef[] = PRELOADED_VENUES.map((v) => ({
+  id: v.id,
+  name: v.name,
+  label: v.name,
+  path: v.path,
+  category: "Venue" as const,
+  width: v.width,
+  height: v.height,
+}));
+
+export const ASSET_LIBRARY: AssetDef[] = [...RAW_ASSET_LIBRARY, ...VENUE_ASSET_LIBRARY].filter((a, i, arr) => arr.findIndex((b) => b.id === a.id) === i).sort(compareAssetsForDisplay);

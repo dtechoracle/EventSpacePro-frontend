@@ -160,6 +160,13 @@ const MarqueeOptionPreview = ({ width, height }: { width?: number; height?: numb
   );
 };
 
+const getVenueThumbnailPath = (path?: string): string | null => {
+  if (!path) return null;
+  return `${path
+    .replace('/assets/preloaded-venues/', '/assets/thumbnails/preloaded-venues/')
+    .replace(/\.(svg|dwg|dxf)$/i, '.png')}?v=svgo5`;
+};
+
 export default function AiTrigger() {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -3548,17 +3555,7 @@ export default function AiTrigger() {
       setMessages((m: any) => [...m, { role: 'user', content: prompt }]);
       setIsLoading(true);
 
-    // ── AI OPERATOR: Try tool-calling loop first ──────────────────────────────
-    try {
-      const operatorResult = await runOperatorLoop(prompt);
-      if (operatorResult.handled) {
-        setIsLoading(false);
-        return;
-      }
-    } catch (opErr) {
-      console.log('[AI-Operator] Falling back to plan endpoint:', opErr);
-      // Fall through to existing plan endpoint
-    }
+ 
 
     const selectedAssets = getCurrentSelectedAssets();
 
@@ -4104,6 +4101,7 @@ export default function AiTrigger() {
                         {m.assetSelection && (
                           <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 w-full max-w-2xl mt-1">
                             {m.assetSelection.options
+                              .filter((option: { id: string }, index: number, arr: { id: string }[]) => arr.findIndex((o) => o.id === option.id) === index)
                               .filter((option: { path: string }) => !option.path || !missingOptionPaths.has(option.path))
                               .map((option: { id: string; name: string; category: string; path: string; width?: number; height?: number }) => (
                               <button
@@ -4129,6 +4127,13 @@ export default function AiTrigger() {
                                       <MarqueeOptionPreview
                                         width={option.width}
                                         height={option.height}
+                                      />
+                                    ) : String(option.category || '').toLowerCase() === 'venue' ? (
+                                      <img
+                                        src={getVenueThumbnailPath(option.path) || option.path}
+                                        alt={option.name}
+                                        className="w-full h-full object-contain pointer-events-none"
+                                        loading="lazy"
                                       />
                                     ) : (
                                       <PlanPreview

@@ -35,7 +35,7 @@ export function detectLocalIntent(
     return {
       payload: {
         followUp: 'Would you like to use one of our event location and space options?',
-        choices: ['Custom', 'Marquee', 'Grassy field', 'Parking lot', 'Beach'],
+        choices: ['Custom', 'Marquee', 'Grassy field', 'Parking lot', 'Beach', 'Preloaded venues'],
       },
       reset: true,
       intent: 'new-layout',
@@ -86,6 +86,21 @@ export function detectLocalIntent(
       },
       intent: 'space-type',
       slots: { spaceType: 'marquee' },
+    };
+  }
+
+  if (cmd === 'preloaded venues' || cmd === 'preloaded venue' || cmd === 'preloaded' || cmd === 'venue' || cmd === 'venues') {
+    const venueOptions = assetList.filter((a) => a.category === 'Venue');
+    return {
+      payload: {
+        assetSelection: {
+          category: 'venue',
+          message: 'Excellent! Which preloaded venue would you like to use for your event?',
+          options: venueOptions,
+        },
+      },
+      intent: 'space-type',
+      slots: { spaceType: 'preloaded venues' as any },
     };
   }
 

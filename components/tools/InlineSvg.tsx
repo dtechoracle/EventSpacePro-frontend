@@ -348,7 +348,7 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
     const baseSvg = useMemo(() => {
         if (!rawSvg || typeof window === "undefined") return "";
         
-        const cacheKey = `${src}_${category || 'none'}_v12_overflow_visible`;
+        const cacheKey = `${src}_${category || 'none'}_v13_no_pad`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
@@ -553,14 +553,12 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
                 // Always expand the viewBox slightly so strokes at edges aren't clipped
                 const existingVB = svg.getAttribute("viewBox");
                 if (metrics.shouldCropToContent && metrics.contentX !== null && metrics.contentY !== null && metrics.contentWidth && metrics.contentHeight) {
-                    const pad = Math.max(metrics.contentWidth, metrics.contentHeight) * 0.03;
-                    svg.setAttribute("viewBox", `${metrics.contentX - pad} ${metrics.contentY - pad} ${metrics.contentWidth + pad * 2} ${metrics.contentHeight + pad * 2}`);
+                    svg.setAttribute("viewBox", `${metrics.contentX} ${metrics.contentY} ${metrics.contentWidth} ${metrics.contentHeight}`);
                 } else if (existingVB) {
                     const parts = existingVB.trim().split(/[\s,]+/).map(parseFloat);
                     if (parts.length === 4 && parts.every(Number.isFinite)) {
                         const [vbX, vbY, vbW, vbH] = parts;
-                        const pad = Math.max(vbW, vbH) * 0.03;
-                        svg.setAttribute("viewBox", `${vbX - pad} ${vbY - pad} ${vbW + pad * 2} ${vbH + pad * 2}`);
+                        svg.setAttribute("viewBox", `${vbX} ${vbY} ${vbW} ${vbH}`);
                     }
                 } else if (metrics.artboardWidth && metrics.artboardHeight) {
                     svg.setAttribute("viewBox", `0 0 ${metrics.artboardWidth} ${metrics.artboardHeight}`);
@@ -594,7 +592,21 @@ export const InlineSvg = memo(function InlineSvg({ src, fill, stroke, strokeWidt
                 .replace(/\s+fill\s*=\s*["'][^"']*["']/gi, '')
                 .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '')
                 .replace(/\s+xmlns:\w+\s*=\s*["'][^"']*["']/gi, '');
-            return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%;overflow:visible;">`;
+            const catLower = (category || "").toLowerCase();
+        const srcLower = (src || "").toLowerCase();
+        const isStructural =
+            catLower === 'marquee' ||
+            catLower === 'space_elements' ||
+            catLower === 'venue' ||
+            catLower === 'layout' ||
+            catLower === 'structure' ||
+            srcLower.includes('door') ||
+            srcLower.includes('window') ||
+            srcLower.includes('marquee');
+
+        const preserveAspect = isStructural ? "none" : "xMidYMid meet";
+
+        return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="100%" height="100%" preserveAspectRatio="${preserveAspect}" style="display:block;width:100%;height:100%;overflow:visible;">`;
         });
     }, [baseSvg, fill, stroke, strokeWidth]);
 

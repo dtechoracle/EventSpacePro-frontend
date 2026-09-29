@@ -2594,9 +2594,12 @@ export default function Workspace2D({
                     isHit = true;
                   }
                 } else {
-                  const halfW = ((asset.width || 0) * (asset.scale || 1)) / 2;
-                  const halfH = ((asset.height || 0) * (asset.scale || 1)) / 2;
-                  if (worldX >= (asset.x || 0) - halfW && worldX <= (asset.x || 0) + halfW && worldY >= (asset.y || 0) - halfH && worldY <= (asset.y || 0) + halfH) isHit = true;
+                  // Venue assets are locked (non-selectable) — items placed on top can be clicked freely
+                  if (assetDef?.category !== 'Venue') {
+                    const halfW = ((asset.width || 0) * (asset.scale || 1)) / 2;
+                    const halfH = ((asset.height || 0) * (asset.scale || 1)) / 2;
+                    if (worldX >= (asset.x || 0) - halfW && worldX <= (asset.x || 0) + halfW && worldY >= (asset.y || 0) - halfH && worldY <= (asset.y || 0) + halfH) isHit = true;
+                  }
                 }
               }
             } else if (item._renderType === 'wall') {
@@ -3011,7 +3014,7 @@ export default function Workspace2D({
       });
 
       if (batchUpdates.length > 0) {
-        batchUpdateItems(batchUpdates, true);
+        batchUpdateItems(batchUpdates, false);
       }
     }
     clearDragPreview();
@@ -3617,6 +3620,27 @@ export default function Workspace2D({
         else if (selectedIds.length > 0) {
           removeItemsBatch(selectedIds);
           clearSelection();
+        }
+      }
+      // Arrow keys — nudge selected items
+      else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        if (selectedIds.length > 0) {
+          e.preventDefault();
+          const { gridSize, snapToGrid } = useEditorStore.getState();
+          const { assets: latestAssets, shapes: latestShapes, walls: latestWalls } = useProjectStore.getState();
+          const nudge = snapToGrid ? (gridSize || 100) : 50; // mm
+          const dx = e.key === 'ArrowLeft' ? -nudge : e.key === 'ArrowRight' ? nudge : 0;
+          const dy = e.key === 'ArrowUp' ? -nudge : e.key === 'ArrowDown' ? nudge : 0;
+          const batchUpdates: any[] = [];
+          for (const id of selectedIds) {
+            const a = latestAssets.find(a => a.id === id);
+            if (a) { batchUpdates.push({ id, type: 'asset', updates: { x: a.x + dx, y: a.y + dy } }); continue; }
+            const s = latestShapes.find(s => s.id === id);
+            if (s) { batchUpdates.push({ id, type: 'shape', updates: { x: s.x + dx, y: s.y + dy } }); continue; }
+            const w = latestWalls.find(w => w.id === id);
+            if (w) { batchUpdates.push({ id, type: 'wall', updates: { nodes: w.nodes.map(n => ({ ...n, x: n.x + dx, y: n.y + dy })) } }); continue; }
+          }
+          if (batchUpdates.length > 0) batchUpdateItems(batchUpdates);
         }
       }
     };

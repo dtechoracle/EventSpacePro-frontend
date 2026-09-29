@@ -4,7 +4,7 @@ export const ARRANGEMENT_CHOICES = [
   'Grid', 'Linear', 'Circular', 'Perimeter', 'U-Shape', 'Boardroom', 'Classroom', 'Chevron',
 ];
 
-export const SPACE_CHOICES = ['Custom', 'Marquee', 'Grassy field', 'Parking lot', 'Beach'];
+export const SPACE_CHOICES = ['Custom', 'Marquee', 'Grassy field', 'Parking lot', 'Beach', 'Preloaded venues'];
 
 export const STAGE_CHOICES = ['Yes, add a stage', 'No stage'];
 
@@ -255,6 +255,11 @@ const QUESTION_TEXT: Record<FlowSlot, (state: FlowState) => NextQuestion> = {
     slot: 'marquee',
     followUp: 'Excellent! Which marquee would you like to use for your event?',
     assetSelection: { category: 'marquee', message: 'Select a marquee' },
+  }),
+  preloadedVenue: () => ({
+    slot: 'preloadedVenue',
+    followUp: 'Excellent! Which preloaded venue would you like to use for your event?',
+    assetSelection: { category: 'venue', message: 'Select a preloaded venue' },
   }),
   dimensions: (state) => ({
     slot: 'dimensions',

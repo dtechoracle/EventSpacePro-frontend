@@ -78,7 +78,7 @@ export const AssetRenderer = React.memo(({
   const venueDef = !libDef ? PRELOADED_VENUES.find((v) => v.id === asset.type) : null;
   const def: any = libDef || (venueDef ? { ...venueDef, category: '', label: venueDef.name } : null);
   const isMarquee = asset.type?.toLowerCase().includes('marquee');
-  const defaultStrokeWidth = isMarquee ? 2 : 0.5;
+  const defaultStrokeWidth = 0.5;
   const currentStrokeWidth = asset.strokeWidth !== undefined ? asset.strokeWidth : defaultStrokeWidth;
 
   // ─── LOCAL TEXT HANDLERS ─────────────────────────────────────────────────────

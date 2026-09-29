@@ -344,13 +344,19 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const libDef = ASSET_LIBRARY.find(item => item.id === asset.type);
     const venueDef = !libDef ? PRELOADED_VENUES.find(v => v.id === asset.type) : null;
     const definition: any = libDef || (venueDef ? { ...venueDef, category: 'Venue', label: venueDef.name } : null);
-    const isMarquee = definition?.category === 'Marquee';
+    const isMarquee = definition?.category === 'Marquee' || definition?.path?.toLowerCase().includes('marquee');
+    const isSpaceElement =
+        definition?.category === 'Space_Elements' ||
+        definition?.category === 'Structure' ||
+        definition?.path?.toLowerCase().includes('space_elements') ||
+        definition?.path?.toLowerCase().includes('door') ||
+        definition?.path?.toLowerCase().includes('window');
     const assetPath = definition?.path ? encodeURI(definition.path) : null;
     const rasterAssetPath = definition?.path ? encodeURI(getRasterAssetPath(definition.path) || '') : null;
 
     const showHighlight = isSelected || isHovered;
     const highlightColor = isSelected ? '#3b82f6' : '#60a5fa';
-    const defaultStrokeWidth = isPreview ? 0.4 : DEFAULT_ASSET_STROKE_WIDTH;
+    const defaultStrokeWidth = isPreview ? 0.4 : (isMarquee ? 0.5 : DEFAULT_ASSET_STROKE_WIDTH);
     const disableFastImageForAsset =
         !!definition?.path &&
         (
@@ -373,14 +379,10 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const isRasterFile = !!definition?.path && /\.(png|jpe?g|webp|gif|avif)$/i.test(definition.path);
     // Fast image path: render as .webp <image> instead of inline SVG DOM.
     // Skipped for custom-colored/exploded/venue assets where baked raster won't match.
-    const canUseFastImage =
-        !!assetPath &&
-        !asset.isExploded &&
-        !disableFastImageForAsset &&
-        !hasCustomColors &&
-        !isVenueAsset &&
-        canRenderAssetAsImage(asset, isPreview) &&
-        !!rasterAssetPath;
+    // Fast image path: render as .webp <image> instead of inline SVG DOM.
+    // Disabled: .webp rasters have 10% margins and thick strokes baked in,
+    // which caused asset shrinking, gaps inside the selection box, and stroke-width jumps.
+    const canUseFastImage = false;
     const fastImageHref = canUseFastImage && rasterAssetPath && !rasterImageFailed ? rasterAssetPath : assetPath;
 
     useEffect(() => {
@@ -478,7 +480,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         if (canUseFastImage) return null;
         if (!rawSvgContent || typeof window === 'undefined' || !definition?.path) return null;
 
-        const cacheKey = `${definition.path}_workspace_v53_${equalVenueStrokeWidth ? 'equal' : 'layered'}_eko_individual_strokes`;
+        const cacheKey = `${definition.path}_workspace_v56_no_raster_${equalVenueStrokeWidth ? 'equal' : 'layered'}_eko_individual_strokes`;
         if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
 
         try {
@@ -619,8 +621,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             if (!doc.getElementById(styleId)) {
                 const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
                 styleEl.setAttribute("id", styleId);
-                const isLayoutAsset = definition?.category === "Layout" || definition?.category === "Dance Floor";
-                const vectorEffectRule = isLayoutAsset ? "" : "svg path, svg circle, svg rect, svg line, svg polyline, svg ellipse { vector-effect: non-scaling-stroke !important; }";
+                const vectorEffectRule = "svg path, svg circle, svg rect, svg line, svg polyline, svg ellipse { vector-effect: non-scaling-stroke !important; }";
                 const strokeWidthInheritRule = preserveVenueStrokes ? "" : "stroke-width: inherit !important;";
                 styleEl.textContent = `${vectorEffectRule} svg .fill-none-el { fill: none !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .fill-inherit-el { fill: inherit !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .auto-fill-el { fill: inherit !important; stroke: none !important; } svg .stroke-top-layer { pointer-events: none; } svg .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } svg .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
                 svg.prepend(styleEl);

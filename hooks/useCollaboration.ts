@@ -502,15 +502,11 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     // them into one apply per frame keeps the remote motion smooth.
     const pendingRemoteUpdates: { payload: any; isInitial: boolean }[] = [];
     let remoteApplyRaf = 0;
-    let suppressYObservers = false;
-
     const flushRemoteUpdates = () => {
       remoteApplyRaf = 0;
       if (pendingRemoteUpdates.length === 0) return;
       const batch = pendingRemoteUpdates.splice(0, pendingRemoteUpdates.length);
-      // Batch all inbound deltas into one Y apply + one Zustand sync to avoid
-      // N setState per frame (each observer did its own setState).
-      suppressYObservers = true;
+      // Batch all inbound deltas into one Y apply
       isRemoteUpdating.current = true;
       try {
         for (const { payload } of batch) {
@@ -519,7 +515,6 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
           Y.applyUpdate(ydoc, update, "remote-sync");
         }
       } finally {
-        suppressYObservers = false;
         isRemoteUpdating.current = false;
       }
       // Do NOT call syncVisibleStoreFromYDoc here for non-initial updates.
@@ -570,7 +565,6 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       removeAction: (id: string) => void,
       collectionName?: string
     ) => {
-      if (suppressYObservers) return;
       if (event.transaction.origin === "local-sync") return;
 
       isRemoteUpdating.current = true;
@@ -677,7 +671,6 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
     ));
 
     yCanvas.observe((event) => {
-      if (suppressYObservers) return;
       if (event.transaction.origin === "local-sync") return;
       isRemoteUpdating.current = true;
       const canvas = toPlainYValue(yCanvas.get("config"));

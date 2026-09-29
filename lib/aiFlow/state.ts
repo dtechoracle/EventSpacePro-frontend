@@ -6,12 +6,12 @@ export function emptyState(): FlowState {
 }
 
 const FLOW_KEYS: (keyof FlowState)[] = [
-  'spaceType', 'marqueeAsset', 'widthMm', 'heightMm', 'layoutSummary', 'seatingMode',
+  'spaceType', 'marqueeAsset', 'preloadedVenueAsset', 'widthMm', 'heightMm', 'layoutSummary', 'seatingMode',
   'guestCount', 'tableType', 'chairType', 'chairsPerTable', 'arrangement', 'stage',
   'extras', 'layoutScale', 'orientation', 'confirmation', 'pendingQuestion', 'asked', 'phase',
 ];
 
-const SPACE_TYPES = new Set(['custom', 'marquee', 'grassy field', 'parking lot', 'beach']);
+const SPACE_TYPES = new Set(['custom', 'marquee', 'grassy field', 'parking lot', 'beach', 'preloaded venues']);
 const SEATING_MODES = new Set(['chairs', 'tables']);
 const EXTRA_VALUES = new Set(['none', 'listed']);
 const SCALE_VALUES = new Set(['fit-space', 'default-size']);

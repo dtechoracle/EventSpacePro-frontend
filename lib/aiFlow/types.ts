@@ -18,11 +18,12 @@ export type Intent =
   | 'workspace-op'
   | 'freeform';
 
-export type SpaceType = 'custom' | 'marquee' | 'grassy field' | 'parking lot' | 'beach';
+export type SpaceType = 'custom' | 'marquee' | 'grassy field' | 'parking lot' | 'beach' | 'preloaded venues';
 
 export type FlowSlot =
   | 'spaceType'
   | 'marquee'
+  | 'preloadedVenue'
   | 'dimensions'
   | 'layoutSummary'
   | 'seatingMode'
@@ -54,6 +55,7 @@ export interface AssetSelectionPayload {
 export interface FlowState {
   spaceType?: SpaceType;
   marqueeAsset?: string;
+  preloadedVenueAsset?: string;
   widthMm?: number;
   heightMm?: number;
   layoutSummary?: string;
