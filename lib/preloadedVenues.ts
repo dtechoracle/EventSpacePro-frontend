@@ -40,29 +40,16 @@ export const PRELOADED_VENUES: PreloadedVenueDef[] = [
     features: ["Prime Location", "5-Star Hotel Venue", "Multi-functional Halls", "Elite Security"]
   },
   {
-    id: "eko-hotel-convention-centre-individual-halls",
-    name: "Eko hotel Convention Centre (Individual Halls)",
-    path: "/assets/preloaded-venues/Eko hotel Convention Centre (Individual Halls).svg",
-    width: 114691,
-    height: 79152,
-    latitude: 6.4267,
-    longitude: 3.4301,
-    address: "Eko Hotel Convention Centre, Plot 1415 Adetokunbo Ademola St, Victoria Island, Lagos, Nigeria",
-    capacity: "Halls range 500 - 1,500 guests",
-    description: "Part of the prestigious Eko Hotels complex. These individual halls can be configured for exhibitions, seminars, weddings, and medium-scale corporate functions.",
-    features: ["Hotel Amenities", "High-end AV Systems", "Flexible Layout Configs", "Catering Services"]
-  },
-  {
-    id: "eko-hotel-convention-centre-main-hall",
-    name: "Eko hotel Convention Centre (Main Hall)",
-    path: "/assets/preloaded-venues/Eko hotel Convention Centre (Main Hall).svg",
+    id: "eko-hotel-convention-centre",
+    name: "Eko Hotel Convention Centre",
+    path: "/assets/preloaded-venues/Eko Hotel Convention Centre.svg",
     width: 114691,
     height: 79152,
     latitude: 6.4267,
     longitude: 3.4301,
     address: "Eko Hotel Convention Centre, Plot 1415 Adetokunbo Ademola St, Victoria Island, Lagos, Nigeria",
     capacity: "Up to 6,000 guests",
-    description: "The largest and most famous multipurpose concert and event hall in Nigeria. Home to major global summits, music concerts, pageants, and high-profile corporate galas.",
+    description: "Part of the prestigious Eko Hotels complex, this is the largest and most famous multipurpose concert and event centre in Nigeria. Home to major global summits, music concerts, exhibitions, pageants, and high-profile corporate galas.",
     features: ["Massive Ceiling Height", "Vip Dressing Rooms", "Press Center Access", "Concert Grade Acoustics"]
   },
   {
@@ -116,5 +103,31 @@ export const PRELOADED_VENUES: PreloadedVenueDef[] = [
     capacity: "Up to 1,000 guests",
     description: "A stunning dome-shaped event space within La Madison Place, a one-stop hospitality centre in Lekki. Features a functionally aesthetic dome with 4 access doors, full-service kitchen, and ample parking for over 150 vehicles. Ideal for weddings, corporate events, exhibitions, and social gatherings.",
     features: ["Dome Architecture", "4 Access Doors", "Loading Shutter", "Full-Service Kitchen", "Ample Parking", "Air-Conditioned"]
+  },
+  {
+    id: "civic-centre",
+    name: "Civic Centre",
+    path: "/assets/preloaded-venues/Civic Centre.svg",
+    width: 24958,
+    height: 26604,
+    latitude: 6.4305,
+    longitude: 3.4105,
+    address: "The Civic Centre, Ozumba Mbadiwe Ave, Opposite 1004, Victoria Island, Lagos, Nigeria",
+    capacity: "Up to 1,000 guests",
+    description: "An iconic Victoria Island landmark with distinctive basket-weave architecture overlooking the lagoon. Offers versatile halls including the Grand Banquet Hall and Panoramic View Hall, with in-house catering, ample secure parking, and professional event support.",
+    features: ["Grand Banquet Hall", "Lagoon Views", "In-house Catering", "Ample Secure Parking"]
+  },
+  {
+    id: "national-theatre-banquet-hall",
+    name: "National Theatre (Banquet Hall)",
+    path: "/assets/preloaded-venues/Banquet Hall National Theatre.svg",
+    width: 56092,
+    height: 27324,
+    latitude: 6.4762,
+    longitude: 3.2728,
+    address: "National Theatre (Wole Soyinka Centre), Iganmu, Surulere, Lagos, Nigeria",
+    capacity: "Up to 1,000 guests",
+    description: "The multipurpose banquet hall of Nigeria's iconic National Theatre in Iganmu, newly renovated as part of the Wole Soyinka Centre for Culture and the Creative Arts. A grand fan-shaped ceremonial space blending Nigerian art with a modern stage and advanced acoustic design.",
+    features: ["Newly Renovated", "Advanced Acoustics", "Cultural Landmark", "Modern Stage"]
   }
 ];

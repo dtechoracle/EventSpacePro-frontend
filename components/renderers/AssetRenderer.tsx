@@ -326,9 +326,11 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // scene dirty, so autosave could merge stale scene fields over live work.
     const updateAsset = useProjectStore(s => s.updateAsset);
 
-    // View-only toggle: one stroke width for every venue layer. Exports build
-    // their own SVG (ExportPanel.processVenueSvgForExport) and are unaffected.
-    const equalVenueStrokeWidth = useEditorStore(s => s.equalVenueStrokeWidth);
+    // View-only: venues always preview with one uniform stroke width
+    // (default 0.6) — the "Equal stroke width" Properties toggle was removed
+    // and this is now permanently on. Exports build their own SVG
+    // (ExportPanel.processVenueSvgForExport) and are unaffected.
+    const equalVenueStrokeWidth = true;
 
     // Global numbering settings from store
     const globalPos = useProjectStore(s => s.globalTableNumberingPosition);

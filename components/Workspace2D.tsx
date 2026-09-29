@@ -2724,14 +2724,23 @@ export default function Workspace2D({
           if (!itemSelected) {
             // Fallback: if a top asset is under the cursor (spatial index), select it.
             // Mirrors the hover fallback so click always matches highlight.
+            // Locked venues are skipped here (same as the main hit-test above
+            // which treats them as non-selectable): otherwise every press on
+            // empty venue space "selects" the venue and the rectangular
+            // selector can never start inside a venue.
             if (topAssetHit && activeTool !== 'trim-to-blend') {
               const asset = topAssetHit.item;
+              const assetDef = assetDefinitionById.get(asset.type);
+              if (assetDef?.category === 'Venue') {
+                // Fall through to empty-space handling below (rubber-band select).
+              } else {
               const halfW = ((asset.width || 0) * (asset.scale || 1)) / 2;
               const halfH = ((asset.height || 0) * (asset.scale || 1)) / 2;
               if (worldX >= (asset.x || 0) - halfW && worldX <= (asset.x || 0) + halfW && worldY >= (asset.y || 0) - halfH && worldY <= (asset.y || 0) + halfH) {
                 handleItemSelection([asset.id], e.shiftKey, { x: worldX, y: worldY });
                 itemSelected = true;
                 return;
+              }
               }
             }
             // If we found an already-selected item but nothing unselected on top, start dragging it
@@ -3035,9 +3044,11 @@ export default function Workspace2D({
         }
       });
 
-      // Select assets within rectangle
+      // Select assets within rectangle (locked venues excluded — same as click hit-testing)
       assets.forEach(asset => {
-        if (!asset.isExploded && asset.x >= minX && asset.x <= maxX && asset.y >= minY && asset.y <= maxY) {
+        if (asset.isExploded) return;
+        if (assetDefinitionById.get(asset.type)?.category === 'Venue') return;
+        if (asset.x >= minX && asset.x <= maxX && asset.y >= minY && asset.y <= maxY) {
           selectedItems.push(asset.id);
         }
       });

@@ -214,8 +214,8 @@ export default function PropertiesSidebar(): React.JSX.Element {
   const dimensionType = useEditorStore(s => s.dimensionType);
 const toggleEditorGrid = useEditorStore(s => s.toggleGrid);
 const setEditorGridSize = useEditorStore(s => s.setGridSize);
-const equalVenueStrokeWidth = useEditorStore(s => s.equalVenueStrokeWidth);
-const toggleEqualVenueStrokeWidth = useEditorStore(s => s.toggleEqualVenueStrokeWidth);
+// const equalVenueStrokeWidth = useEditorStore(s => s.equalVenueStrokeWidth);
+// const toggleEqualVenueStrokeWidth = useEditorStore(s => s.toggleEqualVenueStrokeWidth);
   const shapes = useProjectStore(s => s.shapes);
   const assets = useProjectStore(s => s.assets);
   const walls = useProjectStore(s => s.walls);
@@ -1599,7 +1599,10 @@ const toggleEqualVenueStrokeWidth = useEditorStore(s => s.toggleEqualVenueStroke
                       </div>
                     )}
 
-                    {/* Venue: equal stroke width (view only) */}
+                    {/* Venue: equal stroke width (view only) — REMOVED: venues now
+                        always preview with the uniform default stroke width (0.6),
+                        same as when the option was checked. Exports are unaffected
+                        (ExportPanel keeps per-layer stroke widths).
                     {isSelectedVenue && (
                       <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center py-2">
                         <div className="pr-3">
@@ -1616,6 +1619,7 @@ const toggleEqualVenueStrokeWidth = useEditorStore(s => s.toggleEqualVenueStroke
                         />
                       </div>
                     )}
+                    */}
 
                     {/* Relocated Appearance Section */}
                     {/* Appearance (Shape/Asset) - Hidden for preloaded venues */}

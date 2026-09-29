@@ -102,6 +102,51 @@ const toPlainYValue = (value: any) =>
   value && typeof value.toJSON === "function" ? value.toJSON() : value;
 
 /**
+ * Yjs cannot store `undefined` (Y.Map.set throws and rolls back the whole
+ * transact, silently dropping every other item in the batch) and chokes on
+ * functions/class instances. Store items occasionally carry optional fields
+ * left as `undefined` (e.g. wallThickness, metadata), so strip anything that
+ * is not JSON-safe before writing to the room. Falls back to a shallow strip
+ * if the value is not JSON-serializable at all.
+ *
+ * Non-finite numbers (NaN/Infinity from a bad snap/drag computation) are
+ * dropped too: JSON would silently turn them into `null`, teleporting the
+ * item on every peer. Dropping the axis keeps the peer's last good value
+ * (updates merge) instead of corrupting it.
+ */
+const stripNonFinite = (value: any): any => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (Array.isArray(value)) return value.map(stripNonFinite);
+  if (value && typeof value === "object") {
+    const out: Record<string, any> = {};
+    for (const key of Object.keys(value)) {
+      const v = stripNonFinite((value as any)[key]);
+      if (v !== undefined) out[key] = v;
+    }
+    return out;
+  }
+  return value;
+};
+
+const sanitizeForYjs = (value: any): any => {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "object") return value;
+  const finite = stripNonFinite(value);
+  try {
+    const cleaned = JSON.parse(JSON.stringify(finite));
+    return cleaned === undefined ? null : cleaned;
+  } catch {
+    if (Array.isArray(finite)) return [];
+    const out: Record<string, any> = {};
+    for (const key of Object.keys(finite)) {
+      const v = (finite as any)[key];
+      if (v !== undefined && typeof v !== "function") out[key] = v;
+    }
+    return out;
+  }
+};
+
+/**
  * Rooms are keyed by the project's mongo `_id`, never its slug — see
  * docs/frontend-collaboration-contract.md. The editor passes the slug in as
  * `projectId`, so treating that value as already-resolved made the hook open a
@@ -383,7 +428,45 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         return Array.from(byId.values());
       };
 
-      const shouldMerge = localHasItems && local.hasUnsavedChanges;
+      let shouldMerge = localHasItems && local.hasUnsavedChanges;
+      // STALE/DIVERGED ROOM PROTECTION: the room can lag behind the database
+      // (REST saves and pre-join edits never reach it — see flushLocalChanges).
+      // If every room item already exists locally, the room is strictly older:
+      // replacing would silently delete newer local work (this is how items
+      // vanished on refresh with a collaborator on the event). Likewise, when
+      // the room and local diverge (each side has items the other lacks), a
+      // wholesale replace deletes one side's work. In both cases union-merge
+      // with local winning conflicts — erring toward keeping data. A replace
+      // only happens when local adds nothing over the room.
+      const collectSyncIds = (lists: any[][]) => {
+        const ids = new Set<string>();
+        for (const list of lists) {
+          if (!Array.isArray(list)) continue;
+          for (const item of list) {
+            if (item && (item as any).id != null) ids.add(String((item as any).id));
+          }
+        }
+        return ids;
+      };
+      const roomIds = collectSyncIds([nextShapes, nextAssets, nextWalls, nextTextAnnotations, nextDimensions, nextLabelArrows, nextGroups, nextWallSegments, nextComments]);
+      const localIds = collectSyncIds([local.shapes, local.assets, local.walls, local.textAnnotations, local.dimensions, local.labelArrows, local.groups, local.wallSegments, local.comments]);
+      let roomIsSubsetOfLocal = roomIds.size > 0;
+      if (roomIsSubsetOfLocal) {
+        for (const id of roomIds) {
+          if (!localIds.has(id)) { roomIsSubsetOfLocal = false; break; }
+        }
+      }
+      let roomDivergedFromLocal = false;
+      if (!roomIsSubsetOfLocal) {
+        for (const id of localIds) {
+          if (!roomIds.has(id)) { roomDivergedFromLocal = true; break; }
+        }
+      }
+      const shouldMergeGuarded = shouldMerge || (localHasItems && (roomIsSubsetOfLocal || roomDivergedFromLocal));
+      if (localHasItems && !local.hasUnsavedChanges && (roomIsSubsetOfLocal || roomDivergedFromLocal)) {
+        console.warn("[Collaboration] Room snapshot is missing local items — merging instead of replacing to avoid data loss.");
+      }
+      shouldMerge = shouldMergeGuarded;
       const nextShapesM = shouldMerge ? mergeById(nextShapes, local.shapes) : nextShapes;
       const nextAssetsM = shouldMerge ? mergeById(nextAssets, local.assets) : nextAssets;
       const nextWallsM = shouldMerge ? mergeById(nextWalls, local.walls) : nextWalls;
@@ -417,6 +500,57 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       }
 
       return true;
+    };
+
+    // ─── Room reconciliation: heal items the room is missing ───
+    // Diffs only track changes made AFTER the baseline, so anything that
+    // never reached the room (a dropped pre-join flush, a rolled-back
+    // transact, a backend room rebuilt from an older snapshot) stays
+    // invisible to the other browser forever — live position updates flow,
+    // but the elements themselves never arrive ("incomplete elements").
+    // After every initial sync, push each local-only item into the room
+    // (sanitized, idempotent); peers receive them through the normal
+    // yjs-update flow. The pull direction is already handled by the
+    // union-merge in syncVisibleStoreFromYDoc above.
+    const reconcileRoomWithLocal = () => {
+      if (!hasJoinedRef.current) return;
+      const local = useProjectStore.getState();
+      const pairs: Array<[any[], Y.Map<any>, string]> = [
+        [local.shapes, yShapes, "shapes"],
+        [local.assets, yAssets, "assets"],
+        [local.walls, yWalls, "walls"],
+        [local.textAnnotations, yAnnotations, "textAnnotations"],
+        [local.labelArrows, yArrows, "labelArrows"],
+        [local.dimensions, yDimensions, "dimensions"],
+        [local.groups, yGroups, "groups"],
+        [local.wallSegments, yWallSegments, "wallSegments"],
+        [local.comments, yComments, "comments"],
+      ];
+      let pushed = 0;
+      try {
+        ydoc.transact(() => {
+          for (const [items, targetMap, name] of pairs) {
+            if (!Array.isArray(items)) continue;
+            for (const item of items) {
+              const id = (item as any)?.id;
+              if (id == null || targetMap.has(String(id))) continue;
+              try {
+                const clean = sanitizeForYjs({ ...(item as any) });
+                if (clean === null) continue;
+                targetMap.set(String(id), clean);
+                pushed += 1;
+              } catch (err) {
+                console.warn(`[Collaboration] Reconcile skipped ${name} ${id}:`, err);
+              }
+            }
+          }
+        }, "local-sync");
+      } catch (err) {
+        console.warn("[Collaboration] Room reconciliation failed:", err);
+      }
+      if (pushed > 0) {
+        console.log(`[Collaboration] Reconciled ${pushed} local item(s) into the room.`);
+      }
     };
 
     // ─── Step 1: Connect socket with auth token ───
@@ -474,10 +608,17 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         } else if (storeItems === 0 && (yShapes.size > 0 || yAssets.size > 0 || yWalls.size > 0)) {
           console.log("[Collaboration] Step 4: Zustand empty, server has data — applied yjs-sync");
         } else if (storeItems > 0) {
-          console.log("[Collaboration] Step 4: Both store and server have data — server wins via yjs-sync");
+          console.log("[Collaboration] Step 4: Both store and server have data — applied yjs-sync (merged or replaced)");
         } else {
           console.log("[Collaboration] Step 4: Both store and server empty — nothing to sync");
         }
+
+        // Initial sync is done: replay any local edits that were held while
+        // joining (pre-join flushes no longer advance the baseline, so this
+        // pushes them into the room instead of letting it stay stale), then
+        // reconcile anything the room is still missing.
+        scheduleLocalFlush();
+        reconcileRoomWithLocal();
       }
     };
 
@@ -568,16 +709,27 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       if (event.transaction.origin === "local-sync") return;
 
       isRemoteUpdating.current = true;
-      event.changes.keys.forEach((change, key) => {
-        if (change.action === "add" || change.action === "update") {
-          const value = toPlainYValue(event.target.get(key));
-          storeAction(key, value);
-        } else if (change.action === "delete") {
-          removeAction(key);
-        }
-      });
-      useProjectStore.setState((s) => ({ ...s, hasUnsavedChanges: true }));
-      isRemoteUpdating.current = false;
+      try {
+        event.changes.keys.forEach((change, key) => {
+          try {
+            if (change.action === "add" || change.action === "update") {
+              const value = toPlainYValue(event.target.get(key));
+              // A nullish remote value carries nothing — skip it instead of
+              // letting a store action throw and abort the rest of the batch
+              // (that is how a room ends up with "incomplete elements").
+              if (value === null || value === undefined) return;
+              storeAction(key, value);
+            } else if (change.action === "delete") {
+              removeAction(key);
+            }
+          } catch (err) {
+            console.warn(`[Collaboration] Skipping remote ${collectionName || "item"} ${key} that failed to apply:`, err);
+          }
+        });
+        useProjectStore.setState((s) => ({ ...s, hasUnsavedChanges: true }));
+      } finally {
+        isRemoteUpdating.current = false;
+      }
     };
 
     yAssets.observe((event) => applyYChangeToStore(event,
@@ -693,13 +845,22 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         // nothing changed — skip the expensive write. Zustand always produces
         // new references for mutated items.
         if (previousItem !== item) {
-          targetMap.set(item.id, { ...item });
+          try {
+            const clean = sanitizeForYjs({ ...item });
+            if (clean !== null) targetMap.set(item.id, clean);
+          } catch (err) {
+            console.warn(`[Collaboration] Skipping ${collectionName || "item"} ${item.id} that failed to serialize:`, err);
+          }
         }
         previousById.delete(item.id);
       });
 
       previousById.forEach((_, id) => {
-        targetMap.delete(id);
+        try {
+          targetMap.delete(id);
+        } catch (err) {
+          console.warn(`[Collaboration] Failed to delete ${collectionName || "item"} ${id} from room:`, err);
+        }
       });
     };
 
@@ -738,7 +899,6 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       }
 
       const previousState = lastKnownState;
-      lastKnownState = state;
 
       const hasChanges =
         state.assets !== previousState.assets ||
@@ -752,7 +912,10 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         state.comments !== previousState.comments ||
         state.canvas !== previousState.canvas;
 
-      if (!hasChanges) return;
+      if (!hasChanges) {
+        lastKnownState = state;
+        return;
+      }
 
       // BroadcastChannel: only when another tab is known to be listening.
       // Peer liveness is tracked by the hello/heartbeat messages in the
@@ -795,6 +958,12 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         return;
       }
 
+      // Only advance the baseline once the delta actually reached the room.
+      // Advancing it on a held (pre-join) flush silently forgets those edits,
+      // leaving the room permanently stale — the next reconnect then wipes
+      // them from the workspace via the initial "server wins" sync.
+      lastKnownState = state;
+
       ydoc.transact(() => {
         if (state.assets !== previousState.assets) syncCollection(state.assets, previousState.assets, yAssets, "assets");
         if (state.walls !== previousState.walls) syncCollection(state.walls, previousState.walls, yWalls, "walls");
@@ -805,7 +974,10 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
         if (state.groups !== previousState.groups) syncCollection(state.groups, previousState.groups, yGroups, "groups");
         if (state.wallSegments !== previousState.wallSegments) syncCollection(state.wallSegments, previousState.wallSegments, yWallSegments, "wallSegments");
         if (state.comments !== previousState.comments) syncCollection(state.comments, previousState.comments, yComments, "comments");
-        if (state.canvas !== previousState.canvas) yCanvas.set("config", state.canvas);
+        if (state.canvas !== previousState.canvas) {
+          const cleanCanvas = sanitizeForYjs(state.canvas);
+          if (cleanCanvas !== null) yCanvas.set("config", cleanCanvas);
+        }
       }, "local-sync");
     };
 
@@ -1299,22 +1471,55 @@ export const useCollaboration = (projectId: string | undefined, eventId: string 
       }
 
       if (msg.type === "state-sync" || msg.type === "state-update") {
+        // Union-merge, never wholesale-replace: a tab that speaks last may
+        // hold a stale (or emptier) snapshot, and replacing would wipe this
+        // tab's newer items — the same data-loss shape as the Yjs initial
+        // sync had. Incoming wins on id conflicts (the sender just flushed,
+        // so its version of a conflicted item is the newer one).
+        const mergeIncoming = <T extends { id?: string }>(liveList: T[], incoming: T[] | undefined): T[] => {
+          if (!Array.isArray(incoming) || incoming.length === 0) return liveList;
+          const byId = new Map<string, T>();
+          for (const item of liveList) {
+            if (item && item.id != null) byId.set(String(item.id), item);
+          }
+          const merged: T[] = [...liveList];
+          for (const item of incoming) {
+            if (!item) continue;
+            const key = item.id != null ? String(item.id) : null;
+            if (key == null) {
+              merged.push(item);
+              continue;
+            }
+            if (byId.has(key)) {
+              const idx = merged.findIndex((x) => x && String((x as any).id) === key);
+              if (idx >= 0) merged[idx] = { ...merged[idx], ...item };
+            } else {
+              byId.set(key, item);
+              merged.push(item);
+            }
+          }
+          return merged;
+        };
         isRemoteUpdatingRef.current = true;
-        useProjectStore.setState({
-          ...(msg.shapes != null ? { shapes: msg.shapes } : {}),
-          ...(msg.assets != null ? { assets: msg.assets } : {}),
-          ...(msg.walls != null ? { walls: msg.walls } : {}),
-          ...(msg.wallSegments != null ? { wallSegments: msg.wallSegments } : {}),
-          ...(msg.textAnnotations != null ? { textAnnotations: msg.textAnnotations } : {}),
-          ...(msg.labelArrows != null ? { labelArrows: msg.labelArrows } : {}),
-          ...(msg.dimensions != null ? { dimensions: msg.dimensions } : {}),
-          ...(msg.groups != null ? { groups: msg.groups } : {}),
-          ...(msg.comments != null ? { comments: msg.comments } : {}),
-          ...(msg.canvas != null ? { canvas: msg.canvas } : {}),
-        });
-        isRemoteUpdatingRef.current = false;
+        try {
+          const live = useProjectStore.getState();
+          useProjectStore.setState({
+            ...(msg.shapes != null ? { shapes: mergeIncoming(live.shapes, msg.shapes) } : {}),
+            ...(msg.assets != null ? { assets: mergeIncoming(live.assets, msg.assets) } : {}),
+            ...(msg.walls != null ? { walls: mergeIncoming(live.walls, msg.walls) } : {}),
+            ...(msg.wallSegments != null ? { wallSegments: mergeIncoming(live.wallSegments, msg.wallSegments) } : {}),
+            ...(msg.textAnnotations != null ? { textAnnotations: mergeIncoming(live.textAnnotations, msg.textAnnotations) } : {}),
+            ...(msg.labelArrows != null ? { labelArrows: mergeIncoming(live.labelArrows, msg.labelArrows) } : {}),
+            ...(msg.dimensions != null ? { dimensions: mergeIncoming(live.dimensions, msg.dimensions) } : {}),
+            ...(msg.groups != null ? { groups: mergeIncoming(live.groups, msg.groups) } : {}),
+            ...(msg.comments != null ? { comments: mergeIncoming(live.comments, msg.comments) } : {}),
+            ...(msg.canvas != null ? { canvas: msg.canvas } : {}),
+          });
+        } finally {
+          isRemoteUpdatingRef.current = false;
+        }
         const after = useProjectStore.getState();
-        console.log("[BroadcastChannel] Applied state from other tab. Shapes:", after.shapes.length);
+        console.log("[BroadcastChannel] Merged state from other tab. Shapes:", after.shapes.length);
       }
     };
 
