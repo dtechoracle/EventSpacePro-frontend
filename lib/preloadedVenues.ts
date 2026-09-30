@@ -94,7 +94,7 @@ export const PRELOADED_VENUES: PreloadedVenueDef[] = [
   {
     id: "la-madison-dome",
     name: "La Madison Dome",
-    path: "/assets/preloaded-venues/La Madison Dome.dxf",
+    path: "/assets/preloaded-venues/La Madison Dome.svg",
     width: 25000,
     height: 50000,
     latitude: 6.4370,

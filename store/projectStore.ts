@@ -1242,20 +1242,37 @@ export const useProjectStore = create<ProjectState>()(
 
                 if (items.length < 2) return;
 
-                // Sort items by axis
-                items.sort((a, b) => axis === 'horizontal' ? a.x - b.x : a.y - b.y);
+                // `spacing` is the clear gap BETWEEN item edges (the modal labels it
+                // "Space Between"), not a center-to-center pitch. The old formula
+                // (startX + index * spacing) pitched centers, so any item wider than
+                // `spacing` overlapped its neighbor and the requested gap never
+                // appeared. Sort by leading edge and walk a cursor instead: each
+                // item's near edge is placed exactly `gap` after the previous item's
+                // far edge, for any item width.
+                const gap = Number.isFinite(spacing) && spacing >= 0 ? spacing : 100;
+                items.sort((a, b) => axis === 'horizontal'
+                    ? (a.x - a.w / 2) - (b.x - b.w / 2)
+                    : (a.y - a.h / 2) - (b.y - b.h / 2));
 
-                const startX = items[0].x;
-                const startY = items[0].y;
+                // Far edge of the previously placed item, along the axis
+                let cursor = axis === 'horizontal'
+                    ? items[0].x + items[0].w / 2
+                    : items[0].y + items[0].h / 2;
 
                 items.forEach((item, index) => {
                     if (index === 0) return;
 
-                    const newX = axis === 'horizontal' ? startX + (index * spacing) : startX;
-                    const newY = axis === 'vertical' ? startY + (index * spacing) : startY;
-
-                    const dx = newX - item.x;
-                    const dy = newY - item.y;
+                    let dx = 0;
+                    let dy = 0;
+                    if (axis === 'horizontal') {
+                        const newX = cursor + gap + item.w / 2;
+                        dx = newX - item.x;
+                        cursor = newX + item.w / 2;
+                    } else {
+                        const newY = cursor + gap + item.h / 2;
+                        dy = newY - item.y;
+                        cursor = newY + item.h / 2;
+                    }
 
                     // Move all members of this group/item
                     item.memberIds.forEach(mid => {

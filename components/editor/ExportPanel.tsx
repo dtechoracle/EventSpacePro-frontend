@@ -18,7 +18,7 @@ import { apiRequest } from "@/helpers/Config";
 import { getRasterAssetPath } from "@/utils/assetRasterPath";
 import { downloadDxf } from "@/lib/dxfExport";
 
-type ExportFormat = "pdf" | "png" | "jpg" | "jpeg" | "dxf";
+type ExportFormat = "pdf" | "png" | "jpg" | "jpeg" | "dxf" | "svg";
 
 import { PRELOADED_VENUES } from "@/lib/preloadedVenues";
 
@@ -783,7 +783,8 @@ export default function ExportPanel() {
     minY: number,
     maxX: number,
     maxY: number,
-    paddingMm: number
+    paddingMm: number,
+    opts?: { asString?: boolean }
   ) => {
     const workspaceSvg = document.querySelector('svg[data-workspace-root="true"]') as SVGSVGElement | null;
     if (!workspaceSvg) return null;
@@ -803,14 +804,18 @@ export default function ExportPanel() {
     // Remove non-venue raster-backed asset <image> elements from the snapshot.
     // SVG loaded as an <img> from a blob URL cannot render external <image> references,
     // so furniture/assets are re-rendered manually. Preloaded venues are kept and inlined below.
+    // For string exports (SVG download) the elements are kept — the base64 inliner
+    // below embeds them directly so the standalone file stays complete.
     const removedRasterAssetIds = new Set<string>();
-    clone.querySelectorAll('image[href*="/assets/raster/"], image[xlink\\:href*="/assets/raster/"]').forEach((node) => {
-      const href = node.getAttribute('href') || node.getAttribute('xlink:href') || '';
-      if (href.includes('preloaded-venues')) return;
-      const parentG = node.closest('g[data-id]');
-      if (parentG) removedRasterAssetIds.add(parentG.getAttribute('data-id')!);
-      node.remove();
-    });
+    if (!opts?.asString) {
+      clone.querySelectorAll('image[href*="/assets/raster/"], image[xlink\\:href*="/assets/raster/"]').forEach((node) => {
+        const href = node.getAttribute('href') || node.getAttribute('xlink:href') || '';
+        if (href.includes('preloaded-venues')) return;
+        const parentG = node.closest('g[data-id]');
+        if (parentG) removedRasterAssetIds.add(parentG.getAttribute('data-id')!);
+        node.remove();
+      });
+    }
 
     // ─── Replace inline venue SVGs with <image> elements ───
     // Venue SVGs are rendered inline in the workspace with huge CAD-scale viewBoxes
@@ -991,10 +996,60 @@ export default function ExportPanel() {
     // is needed — the snapshot captures the exact workspace appearance.
 
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.style.background = 'transparent';
+
+    if (opts?.asString) {
+      // ─── Standalone SVG file output ───
+      // Emit world-millimetre coordinates instead of screen coordinates:
+      // neutralize the workspace pan/zoom transform and point the viewBox at
+      // the world content bounds, so 1 SVG user unit = 1 mm regardless of the
+      // zoom level at export time. A white background rect is inserted behind
+      // the content to match the PNG/PDF exports.
+      const contentTransform = `translate(${panX}, ${panY}) scale(${zoom})`;
+      let contentG: Element | null = null;
+      Array.from(clone.children).forEach((child) => {
+        if (child.getAttribute('transform') === contentTransform) {
+          if (!contentG) contentG = child;
+          child.removeAttribute('transform');
+        }
+      });
+
+      let vbX = minX - paddingMm;
+      let vbY = minY - paddingMm;
+      let vbW = Math.max(1, maxX - minX + paddingMm * 2);
+      let vbH = Math.max(1, maxY - minY + paddingMm * 2);
+      if (!contentG) {
+        // Transform match failed — content is still in screen coordinates, so
+        // fall back to the screen-space viewBox instead of an empty file.
+        vbX = screenMinX;
+        vbY = screenMinY;
+        vbW = screenWidth;
+        vbH = screenHeight;
+      }
+      clone.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+      clone.setAttribute('width', String(vbW));
+      clone.setAttribute('height', String(vbH));
+
+      if (contentG) {
+        const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        bg.setAttribute('x', String(vbX));
+        bg.setAttribute('y', String(vbY));
+        bg.setAttribute('width', String(vbW));
+        bg.setAttribute('height', String(vbH));
+        bg.setAttribute('fill', '#ffffff');
+        clone.insertBefore(bg, contentG);
+      }
+
+      return {
+        img: null,
+        svgString: new XMLSerializer().serializeToString(clone),
+        removedRasterAssetIds,
+      };
+    }
+
     clone.setAttribute('width', `${screenWidth}`);
     clone.setAttribute('height', `${screenHeight}`);
     clone.setAttribute('viewBox', `${screenMinX} ${screenMinY} ${screenWidth} ${screenHeight}`);
-    clone.style.background = 'transparent';
 
     const serialized = new XMLSerializer().serializeToString(clone);
     const blob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' });
@@ -1761,6 +1816,40 @@ const renderAssetToCanvas = (
       const contentW_mm = (maxX - minX) + mmPadding * 2;
       const contentH_mm = (maxY - minY) + mmPadding * 2;
 
+      // SVG: vector download of the full scene (walls, shapes, assets, text,
+      // dimensions, textures) — no paper rasterization needed.
+      if (option.format === 'svg') {
+        // Viewport culling keeps off-screen items out of the live SVG DOM.
+        // Fail loudly instead of silently exporting an incomplete drawing.
+        const liveSvg = document.querySelector('svg[data-workspace-root="true"]');
+        if (liveSvg) {
+          const presentIds = new Set<string>();
+          liveSvg.querySelectorAll('[data-id]').forEach((el) => {
+            const id = el.getAttribute('data-id');
+            if (id) presentIds.add(id);
+          });
+          const missing = assetsToExport.filter(
+            (a) => a.type !== 'dimension' && !presentIds.has(a.id)
+          );
+          if (missing.length > 0) {
+            throw new Error(
+              `${missing.length} item(s) are outside the visible area and would be missing from the export. Zoom out to fit the whole layout, then export again.`
+            );
+          }
+        }
+        const svgResult = await loadWorkspaceSnapshot(minX, minY, maxX, maxY, mmPadding, { asString: true });
+        if (!svgResult?.svgString) throw new Error("Failed to capture the workspace as SVG.");
+        const svgBlob = new Blob([svgResult.svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const svgUrl = URL.createObjectURL(svgBlob);
+        const svgLink = document.createElement('a');
+        svgLink.download = `export-${Date.now()}.svg`;
+        svgLink.href = svgUrl;
+        svgLink.click();
+        setTimeout(() => URL.revokeObjectURL(svgUrl), 1000);
+        toast.success("SVG export finished!");
+        return;
+      }
+
       // 2. Set up Final Paper dimensions
       const p = PAPER_SIZES[option.paperSize];
       const paperPx = EXPORT_DPI / 25.4;
@@ -1930,6 +2019,7 @@ const renderAssetToCanvas = (
                 <option value="png">PNG</option>
                 <option value="jpg">JPG</option>
                 <option value="dxf">DXF</option>
+                <option value="svg">SVG</option>
               </select>
             </div>
             <button
@@ -1966,7 +2056,7 @@ const renderAssetToCanvas = (
 
           <button
             onClick={() => {
-              if (primaryOption.format === 'dxf') { handleExport(primaryOption); }
+              if (primaryOption.format === 'dxf' || primaryOption.format === 'svg') { handleExport(primaryOption); }
               else if (primaryOption.isProfessional) { setCurrentOption(primaryOption); setShowProfessionalModal(true); }
               else handleExport(primaryOption);
             }}
@@ -2003,6 +2093,7 @@ const renderAssetToCanvas = (
                   <option value="png">PNG</option>
                   <option value="jpg">JPG</option>
                   <option value="dxf">DXF</option>
+                  <option value="svg">SVG</option>
                 </select>
               </div>
             </div>

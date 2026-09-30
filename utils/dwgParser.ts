@@ -530,10 +530,29 @@ function buildSvgFromDb(db: DwgDatabase): string {
 </svg>`;
 }
 
+/**
+ * DWG files are binary and start with an ASCII version magic ("AC1032" etc).
+ * DXF files are plain text starting with a group-code line ("0 / SECTION",
+ * optionally after a BOM, whitespace, or "999" comment lines). The previous
+ * code hard-coded Dwg_File_Type.DWG, so text DXFs (e.g. La Madison Dome)
+ * failed to parse and the renderer silently showed nothing.
+ */
+function detectDwgFileType(buf: ArrayBuffer): Dwg_File_Type {
+  const bytes = new Uint8Array(buf, 0, Math.min(128, buf.byteLength));
+  let head = '';
+  for (let i = 0; i < bytes.length; i++) head += String.fromCharCode(bytes[i]);
+  if (/^AC\d{4}/.test(head)) return Dwg_File_Type.DWG;
+  const trimmed = head.replace(/^\uFEFF/, '').trimStart();
+  if (/^(0|999)\s*\r?\n/.test(trimmed)) return Dwg_File_Type.DXF;
+  // Extension hint from a DXF that starts unusually (e.g. with comments)
+  if (/SECTION|ENTITIES|HEADER|EOF/i.test(head)) return Dwg_File_Type.DXF;
+  return Dwg_File_Type.DWG;
+}
+
 export async function parseDwgToSvg(dwgArrayBuffer: ArrayBuffer): Promise<string> {
   const libredwg = await getLibredwg();
 
-  const dwgData = libredwg.dwg_read_data(dwgArrayBuffer, Dwg_File_Type.DWG);
+  const dwgData = libredwg.dwg_read_data(dwgArrayBuffer, detectDwgFileType(dwgArrayBuffer));
   if (dwgData === undefined) {
     throw new Error('Failed to parse DWG/DXF file');
   }

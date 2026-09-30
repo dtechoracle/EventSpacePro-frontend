@@ -473,7 +473,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             const blob = new Blob([svgStr], { type: 'image/svg+xml' });
             const url = URL.createObjectURL(blob);
             setDwgSvgData(url);
-        }).catch(() => {});
+        }).catch((err) => console.error('[AssetRenderer] CAD parse failed for', assetPath, err));
         return () => { cancelled = true; };
     }, [isCad, assetPath]);
 

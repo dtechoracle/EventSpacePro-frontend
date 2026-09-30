@@ -133,7 +133,7 @@ const VenueThumbnail = memo(function VenueThumbnail({
         dwgSvgCache.set(src, parsed);
         setDwgParsed(parsed);
       })
-      .catch(() => {});
+      .catch((err) => console.error('[VenueThumbnail] CAD parse failed for', src, err));
     return () => { cancelled = true; };
   }, [src, cad]);
 

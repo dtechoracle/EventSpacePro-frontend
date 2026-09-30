@@ -3952,7 +3952,7 @@ export default function Workspace2D({
     } else {
       useProjectStore.getState().distributeSelection(
         mode === 'horizontal' ? 'horizontal' : 'vertical',
-        spacing || 100,
+        spacing ?? 100,
         selectedIds
       );
     }
@@ -4083,23 +4083,6 @@ export default function Workspace2D({
     ];
 
     if (hasSelection) {
-      // Distribute only
-      actions.push({
-        label: "Distribute...",
-        action: () => {
-          setDuplicateDistributeModal({ isOpen: true, mode: 'distribute' });
-          closeContextMenu();
-        },
-      });
-
-      // Duplicate & Distribute
-      actions.push({
-        label: "Duplicate & Distribute...",
-        action: () => {
-          setDuplicateDistributeModal({ isOpen: true, mode: 'duplicate' });
-          closeContextMenu();
-        },
-      });
       actions.push({
         label: "Add to AI chat",
         action: () => {
@@ -4445,7 +4428,7 @@ export default function Workspace2D({
     // Duplicate Actions
     if (hasSelection) {
       actions.push({
-        label: 'Duplicate & Distribute',
+        label: 'Duplicate & Distribute...',
         action: () => {
           setDuplicateDistributeModal({ isOpen: true, mode: 'duplicate' });
           setTimeout(() => closeContextMenu(), 0);
@@ -5042,16 +5025,21 @@ export default function Workspace2D({
         onClose={() => setDuplicateDistributeModal({ isOpen: false, mode: 'duplicate' })}
         onConfirm={(data) => {
           if (duplicateDistributeModal.mode === 'duplicate') {
-            // Duplicate & distribute
+            // Capture originals before duplicating — duplicateSelection() switches
+            // the selection to only the new copies. The originals must join the
+            // distribution too: copies are created just 300mm from the original,
+            // so distributing only the copies left the original overlapping the
+            // first copy with no gap.
+            const originalIds = [...useEditorStore.getState().selectedIds];
             const newIds = duplicateSelection(data.count || 1);
 
             if (newIds && newIds.length > 0) {
-              // Distribute immediately using the new IDs
+              // Distribute original + copies together so the whole row honors the gap
               distributeSelection(
                 data.type || 'horizontal',
                 data.spacing,
                 data.diameter,
-                newIds
+                [...originalIds, ...newIds]
               );
             }
           } else {
