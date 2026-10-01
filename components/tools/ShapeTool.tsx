@@ -50,7 +50,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
     const [endPoint, setEndPoint] = useState<{ x: number; y: number } | null>(null);
     const [snapIndicator, setSnapIndicator] = useState<SnapPoint | null>(null);
 
-    const isLineMode = false; // Disable multi-segment line mode for now
+    const isLineMode = shapeType === 'line' || shapeType === 'arrow';
     const isPolygon = shapeType === 'polygon';
 
     const drawingSnapTargets = useMemo(

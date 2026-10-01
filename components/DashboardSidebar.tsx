@@ -63,18 +63,17 @@ export default function DashboardSidebar() {
     // Clear user state from Zustand store
     clearUser();
 
-    // Clear any persisted user storage
+    // Clear any persisted user storage and other states (projects, etc)
     try {
       if (typeof window !== "undefined") {
-        localStorage.removeItem("user-storage");
-        localStorage.removeItem("auth-token");
+        localStorage.clear();
       }
     } catch {
       // ignore storage errors
     }
 
-    // Redirect to login page
-    router.push("/auth/login");
+    // Redirect to login page and force full reload to drop memory state
+    window.location.href = "/auth/login";
   };
 
   // During SSR/hydration, render uncollapsed to match server HTML

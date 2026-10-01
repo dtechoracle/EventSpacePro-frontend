@@ -22,11 +22,10 @@ const Sidebar = () => {
     clearUser();
     try {
       if (typeof window !== "undefined") {
-        localStorage.removeItem("user-storage");
-        localStorage.removeItem("auth-token");
+        localStorage.clear();
       }
     } catch {}
-    router.push("/auth/login");
+    window.location.href = "/auth/login";
   };
 
   useEffect(() => {

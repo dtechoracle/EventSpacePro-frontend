@@ -268,15 +268,25 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
 
                 return (
                     <g data-id={shape.id}>
+                        {/* Invisible thick line for hit testing */}
                         <polyline
                             points={points}
-                            fill={commonProps.fill}
+                            fill="none"
+                            stroke="transparent"
+                            strokeWidth={Math.max(20, commonProps.strokeWidth + 10)}
+                            style={{ pointerEvents: 'stroke' }}
+                            data-id={shape.id}
+                        />
+                        <polyline
+                            points={points}
+                            fill={commonProps.fill === 'transparent' ? 'none' : commonProps.fill}
                             stroke={commonProps.stroke}
                             strokeWidth={commonProps.strokeWidth}
                             opacity={commonProps.opacity}
                             strokeLinecap="round"
                             strokeLinejoin="round"
                             strokeDasharray={commonProps.strokeDasharray}
+                            style={commonProps.style}
                             data-id={shape.id}
                         />
                         {/* Control points for polyline */}
