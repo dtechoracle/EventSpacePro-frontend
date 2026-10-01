@@ -2223,6 +2223,11 @@ export default function Workspace2D({
     (e: React.MouseEvent) => {
       if (!canvasRef.current) return;
 
+      // If user is actively editing a text annotation inline, don't intercept mouse events
+      // so they can drag-select text inside the textarea freely
+      const currentEditingId = useEditorStore.getState().editingTextId;
+      if (currentEditingId) return;
+
       const { x: worldX, y: worldY } = screenToWorld(e.clientX, e.clientY);
 
       // Skip if click originated from scrollbar indicators
@@ -2632,7 +2637,7 @@ export default function Workspace2D({
               const arrow = item;
               const dx = arrow.endPoint.x - arrow.startPoint.x, dy = arrow.endPoint.y - arrow.startPoint.y;
               const lenSq = dx * dx + dy * dy;
-              const thickness = (arrow.strokeWidth || 2) + 30;
+              const thickness = Math.max((arrow.strokeWidth || 2) + 30, 20 / zoom);
               if (lenSq === 0) {
                 if (Math.hypot(worldX - arrow.startPoint.x, worldY - arrow.startPoint.y) <= thickness) isHit = true;
               } else {
@@ -2659,7 +2664,8 @@ export default function Workspace2D({
                   const localX = worldX - labelX, localY = worldY - labelY;
                   const rotX = localX * cosA - localY * sinA;
                   const rotY = localX * sinA + localY * cosA;
-                  if (Math.abs(rotX) <= rectWidth / 2 + 10 && Math.abs(rotY) <= rectHeight / 2 + 10) isHit = true;
+                  const pad = Math.max(10, 10 / zoom);
+                  if (Math.abs(rotX) <= rectWidth / 2 + pad && Math.abs(rotY) <= rectHeight / 2 + pad) isHit = true;
                 }
               }
             }
@@ -2942,9 +2948,14 @@ export default function Workspace2D({
     }
 
     // Update typing state when clicking away from text
+    // But don't close editing if user is still inside the textarea (e.g. after text-select drag)
     if (useEditorStore.getState().editingTextId) {
-      setEditingTextId(null);
-      updateTyping(false);
+      const activeEl = document.activeElement;
+      const isInTextarea = activeEl && activeEl.tagName === 'TEXTAREA';
+      if (!isInTextarea) {
+        setEditingTextId(null);
+        updateTyping(false);
+      }
     }
 
     const previewToCommit = dragPreviewRef.current;
@@ -4628,7 +4639,6 @@ export default function Workspace2D({
       style={{
         cursor: isPanning ? 'grabbing' : 
                 activeTool === 'pan' ? 'grab' : 
-                activeHoveredSnapPoint ? 'crosshair' :
                 (hoveredId && activeTool === 'select') ? 'pointer' :
                 activeTool === 'select' ? 'default' : 'crosshair',
       }}
@@ -4717,19 +4727,19 @@ export default function Workspace2D({
       )}
       {/* Placement Mode HUD */}
       {placementMode.active && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-2 rounded-lg bg-slate-900/90 text-white shadow-xl border border-white/20">
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-2 rounded-lg bg-white text-slate-800 shadow-lg border border-slate-200">
           <div className="flex flex-col">
             <span className="text-sm font-bold">AI Plan Preview</span>
-            <span className="text-[10px] text-slate-300">Move your mouse to position the layout, then click to place.</span>
+            <span className="text-[10px] text-slate-500">Move your mouse to position the layout, then click to place.</span>
           </div>
-          <div className="h-8 w-px bg-white/20"></div>
+          <div className="h-8 w-px bg-slate-200"></div>
           <button
             onClick={(e) => {
               e.stopPropagation();
               setPlacementMode({ active: false, data: null });
               toast("AI Placement cancelled");
             }}
-            className="px-3 py-1.5 rounded-md bg-red-500/20 hover:bg-red-500/40 text-red-200 text-xs font-semibold transition-colors border border-red-500/30"
+            className="px-3 py-1.5 rounded-md bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold transition-colors border border-red-200"
           >
             Cancel
           </button>
@@ -4737,18 +4747,18 @@ export default function Workspace2D({
       )}
       {/* Pending Import Shape HUD */}
       {pendingImportShape && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-2 rounded-lg bg-slate-900/90 text-white shadow-xl border border-white/20">
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-2 rounded-lg bg-white text-slate-800 shadow-lg border border-slate-200">
           <div className="flex flex-col">
             <span className="text-sm font-bold">Place Imported File</span>
-            <span className="text-[10px] text-slate-300">Move your mouse to position, then click to place. Press Esc to cancel.</span>
+            <span className="text-[10px] text-slate-500">Move your mouse to position, then click to place. Press Esc to cancel.</span>
           </div>
-          <div className="h-8 w-px bg-white/20"></div>
+          <div className="h-8 w-px bg-slate-200"></div>
           <button
             onClick={(e) => {
               e.stopPropagation();
               setPendingImportShape(null);
             }}
-            className="px-3 py-1.5 rounded-md bg-red-500/20 hover:bg-red-500/40 text-red-200 text-xs font-semibold transition-colors border border-red-500/30"
+            className="px-3 py-1.5 rounded-md bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold transition-colors border border-red-200"
           >
             Cancel
           </button>

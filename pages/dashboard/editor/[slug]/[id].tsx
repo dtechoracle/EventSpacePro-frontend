@@ -137,6 +137,7 @@ type ElementRowProps = {
   onSelect: (payload: { id: string; x: number; y: number; childIds?: string[] }, e?: React.MouseEvent) => void;
   onToggleExpand: (id: string) => void;
   onHide: (id: string, hidden: boolean, type: string) => void;
+  onLock: (id: string, locked: boolean, type: string) => void;
   onStartRename: (id: string, label: string) => void;
   onRenameTextChange: (text: string) => void;
   onCommitRename: (id: string, name: string, type: string) => void;
@@ -392,6 +393,7 @@ const ElementRow = React.memo(function ElementRow({
   onSelect,
   onToggleExpand,
   onHide,
+  onLock,
   onStartRename,
   onRenameTextChange,
   onCommitRename,
@@ -401,6 +403,8 @@ const ElementRow = React.memo(function ElementRow({
   const childShapes = (item as any).childShapes as any[] | undefined;
   const hasChildren = isAsset && childShapes && childShapes.length > 0;
   const isHidden = Boolean(item.hidden);
+  const entity = item.wall || item.shape || item.asset || item.text || item.dimension || item.labelArrow || item.group || item;
+  const isLocked = Boolean(entity.locked);
 
   return (
     <div key={item.id} className={`group relative ${isSelected ? "bg-blue-50" : ""}`}>
@@ -476,6 +480,29 @@ const ElementRow = React.memo(function ElementRow({
           </svg>
         )}
       </button>
+
+      {/* Lock Icon */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onLock(item.id, isLocked, item.type);
+          }}
+          title={isLocked ? "Unlock element" : "Lock element"}
+          className={`absolute right-8 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-slate-200/60 transition-all ${isLocked ? "opacity-100 text-amber-600 font-bold" : "opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-700"}`}
+        >
+          {isLocked ? (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+            </svg>
+          )}
+        </button>
 
       {isAsset && hasChildren && isExpanded && (
         <div className="ml-6 border-l border-gray-200">
@@ -913,6 +940,19 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
   // Props for a single row. Everything here is either a stable callback or a
   // primitive, so unchanged rows bail out of re-rendering inside ElementRow
   // even though the pane itself re-renders on every store write.
+  const handleToggleLock = React.useCallback((id: string, currentlyLocked: boolean, type: string) => {
+    const store = useProjectStore.getState();
+    const updates = { locked: !currentlyLocked };
+
+    if (type === "Wall") store.updateWall(id, updates as any);
+    else if (type === "Shape") store.updateShape(id, updates as any);
+    else if (type === "Asset") store.updateAsset(id, updates as any);
+    else if (type === "Text") store.updateTextAnnotation(id, updates as any);
+    else if (type === "Dimension") store.updateDimension(id, updates as any);
+    else if (type === "LabelArrow") store.updateLabelArrow(id, updates as any);
+    else if (type === "Group") store.updateGroup(id, updates as any);
+  }, []);
+
   const rowProps = (item: any, plClass: string) => {
     const childIds = item.childIds as string[] | undefined;
     const isSelected = childIds
@@ -929,6 +969,7 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
       onSelect: handleSelect,
       onToggleExpand: handleToggleExpand,
       onHide: handleToggleHide,
+      onLock: handleToggleLock,
       onStartRename: handleStartRename,
       onRenameTextChange: handleRenameTextChange,
       onCommitRename: handleRename,

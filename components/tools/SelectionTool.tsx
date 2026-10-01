@@ -108,8 +108,8 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
         selectedItems.forEach(item => {
             if (item.type === 'shape') {
                 const shape = item.object as Shape;
-                const w = shape.fixedSize ? 16 / zoom : shape.width;
-                const h = shape.fixedSize ? 16 / zoom : shape.height;
+                const w = shape.fixedSize ? 16 / zoom : (shape.width || 0) * ((shape as any).scale || 1);
+                const h = shape.fixedSize ? 16 / zoom : (shape.height || 0) * ((shape as any).scale || 1);
                 const halfW = w / 2;
                 const halfH = h / 2;
                 const rot = (shape.rotation || 0) * (Math.PI / 180);
@@ -209,8 +209,8 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                     const h = item.fixedSize ? 16 / zoom : (item.height || 0) * (item.scale || 1);
                     nextGroupBounds = { x: item.x || 0, y: item.y || 0, width: w, height: h, rotation: item.rotation || 0 };
                 } else if (type === 'shape') {
-                    const w = item.fixedSize ? 16 / zoom : (item.width || 0);
-                    const h = item.fixedSize ? 16 / zoom : (item.height || 0);
+                    const w = item.fixedSize ? 16 / zoom : (item.width || 0) * (item.scale || 1);
+                    const h = item.fixedSize ? 16 / zoom : (item.height || 0) * (item.scale || 1);
                     nextGroupBounds = { x: item.x || 0, y: item.y || 0, width: w, height: h, rotation: item.rotation || 0 };
                 } else if (type === 'textAnnotation') {
                     const fs = item.fontSize || 250;
@@ -366,6 +366,7 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
 
             const batchUpdates: any[] = [];
             initialState.items.forEach(item => {
+              if ((item.object as any).locked) return;
                 const it = item.object as any;
                 if (item.type === 'shape') batchUpdates.push({ id: item.id, type: 'shape', updates: { x: it.x + finalDx, y: it.y + finalDy } });
                 else if (item.type === 'asset') batchUpdates.push({ id: item.id, type: 'asset', updates: { x: it.x + finalDx, y: it.y + finalDy } });
@@ -395,6 +396,7 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
             }
             const batchUpdates: any[] = [];
             initialState.items.forEach(item => {
+              if ((item.object as any).locked) return;
                 const it = item.object as any;
                 if (item.type === 'shape' && it.points) {
                     const newPoints = [...it.points];
@@ -427,6 +429,7 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
 
             const batchUpdates: any[] = [];
             initialState.items.forEach(item => {
+              if ((item.object as any).locked) return;
                 const it = item.object as any;
                 const rx = it.x - centerX;
                 const ry = it.y - centerY;
@@ -474,10 +477,91 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                 const initialShape = item.object as Shape;
                 const rotation = initialShape.rotation || 0;
                 const rotRad = rotation * (Math.PI / 180);
+
+                const isStraightLine = (initialShape.type === 'line' || initialShape.type === 'arrow') && !initialShape.points;
+                if (isStraightLine && (dragHandle === 'w' || dragHandle === 'e')) {
+                    const cx = initialShape.x;
+                    const cy = initialShape.y;
+                    const w2 = initialShape.width / 2;
+                    const p1x = cx - w2 * Math.cos(rotRad);
+                    const p1y = cy - w2 * Math.sin(rotRad);
+                    const p2x = cx + w2 * Math.cos(rotRad);
+                    const p2y = cy + w2 * Math.sin(rotRad);
+
+                    let newP1x = p1x, newP1y = p1y;
+                    let newP2x = p2x, newP2y = p2y;
+
+                    if (dragHandle === 'w') {
+                        newP1x += finalDx;
+                        newP1y += finalDy;
+                    } else if (dragHandle === 'e') {
+                        newP2x += finalDx;
+                        newP2y += finalDy;
+                    }
+
+                    const newCx = (newP1x + newP2x) / 2;
+                    const newCy = (newP1y + newP2y) / 2;
+                    const newWidth = Math.hypot(newP2x - newP1x, newP2y - newP1y);
+                    let newRot = Math.atan2(newP2y - newP1y, newP2x - newP1x) * (180 / Math.PI);
+                    
+                    store.updateShape(item.id, { x: newCx, y: newCy, width: Math.max(5, newWidth), rotation: newRot }, true);
+                    return;
+                }
+
                 const cosR = Math.cos(rotRad);
                 const sinR = Math.sin(rotRad);
                 const localDx = finalDx * cosR + finalDy * sinR;
                 const localDy = -finalDx * sinR + finalDy * cosR;
+
+                if ((initialShape.type as string) === 'image') {
+                    // Proportional scaling for image shapes
+                    const initialWidth = initialShape.width;
+                    const initialHeight = initialShape.height;
+                    let scaleFactor = 1;
+                    
+                    if (dragHandle.length === 2) {
+                        const diagLen = Math.hypot(initialWidth, initialHeight);
+                        let proj = 0;
+                        if (dragHandle === 'se') proj = (localDx * initialWidth + localDy * initialHeight) / diagLen;
+                        if (dragHandle === 'nw') proj = (-localDx * initialWidth + -localDy * initialHeight) / diagLen;
+                        if (dragHandle === 'ne') proj = (localDx * initialWidth + -localDy * initialHeight) / diagLen;
+                        if (dragHandle === 'sw') proj = (-localDx * initialWidth + localDy * initialHeight) / diagLen;
+                        scaleFactor = Math.max(0.05, (diagLen + proj) / diagLen);
+                    } else if (dragHandle === 'n') {
+                        scaleFactor = Math.max(0.05, (initialHeight - localDy) / initialHeight);
+                    } else if (dragHandle === 's') {
+                        scaleFactor = Math.max(0.05, (initialHeight + localDy) / initialHeight);
+                    } else if (dragHandle === 'e') {
+                        scaleFactor = Math.max(0.05, (initialWidth + localDx) / initialWidth);
+                    } else if (dragHandle === 'w') {
+                        scaleFactor = Math.max(0.05, (initialWidth - localDx) / initialWidth);
+                    }
+
+                    const newW = Math.max(5, initialWidth * scaleFactor);
+                    const newH = Math.max(5, initialHeight * scaleFactor);
+
+                    const isCorner = dragHandle.length === 2;
+                    let offLX = 0, offLY = 0;
+                    if (isCorner) {
+                        const wDelta = (newW - initialWidth) / 2;
+                        const hDelta = (newH - initialHeight) / 2;
+                        if (dragHandle.includes('e')) offLX = wDelta;
+                        if (dragHandle.includes('w')) offLX = -wDelta;
+                        if (dragHandle.includes('s')) offLY = hDelta;
+                        if (dragHandle.includes('n')) offLY = -hDelta;
+                    } else {
+                        if (dragHandle === 'e') offLX = (newW - initialWidth) / 2;
+                        if (dragHandle === 'w') offLX = -(newW - initialWidth) / 2;
+                        if (dragHandle === 's') offLY = (newH - initialHeight) / 2;
+                        if (dragHandle === 'n') offLY = -(newH - initialHeight) / 2;
+                    }
+
+                    const nextX = initialShape.x + offLX * cosR - offLY * sinR;
+                    const nextY = initialShape.y + offLX * sinR + offLY * cosR;
+
+                    store.updateShape(item.id, { x: nextX, y: nextY, width: newW, height: newH }, true);
+                } else {
+
 
                 let halfW = initialShape.width / 2;
                 let halfH = initialShape.height / 2;
@@ -502,6 +586,9 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                 }
                 store.updateShape(item.id, { x: centerX, y: centerY, width: halfW * 2, height: halfH * 2 }, true);
 
+
+                }
+
             } else if (item.type === 'asset') {
                 const initialAsset = item.object as Asset;
                 const rotation = initialAsset.rotation || 0;
@@ -514,20 +601,65 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                 const initialHeight = initialAsset.height * (initialAsset.scale || 1);
                 const aspect = initialWidth / initialHeight;
 
+
+
                 // Proportional corner scaling for assets
+
+
                 let scaleFactor = 1;
-                if (dragHandle === 'se' || dragHandle === 'ne') {
-                    scaleFactor = Math.max(0.05, (initialWidth + localDx) / initialWidth);
-                } else if (dragHandle === 'sw' || dragHandle === 'nw') {
-                    scaleFactor = Math.max(0.05, (initialWidth - localDx) / initialWidth);
+
+
+                
+
+
+                if (dragHandle.length === 2) {
+
+
+                    const diagLen = Math.hypot(initialWidth, initialHeight);
+
+
+                    let proj = 0;
+
+
+                    if (dragHandle === 'se') proj = (localDx * initialWidth + localDy * initialHeight) / diagLen;
+
+
+                    if (dragHandle === 'nw') proj = (-localDx * initialWidth + -localDy * initialHeight) / diagLen;
+
+
+                    if (dragHandle === 'ne') proj = (localDx * initialWidth + -localDy * initialHeight) / diagLen;
+
+
+                    if (dragHandle === 'sw') proj = (-localDx * initialWidth + localDy * initialHeight) / diagLen;
+
+
+                    scaleFactor = Math.max(0.05, (diagLen + proj) / diagLen);
+
+
                 } else if (dragHandle === 'n') {
+
+
                     scaleFactor = Math.max(0.05, (initialHeight - localDy) / initialHeight);
+
+
                 } else if (dragHandle === 's') {
+
+
                     scaleFactor = Math.max(0.05, (initialHeight + localDy) / initialHeight);
+
+
                 } else if (dragHandle === 'e') {
+
+
                     scaleFactor = Math.max(0.05, (initialWidth + localDx) / initialWidth);
+
+
                 } else if (dragHandle === 'w') {
+
+
                     scaleFactor = Math.max(0.05, (initialWidth - localDx) / initialWidth);
+
+
                 }
 
                 const newW = Math.max(5, initialWidth * scaleFactor);
@@ -674,6 +806,7 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
     // Flowers & Plants and Trees are free-scalable image assets; other library
     // assets keep the prior no-corner-handle behavior (move/rotate only via this tool).
     const canShowResizeHandles = !selectedItems.some(it => {
+        if ((it.object as any).locked) return true;
         if (it.type === 'shape') return Boolean((it.object as any).fixedSize);
         if (it.type === 'asset') {
             const asset = it.object as any;
@@ -728,11 +861,17 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
 
     if (isSingleStraightLine) {
         const shape = selectedItems[0].object as Shape;
+        let sx = shape.x;
+        let sy = shape.y;
+        if (dragPreview && dragPreview.ids.includes(shape.id)) {
+            sx += dragPreview.dx;
+            sy += dragPreview.dy;
+        }
         const rot = (shape.rotation || 0) * (Math.PI / 180);
-        const s = { x: shape.x - (shape.width / 2) * Math.cos(rot), y: shape.y - (shape.width / 2) * Math.sin(rot) };
-        const e = { x: shape.x + (shape.width / 2) * Math.cos(rot), y: shape.y + (shape.width / 2) * Math.sin(rot) };
-        const ss = worldToScreenPoint(s.x, s.y), es = worldToScreenPoint(e.x, e.y), cs = worldToScreenPoint(shape.x, shape.y);
-        const rp = worldToScreenPoint(shape.x - Math.sin(rot) * (30 / zoom), shape.y + Math.cos(rot) * (30 / zoom));
+        const s = { x: sx - (shape.width / 2) * Math.cos(rot), y: sy - (shape.width / 2) * Math.sin(rot) };
+        const e = { x: sx + (shape.width / 2) * Math.cos(rot), y: sy + (shape.width / 2) * Math.sin(rot) };
+        const ss = worldToScreenPoint(s.x, s.y), es = worldToScreenPoint(e.x, e.y), cs = worldToScreenPoint(sx, sy);
+        const rp = worldToScreenPoint(sx - Math.sin(rot) * (30 / zoom), sy + Math.cos(rot) * (30 / zoom));
         return (
             <g data-export-ignore="true">
                 <line x1={ss.x} y1={ss.y} x2={es.x} y2={es.y} stroke="#3B82F6" strokeWidth={2} vectorEffect="non-scaling-stroke" />
@@ -749,6 +888,12 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
     const isSinglePolyline = selectedItems.length === 1 && selectedItems[0].type === 'shape' && (selectedItems[0].object as Shape).points;
     if (isSinglePolyline) {
         const shape = selectedItems[0].object as Shape;
+        let sx = shape.x;
+        let sy = shape.y;
+        if (dragPreview && dragPreview.ids.includes(shape.id)) {
+            sx += dragPreview.dx;
+            sy += dragPreview.dy;
+        }
         if (shape.points) {
             return (
                 <g data-export-ignore="true">
@@ -764,7 +909,7 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                         style={{ cursor: 'move' }}
                     />
                     {shape.points.map((p, i) => {
-                        const pt = worldToScreenPoint(shape.x + p.x, shape.y + p.y);
+                        const pt = worldToScreenPoint(sx + p.x, sy + p.y);
                         return (
                             <rect 
                                 key={i} 
@@ -903,7 +1048,7 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                 );
             })}
 
-            {(() => {
+            {canShowResizeHandles && (() => {
                 const sp_raw = worldToScreenPoint(rotatePoint(0, -halfH).x, rotatePoint(0, -halfH).y);
                 const ep_raw = worldToScreenPoint(rotatePoint(0, -halfH - Math.max(0, 30 / (zoom || 1))).x, rotatePoint(0, -halfH - Math.max(0, 30 / (zoom || 1))).y);
                 

@@ -40,6 +40,7 @@ export type WallEdge = {
 };
 
 export type Group = {
+    locked?: boolean;
     id: string;
     name?: string;
     itemIds: string[];
@@ -48,6 +49,7 @@ export type Group = {
 };
 
 export type Shape = {
+    locked?: boolean;
     id: string;
     name?: string;
     groupId?: string;
@@ -125,6 +127,7 @@ export type Shape = {
 };
 
 export type Asset = {
+    locked?: boolean;
     id: string;
     name?: string;
     groupId?: string;
@@ -202,6 +205,7 @@ export type Asset = {
 
 
 export type Wall = {
+    locked?: boolean;
     id: string;
     name?: string;
     groupId?: string;
@@ -250,6 +254,7 @@ export type Canvas = {
 };
 
 export interface Dimension {
+    locked?: boolean;
     id: string;
     name?: string;
     hidden?: boolean;
@@ -294,6 +299,7 @@ export type Comment = {
 };
 
 export type TextAnnotation = {
+    locked?: boolean;
     id: string;
     name?: string;
     groupId?: string;
@@ -315,6 +321,7 @@ export type TextAnnotation = {
 };
 
 export type LabelArrow = {
+    locked?: boolean;
     id: string;
     name?: string;
     groupId?: string;
@@ -388,6 +395,8 @@ export type ProjectState = {
     globalTableNumberingFontStyle: string;
     globalTableNumberingTextDecoration: string;
     globalTableNumberingColor: string;
+    tableNumberingVisible: boolean;
+    setTableNumberingVisible: (visible: boolean) => void;
     setGlobalTableNumberingPosition: (pos: 'center' | 'top' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'middle-left' | 'middle-right', updateAll?: boolean) => void;
     setGlobalTableNumberingOrientation: (orientation: 'horizontal' | 'vertical', updateAll?: boolean) => void;
     setGlobalTableNumberingTextStyle: (updates: {
@@ -784,6 +793,7 @@ export const useProjectStore = create<ProjectState>()(
             globalTableNumberingFontStyle: 'normal',
             globalTableNumberingTextDecoration: 'none',
             globalTableNumberingColor: '#000000',
+    tableNumberingVisible: true,
 
             setGlobalTableNumberingPosition: (pos, updateAll) => {
                 set({ globalTableNumberingPosition: pos, hasUnsavedChanges: true });
@@ -813,7 +823,10 @@ export const useProjectStore = create<ProjectState>()(
                 }
             },
 
-            setGlobalTableNumberingTextStyle: (updates, updateAll) => {
+            setTableNumberingVisible: (visible) => {
+      set({ tableNumberingVisible: visible });
+    },
+    setGlobalTableNumberingTextStyle: (updates, updateAll) => {
                 const storeUpdates: Partial<ProjectState> = {
                     hasUnsavedChanges: true,
                 };

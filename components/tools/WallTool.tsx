@@ -313,7 +313,7 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
         const { snapToObjects } = useEditorStore.getState();
         if (snapToObjects && !snappedXToGuide && !snappedYToGuide) {
             const allElements = [...shapes, ...walls.filter(w => w.id !== currentWallId), ...assets];
-            const snapResult = findSnapPointInShapes(worldPos, allElements, 20 / zoom);
+            const snapResult = findSnapPointInShapes(worldPos, allElements, 32 / zoom);
             if (snapResult) {
                 snapped = { x: snapResult.x, y: snapResult.y };
             }
@@ -775,8 +775,8 @@ export default function WallTool({ isActive, thickness = 150 }: WallToolProps) {
 
     if (!isActive) return null;
 
-    const cursorMarkerStroke = 1.25 / zoom;
-    const junctionMarkerRadius = 4.5 / zoom;
+    const cursorMarkerStroke = 1.5;
+    const junctionMarkerRadius = 7;
 
     // Show preview line and junction indicator
     return (

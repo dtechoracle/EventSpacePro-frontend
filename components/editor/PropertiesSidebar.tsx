@@ -228,6 +228,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
   const removeComment = useProjectStore(s => s.removeComment);
   const updateShape = useProjectStore(s => s.updateShape);
   const updateAsset = useProjectStore(s => s.updateAsset);
+  const updateSceneAsset = useSceneStore((s) => s.updateAsset);
   const updateWall = useProjectStore(s => s.updateWall);
   const updateTextAnnotation = useProjectStore(s => s.updateTextAnnotation);
   const updateLabelArrow = useProjectStore(s => s.updateLabelArrow);
@@ -260,6 +261,13 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
   const [numberingPattern, setNumberingPattern] = useState<TableNumberingPattern>('linear');
   const [numberingDirection, setNumberingDirection] = useState<TableNumberingDirection>('from-top-left-to-right');
   const [activeInspectorTab, setActiveInspectorTab] = useState<'comments' | 'properties'>('properties');
+  const [isTextureCollapsed, setIsTextureCollapsed] = useState(false);
+  const [localScale, setLocalScale] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    setLocalScale(undefined);
+  }, [selectedIds, selectedIds[0]]);
+
   const textStyleFonts = TEXT_STYLE_FONTS;
 
   // Local state to prevent cursor jumping when typing text annotations
@@ -274,6 +282,86 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
   const resolveIdsWithGroups = useProjectStore(s => s.resolveIdsWithGroups);
   const resolvedSelectedIds = useMemo(() => resolveIdsWithGroups(selectedIds), [selectedIds, resolveIdsWithGroups]);
   const selectedIdSet = useMemo(() => new Set(resolvedSelectedIds), [resolvedSelectedIds]);
+
+  const flipSelectionX = useCallback(() => {
+    const ids = resolvedSelectedIds;
+    if (ids.length === 0) return;
+
+    if (ids.length === 1) {
+      const id = ids[0];
+      const s = shapes.find(sh => sh.id === id);
+      if (s) updateShape(id, { flipX: !(s as any).flipX, rotation: -(s.rotation || 0) });
+      const a = assets.find(as => as.id === id);
+      if (a) {
+        updateAsset(id, { flipX: !(a as any).flipX, rotation: -(a.rotation || 0) });
+        updateSceneAsset(id, { flipX: !(a as any).flipX, rotation: -(a.rotation || 0) });
+      }
+      return;
+    }
+
+    const targetShapes = shapes.filter(s => ids.includes(s.id));
+    const targetAssets = assets.filter(a => ids.includes(a.id));
+
+    let minX = Infinity, maxX = -Infinity;
+    [...targetShapes, ...targetAssets].forEach(item => {
+      const w = (item.width || 0) * ((item as any).scale || 1);
+      minX = Math.min(minX, item.x - w / 2);
+      maxX = Math.max(maxX, item.x + w / 2);
+    });
+
+    if (!isFinite(minX) || !isFinite(maxX)) return;
+    const groupCenterX = (minX + maxX) / 2;
+
+    targetShapes.forEach(s => {
+      const newX = 2 * groupCenterX - s.x;
+      updateShape(s.id, { x: newX, flipX: !(s as any).flipX, rotation: -(s.rotation || 0) });
+    });
+    targetAssets.forEach(a => {
+      const newX = 2 * groupCenterX - a.x;
+      updateAsset(a.id, { x: newX, flipX: !(a as any).flipX, rotation: -(a.rotation || 0) });
+      updateSceneAsset(a.id, { x: newX, flipX: !(a as any).flipX, rotation: -(a.rotation || 0) });
+    });
+  }, [resolvedSelectedIds, shapes, assets, updateShape, updateAsset, updateSceneAsset]);
+
+  const flipSelectionY = useCallback(() => {
+    const ids = resolvedSelectedIds;
+    if (ids.length === 0) return;
+
+    if (ids.length === 1) {
+      const id = ids[0];
+      const s = shapes.find(sh => sh.id === id);
+      if (s) updateShape(id, { flipY: !(s as any).flipY, rotation: -(s.rotation || 0) });
+      const a = assets.find(as => as.id === id);
+      if (a) {
+        updateAsset(id, { flipY: !(a as any).flipY, rotation: -(a.rotation || 0) });
+        updateSceneAsset(id, { flipY: !(a as any).flipY, rotation: -(a.rotation || 0) });
+      }
+      return;
+    }
+
+    const targetShapes = shapes.filter(s => ids.includes(s.id));
+    const targetAssets = assets.filter(a => ids.includes(a.id));
+
+    let minY = Infinity, maxY = -Infinity;
+    [...targetShapes, ...targetAssets].forEach(item => {
+      const h = (item.height || 0) * ((item as any).scale || 1);
+      minY = Math.min(minY, item.y - h / 2);
+      maxY = Math.max(maxY, item.y + h / 2);
+    });
+
+    if (!isFinite(minY) || !isFinite(maxY)) return;
+    const groupCenterY = (minY + maxY) / 2;
+
+    targetShapes.forEach(s => {
+      const newY = 2 * groupCenterY - s.y;
+      updateShape(s.id, { y: newY, flipY: !(s as any).flipY, rotation: -(s.rotation || 0) });
+    });
+    targetAssets.forEach(a => {
+      const newY = 2 * groupCenterY - a.y;
+      updateAsset(a.id, { y: newY, flipY: !(a as any).flipY, rotation: -(a.rotation || 0) });
+      updateSceneAsset(a.id, { y: newY, flipY: !(a as any).flipY, rotation: -(a.rotation || 0) });
+    });
+  }, [resolvedSelectedIds, shapes, assets, updateShape, updateAsset, updateSceneAsset]);
 
   // Calculate collective bounding box for multi-selection or single item
   const collectiveBounds = useMemo(() => {
@@ -388,7 +476,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
   const setSelectedGridSizeIndex = useSceneStore((s) => s.setSelectedGridSizeIndex);
   const snapToGridEnabled = useSceneStore((s) => s.snapToGridEnabled);
   const toggleSnapToGrid = useSceneStore((s) => s.toggleSnapToGrid);
-  const updateSceneAsset = useSceneStore((s) => s.updateAsset);
+
   const unitSystem = useSceneStore((s) => s.unitSystem) || 'metric-mm';
   const unitLabel = getUnitLabel(unitSystem);
   const chairSettings = useSceneStore((s) => s.chairSettings) || { numChairs: 8 };
@@ -571,6 +659,8 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
   const [showMultiProps, setShowMultiProps] = useState(false);
   const [showSingleProps, setShowSingleProps] = useState(false);
   const [showTableNumbering, setShowTableNumbering] = useState(false);
+  const tableNumberingVisible = useProjectStore(s => s.tableNumberingVisible ?? true);
+  const setTableNumberingVisible = useProjectStore(s => s.setTableNumberingVisible);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [renameName, setRenameName] = useState("");
@@ -679,8 +769,15 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
       setShowRenameModal(true);
       return;
     }
-    if (id && typeof id === 'string' && slug && typeof slug === 'string') {
+    if (!id || typeof id !== 'string' || !slug || typeof slug !== 'string') {
+      toast.error("Cannot save yet — the editor is still loading. Try again in a moment.");
+      return;
+    }
+    try {
       await saveEvent(id, slug);
+      toast.success("Saved", { id: "manual-save" });
+    } catch (err) {
+      toast.error(`Save failed: ${err instanceof Error ? err.message : "Unknown error"}`, { id: "manual-save", duration: 6000 });
     }
   };
 
@@ -693,8 +790,15 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
     setShowRenameModal(false);
     // Wait for state to update, then save
     setTimeout(async () => {
-      if (id && typeof id === 'string' && slug && typeof slug === 'string') {
+      if (!id || typeof id !== 'string' || !slug || typeof slug !== 'string') {
+        toast.error("Cannot save yet — the editor is still loading. Try again in a moment.");
+        return;
+      }
+      try {
         await saveEvent(id, slug);
+        toast.success("Saved", { id: "manual-save" });
+      } catch (err) {
+        toast.error(`Save failed: ${err instanceof Error ? err.message : "Unknown error"}`, { id: "manual-save", duration: 6000 });
       }
     }, 50);
   };
@@ -1343,15 +1447,18 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                     type="number"
                     defaultValue={1}
                     onChange={(e) => {
-                      const val = Math.max(0.01, Number(e.target.value) || 1);
-                      const sIds = selectedShapes.map(s => s.id);
-                      const aIds = selectedAssets.map(a => a.id);
-                      if (sIds.length > 0) updateShapeBatch(sIds, { scale: val } as any);
-                      if (aIds.length > 0) updateAssetBatch(aIds, { scale: val });
+                      const parsed = parseFloat(e.target.value);
+                      if (!isNaN(parsed) && parsed > 0) {
+                        const val = Math.max(0.001, parsed);
+                        const sIds = selectedShapes.map(s => s.id);
+                        const aIds = selectedAssets.map(a => a.id);
+                        if (sIds.length > 0) updateShapeBatch(sIds, { scale: val } as any);
+                        if (aIds.length > 0) updateAssetBatch(aIds, { scale: val });
+                      }
                     }}
                     className="sidebar-input w-16 text-center"
-                    min={0.01}
-                    step={0.1}
+                    min={0.001}
+                    step="any"
                     placeholder="Set All"
                   />
                 </div>
@@ -1362,43 +1469,15 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                   <div className="flex gap-1">
                     <button
                       type="button"
-                      title="Vertical"
-                      onClick={() => {
-                        const sIds = selectedShapes.map(s => s.id);
-                        const aIds = selectedAssets.map(a => a.id);
-                        if (sIds.length > 0) sIds.forEach(id => {
-                          const s = useProjectStore.getState().shapes.find(sh => sh.id === id);
-                          if (s) updateShape(id, { flipY: !(s as any).flipY });
-                        });
-                        if (aIds.length > 0) aIds.forEach(id => {
-                          const a = useProjectStore.getState().assets.find(as => as.id === id);
-                          if (a) {
-                            updateAsset(id, { flipY: !(a as any).flipY });
-                            updateSceneAsset(id, { flipY: !(a as any).flipY });
-                          }
-                        });
-                      }}
-                      className={`px-3 py-1 text-xs border rounded transition-colors ${selectedShapes.some(s => (s as any).flipY) || selectedAssets.some(a => (a as any).flipY) ? 'bg-blue-100 border-blue-200 text-blue-600 font-medium' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                      title="Horizontal"
+                      onClick={() => flipSelectionX()}
+                      className="px-3 py-1 text-xs border rounded transition-colors bg-white border-gray-200 text-gray-600 hover:bg-gray-50 focus:outline-none"
                     >H</button>
                     <button
                       type="button"
-                      title="Horizontal"
-                      onClick={() => {
-                        const sIds = selectedShapes.map(s => s.id);
-                        const aIds = selectedAssets.map(a => a.id);
-                        if (sIds.length > 0) sIds.forEach(id => {
-                          const s = useProjectStore.getState().shapes.find(sh => sh.id === id);
-                          if (s) updateShape(id, { flipX: !(s as any).flipX });
-                        });
-                        if (aIds.length > 0) aIds.forEach(id => {
-                          const a = useProjectStore.getState().assets.find(as => as.id === id);
-                          if (a) {
-                            updateAsset(id, { flipX: !(a as any).flipX });
-                            updateSceneAsset(id, { flipX: !(a as any).flipX });
-                          }
-                        });
-                      }}
-                      className={`px-3 py-1 text-xs border rounded transition-colors ${selectedShapes.some(s => (s as any).flipX) || selectedAssets.some(a => (a as any).flipX) ? 'bg-blue-100 border-blue-200 text-blue-600 font-medium' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                      title="Vertical"
+                      onClick={() => flipSelectionY()}
+                      className="px-3 py-1 text-xs border rounded transition-colors bg-white border-gray-200 text-gray-600 hover:bg-gray-50 focus:outline-none"
                     >V</button>
                   </div>
                 </div>
@@ -1524,56 +1603,21 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                       </div>
                     </div>
 
-                    {/* Scale */}
-                    <div className="flex justify-between items-center mb-3 py-2 border-t border-gray-100">
-                      <span className="text-xs text-gray-500">Scale</span>
-                      <input
-                        type="number"
-                        value={(selectedItem as any).scale || 1}
-                        disabled={isSelectedVenue}
-                        onChange={(e) => {
-                          const val = Math.max(0.01, Number(e.target.value) || 1);
-                          if (itemType === 'shape') updateShape(selectedItem.id, { scale: val } as any);
-                          if (itemType === 'asset') {
-                            updateAsset(selectedItem.id, { scale: val });
-                            updateSceneAsset(selectedItem.id, { scale: val });
-                          }
-                        }}
-                        className={`sidebar-input w-16 text-center ${isSelectedVenue ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-transparent' : ''}`}
-                        min={0.01}
-                        step={0.1}
-                      />
-                    </div>
-
                     {/* Flip Controls */}
                     <div className="flex justify-between items-center mb-3 py-2 border-t border-gray-100">
                       <span className="text-xs text-gray-500">Flip/Mirror</span>
                       <div className="flex gap-1">
                         <button
                           type="button"
-                          title="Vertical"
-                          onClick={() => {
-                            const next = !(selectedItem as any).flipY;
-                            if (itemType === 'shape') updateShape(selectedItem.id, { flipY: next });
-                            if (itemType === 'asset') {
-                              updateAsset(selectedItem.id, { flipY: next });
-                              updateSceneAsset(selectedItem.id, { flipY: next });
-                            }
-                          }}
-                          className={`px-3 py-1 text-xs border rounded transition-colors ${(selectedItem as any).flipY ? 'bg-blue-100 border-blue-200 text-blue-600 font-medium' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                          title="Horizontal"
+                          onClick={() => flipSelectionX()}
+                          className="px-3 py-1 text-xs border rounded transition-colors bg-white border-gray-200 text-gray-600 hover:bg-gray-50 focus:outline-none"
                         >H</button>
                         <button
                           type="button"
-                          title="Horizontal"
-                          onClick={() => {
-                            const next = !(selectedItem as any).flipX;
-                            if (itemType === 'shape') updateShape(selectedItem.id, { flipX: next });
-                            if (itemType === 'asset') {
-                              updateAsset(selectedItem.id, { flipX: next });
-                              updateSceneAsset(selectedItem.id, { flipX: next });
-                            }
-                          }}
-                          className={`px-3 py-1 text-xs border rounded transition-colors ${(selectedItem as any).flipX ? 'bg-blue-100 border-blue-200 text-blue-600 font-medium' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                          title="Vertical"
+                          onClick={() => flipSelectionY()}
+                          className="px-3 py-1 text-xs border rounded transition-colors bg-white border-gray-200 text-gray-600 hover:bg-gray-50 focus:outline-none"
                         >V</button>
                       </div>
                     </div>
@@ -1596,6 +1640,113 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                           }}
                           className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
+                      </div>
+                    )}
+
+                    {/* Scale (Directly under Flip/Mirror) */}
+                    <div className="flex justify-between items-center mb-3 py-2 border-t border-gray-100">
+                      <span className="text-xs text-gray-500">Scale</span>
+                      <input
+                        type="number"
+                        value={localScale !== undefined ? localScale : ((selectedItem as any).scale ?? 1)}
+                        disabled={isSelectedVenue}
+                        onBlur={() => setLocalScale(undefined)}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          setLocalScale(raw);
+                          const parsed = parseFloat(raw);
+                          if (!isNaN(parsed) && parsed > 0) {
+                            if (itemType === 'shape') updateShape(selectedItem.id, { scale: parsed } as any);
+                            if (itemType === 'asset') {
+                              updateAsset(selectedItem.id, { scale: parsed });
+                              updateSceneAsset(selectedItem.id, { scale: parsed });
+                            }
+                          }
+                        }}
+                        className={`sidebar-input w-16 text-center ${isSelectedVenue ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-transparent' : ''}`}
+                        min={0.001}
+                        step={0.1}
+                      />
+                    </div>
+
+                    {/* Stroke Color (Directly under Scale) */}
+                    {(itemType === 'shape' || itemType === 'asset') && (
+                      <div className="flex justify-between items-center mb-3 py-2 border-t border-gray-100">
+                        <span className="text-xs text-gray-500">Stroke Color</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={(itemType === 'asset' ? (selectedItem as any).strokeColor : (selectedItem as any).stroke) || '#000000'}
+                            onChange={(e) => {
+                              if (itemType === 'shape') updateShape(selectedItem.id, { stroke: e.target.value });
+                              if (itemType === 'asset') {
+                                updateAsset(selectedItem.id, { strokeColor: e.target.value });
+                                updateSceneAsset(selectedItem.id, { strokeColor: e.target.value });
+                              }
+                            }}
+                            className="sidebar-input w-20 text-xs"
+                          />
+                          <input
+                            type="color"
+                            value={(itemType === 'asset' ? (selectedItem as any).strokeColor : (selectedItem as any).stroke) || '#000000'}
+                            onChange={(e) => {
+                              if (itemType === 'shape') updateShape(selectedItem.id, { stroke: e.target.value });
+                              if (itemType === 'asset') {
+                                updateAsset(selectedItem.id, { strokeColor: e.target.value });
+                                updateSceneAsset(selectedItem.id, { strokeColor: e.target.value });
+                              }
+                            }}
+                            className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stroke Width & Corner Radius (Directly under Stroke Color) */}
+                    {(itemType === 'shape' || itemType === 'asset') && (
+                      <div className="mb-3 py-2 border-t border-gray-100 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-500">Stroke Width</span>
+                          <input
+                            type="number"
+                            value={(selectedItem as any).strokeWidth ?? (itemType === 'asset' ? 0.6 : 0)}
+                            onChange={(e) => {
+                              const parsed = parseFloat(e.target.value);
+                              if (!isNaN(parsed)) {
+                                const val = Math.max(0, parsed);
+                                if (itemType === 'shape') updateShape(selectedItem.id, { strokeWidth: val });
+                                if (itemType === 'asset') {
+                                  updateAsset(selectedItem.id, { strokeWidth: val });
+                                  updateSceneAsset(selectedItem.id, { strokeWidth: val });
+                                }
+                              }
+                            }}
+                            className="sidebar-input w-16 text-center"
+                            min={0}
+                            step={0.1}
+                          />
+                        </div>
+
+                        {itemType === 'shape' && (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-gray-500">Corner Radius</span>
+                              <input
+                                type="number"
+                                value={(selectedItem as any).borderRadius || 0}
+                                onChange={(e) => {
+                                  const maxR = Math.min((selectedItem as any).width || 0, (selectedItem as any).height || 0) / 2;
+                                  updateShape(selectedItem.id, { borderRadius: Math.min(Number(e.target.value), maxR) });
+                                }}
+                                className="sidebar-input w-16 text-center"
+                                min={0}
+                                max={Math.min((selectedItem as any).width || 0, (selectedItem as any).height || 0) / 2}
+                                step="any"
+                              />
+                            </div>
+                            <span className="text-[10px] text-gray-400 italic text-right">Max: {Math.floor(Math.min((selectedItem as any).width || 0, (selectedItem as any).height || 0) / 2)}mm</span>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1799,6 +1950,18 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                               }}
                               className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
                             />
+                            {itemType === 'asset' && (
+                                <button
+                                    onClick={() => {
+                                        updateAsset(selectedItem.id, { fillColor: undefined, tableColor: undefined, chairColor: undefined });
+                                        updateSceneAsset(selectedItem.id, { fillColor: undefined, tableColor: undefined, chairColor: undefined });
+                                    }}
+                                    className="ml-2 px-2 py-1 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition-colors"
+                                    title="Reset Fill"
+                                >
+                                    Reset
+                                </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -1864,43 +2027,52 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                     {/* Texture Fill */}
                     {(selectedItem as any).fillType === 'texture' && (
                       <div className="space-y-2 mb-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          {texturePatterns.filter(p => !p.id.startsWith('hatch-')).map((pattern) => (
-                            <button
-                              key={pattern.id}
-                              className={`aspect-square h-auto border rounded overflow-hidden relative ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500' : 'border-gray-300'
-                                }`}
-                              onClick={() => {
-                                const val = pattern.id;
-                                if ((itemType as string) === 'wall' && !(selectedItem as any).wallSegments) {
-                                  updateWall(selectedItem.id, { fillTexture: val });
-                                  syncToScene(selectedItem.id, { fillTexture: val });
-                                }
-                                else if ((itemType as string) === 'shape') {
-                                  updateShape(selectedItem.id, { fillTexture: val });
-                                }
-                                else {
-                                  updateAsset(selectedItem.id, { fillTexture: val } as any);
-                                  updateSceneAsset(selectedItem.id, { fillTexture: val } as any);
-                                }
-                              }}
-                              title={pattern.name}
-                            >
-                              <div className="w-full h-full bg-white text-slate-800">
-                                <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
-                                  {pattern.isImage ? (
-                                    <image href={pattern.path} width="100" height="100" preserveAspectRatio="xMidYMid slice" />
-                                  ) : (
-                                    <>
-                                      <defs dangerouslySetInnerHTML={{ __html: (pattern.svg || "").replace(/id="([^"]+)"/g, 'id="preview-sidebar-texture-$1"') }} />
-                                      <rect width="100" height="100" fill={`url(#preview-sidebar-texture-${pattern.id})`} />
-                                    </>
-                                  )}
-                                </svg>
-                              </div>
-                            </button>
-                          ))}
+                        <div
+                          className="flex justify-between items-center cursor-pointer py-1.5 px-2 bg-gray-50 hover:bg-gray-100 rounded border border-gray-200 mb-2"
+                          onClick={() => setIsTextureCollapsed(!isTextureCollapsed)}
+                        >
+                          <span className="text-xs font-medium text-gray-700">Texture Patterns</span>
+                          {isTextureCollapsed ? <FaChevronRight className="w-3 h-3 text-gray-500" /> : <FaChevronDown className="w-3 h-3 text-gray-500" />}
                         </div>
+                        {!isTextureCollapsed && (
+                          <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                            {texturePatterns.filter(p => !p.id.startsWith('hatch-')).map((pattern) => (
+                              <button
+                                key={pattern.id}
+                                className={`aspect-square h-auto border rounded overflow-hidden relative ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500' : 'border-gray-300'
+                                  }`}
+                                onClick={() => {
+                                  const val = pattern.id;
+                                  if ((itemType as string) === 'wall' && !(selectedItem as any).wallSegments) {
+                                    updateWall(selectedItem.id, { fillTexture: val });
+                                    syncToScene(selectedItem.id, { fillTexture: val });
+                                  }
+                                  else if ((itemType as string) === 'shape') {
+                                    updateShape(selectedItem.id, { fillTexture: val });
+                                  }
+                                  else {
+                                    updateAsset(selectedItem.id, { fillTexture: val } as any);
+                                    updateSceneAsset(selectedItem.id, { fillTexture: val } as any);
+                                  }
+                                }}
+                                title={pattern.name}
+                              >
+                                <div className="w-full h-full bg-white text-slate-800">
+                                  <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+                                    {pattern.isImage ? (
+                                      <image href={pattern.path} width="100" height="100" preserveAspectRatio="xMidYMid slice" />
+                                    ) : (
+                                      <>
+                                        <defs dangerouslySetInnerHTML={{ __html: (pattern.svg || "").replace(/id="([^"]+)"/g, 'id="preview-sidebar-texture-$1"') }} />
+                                        <rect width="100" height="100" fill={`url(#preview-sidebar-texture-${pattern.id})`} />
+                                      </>
+                                    )}
+                                  </svg>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
 
                         <div className="flex justify-between items-center">
                           <span className="text-gray-500 text-xs">Scale</span>
@@ -1910,7 +2082,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                             onChange={(e) => updateShape(selectedItem.id, { fillTextureScale: Number(e.target.value) } as any)}
                             className="sidebar-input w-12 text-center text-xs"
                             max={1000}
-                            step={0.1}
+                            step="any"
                           />
                         </div>
 
@@ -1921,9 +2093,9 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                             value={(selectedItem as any).fillTextureThickness || 1}
                             onChange={(e) => updateShape(selectedItem.id, { fillTextureThickness: Number(e.target.value) } as any)}
                             className="sidebar-input w-12 text-center text-xs"
-                            min={0.1}
+                            min={0.01}
                             max={10}
-                            step={0.1}
+                            step="any"
                           />
                         </div>
                       </div>
@@ -1932,43 +2104,52 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                     {/* Hatch Fill (Shape or Asset) */}
                     {(selectedItem as any).fillType === 'hatch' && (
                       <div className="space-y-2 mb-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          {texturePatterns.filter(p => p.id.startsWith('hatch-')).map((pattern) => (
-                            <button
-                              key={pattern.id}
-                              className={`aspect-square h-auto border rounded overflow-hidden relative ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500' : 'border-gray-300'
-                                }`}
-                              onClick={() => {
-                                const val = pattern.id;
-                                if ((itemType as string) === 'wall' && !(selectedItem as any).wallSegments) {
-                                  updateWall(selectedItem.id, { fillTexture: val });
-                                  syncToScene(selectedItem.id, { fillTexture: val });
-                                }
-                                else if ((itemType as string) === 'shape') {
-                                  updateShape(selectedItem.id, { fillTexture: val });
-                                }
-                                else {
-                                  updateAsset(selectedItem.id, { fillTexture: val } as any);
-                                  updateSceneAsset(selectedItem.id, { fillTexture: val } as any);
-                                }
-                              }}
-                              title={pattern.name}
-                            >
-                              <div className="w-full h-full bg-white text-slate-800">
-                                <svg width="100%" height="100%" viewBox="0 0 40 40" preserveAspectRatio="xMidYMid slice">
-                                  {pattern.isImage ? (
-                                    <image href={pattern.path} width="40" height="40" preserveAspectRatio="xMidYMid slice" />
-                                  ) : (
-                                    <>
-                                      <defs dangerouslySetInnerHTML={{ __html: (pattern.svg || "").replace(/id="([^"]+)"/g, 'id="preview-sidebar-hatch-$1"') }} />
-                                      <rect width="40" height="40" fill={`url(#preview-sidebar-hatch-${pattern.id})`} />
-                                    </>
-                                  )}
-                                </svg>
-                              </div>
-                            </button>
-                          ))}
+                        <div
+                          className="flex justify-between items-center cursor-pointer py-1.5 px-2 bg-gray-50 hover:bg-gray-100 rounded border border-gray-200 mb-2"
+                          onClick={() => setIsTextureCollapsed(!isTextureCollapsed)}
+                        >
+                          <span className="text-xs font-medium text-gray-700">Hatch Patterns</span>
+                          {isTextureCollapsed ? <FaChevronRight className="w-3 h-3 text-gray-500" /> : <FaChevronDown className="w-3 h-3 text-gray-500" />}
                         </div>
+                        {!isTextureCollapsed && (
+                          <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                            {texturePatterns.filter(p => p.id.startsWith('hatch-')).map((pattern) => (
+                              <button
+                                key={pattern.id}
+                                className={`aspect-square h-auto border rounded overflow-hidden relative ${(selectedItem as any).fillTexture === pattern.id ? 'ring-2 ring-blue-500' : 'border-gray-300'
+                                  }`}
+                                onClick={() => {
+                                  const val = pattern.id;
+                                  if ((itemType as string) === 'wall' && !(selectedItem as any).wallSegments) {
+                                    updateWall(selectedItem.id, { fillTexture: val });
+                                    syncToScene(selectedItem.id, { fillTexture: val });
+                                  }
+                                  else if ((itemType as string) === 'shape') {
+                                    updateShape(selectedItem.id, { fillTexture: val });
+                                  }
+                                  else {
+                                    updateAsset(selectedItem.id, { fillTexture: val } as any);
+                                    updateSceneAsset(selectedItem.id, { fillTexture: val } as any);
+                                  }
+                                }}
+                                title={pattern.name}
+                              >
+                                <div className="w-full h-full bg-white text-slate-800">
+                                  <svg width="100%" height="100%" viewBox="0 0 40 40" preserveAspectRatio="xMidYMid slice">
+                                    {pattern.isImage ? (
+                                      <image href={pattern.path} width="40" height="40" preserveAspectRatio="xMidYMid slice" />
+                                    ) : (
+                                      <>
+                                        <defs dangerouslySetInnerHTML={{ __html: (pattern.svg || "").replace(/id="([^"]+)"/g, 'id="preview-sidebar-hatch-$1"') }} />
+                                        <rect width="40" height="40" fill={`url(#preview-sidebar-hatch-${pattern.id})`} />
+                                      </>
+                                    )}
+                                  </svg>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
 
                         <div className="flex justify-between items-center mt-2">
                           <span className="text-gray-500 text-xs">Scale</span>
@@ -1986,7 +2167,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                             }}
                             className="sidebar-input w-12 text-center text-xs"
                             max={1000}
-                            step={0.1}
+                            step="any"
                           />
                         </div>
 
@@ -1997,7 +2178,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                             value={(selectedItem as any).fillTextureThickness || 1}
                             onChange={(e) => {
                               const val = Number(e.target.value);
-                              const safeVal = Math.max(0.1, val);
+                              const safeVal = Math.max(0.01, val);
                               if (itemType === 'shape') {
                                 updateShape((selectedItem as any).id, { fillTextureThickness: safeVal });
                               } else {
@@ -2006,9 +2187,9 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                               }
                             }}
                             className="sidebar-input w-12 text-center text-xs"
-                            min={0.1}
+                            min={0.01}
                             max={10}
-                            step={0.1}
+                            step="any"
                           />
                         </div>
                         <div className="flex justify-between items-center mt-2">
@@ -2028,7 +2209,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                             className="sidebar-input w-12 text-center text-xs"
                             min={0}
                             max={360}
-                            step={15}
+                            step="any"
                           />
                         </div>
                       </div>
@@ -2080,81 +2261,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                         )}
                       </div>
                     )}
-                    {/* Stroke Color (Shape or Asset) */}
-                    {(itemType === 'shape' || itemType === 'asset') && (
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-gray-500">Stroke Color</span>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={(itemType === 'asset' ? (selectedItem as any).strokeColor : (selectedItem as any).stroke) || '#000000'}
-                            onChange={(e) => {
-                              if (itemType === 'shape') updateShape(selectedItem.id, { stroke: e.target.value });
-                              if (itemType === 'asset') {
-                                updateAsset(selectedItem.id, { strokeColor: e.target.value });
-                                updateSceneAsset(selectedItem.id, { strokeColor: e.target.value });
-                              }
-                            }}
-                            className="sidebar-input w-20 text-xs"
-                          />
-                          <input
-                            type="color"
-                            value={(itemType === 'asset' ? (selectedItem as any).strokeColor : (selectedItem as any).stroke) || '#000000'}
-                            onChange={(e) => {
-                              if (itemType === 'shape') updateShape(selectedItem.id, { stroke: e.target.value });
-                              if (itemType === 'asset') {
-                                updateAsset(selectedItem.id, { strokeColor: e.target.value });
-                                updateSceneAsset(selectedItem.id, { strokeColor: e.target.value });
-                              }
-                            }}
-                            className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
-                          />
-                        </div>
-                      </div>
-                    )}
 
-                    {/* Stroke Width (Shape or Asset) */}
-                    {(itemType === 'shape' || itemType === 'asset') && (
-                      <>
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-gray-500">Stroke Width</span>
-                          <input
-                            type="number"
-                            value={(selectedItem as any).strokeWidth ?? (itemType === 'asset' ? 0.6 : 0)}
-                            onChange={(e) => {
-                              const val = Number(e.target.value);
-                              if (itemType === 'shape') updateShape(selectedItem.id, { strokeWidth: val });
-                              if (itemType === 'asset') {
-                                updateAsset(selectedItem.id, { strokeWidth: val });
-                                updateSceneAsset(selectedItem.id, { strokeWidth: val });
-                              }
-                            }}
-                            className="sidebar-input w-16 text-center"
-                            min={0}
-                            step={0.1}
-                          />
-                        </div>
-
-                        <div className="flex flex-col gap-1 mb-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-500">Corner Radius</span>
-                            <input
-                              type="number"
-                              value={(selectedItem as any).borderRadius || 0}
-                              onChange={(e) => {
-                                const maxR = Math.min((selectedItem as any).width, (selectedItem as any).height) / 2;
-                                updateShape(selectedItem.id, { borderRadius: Math.min(Number(e.target.value), maxR) });
-                              }}
-                              className="sidebar-input w-16 text-center"
-                              min={0}
-                              max={Math.min((selectedItem as any).width, (selectedItem as any).height) / 2}
-step={1}
-                            />
-                          </div>
-                          <span className="text-[10px] text-gray-400 italic text-right">Max: {Math.floor(Math.min((selectedItem as any).width, (selectedItem as any).height) / 2)}mm</span>
-                        </div>
-                      </>
-                    )}
 
                     {/* Line Type (Shape Only) */}
                     {itemType === 'shape' && (
@@ -2950,6 +3057,7 @@ step={1}
                         }}
                         className="sidebar-input w-16 text-center"
                         min={1}
+                        step={0.1}
                       />
                     </div>
 
@@ -3252,6 +3360,7 @@ step={1}
                         }}
                         className="sidebar-input w-16 text-center"
                         min={0}
+                        step={0.1}
                       />
                     </div>
                     <div className="flex justify-between items-center mb-2">
@@ -3889,14 +3998,25 @@ step={1}
       {/* Workspace Numbering Section */}
       {tableNumberingItems.length > 0 && (
         <div className="mb-4 border-b border-slate-200 pb-2">
-          <button
-            type="button"
-            onClick={() => setShowTableNumbering(s => !s)}
-            className="flex w-full items-center justify-between text-left mb-2"
-          >
-            <div className="text-sm font-bold text-[#0056A9]">Table Numbering</div>
-            {showTableNumbering ? <FaChevronDown size={12} className="text-[#0056A9]" /> : <FaChevronRight size={12} className="text-[#0056A9]" />}
-          </button>
+          <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => setShowTableNumbering(s => !s)}
+              className="flex items-center gap-2 text-left"
+            >
+              <div className="text-sm font-bold text-[#0056A9]">Table Numbering</div>
+              {showTableNumbering ? <FaChevronDown size={12} className="text-[#0056A9]" /> : <FaChevronRight size={12} className="text-[#0056A9]" />}
+            </button>
+            {/* Enable/disable toggle */}
+            <label className="flex items-center gap-1.5 cursor-pointer" title={tableNumberingVisible ? "Hide numbering" : "Show numbering"}>
+              <div
+                onClick={() => setTableNumberingVisible(!tableNumberingVisible)}
+                className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer ${tableNumberingVisible ? 'bg-blue-500' : 'bg-gray-300'}`}
+              >
+                <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${tableNumberingVisible ? 'translate-x-4' : 'translate-x-0'}`} />
+              </div>
+            </label>
+          </div>
           {showTableNumbering && (<div className="space-y-2">
 
           {/* Text Properties — shared between Auto and Manual modes */}

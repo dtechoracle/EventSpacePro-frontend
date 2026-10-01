@@ -66,7 +66,7 @@ export default function DimensionTool({ isActive }: DimensionToolProps) {
         const { snapToObjects } = useEditorStore.getState();
         if (snapToObjects) {
             const allElements = [...shapes, ...walls, ...marqueeAssets];
-            const snapResult = findSnapPointInShapes(pos, allElements, 20 / zoom);
+            const snapResult = findSnapPointInShapes(pos, allElements, 32 / zoom);
             if (snapResult) {
                 return { point: { x: snapResult.x, y: snapResult.y }, elementId: snapResult.elementId };
             }

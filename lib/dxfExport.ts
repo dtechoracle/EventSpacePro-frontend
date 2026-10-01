@@ -36,7 +36,25 @@ const transformLocalPoint = (item: DxfLikeItem, point: DxfPoint): DxfPoint => {
   };
 };
 
-const pair = (code: number | string, value: string | number) => `${code}\n${value}\n`;
+// DXF numeric values must never use scientific notation ("1.22e-13") or
+// non-finite tokens — QCAD rejects the import with an error dialog. Round to
+// 6 decimals (sub-nanometer at mm scale), which also strips the float noise
+// produced by trig/rotation math (cos(90°) = 6.1e-17, atan2 of near-zero dy…).
+const formatDxfNumber = (value: number): string => {
+  if (!Number.isFinite(value)) return "0";
+  const rounded = Math.round(value * 1e6) / 1e6;
+  return Number.isFinite(rounded) ? String(rounded) : "0";
+};
+
+const pair = (code: number | string, value: string | number) => {
+  // User text can contain newlines/control chars; a stray "\n" inside a value
+  // desyncs the code/value stream and corrupts every following pair in the file.
+  const safe =
+    typeof value === "number"
+      ? formatDxfNumber(value)
+      : String(value).replace(/[\x00-\x1F\x7F]/g, " ");
+  return `${code}\n${safe}\n`;
+};
 
 const lineEntity = (layer: string, start: DxfPoint, end: DxfPoint) => {
   const a = toCadPoint(start);
@@ -556,5 +574,7 @@ export const downloadDxf = (items: DxfLikeItem[], unitSystem: UnitSystem, projec
   anchor.href = url;
   anchor.download = `${sanitizeFilename(projectName || "layout") || "layout"}-${Date.now()}.dxf`;
   anchor.click();
-  URL.revokeObjectURL(url);
+  // Revoke asynchronously — revoking synchronously after click can truncate
+  // the download in some browsers (the blob URL dies before the stream starts).
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 };

@@ -618,6 +618,60 @@ const loadSvgAssets = async (assets: AssetInstance[]) => {
   return loadedImages;
 };
 
+// ─── Oversized-raster shrink for export embedding ───
+// Embedded base64 images (esp. the 3000-4096px texture PNGs in
+// /assets/textures, which run 10-22MB each) explode export size — a scene with
+// a few textured walls produces 100MB+ SVGs. Decode, downscale and re-encode so
+// exported files stay self-contained but small.
+const EMBED_IMAGE_MAX_DIM = 1600;
+const EMBED_IMAGE_TRIGGER_BYTES = 512 * 1024;
+
+const shrinkImageBlob = async (blob: Blob): Promise<Blob> => {
+  if (blob.size <= EMBED_IMAGE_TRIGGER_BYTES) return blob;
+  if (!/^image\/(png|jpe?g|webp|gif|bmp)$/i.test(blob.type || '')) return blob;
+  try {
+    const bitmap = await createImageBitmap(blob);
+    const scale = Math.min(1, EMBED_IMAGE_MAX_DIM / Math.max(bitmap.width, bitmap.height));
+
+    // Probe actual pixel transparency on a tiny downsample: opaque photos can
+    // go to JPEG (far smaller), anything with real alpha stays PNG.
+    const probe = document.createElement('canvas');
+    probe.width = 48;
+    probe.height = 48;
+    const probeCtx = probe.getContext('2d');
+    if (!probeCtx) { bitmap.close?.(); return blob; }
+    probeCtx.drawImage(bitmap, 0, 0, 48, 48);
+    const px = probeCtx.getImageData(0, 0, 48, 48).data;
+    let hasAlpha = false;
+    for (let i = 3; i < px.length; i += 4) {
+      if (px[i] < 250) { hasAlpha = true; break; }
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { bitmap.close?.(); return blob; }
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+
+    const out = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, hasAlpha ? 'image/png' : 'image/jpeg', 0.85)
+    );
+    if (out && out.size < blob.size) return out;
+    return blob;
+  } catch {
+    return blob;
+  }
+};
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.readAsDataURL(blob);
+  });
+
 export default function ExportPanel() {
   const { 
     shapes, assets, walls, textAnnotations, labelArrows, dimensions, projectName,
@@ -936,27 +990,40 @@ export default function ExportPanel() {
     const base64Cache = new Map<string, string>();
     await Promise.all(Array.from(imageElements).map(async (imgEl) => {
       const href = imgEl.getAttribute('href') || imgEl.getAttribute('xlink:href') || '';
-      if (!href || href.startsWith('data:') || href.startsWith('blob:')) return;
+      if (!href || href.startsWith('blob:')) return;
+      if (href.startsWith('data:')) {
+        // Already embedded (venue images, uploads) — but oversized data URLs
+        // (e.g. full-resolution PNGs) bloat the export just as badly, so
+        // re-embed them through the same shrink path when large.
+        if (href.length > EMBED_IMAGE_TRIGGER_BYTES * 1.4) {
+          try {
+            const resp = await fetch(href);
+            if (!resp.ok) return;
+            const blob = await resp.blob();
+            const shrunk = await shrinkImageBlob(blob);
+            if (shrunk.size < blob.size) {
+              const value = await blobToDataUrl(shrunk);
+              imgEl.setAttribute('href', value);
+              if (imgEl.hasAttribute('xlink:href')) imgEl.setAttribute('xlink:href', value);
+            }
+          } catch {
+            // Leave the original data URL as-is
+          }
+        }
+        return;
+      }
       if (!href.includes('/assets/') && !href.includes('texture') && !href.includes('raster')) return;
       try {
         let base64 = base64Cache.get(href);
         if (!base64) {
           const resp = await fetch(href);
           if (!resp.ok) return;
-          let imageBlob: Blob;
-          if (href.includes('preloaded-venues') || href.includes('/assets/preloaded-venues/')) {
-            imageBlob = await resp.blob();
-          } else {
-            // Non-venue assets: embed as-is (raster PNGs, regular SVGs).
-            // processVenueSvgForExport must NOT be applied here — it inflates
-            // stroke widths designed for CAD floorplans and ruins regular assets.
-            imageBlob = await resp.blob();
-          }
-          base64 = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(imageBlob);
-          });
+          // Embed as-is from a structural standpoint (no processVenueSvgForExport —
+          // it inflates stroke widths designed for CAD floorplans and ruins regular
+          // assets), but downscale/re-encode oversized rasters so a texture-heavy
+          // scene doesn't produce a 100MB+ file.
+          const imageBlob = await shrinkImageBlob(await resp.blob());
+          base64 = await blobToDataUrl(imageBlob);
           base64Cache.set(href, base64);
         }
         imgEl.setAttribute('href', base64);
@@ -1577,7 +1644,12 @@ const renderAssetToCanvas = (
         
         // Strictly Seating / Tables keyword check
         const sittingKeywords = ['chair', 'table', 'stool', 'sofa', 'bench', 'seater'];
-        const matchesKeyword = sittingKeywords.some(kw => name.includes(kw));
+        let matchesKeyword = sittingKeywords.some(kw => name.includes(kw));
+        
+        // Exclude singular tables (tables without 'seater' or 'chairs' in the name)
+        if (matchesKeyword && name.includes('table') && !name.includes('seater') && !name.match(/\d+\s*chairs/)) {
+            matchesKeyword = false;
+        }
         
         // Only include in SITTING if it's furniture that matches keyword.
         // Sitting Styles (complex layouts like Classroom) go to OTHER ITEMS.
@@ -1736,7 +1808,10 @@ const renderAssetToCanvas = (
 
       if (option.format === 'dxf') {
         downloadDxf(assetsToExport as any[], unitSystem, projectName || "layout");
-        toast.success("DXF export finished!");
+        const count = assetsToExport.length;
+        toast.success(
+          `DXF export finished! (${count} item${count === 1 ? '' : 's'}${option.exportSelection ? ', selection only' : ''})`
+        );
         return;
       }
 
@@ -1846,7 +1921,11 @@ const renderAssetToCanvas = (
         svgLink.href = svgUrl;
         svgLink.click();
         setTimeout(() => URL.revokeObjectURL(svgUrl), 1000);
-        toast.success("SVG export finished!");
+        const svgCount = assetsToExport.length;
+        const svgKb = Math.max(1, Math.round(svgBlob.size / 1024));
+        toast.success(
+          `SVG export finished! (${svgCount} item${svgCount === 1 ? '' : 's'}, ${svgKb >= 1024 ? `${(svgKb / 1024).toFixed(1)} MB` : `${svgKb} KB`})`
+        );
         return;
       }
 

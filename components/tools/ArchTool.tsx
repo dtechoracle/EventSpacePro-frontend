@@ -63,7 +63,7 @@ export default function ArchTool({ isActive }: ArchToolProps) {
         }
         if (snapToObjects) {
             const allElements = [...shapes, ...walls, ...assets];
-            const snapResult = findSnapPointInShapes(pos, allElements, 20 / zoom);
+            const snapResult = findSnapPointInShapes(pos, allElements, 32 / zoom);
             if (snapResult) return { x: snapResult.x, y: snapResult.y };
         }
         return pos;
@@ -249,7 +249,7 @@ export default function ArchTool({ isActive }: ArchToolProps) {
         opacity: 0.7,
         style: { pointerEvents: 'none' as const },
     };
-    const dotR = 5 / zoom;
+    const dotR = 4 / zoom;
 
     return (
         <g style={{ pointerEvents: 'none' }}>

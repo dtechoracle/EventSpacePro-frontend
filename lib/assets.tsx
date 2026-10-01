@@ -7,7 +7,8 @@ export type AssetCategory =
   | "Flowers & Plants"
   | "Trees"
   | "Marquee"
-  | "Venue";
+  | "Venue"
+  | "Vehicles";
 
 export type AssetDef = {
   name: string
@@ -19,10 +20,10 @@ export type AssetDef = {
   height?: number
 }
 
-export const ASSET_CATEGORIES: AssetCategory[] = ["Furniture", "Layout", "Dance Floor", "Sitting_Styles", "Space_Elements", "Flowers & Plants", "Trees", "Marquee", "Venue"];
+export const ASSET_CATEGORIES: AssetCategory[] = ["Furniture", "Layout", "Dance Floor", "Sitting_Styles", "Space_Elements", "Flowers & Plants", "Trees", "Marquee", "Venue", "Vehicles"];
 
 /** PNG/image assets — no SVG fill/stroke controls; free-resizable on canvas. */
-export const IMAGE_ASSET_CATEGORIES: readonly AssetCategory[] = ["Flowers & Plants", "Trees"];
+export const IMAGE_ASSET_CATEGORIES: readonly AssetCategory[] = ["Flowers & Plants", "Trees", "Vehicles"];
 
 import { MARQUEES } from './marquees';
 import { PRELOADED_VENUES } from './preloadedVenues';
@@ -37,6 +38,7 @@ const CATEGORY_SORT_ORDER: Record<AssetCategory, number> = {
   Trees: 6,
   Marquee: 7,
   Venue: 8,
+  Vehicles: 9,
 };
 
 const getAssetArea = (asset: AssetDef) => (asset.width || 0) * (asset.height || 0);
@@ -1351,6 +1353,78 @@ const RAW_ASSET_LIBRARY: AssetDef[] = [
     "width": 2128,
     "height": 1966,
     "name": "Tree 05"
+  },
+  {
+      "id": "bike",
+      "label": "Bike",
+      "path": "/assets/modal/Vehicles/Bike.png",
+      "category": "Vehicles",
+      "width": 639,
+      "height": 426,
+      "name": "Bike"
+  },
+  {
+      "id": "boat",
+      "label": "Boat",
+      "path": "/assets/modal/Vehicles/Boat.png",
+      "category": "Vehicles",
+      "width": 1000,
+      "height": 549,
+      "name": "Boat"
+  },
+  {
+      "id": "vehicle-01",
+      "label": "Vehicle 01",
+      "path": "/assets/modal/Vehicles/Vehicle 01.png",
+      "category": "Vehicles",
+      "width": 3976,
+      "height": 2204,
+      "name": "Vehicle 01"
+  },
+  {
+      "id": "vehicle-02",
+      "label": "Vehicle 02",
+      "path": "/assets/modal/Vehicles/Vehicle 02.png",
+      "category": "Vehicles",
+      "width": 3704,
+      "height": 1920,
+      "name": "Vehicle 02"
+  },
+  {
+      "id": "vehicle-03",
+      "label": "Vehicle 03",
+      "path": "/assets/modal/Vehicles/Vehicle 03.png",
+      "category": "Vehicles",
+      "width": 3800,
+      "height": 2132,
+      "name": "Vehicle 03"
+  },
+  {
+      "id": "vehicle-04",
+      "label": "Vehicle 04",
+      "path": "/assets/modal/Vehicles/Vehicle 04.png",
+      "category": "Vehicles",
+      "width": 3400,
+      "height": 1776,
+      "name": "Vehicle 04"
+  },
+  {
+      "id": "vehicle-05",
+      "label": "Vehicle 05",
+      "path": "/assets/modal/Vehicles/Vehicle 05.png",
+      "category": "Vehicles",
+      "width": 3788,
+      "height": 1900,
+      "name": "Vehicle 05"
+  },
+  {
+      "id": "vehicle-06",
+      "label": "Vehicle 06",
+      "path": "/assets/modal/Vehicles/Vehicle 06.png",
+      "category": "Vehicles",
+      "width": 3644,
+      "height": 2060,
+      "name": "Vehicle 06"
   }
 ];
 

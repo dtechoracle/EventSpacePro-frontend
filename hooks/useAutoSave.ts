@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { useProjectStore } from '@/store/projectStore';
 import { useRouter } from 'next/router';
 
@@ -24,8 +25,10 @@ export function useAutoSave({ interval = 30000, enabled = true }: UseAutoSaveOpt
             if (pendingSave && id && typeof id === 'string' && slug && typeof slug === "string") {
                 saveEvent(id, slug).then(() => {
                     setPendingSave(false);
-                }).catch(() => {
-                    // Silent fail
+                    toast.success("Back online — changes saved", { id: "autosave-offline" });
+                }).catch((error) => {
+                    setPendingSave(true);
+                    toast.error(`Auto-save failed: ${error instanceof Error ? error.message : "Unknown error"}`, { id: "autosave-error", duration: 4000 });
                 });
             }
         };
@@ -43,7 +46,7 @@ export function useAutoSave({ interval = 30000, enabled = true }: UseAutoSaveOpt
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
         };
-    }, [pendingSave, id, saveEvent]);
+    }, [pendingSave, id, slug, saveEvent]);
 
     // Auto-save at intervals (silently)
     useEffect(() => {
@@ -55,11 +58,12 @@ export function useAutoSave({ interval = 30000, enabled = true }: UseAutoSaveOpt
                     try {
                         await saveEvent(id, slug);
                     } catch (error) {
-                        // Silent fail
                         setPendingSave(true);
+                        toast.error(`Auto-save failed: ${error instanceof Error ? error.message : "Unknown error"}`, { id: "autosave-error", duration: 4000 });
                     }
                 } else {
                     setPendingSave(true);
+                    toast("You're offline — changes will auto-save when you reconnect", { id: "autosave-offline", duration: 4000 });
                 }
             }
         }, interval);

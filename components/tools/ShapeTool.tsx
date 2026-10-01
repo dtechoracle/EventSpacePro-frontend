@@ -50,12 +50,12 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
     const [endPoint, setEndPoint] = useState<{ x: number; y: number } | null>(null);
     const [snapIndicator, setSnapIndicator] = useState<SnapPoint | null>(null);
 
-    const isLineMode = shapeType === 'line' || shapeType === 'arrow';
+    const isLineMode = false; // Disable multi-segment line mode for now
     const isPolygon = shapeType === 'polygon';
 
     const drawingSnapTargets = useMemo(
-        () => [...shapes, ...walls, ...marqueeAssets],
-        [shapes, walls, marqueeAssets]
+        () => [...shapes, ...walls, ...assets],
+        [shapes, walls, assets]
     );
 
     const [polygonSides, setPolygonSides] = useState<number>(4);
@@ -123,15 +123,16 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         }
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
-        const { snapToObjects, zoom } = useEditorStore.getState();
+        const { zoom, snapToObjects } = useEditorStore.getState();
+        const doGridSnap = Boolean(snapToGridEnabled);
+        const doObjectSnap = snapToObjects !== false;
 
-        let snapped = snapToGridEnabled
-            ? { x: Math.round(worldPos.x / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom), y: Math.round(worldPos.y / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom) }
+        let snapped = doGridSnap
+            ? { x: Math.round(worldPos.x / getEffectiveGridSize(gridSize, zoom)) * getEffectiveGridSize(gridSize, zoom), y: Math.round(worldPos.y / getEffectiveGridSize(gridSize, zoom)) * getEffectiveGridSize(gridSize, zoom) }
             : worldPos;
 
-        // Apply Smart Snapping on Click
-        if (snapToObjects && !snapToGridEnabled) {
-            const snapResult = findSnapPointInShapes(worldPos, drawingSnapTargets, 20 / zoom);
+        if (doObjectSnap) {
+            const snapResult = findSnapPointInShapes(worldPos, drawingSnapTargets, 32 / zoom);
             if (snapResult) {
                 snapped = { x: snapResult.x, y: snapResult.y };
             }
@@ -147,15 +148,16 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         if (!isActive) return;
         const worldPos = screenToWorld(e.clientX, e.clientY);
         const { zoom, snapToObjects } = useEditorStore.getState();
+        const doGridSnap = Boolean(snapToGridEnabled);
+        const doObjectSnap = snapToObjects !== false;
 
-        let snapped = snapToGridEnabled
-            ? { x: Math.round(worldPos.x / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom), y: Math.round(worldPos.y / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom) }
+        let snapped = doGridSnap
+            ? { x: Math.round(worldPos.x / getEffectiveGridSize(gridSize, zoom)) * getEffectiveGridSize(gridSize, zoom), y: Math.round(worldPos.y / getEffectiveGridSize(gridSize, zoom)) * getEffectiveGridSize(gridSize, zoom) }
             : worldPos;
 
-        // Enhanced snap-to-objects
         let currentSnapPoint: SnapPoint | null = null;
-        if (snapToObjects && !snapToGridEnabled) {
-            const snapResult = findSnapPointInShapes(worldPos, drawingSnapTargets, 20 / zoom);
+        if (doObjectSnap) {
+            const snapResult = findSnapPointInShapes(worldPos, drawingSnapTargets, 32 / zoom);
             if (snapResult) {
                 snapped = { x: snapResult.x, y: snapResult.y };
                 currentSnapPoint = snapResult;
@@ -168,7 +170,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
 
             // If not already snapped to an object, check endpoints (legacy behavior, maybe redundant but safe)
             if (!currentSnapPoint) {
-                const snapThreshold = 20 / zoom;
+                const snapThreshold = 32 / zoom;
                 for (const p of existingEndpoints) {
                     if (Math.hypot(snapped.x - p.x, snapped.y - p.y) < snapThreshold) {
                         snapped = p;
@@ -180,7 +182,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             // Also snap to the start of the current line (to close loop)
             if (segments.length > 0) {
                 const start = segments[0].start;
-                const snapThreshold = 20 / zoom;
+                const snapThreshold = 32 / zoom;
                 if (Math.hypot(snapped.x - start.x, snapped.y - start.y) < snapThreshold) {
                     snapped = start;
                 }
@@ -200,9 +202,11 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
     const handleMouseUp = useCallback(() => {
         if (!isActive || isLineMode || !isDrawing || !startPoint || !endPoint) return;
 
-        const width = Math.abs(endPoint.x - startPoint.x);
-        const height = Math.abs(endPoint.y - startPoint.y);
-        if (width < 5 || height < 5) {
+        const dx = endPoint.x - startPoint.x;
+        const dy = endPoint.y - startPoint.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist < 5) {
             setStartPoint(null);
             setEndPoint(null);
             setIsDrawing(false);
@@ -212,8 +216,15 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         const centerX = (startPoint.x + endPoint.x) / 2;
         const centerY = (startPoint.y + endPoint.y) / 2;
 
-        let finalWidth = width;
-        let finalHeight = height;
+        let finalWidth = Math.abs(dx);
+        let finalHeight = Math.abs(dy);
+        let finalRotation = 0;
+
+        if (shapeType === 'line' || shapeType === 'arrow') {
+            finalWidth = dist;
+            finalHeight = 0;
+            finalRotation = Math.atan2(dy, dx) * (180 / Math.PI);
+        }
 
         const newShape: Shape = {
             id: crypto.randomUUID(),
@@ -222,7 +233,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             y: centerY,
             width: finalWidth,
             height: finalHeight,
-            rotation: 0,
+            rotation: finalRotation,
             fill: 'transparent',
             fillType: 'solid',
             // Default black stroke for better visibility
@@ -296,8 +307,8 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 fill: 'transparent',
                 // Black default stroke for single lines/arrows
                 stroke: '#000000',
-                strokeWidth: shapeType === 'arrow' ? 3 : 1,
-                ...(shapeType === 'arrow' ? { arrowHeadType: 'filled-triangle' as any, arrowTailType: 'none' as any } : {}),
+                strokeWidth: shapeType === 'arrow' ? 2 : 1,
+                ...(shapeType === 'arrow' ? { arrowHeadType: 'filled-triangle' as any, arrowTailType: 'none' as any, arrowHeadSize: 20 } : {}),
                 zIndex: getNextZIndex(),
             };
 
@@ -314,7 +325,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             const first = pts[0];
             const last = pts[pts.length - 1];
             const dist = Math.hypot(last.x - first.x, last.y - first.y);
-            const snapThreshold = 20 / useEditorStore.getState().zoom;
+            const snapThreshold = 32 / useEditorStore.getState().zoom;
             const isClosed = dist < snapThreshold;
 
             let finalType = shapeType;
@@ -348,8 +359,8 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 fillType: 'solid',
                 // Black default stroke for multi‑segment lines/arrows
                 stroke: '#000000',
-                strokeWidth: shapeType === 'arrow' ? 3 : 1,
-                ...(shapeType === 'arrow' ? { arrowHeadType: 'filled-triangle' as any, arrowTailType: 'none' as any } : {}),
+                strokeWidth: shapeType === 'arrow' ? 2 : 1,
+                ...(shapeType === 'arrow' ? { arrowHeadType: 'filled-triangle' as any, arrowTailType: 'none' as any, arrowHeadSize: 20 } : {}),
                 points: relativePoints,
                 zIndex: getNextZIndex(),
             };
@@ -374,9 +385,20 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         if (!target || !target.closest('svg[data-workspace-root="true"]')) return;
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
-        let snapped = snapToGridEnabled
-            ? { x: Math.round(worldPos.x / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom), y: Math.round(worldPos.y / getEffectiveGridSize(gridSize, useEditorStore.getState().zoom)) * getEffectiveGridSize(gridSize, useEditorStore.getState().zoom) }
+        const { zoom, snapToObjects } = useEditorStore.getState();
+        const doGridSnap = Boolean(snapToGridEnabled);
+        const doObjectSnap = snapToObjects !== false;
+
+        let snapped = doGridSnap
+            ? { x: Math.round(worldPos.x / getEffectiveGridSize(gridSize, zoom)) * getEffectiveGridSize(gridSize, zoom), y: Math.round(worldPos.y / getEffectiveGridSize(gridSize, zoom)) * getEffectiveGridSize(gridSize, zoom) }
             : worldPos;
+
+        if (doObjectSnap) {
+            const snapResult = findSnapPointInShapes(worldPos, drawingSnapTargets, 32 / zoom);
+            if (snapResult) {
+                snapped = { x: snapResult.x, y: snapResult.y };
+            }
+        }
 
         // Snapping logic (existing)
         if (!isDrawing) {
@@ -398,7 +420,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                         };
                     }
                     if (endpoint) {
-                        const snapThreshold = 20 / useEditorStore.getState().zoom;
+                        const snapThreshold = 32 / useEditorStore.getState().zoom;
                         if (Math.hypot(worldPos.x - endpoint.x, worldPos.y - endpoint.y) < snapThreshold * 2) {
                             snapped = endpoint;
                         }
@@ -411,7 +433,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             snapped = snapTo90Degrees(lastPoint, snapped, 6);
         }
 
-        const snapThreshold = 20 / useEditorStore.getState().zoom;
+        const snapThreshold = 32 / useEditorStore.getState().zoom;
         for (const p of existingEndpoints) {
             if (Math.hypot(snapped.x - p.x, snapped.y - p.y) < snapThreshold) {
                 snapped = p;
@@ -465,7 +487,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             // Snap logic again for accuracy... or typically we rely on mousemove's previewPoint?
             // But previewPoint is state, better to recalc or trust mousemove updated it?
             // Let's recalc strict snap for accuracy.
-            const snapThreshold = 20 / useEditorStore.getState().zoom;
+            const snapThreshold = 32 / useEditorStore.getState().zoom;
             for (const p of existingEndpoints) {
                 if (Math.hypot(snapped.x - p.x, snapped.y - p.y) < snapThreshold) {
                     snapped = p;
@@ -780,10 +802,10 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                             <circle
                                 cx={segments[0].start.x}
                                 cy={segments[0].start.y}
-                                r={12 / zoom}
+                                r={7}
                                 fill={isSnappingToStart ? "#22c55e" : "white"}
                                 stroke={isSnappingToStart ? "#ffffff" : "#3b82f6"}
-                                strokeWidth={3 / zoom}
+                                strokeWidth={1.5}
                                 style={{ opacity: isSnappingToStart ? 1 : 0.8 }}
                             />
                         )}
@@ -796,23 +818,23 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                         <circle
                             cx={snapIndicator.x}
                             cy={snapIndicator.y}
-                            r={8 / zoom}
+                            r={7}
                             fill="none"
                             stroke="#f59e0b"
-                            strokeWidth={2 / zoom}
+                            strokeWidth={1.5}
                         />
                         {snapIndicator.type === 'midpoint' && (
                             <path
                                 d={`M${snapIndicator.x - 4 / zoom},${snapIndicator.y - 4 / zoom} L${snapIndicator.x + 4 / zoom},${snapIndicator.y + 4 / zoom} M${snapIndicator.x + 4 / zoom},${snapIndicator.y - 4 / zoom} L${snapIndicator.x - 4 / zoom},${snapIndicator.y + 4 / zoom}`}
                                 stroke="#f59e0b"
-                                strokeWidth={1 / zoom}
+                                strokeWidth={1.5}
                             />
                         )}
                         {snapIndicator.type === 'center' && (
                             <circle
                                 cx={snapIndicator.x}
                                 cy={snapIndicator.y}
-                                r={2 / zoom}
+                                r={4.5}
                                 fill="#f59e0b"
                             />
                         )}
@@ -858,6 +880,19 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                         width={previewWidth}
                         height={previewHeight}
                         fill="transparent"
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                        opacity={0.7}
+                        vectorEffect="non-scaling-stroke"
+                    />
+                )}
+
+                {(shapeType === 'line' || shapeType === 'arrow') && (
+                    <line
+                        x1={startPoint.x}
+                        y1={startPoint.y}
+                        x2={endPoint.x}
+                        y2={endPoint.y}
                         stroke="#3b82f6"
                         strokeWidth={2}
                         opacity={0.7}

@@ -29,8 +29,8 @@ export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererPr
     const strokeWidth = arrow.strokeWidth || 3;
     const headType = markerLabel(arrow.arrowHeadType || 'filled-triangle');
     const tailType = markerLabel(arrow.arrowTailType || 'none');
-    const headSize = Math.max(14, strokeWidth * 5) * (arrow.arrowHeadSize || 1);
-    const tailSize = Math.max(14, strokeWidth * 5) * (arrow.arrowTailSize || 1);
+    const headSize = arrow.arrowHeadSize || 20;
+    const tailSize = arrow.arrowTailSize || 20;
 
     const renderMarker = (
         type: MarkerType,
@@ -143,23 +143,39 @@ export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererPr
     };
 
     const labelPosition = arrow.textPosition || 'bottom';
-    const labelT = labelPosition === 'top' ? 0.86 : labelPosition === 'middle' ? 0.5 : 0.14;
-    const labelX = arrow.startPoint.x + dx * labelT;
-    const labelY = arrow.startPoint.y + dy * labelT;
+    let labelX = 0;
+    let labelY = 0;
+    
+    const fontSize = arrow.fontSize || 120;
+    const labelStr = arrow.label || '';
+    const rectPadH = fontSize * 0.5;
+    const rectWidth = Math.max(fontSize * 2, labelStr.length * fontSize * 0.62 + rectPadH * 2);
+
+    if (labelPosition === 'top') {
+        // Appended to the very end of the arrow (outwards)
+        labelX = arrow.endPoint.x + ux * (rectWidth / 2 + headSize + 10);
+        labelY = arrow.endPoint.y + uy * (rectWidth / 2 + headSize + 10);
+    } else if (labelPosition === 'bottom') {
+        // Appended to the very start of the arrow (outwards)
+        labelX = arrow.startPoint.x - ux * (rectWidth / 2 + tailSize + 10);
+        labelY = arrow.startPoint.y - uy * (rectWidth / 2 + tailSize + 10);
+    } else {
+        // Middle - centered on the arrow line
+        labelX = arrow.startPoint.x + dx * 0.5;
+        labelY = arrow.startPoint.y + dy * 0.5;
+    }
 
     let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
     if (textAngle > 90 || textAngle < -90) textAngle += 180;
 
-    const fontSize = arrow.fontSize || 120;
     const fontFamily = arrow.fontFamily || 'Inter, sans-serif';
     const fontWeight = arrow.fontWeight || '700';
     const fontStyle = arrow.fontStyle || 'normal';
     const textDecoration = arrow.textDecoration || 'none';
-    const label = arrow.label || '';
-    const rectPadH = fontSize * 0.5;
     const rectPadV = fontSize * 0.35;
-    const rectWidth = Math.max(fontSize * 2, label.length * fontSize * 0.62 + rectPadH * 2);
     const rectHeight = fontSize + rectPadV * 2;
+    const label = labelStr; // Map to the one declared above
+
 
     return (
         <g data-id={arrow.id}>

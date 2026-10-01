@@ -202,10 +202,10 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                             key={i}
                             cx={p.x}
                             cy={p.y}
-                            r={4 / zoom}
+                            r={6.5}
                             fill="#ffffff"
                             stroke="#3b82f6"
-                            strokeWidth={1.5} vectorEffect="non-scaling-stroke"
+                            strokeWidth={1} 
                             className="cursor-move"
                             data-id={shape.id}
                         />
@@ -254,10 +254,10 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                                     key={i}
                                     cx={p.x}
                                     cy={p.y}
-                                    r={4 / zoom}
+                                    r={6.5}
                                     fill="#ffffff"
                                     stroke="#3b82f6"
-                                    strokeWidth={1.5} vectorEffect="non-scaling-stroke"
+                                    strokeWidth={1} 
                                     className="cursor-move"
                                     data-id={shape.id}
                                 />
@@ -285,10 +285,10 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                                 key={i}
                                 cx={p.x}
                                 cy={p.y}
-                                r={4 / zoom}
+                                r={6.5}
                                 fill="#ffffff"
                                 stroke="#3b82f6"
-                                strokeWidth={1.5} vectorEffect="non-scaling-stroke"
+                                strokeWidth={1} 
                                 className="cursor-move"
                                 data-id={shape.id}
                             />
@@ -314,20 +314,20 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                             <circle
                                 cx={-shape.width / 2}
                                 cy={0}
-                                r={4 / zoom}
+                                r={6.5}
                                 fill="#ffffff"
                                 stroke="#3b82f6"
-                                strokeWidth={1.5} vectorEffect="non-scaling-stroke"
+                                strokeWidth={1} 
                                 className="cursor-move"
                                 data-id={shape.id}
                             />
                             <circle
                                 cx={shape.width / 2}
                                 cy={0}
-                                r={4 / zoom}
+                                r={6.5}
                                 fill="#ffffff"
                                 stroke="#3b82f6"
-                                strokeWidth={1.5} vectorEffect="non-scaling-stroke"
+                                strokeWidth={1} 
                                 className="cursor-move"
                                 data-id={shape.id}
                             />
@@ -573,10 +573,10 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                         {!isHighlight && isSelected && pts.map((p, i) => (
                             <circle
                                 key={i}
-                                cx={p.x} cy={p.y} r={4 / zoom}
+                                cx={p.x} cy={p.y} r={6.5}
                                 fill={i % 2 === 0 ? '#ffffff' : '#fbbf24'}
                                 stroke={i % 2 === 0 ? '#3b82f6' : '#f59e0b'}
-                                strokeWidth={1.5} vectorEffect="non-scaling-stroke"
+                                strokeWidth={1} 
                                 className="cursor-move"
                                 data-id={shape.id}
                             />
@@ -601,10 +601,10 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                     {!isHighlight && isSelected && shape.points.map((p, i) => (
                         <circle
                             key={i}
-                            cx={p.x} cy={p.y} r={4 / zoom}
+                            cx={p.x} cy={p.y} r={6.5}
                             fill={i === 2 ? '#fbbf24' : '#ffffff'}
                             stroke={i === 2 ? '#f59e0b' : '#3b82f6'}
-                            strokeWidth={1.5} vectorEffect="non-scaling-stroke"
+                            strokeWidth={1} 
                             className="cursor-move"
                             data-id={shape.id}
                         />

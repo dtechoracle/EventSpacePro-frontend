@@ -55,6 +55,7 @@ export function findClosestSnapPointFromList(
     let closestDistance = snapThreshold;
 
     for (const point of snapPoints) {
+        if (point == null || isNaN(point.x) || isNaN(point.y)) continue;
         const distance = Math.hypot(cursorPos.x - point.x, cursorPos.y - point.y);
         if (distance < closestDistance) {
             closestDistance = distance;
@@ -158,9 +159,11 @@ export function getSnapPoints(element: SnapTarget, vertices: { x: number; y: num
         const cachedVertices = liveVertices.length > 0
             ? liveVertices
             : (vertices.length > 0 ? vertices : getCachedAssetVertices(asset.id));
-        // Use scaled dimensions
-        const width = asset.width * (asset.scale || 1);
-        const height = asset.height * (asset.scale || 1);
+        // Use scaled dimensions with safe fallbacks
+        const rawW = asset.width || assetDef?.width || 100;
+        const rawH = asset.height || assetDef?.height || 100;
+        const width = rawW * (asset.scale || 1);
+        const height = rawH * (asset.scale || 1);
         const halfW = width / 2;
         const halfH = height / 2;
         const rot = asset.rotation || 0;

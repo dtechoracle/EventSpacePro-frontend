@@ -102,7 +102,7 @@ export default function FreehandTool({ isActive }: FreehandToolProps) {
             height,
             rotation: 0,
             stroke: '#000000',
-            strokeWidth: 3,
+            strokeWidth: 1,
             // If path is closed, apply a light fill; otherwise transparent
             fill: 'transparent',
             fillType: 'color' as const,

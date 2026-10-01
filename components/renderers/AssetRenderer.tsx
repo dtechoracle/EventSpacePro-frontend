@@ -337,6 +337,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const globalOrientation = useProjectStore(s => s.globalTableNumberingOrientation);
     const globalTableFontSize = useProjectStore(s => s.globalTableNumberingFontSize);
     const globalTableFontFamily = useProjectStore(s => s.globalTableNumberingFontFamily);
+    const tableNumberingVisible = useProjectStore(s => s.tableNumberingVisible ?? true);
     const globalTableFontWeight = useProjectStore(s => s.globalTableNumberingFontWeight);
     const globalTableFontStyle = useProjectStore(s => s.globalTableNumberingFontStyle);
     const globalTableTextDecoration = useProjectStore(s => s.globalTableNumberingTextDecoration);
@@ -379,13 +380,11 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const isVenueAsset = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
     const isCad = !!definition?.path && (definition.path.toLowerCase().endsWith('.dwg') || definition.path.toLowerCase().endsWith('.dxf'));
     const isRasterFile = !!definition?.path && /\.(png|jpe?g|webp|gif|avif)$/i.test(definition.path);
-    // Fast image path: render as .webp <image> instead of inline SVG DOM.
-    // Skipped for custom-colored/exploded/venue assets where baked raster won't match.
-    // Fast image path: render as .webp <image> instead of inline SVG DOM.
-    // Disabled: .webp rasters have 10% margins and thick strokes baked in,
-    // which caused asset shrinking, gaps inside the selection box, and stroke-width jumps.
+    // Fast image path: render standard unexploded assets using their pre-rendered .webp raster
+    // instead of parsing DOM and dangerouslySetInnerHTML DOM string for every asset instance.
+    // Falls back to processed SVG if raster fails or for custom-colored/exploded/venue assets.
     const canUseFastImage = false;
-    const fastImageHref = canUseFastImage && rasterAssetPath && !rasterImageFailed ? rasterAssetPath : assetPath;
+    const fastImageHref = canUseFastImage ? rasterAssetPath : assetPath;
 
     useEffect(() => {
         setRasterImageFailed(false);
@@ -957,7 +956,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const flipX = !!(asset as any).flipX;
 
     let tableLabel: React.ReactNode = null;
-    if (asset.tableName && !isHighlightOnly) {
+    if (asset.tableName && !isHighlightOnly && tableNumberingVisible) {
         const pos = (asset as any).tableNumberingPosition || globalPos || 'center';
         const orientation = (asset as any).tableNumberingOrientation || globalOrientation || 'horizontal';
         const labelFontSize = (asset as any).tableNumberingFontSize || globalTableFontSize || Math.max(14, (asset.width || 100) * 0.14);
@@ -973,28 +972,34 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
 
         let tx = 0;
         let ty = 0;
-
-        switch (pos) {
-            case 'top': ty = -halfH - padding; break;
-            case 'bottom': ty = halfH + padding; break;
-            case 'top-left': tx = -halfW; ty = -halfH - padding; break;
-            case 'top-right': tx = halfW; ty = -halfH - padding; break;
-            case 'bottom-left': tx = -halfW; ty = halfH + padding; break;
-            case 'bottom-right': tx = halfW; ty = halfH + padding; break;
-            case 'middle-left': tx = -halfW - padding; break;
-            case 'middle-right': tx = halfW + padding; break;
-            default: break;
-        }
-
-        if (flipX) tx = -tx;
-
+        
         const rad = rotation * Math.PI / 180;
         const cosR = Math.cos(rad);
         const sinR = Math.sin(rad);
-        const worldX = asset.x + baseScale * (cosR * tx - sinR * ty);
-        const worldY = asset.y + baseScale * (sinR * tx + cosR * ty);
-        let worldRotation = rotation;
-        if (orientation === 'vertical') worldRotation += 90;
+
+        // Compute the rotated visual bounding box
+        const visHalfW = Math.abs(halfW * cosR) + Math.abs(halfH * sinR);
+        const visHalfH = Math.abs(halfW * sinR) + Math.abs(halfH * cosR);
+
+        switch (pos) {
+            case 'top': ty = -visHalfH - padding; break;
+            case 'bottom': ty = visHalfH + padding; break;
+            case 'top-left': tx = -visHalfW; ty = -visHalfH - padding; break;
+            case 'top-right': tx = visHalfW; ty = -visHalfH - padding; break;
+            case 'bottom-left': tx = -visHalfW; ty = visHalfH + padding; break;
+            case 'bottom-right': tx = visHalfW; ty = visHalfH + padding; break;
+            case 'middle-left': tx = -visHalfW - padding; break;
+            case 'middle-right': tx = visHalfW + padding; break;
+            default: break;
+        }
+
+        // Do not apply flipX, flipY, or rotation to the label position itself,
+        // because we want the label to always stay in the absolute visual direction requested.
+        const worldX = asset.x + baseScale * tx;
+        const worldY = asset.y + baseScale * ty;
+        // Label always stays upright - do not rotate with the asset
+        let worldRotation = 0;
+        if (orientation === 'vertical') worldRotation = 90;
 
         tableLabel = (
             <g transform={`translate(${worldX}, ${worldY}) rotate(${worldRotation})`}>
