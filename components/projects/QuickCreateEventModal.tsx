@@ -15,6 +15,7 @@ interface ApiError {
 
 export default function QuickCreateEventModal({ onClose }: { onClose: () => void }) {
   const [eventName, setEventName] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -98,8 +99,12 @@ export default function QuickCreateEventModal({ onClose }: { onClose: () => void
 
             <div className="flex flex-col gap-4 mt-2">
               <button
-                onClick={() => mutation.mutate()}
-                disabled={!eventName || mutation.isPending}
+                onClick={() => {
+                  if (isSubmitting || mutation.isPending) return;
+                  setIsSubmitting(true);
+                  mutation.mutate();
+                }}
+                disabled={!eventName || mutation.isPending || isSubmitting}
                 className="w-full h-12 rounded-xl text-white text-sm font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
               >
                 {mutation.isPending ? "Creating..." : (

@@ -50,6 +50,7 @@ export default function CreateEventModal({
   const [mapModalVenue, setMapModalVenue] = useState<PreloadedVenueDef | null>(null);
   const [venueImage, setVenueImage] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [collabEmail, setCollabEmail] = useState("");
   const [collabPermission, setCollabPermission] = useState("editor");
   // Refs to avoid stale-closure in useMutation's onSuccess callback
@@ -406,6 +407,8 @@ export default function CreateEventModal({
   };
 
   const handleCreateEvent = () => {
+    if (isSubmitting || mutation.isPending) return;
+    setIsSubmitting(true);
     mutation.mutate();
   };
 
@@ -953,7 +956,7 @@ export default function CreateEventModal({
 
                 <button
                   onClick={handleCreateEvent}
-                  disabled={!eventName || mutation.isPending || (venueType === 'outdoor' && (!outdoorWidth || !outdoorDepth)) || (venueType === 'preloaded' && !selectedPreloadedVenue)}
+                  disabled={!eventName || mutation.isPending || isSubmitting || (venueType === 'outdoor' && (!outdoorWidth || !outdoorDepth)) || (venueType === 'preloaded' && !selectedPreloadedVenue)}
                   className="w-full h-14 rounded-2xl text-white text-base font-bold bg-[#3b82f6] hover:bg-blue-600 disabled:bg-gray-100 disabled:text-gray-400 disabled:opacity-100 transition-all flex items-center justify-center gap-2"
                 >
                   {mutation.isPending ? (
