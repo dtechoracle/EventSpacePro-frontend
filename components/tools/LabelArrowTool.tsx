@@ -90,6 +90,7 @@ export default function LabelArrowTool({ isActive }: LabelArrowToolProps) {
             strokeWidth: 2,
             arrowHeadType: 'filled-triangle',
             arrowTailType: 'none',
+            arrowHeadSize: 20,
             textPosition: 'bottom',
             zIndex: getNextZIndex(),
         };
@@ -158,6 +159,7 @@ export default function LabelArrowTool({ isActive }: LabelArrowToolProps) {
         strokeWidth: 2,
         arrowHeadType: 'filled-triangle',
         arrowTailType: 'none',
+        arrowHeadSize: 20,
         textPosition: 'bottom',
         zIndex: 9999,
     };
