@@ -1808,7 +1808,11 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                               <div className="flex items-center gap-2">
                                 <input
                                   type="text"
-                                  value={(selectedItem as any).fillColor || '#ffffff'}
+                                  value={(() => {
+                                const val = (selectedItem as any).fillColor;
+                                if (!val || val === 'transparent' || val.startsWith('url')) return '#ffffff';
+                                return val;
+                              })()}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     updateAsset(selectedItem.id, { fillColor: val, tableColor: val, chairColor: val });
@@ -1818,7 +1822,11 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                                 />
                                 <input
                                   type="color"
-                                  value={(selectedItem as any).fillColor || '#ffffff'}
+                                  value={(() => {
+                                const val = (selectedItem as any).fillColor;
+                                if (!val || val === 'transparent' || val.startsWith('url')) return '#ffffff';
+                                return val;
+                              })()}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     updateAsset(selectedItem.id, { fillColor: val, tableColor: val, chairColor: val });
@@ -1838,7 +1846,11 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                               <div className="flex items-center gap-2">
                                 <input
                                   type="text"
-                                  value={(selectedItem as any).tableColor || (selectedItem as any).fillColor || '#ffffff'}
+                                  value={(() => {
+                                const val = (selectedItem as any).tableColor || (selectedItem as any).fillColor;
+                                if (!val || val === 'transparent' || val.startsWith('url')) return '#ffffff';
+                                return val;
+                              })()}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     updateAsset(selectedItem.id, { tableColor: val });
@@ -1848,7 +1860,11 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                                 />
                                 <input
                                   type="color"
-                                  value={(selectedItem as any).tableColor || (selectedItem as any).fillColor || '#ffffff'}
+                                  value={(() => {
+                                const val = (selectedItem as any).tableColor || (selectedItem as any).fillColor;
+                                if (!val || val === 'transparent' || val.startsWith('url')) return '#ffffff';
+                                return val;
+                              })()}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     updateAsset(selectedItem.id, { tableColor: val });
@@ -1865,7 +1881,11 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                               <div className="flex items-center gap-2">
                                 <input
                                   type="text"
-                                  value={(selectedItem as any).chairColor || (selectedItem as any).fillColor || '#ffffff'}
+                                  value={(() => {
+                                const val = (selectedItem as any).chairColor || (selectedItem as any).fillColor;
+                                if (!val || val === 'transparent' || val.startsWith('url')) return '#ffffff';
+                                return val;
+                              })()}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     updateAsset(selectedItem.id, { chairColor: val });
@@ -1875,7 +1895,11 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                                 />
                                 <input
                                   type="color"
-                                  value={(selectedItem as any).chairColor || (selectedItem as any).fillColor || '#ffffff'}
+                                  value={(() => {
+                                const val = (selectedItem as any).chairColor || (selectedItem as any).fillColor;
+                                if (!val || val === 'transparent' || val.startsWith('url')) return '#ffffff';
+                                return val;
+                              })()}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     updateAsset(selectedItem.id, { chairColor: val });
@@ -1892,7 +1916,11 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                               <div className="flex items-center gap-2">
                                 <input
                                   type="text"
-                                  value={(selectedItem as any).fillColor || '#ffffff'}
+                                  value={(() => {
+                                const val = (selectedItem as any).fillColor;
+                                if (!val || val === 'transparent' || val.startsWith('url')) return '#ffffff';
+                                return val;
+                              })()}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     updateAsset(selectedItem.id, { fillColor: val, tableColor: undefined, chairColor: undefined });
@@ -1902,7 +1930,11 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                                 />
                                 <input
                                   type="color"
-                                  value={(selectedItem as any).fillColor || '#ffffff'}
+                                  value={(() => {
+                                const val = (selectedItem as any).fillColor;
+                                if (!val || val === 'transparent' || val.startsWith('url')) return '#ffffff';
+                                return val;
+                              })()}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     updateAsset(selectedItem.id, { fillColor: val, tableColor: undefined, chairColor: undefined });
