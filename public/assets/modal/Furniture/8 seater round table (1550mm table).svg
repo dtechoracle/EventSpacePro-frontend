@@ -1,1 +1,535 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="2578mm" height="2578mm" viewBox="-19.54 -2560.176 2577.6 2577.6" version="1.1"><g transform="scale(1 -1)"><path d="M1455.137 2539.839a240.9 240.9 0 0 1-8.2-89.113" style="stroke:#000;stroke-width:.1"/><path d="M1450.653 2521.464a317.3 317.3 0 0 1-14.728-89.338" style="stroke:#000;stroke-width:.1"/><path d="M1103.227 2432.126a317.3 317.3 0 0 1-14.728 89.338" style="stroke:#000;stroke-width:.1"/><path d="M1092.214 2450.726a240.9 240.9 0 0 1-8.199 89.112" style="stroke:#000;stroke-width:.1"/><path d="M1269.576 2453.029h106.785" style="stroke:#000;stroke-width:.1"/><path d="M1462.552 2079.3a1154.4 1154.4 0 0 1-15.227 368.834" style="stroke:#000;stroke-width:.1"/><path d="M1453.808 2413.815a97.83 97.83 0 0 1-77.447 39.214" style="stroke:#000;stroke-width:.1"/><path d="M1462.552 2079.3a12.02 12.02 0 0 1-9.13.662" style="stroke:#000;stroke-width:.1"/><path d="m1453.422 2079.962 1.765 19.4" style="stroke:#000;stroke-width:.1"/><path d="m1455.187 2099.363 9.142-4.327" style="stroke:#000;stroke-width:.1"/><path d="M1455.187 2099.363h9.592" style="stroke:#000;stroke-width:.1"/><path d="M1083.965 2099.363h-9.592" style="stroke:#000;stroke-width:.1"/><path d="m1083.965 2099.363-9.142-4.327" style="stroke:#000;stroke-width:.1"/><path d="m1085.73 2079.962-1.765 19.4" style="stroke:#000;stroke-width:.1"/><path d="M1085.73 2079.962a12.02 12.02 0 0 1-9.13-.662" style="stroke:#000;stroke-width:.1"/><path d="M1162.79 2453.029a97.83 97.83 0 0 1-77.446-39.214" style="stroke:#000;stroke-width:.1"/><path d="M1091.827 2448.134A1154.4 1154.4 0 0 1 1076.6 2079.3" style="stroke:#000;stroke-width:.1"/><path d="M1269.576 2453.029H1162.79" style="stroke:#000;stroke-width:.1"/><path d="M1269.576 2534.91h183.421" style="stroke:#000;stroke-width:.1"/><path d="M1269.576 2543.098h183.743" style="stroke:#000;stroke-width:.1"/><path d="M1455.137 2539.839a2.418 2.418 0 0 1-1.818 3.259" style="stroke:#000;stroke-width:.1"/><path d="M1453.656 2533.967a.725.725 0 0 1-.725.943" style="stroke:#000;stroke-width:.1"/><path d="M1269.576 2534.091h183.421" style="stroke:#000;stroke-width:.1"/><path d="M1453.56 2533.61a.433.433 0 0 1-.563.481" style="stroke:#000;stroke-width:.1"/><path d="M1086.155 2534.091a.433.433 0 0 1-.563-.48" style="stroke:#000;stroke-width:.1"/><path d="M1269.576 2534.091h-183.421" style="stroke:#000;stroke-width:.1"/><path d="M1086.22 2534.91a.725.725 0 0 1-.724-.943" style="stroke:#000;stroke-width:.1"/><path d="M1085.833 2543.098a2.418 2.418 0 0 1-1.818-3.26" style="stroke:#000;stroke-width:.1"/><path d="M1269.576 2543.098h-183.744" style="stroke:#000;stroke-width:.1"/><path d="M1269.576 2534.91h-183.421" style="stroke:#000;stroke-width:.1"/><path d="M1480.952 2540.991a216.6 216.6 0 0 1-9.584-87.385 1180.7 1180.7 0 0 0 15.574-377.23 22.2 22.2 0 0 0-24.426 2.928 12.03 12.03 0 0 1-9.143.663 481 481 0 0 0-54.068-3.59h-260.09a481 481 0 0 0-54.068 3.59 12.03 12.03 0 0 1-9.143-.663 22.2 22.2 0 0 0-24.425-2.928 1180.7 1180.7 0 0 0 15.573 377.23 216.6 216.6 0 0 1-9.584 87.385 12.6 12.6 0 0 0 10.782 19.185h401.82a12.6 12.6 0 0 0 10.782-19.185" style="stroke:#000;stroke-width:.1"/><path d="M2537.723 1085.5a240.9 240.9 0 0 1-89.113 8.199" style="stroke:#000;stroke-width:.1"/><path d="M2519.348 1089.983a317.3 317.3 0 0 1-89.338 14.728" style="stroke:#000;stroke-width:.1"/><path d="M2430.01 1437.41a317.3 317.3 0 0 1 89.338 14.727" style="stroke:#000;stroke-width:.1"/><path d="M2448.61 1448.422a240.9 240.9 0 0 1 89.112 8.199" style="stroke:#000;stroke-width:.1"/><path d="M2450.913 1271.06v-106.785" style="stroke:#000;stroke-width:.1"/><path d="M2077.184 1078.084a1154.4 1154.4 0 0 1 368.834 15.227" style="stroke:#000;stroke-width:.1"/><path d="M2411.699 1086.828a97.83 97.83 0 0 1 39.214 77.447" style="stroke:#000;stroke-width:.1"/><path d="M2077.184 1078.084a12.02 12.02 0 0 1 .662 9.13" style="stroke:#000;stroke-width:.1"/><path d="m2077.846 1087.215 19.4-1.765" style="stroke:#000;stroke-width:.1"/><path d="m2097.247 1085.45-4.327-9.143" style="stroke:#000;stroke-width:.1"/><path d="M2097.247 1085.45v-9.593" style="stroke:#000;stroke-width:.1"/><path d="M2097.247 1456.671v9.593" style="stroke:#000;stroke-width:.1"/><path d="m2097.247 1456.671-4.327 9.142" style="stroke:#000;stroke-width:.1"/><path d="m2077.846 1454.906 19.4 1.765" style="stroke:#000;stroke-width:.1"/><path d="M2077.846 1454.906a12.02 12.02 0 0 1-.662 9.13" style="stroke:#000;stroke-width:.1"/><path d="M2450.913 1377.845a97.83 97.83 0 0 1-39.214 77.448" style="stroke:#000;stroke-width:.1"/><path d="M2446.018 1448.81a1154.4 1154.4 0 0 1-368.834 15.226" style="stroke:#000;stroke-width:.1"/><path d="M2450.913 1271.06v106.785" style="stroke:#000;stroke-width:.1"/><path d="M2532.794 1271.06v-183.42" style="stroke:#000;stroke-width:.1"/><path d="M2540.982 1271.06v-183.743" style="stroke:#000;stroke-width:.1"/><path d="M2537.723 1085.5a2.418 2.418 0 0 1 3.259 1.817" style="stroke:#000;stroke-width:.1"/><path d="M2531.851 1086.98a.725.725 0 0 1 .943.725" style="stroke:#000;stroke-width:.1"/><path d="M2531.975 1271.06v-183.42" style="stroke:#000;stroke-width:.1"/><path d="M2531.494 1087.076a.433.433 0 0 1 .481.563" style="stroke:#000;stroke-width:.1"/><path d="M2531.975 1454.482a.433.433 0 0 1-.48.563" style="stroke:#000;stroke-width:.1"/><path d="M2531.975 1271.06v183.422" style="stroke:#000;stroke-width:.1"/><path d="M2532.794 1454.415a.725.725 0 0 1-.943.725" style="stroke:#000;stroke-width:.1"/><path d="M2540.982 1454.804a2.418 2.418 0 0 1-3.26 1.817" style="stroke:#000;stroke-width:.1"/><path d="M2540.982 1271.06v183.744" style="stroke:#000;stroke-width:.1"/><path d="M2532.794 1271.06v183.422" style="stroke:#000;stroke-width:.1"/><path d="M2538.875 1059.684a216.6 216.6 0 0 1-87.385 9.584 1180.7 1180.7 0 0 0-377.23-15.573 22.2 22.2 0 0 0 2.928 24.425 12.03 12.03 0 0 1 .663 9.143 481 481 0 0 0-3.59 54.068v260.09a481 481 0 0 0 3.59 54.068 12.03 12.03 0 0 1-.663 9.143 22.2 22.2 0 0 0-2.928 24.426 1180.7 1180.7 0 0 0 377.23-15.574 216.6 216.6 0 0 1 87.385 9.584 12.6 12.6 0 0 0 19.185-10.782v-401.82a12.6 12.6 0 0 0-19.185-10.782" style="stroke:#000;stroke-width:.1"/><path d="M2297.633 2036.88a240.9 240.9 0 0 1-68.81-57.215" style="stroke:#000;stroke-width:.1"/><path d="M2281.47 2027.057a317.3 317.3 0 0 1-73.586-52.757" style="stroke:#000;stroke-width:.1"/><path d="M1972.63 2209.553a317.3 317.3 0 0 1 52.758 73.586" style="stroke:#000;stroke-width:.1"/><path d="M1977.996 2230.493a240.9 240.9 0 0 1 57.214 68.81" style="stroke:#000;stroke-width:.1"/><path d="m2105.038 2106.708 75.508-75.509" style="stroke:#000;stroke-width:.1"/><path d="M1977.227 1705.987a1154.4 1154.4 0 0 1 250.038 271.572" style="stroke:#000;stroke-width:.1"/><path d="M2207.582 1948.707a97.83 97.83 0 0 1-27.035 82.492" style="stroke:#000;stroke-width:.1"/><path d="M1977.227 1705.987a12.02 12.02 0 0 1-5.989 6.924" style="stroke:#000;stroke-width:.1"/><path d="m1971.238 1712.91 14.967 12.471" style="stroke:#000;stroke-width:.1"/><path d="m1986.205 1725.381 3.405-9.524" style="stroke:#000;stroke-width:.1"/><path d="m1986.205 1725.381 6.783-6.783" style="stroke:#000;stroke-width:.1"/><path d="m1723.712 1987.875-6.783 6.783" style="stroke:#000;stroke-width:.1"/><path d="m1723.712 1987.875-9.525 3.404" style="stroke:#000;stroke-width:.1"/><path d="m1711.241 1972.908 12.47 14.966" style="stroke:#000;stroke-width:.1"/><path d="M1711.241 1972.908a12.02 12.02 0 0 1-6.924 5.988" style="stroke:#000;stroke-width:.1"/><path d="M2029.53 2182.216a97.83 97.83 0 0 1-82.492 27.035" style="stroke:#000;stroke-width:.1"/><path d="M1975.89 2228.934a1154.4 1154.4 0 0 1-271.573-250.038" style="stroke:#000;stroke-width:.1"/><path d="m2105.038 2106.708-75.508 75.508" style="stroke:#000;stroke-width:.1"/><path d="m2162.937 2164.606 129.698-129.698" style="stroke:#000;stroke-width:.1"/><path d="m2168.727 2170.396 129.926-129.926" style="stroke:#000;stroke-width:.1"/><path d="M2297.633 2036.88a2.418 2.418 0 0 1 1.02 3.59" style="stroke:#000;stroke-width:.1"/><path d="M2292.434 2033.776a.725.725 0 0 1 .154 1.178" style="stroke:#000;stroke-width:.1"/><path d="m2162.358 2164.027 129.698-129.698" style="stroke:#000;stroke-width:.1"/><path d="M2292.114 2033.59a.433.433 0 0 1-.058.739" style="stroke:#000;stroke-width:.1"/><path d="M2032.66 2293.726a.433.433 0 0 1-.739.058" style="stroke:#000;stroke-width:.1"/><path d="m2162.358 2164.027-129.699 129.699" style="stroke:#000;stroke-width:.1"/><path d="M2033.285 2294.258a.725.725 0 0 1-1.179-.154" style="stroke:#000;stroke-width:.1"/><path d="M2038.8 2300.322a2.418 2.418 0 0 1-3.59-1.02" style="stroke:#000;stroke-width:.1"/><path d="M2168.727 2170.396 2038.8 2300.322" style="stroke:#000;stroke-width:.1"/><path d="m2162.937 2164.606-129.699 129.699" style="stroke:#000;stroke-width:.1"/><path d="M2316.703 2019.441a216.6 216.6 0 0 1-68.568-55.014 1180.7 1180.7 0 0 0-255.73-277.754 22.2 22.2 0 0 0-15.2 19.342 12.03 12.03 0 0 1-5.997 6.934 481 481 0 0 0-40.771 35.692l-91.956 91.956-91.956 91.956a481 481 0 0 0-35.692 40.77 12.03 12.03 0 0 1-6.934 5.997 22.2 22.2 0 0 0-19.342 15.201 1180.7 1180.7 0 0 0 277.754 255.73 216.6 216.6 0 0 1 55.014 68.567 12.6 12.6 0 0 0 21.19 5.942l284.13-284.13a12.6 12.6 0 0 0-5.943-21.189" style="stroke:#000;stroke-width:.1"/><path d="M.798 1457.253a240.9 240.9 0 0 1 89.112-8.2" style="stroke:#000;stroke-width:.1"/><path d="M19.172 1452.77a317.3 317.3 0 0 1 89.339-14.73" style="stroke:#000;stroke-width:.1"/><path d="M108.51 1105.343a317.3 317.3 0 0 1-89.338-14.728" style="stroke:#000;stroke-width:.1"/><path d="M89.91 1094.33a240.9 240.9 0 0 1-89.112-8.199" style="stroke:#000;stroke-width:.1"/><path d="M87.607 1271.692v106.785" style="stroke:#000;stroke-width:.1"/><path d="M461.336 1464.668a1154.4 1154.4 0 0 1-368.834-15.227" style="stroke:#000;stroke-width:.1"/><path d="M126.821 1455.924a97.83 97.83 0 0 1-39.214-77.447" style="stroke:#000;stroke-width:.1"/><path d="M461.336 1464.668a12.02 12.02 0 0 1-.662-9.13" style="stroke:#000;stroke-width:.1"/><path d="m460.674 1455.538-19.4 1.765" style="stroke:#000;stroke-width:.1"/><path d="m441.273 1457.303 4.328 9.142" style="stroke:#000;stroke-width:.1"/><path d="M441.273 1457.303v9.592" style="stroke:#000;stroke-width:.1"/><path d="M441.273 1086.081v-9.592" style="stroke:#000;stroke-width:.1"/><path d="m441.273 1086.081 4.328-9.142" style="stroke:#000;stroke-width:.1"/><path d="m460.674 1087.846-19.4-1.765" style="stroke:#000;stroke-width:.1"/><path d="M460.674 1087.846a12.02 12.02 0 0 1 .662-9.13" style="stroke:#000;stroke-width:.1"/><path d="M87.607 1164.907a97.83 97.83 0 0 1 39.214-77.447" style="stroke:#000;stroke-width:.1"/><path d="M92.502 1093.943a1154.4 1154.4 0 0 1 368.834-15.227" style="stroke:#000;stroke-width:.1"/><path d="M87.607 1271.692v-106.785" style="stroke:#000;stroke-width:.1"/><path d="M5.726 1271.692v183.421" style="stroke:#000;stroke-width:.1"/><path d="M-2.462 1271.692v183.743" style="stroke:#000;stroke-width:.1"/><path d="M.798 1457.253a2.418 2.418 0 0 1-3.26-1.818" style="stroke:#000;stroke-width:.1"/><path d="M6.669 1455.772a.725.725 0 0 1-.943-.725" style="stroke:#000;stroke-width:.1"/><path d="M6.545 1271.692v183.421" style="stroke:#000;stroke-width:.1"/><path d="M7.026 1455.676a.433.433 0 0 1-.48-.563" style="stroke:#000;stroke-width:.1"/><path d="M6.545 1088.27a.433.433 0 0 1 .48-.562" style="stroke:#000;stroke-width:.1"/><path d="M6.545 1271.692V1088.27" style="stroke:#000;stroke-width:.1"/><path d="M5.726 1088.337a.725.725 0 0 1 .943-.725" style="stroke:#000;stroke-width:.1"/><path d="M-2.462 1087.948a2.418 2.418 0 0 1 3.26-1.817" style="stroke:#000;stroke-width:.1"/><path d="M-2.462 1271.692v-183.744" style="stroke:#000;stroke-width:.1"/><path d="M5.726 1271.692V1088.27" style="stroke:#000;stroke-width:.1"/><path d="M-.355 1483.068a216.6 216.6 0 0 1 87.386-9.584 1180.7 1180.7 0 0 0 377.23 15.574 22.2 22.2 0 0 0-2.93-24.426 12.03 12.03 0 0 1-.662-9.143 481 481 0 0 0 3.591-54.068v-260.09a481 481 0 0 0-3.59-54.068 12.03 12.03 0 0 1 .662-9.143 22.2 22.2 0 0 0 2.928-24.425 1180.7 1180.7 0 0 0-377.23 15.573 216.6 216.6 0 0 1-87.385-9.584 12.6 12.6 0 0 0-19.185 10.782v401.82a12.6 12.6 0 0 0 19.185 10.782" style="stroke:#000;stroke-width:.1"/><path d="M503.756 2299.749a240.9 240.9 0 0 1 57.215-68.81" style="stroke:#000;stroke-width:.1"/><path d="M513.579 2283.586A317.3 317.3 0 0 1 566.336 2210" style="stroke:#000;stroke-width:.1"/><path d="M331.083 1974.747a317.3 317.3 0 0 1-73.586 52.757" style="stroke:#000;stroke-width:.1"/><path d="M310.144 1980.112a240.9 240.9 0 0 1-68.81 57.214" style="stroke:#000;stroke-width:.1"/><path d="m433.929 2107.154 75.508 75.508" style="stroke:#000;stroke-width:.1"/><path d="M834.65 1979.343a1154.4 1154.4 0 0 1-271.572 250.038" style="stroke:#000;stroke-width:.1"/><path d="M591.93 2209.698a97.83 97.83 0 0 1-82.493-27.035" style="stroke:#000;stroke-width:.1"/><path d="M834.65 1979.343a12.02 12.02 0 0 1-6.924-5.989" style="stroke:#000;stroke-width:.1"/><path d="m827.726 1973.354-12.471 14.967" style="stroke:#000;stroke-width:.1"/><path d="m815.255 1988.321 9.524 3.405" style="stroke:#000;stroke-width:.1"/><path d="m815.255 1988.321 6.783 6.783" style="stroke:#000;stroke-width:.1"/><path d="m552.762 1725.828-6.783-6.783" style="stroke:#000;stroke-width:.1"/><path d="m552.762 1725.828-3.405-9.525" style="stroke:#000;stroke-width:.1"/><path d="m567.729 1713.357-14.967 12.47" style="stroke:#000;stroke-width:.1"/><path d="M567.729 1713.357a12.02 12.02 0 0 1-5.989-6.924" style="stroke:#000;stroke-width:.1"/><path d="M358.42 2031.646a97.83 97.83 0 0 1-27.035-82.492" style="stroke:#000;stroke-width:.1"/><path d="M311.702 1978.005a1154.4 1154.4 0 0 1 250.038-271.572" style="stroke:#000;stroke-width:.1"/><path d="m433.929 2107.154-75.509-75.508" style="stroke:#000;stroke-width:.1"/><path d="m376.03 2165.053 129.7 129.697" style="stroke:#000;stroke-width:.1"/><path d="m370.24 2170.843 129.926 129.926" style="stroke:#000;stroke-width:.1"/><path d="M503.756 2299.749a2.418 2.418 0 0 1-3.59 1.02" style="stroke:#000;stroke-width:.1"/><path d="M506.86 2294.55a.725.725 0 0 1-1.178.154" style="stroke:#000;stroke-width:.1"/><path d="m376.61 2164.474 129.698 129.698" style="stroke:#000;stroke-width:.1"/><path d="M507.046 2294.23a.433.433 0 0 1-.738-.058" style="stroke:#000;stroke-width:.1"/><path d="M246.91 2034.775a.433.433 0 0 1-.058-.738" style="stroke:#000;stroke-width:.1"/><path d="m376.61 2164.474-129.7-129.699" style="stroke:#000;stroke-width:.1"/><path d="M246.379 2035.401a.725.725 0 0 1 .154-1.179" style="stroke:#000;stroke-width:.1"/><path d="M240.314 2040.916a2.418 2.418 0 0 1 1.02-3.59" style="stroke:#000;stroke-width:.1"/><path d="m370.24 2170.843-129.926-129.927" style="stroke:#000;stroke-width:.1"/><path d="m376.03 2165.053-129.698-129.699" style="stroke:#000;stroke-width:.1"/><path d="M521.195 2318.818a216.6 216.6 0 0 1 55.015-68.567 1180.7 1180.7 0 0 0 277.753-255.73 22.2 22.2 0 0 0-19.341-15.2 12.03 12.03 0 0 1-6.935-5.997 481 481 0 0 0-35.692-40.771l-91.956-91.956-91.956-91.956a481 481 0 0 0-40.77-35.692 12.03 12.03 0 0 1-5.997-6.934 22.2 22.2 0 0 0-15.2-19.342 1180.7 1180.7 0 0 0-255.73 277.754 216.6 216.6 0 0 1-68.568 55.014 12.6 12.6 0 0 0-5.942 21.19l284.13 284.13a12.6 12.6 0 0 0 21.19-5.943" style="stroke:#000;stroke-width:.1"/><path d="M1083.384 2.914a240.9 240.9 0 0 1 8.199 89.112" style="stroke:#000;stroke-width:.1"/><path d="M1087.867 21.288a317.3 317.3 0 0 1 14.728 89.339" style="stroke:#000;stroke-width:.1"/><path d="M1435.293 110.627a317.3 317.3 0 0 1 14.729-89.339" style="stroke:#000;stroke-width:.1"/><path d="M1446.306 92.026a240.9 240.9 0 0 1 8.199-89.112" style="stroke:#000;stroke-width:.1"/><path d="M1268.944 89.723H1162.16" style="stroke:#000;stroke-width:.1"/><path d="M1075.968 463.452a1154.4 1154.4 0 0 1 15.227-368.834" style="stroke:#000;stroke-width:.1"/><path d="M1084.712 128.937a97.83 97.83 0 0 1 77.447-39.214" style="stroke:#000;stroke-width:.1"/><path d="M1075.968 463.452a12.02 12.02 0 0 1 9.13-.662" style="stroke:#000;stroke-width:.1"/><path d="m1085.099 462.79-1.765-19.4" style="stroke:#000;stroke-width:.1"/><path d="m1083.334 443.39-9.143 4.327" style="stroke:#000;stroke-width:.1"/><path d="M1083.334 443.39h-9.593" style="stroke:#000;stroke-width:.1"/><path d="M1454.555 443.39h9.593" style="stroke:#000;stroke-width:.1"/><path d="m1454.555 443.39 9.142 4.327" style="stroke:#000;stroke-width:.1"/><path d="m1452.79 462.79 1.765-19.4" style="stroke:#000;stroke-width:.1"/><path d="M1452.79 462.79a12.02 12.02 0 0 1 9.13.662" style="stroke:#000;stroke-width:.1"/><path d="M1375.73 89.723a97.83 97.83 0 0 1 77.447 39.214" style="stroke:#000;stroke-width:.1"/><path d="M1446.694 94.618a1154.4 1154.4 0 0 1 15.226 368.834" style="stroke:#000;stroke-width:.1"/><path d="M1268.944 89.723h106.785" style="stroke:#000;stroke-width:.1"/><path d="M1268.944 7.842h-183.421" style="stroke:#000;stroke-width:.1"/><path d="M1268.944-.346h-183.743" style="stroke:#000;stroke-width:.1"/><path d="M1083.384 2.914a2.418 2.418 0 0 1 1.817-3.26" style="stroke:#000;stroke-width:.1"/><path d="M1084.865 8.785a.725.725 0 0 1 .724-.943" style="stroke:#000;stroke-width:.1"/><path d="M1268.944 8.661h-183.421" style="stroke:#000;stroke-width:.1"/><path d="M1084.96 9.142a.433.433 0 0 1 .563-.48" style="stroke:#000;stroke-width:.1"/><path d="M1452.366 8.661a.433.433 0 0 1 .563.48" style="stroke:#000;stroke-width:.1"/><path d="M1268.944 8.661h183.422" style="stroke:#000;stroke-width:.1"/><path d="M1452.3 7.842a.725.725 0 0 1 .724.943" style="stroke:#000;stroke-width:.1"/><path d="M1452.688-.346a2.418 2.418 0 0 1 1.817 3.26" style="stroke:#000;stroke-width:.1"/><path d="M1268.944-.346h183.744" style="stroke:#000;stroke-width:.1"/><path d="M1268.944 7.842h183.422" style="stroke:#000;stroke-width:.1"/><path d="M1057.568 1.76a216.6 216.6 0 0 1 9.584 87.387 1180.7 1180.7 0 0 0-15.573 377.23 22.2 22.2 0 0 0 24.425-2.93 12.03 12.03 0 0 1 9.143-.662 481 481 0 0 0 54.068 3.591h260.09a481 481 0 0 0 54.068-3.59 12.03 12.03 0 0 1 9.143.662 22.2 22.2 0 0 0 24.426 2.928 1180.7 1180.7 0 0 0-15.574-377.23 216.6 216.6 0 0 1 9.584-87.385 12.6 12.6 0 0 0-10.782-19.185h-401.82a12.6 12.6 0 0 0-10.782 19.185" style="stroke:#000;stroke-width:.1"/><path d="M2034.764 243.003a240.9 240.9 0 0 1-57.214 68.81" style="stroke:#000;stroke-width:.1"/><path d="M2024.941 259.166a317.3 317.3 0 0 1-52.757 73.587" style="stroke:#000;stroke-width:.1"/><path d="M2207.437 568.006a317.3 317.3 0 0 1 73.586-52.758" style="stroke:#000;stroke-width:.1"/><path d="M2228.377 562.64a240.9 240.9 0 0 1 68.81-57.214" style="stroke:#000;stroke-width:.1"/><path d="m2104.592 435.598-75.509-75.508" style="stroke:#000;stroke-width:.1"/><path d="M1703.87 563.41a1154.4 1154.4 0 0 1 271.573-250.038" style="stroke:#000;stroke-width:.1"/><path d="M1946.591 333.055a97.83 97.83 0 0 1 82.492 27.035" style="stroke:#000;stroke-width:.1"/><path d="M1703.87 563.41a12.02 12.02 0 0 1 6.925 5.988" style="stroke:#000;stroke-width:.1"/><path d="m1710.795 569.398 12.47-14.967" style="stroke:#000;stroke-width:.1"/><path d="m1723.265 554.431-9.524-3.404" style="stroke:#000;stroke-width:.1"/><path d="m1723.265 554.431-6.783-6.783" style="stroke:#000;stroke-width:.1"/><path d="m1985.759 816.924 6.783 6.783" style="stroke:#000;stroke-width:.1"/><path d="m1985.759 816.924 3.404 9.525" style="stroke:#000;stroke-width:.1"/><path d="m1970.792 829.395 14.966-12.47" style="stroke:#000;stroke-width:.1"/><path d="M1970.792 829.395a12.02 12.02 0 0 1 5.988 6.924" style="stroke:#000;stroke-width:.1"/><path d="M2180.1 511.107a97.83 97.83 0 0 1 27.035 82.491" style="stroke:#000;stroke-width:.1"/><path d="M2226.818 564.747a1154.4 1154.4 0 0 1-250.038 271.572" style="stroke:#000;stroke-width:.1"/><path d="m2104.592 435.598 75.508 75.509" style="stroke:#000;stroke-width:.1"/><path d="M2162.49 377.7 2032.792 248" style="stroke:#000;stroke-width:.1"/><path d="m2168.28 371.91-129.926-129.927" style="stroke:#000;stroke-width:.1"/><path d="M2034.764 243.003a2.418 2.418 0 0 1 3.59-1.02" style="stroke:#000;stroke-width:.1"/><path d="M2031.66 248.202a.725.725 0 0 1 1.179-.154" style="stroke:#000;stroke-width:.1"/><path d="M2161.911 378.279 2032.213 248.58" style="stroke:#000;stroke-width:.1"/><path d="M2031.475 248.522a.433.433 0 0 1 .738.058" style="stroke:#000;stroke-width:.1"/><path d="M2291.61 507.977a.433.433 0 0 1 .058.738" style="stroke:#000;stroke-width:.1"/><path d="m2161.911 378.279 129.699 129.698" style="stroke:#000;stroke-width:.1"/><path d="M2292.142 507.351a.725.725 0 0 1-.154 1.179" style="stroke:#000;stroke-width:.1"/><path d="M2298.206 501.836a2.418 2.418 0 0 1-1.02 3.59" style="stroke:#000;stroke-width:.1"/><path d="m2168.28 371.91 129.926 129.926" style="stroke:#000;stroke-width:.1"/><path d="m2162.49 377.7 129.699 129.698" style="stroke:#000;stroke-width:.1"/><path d="M2017.325 223.934a216.6 216.6 0 0 1-55.014 68.568 1180.7 1180.7 0 0 0-277.754 255.73 22.2 22.2 0 0 0 19.342 15.2 12.03 12.03 0 0 1 6.934 5.997 481 481 0 0 0 35.692 40.77l91.956 91.956 91.956 91.956a481 481 0 0 0 40.77 35.692 12.03 12.03 0 0 1 5.997 6.934 22.2 22.2 0 0 0 15.201 19.342 1180.7 1180.7 0 0 0 255.73-277.753 216.6 216.6 0 0 1 68.567-55.015 12.6 12.6 0 0 0 5.942-21.19l-284.13-284.13a12.6 12.6 0 0 0-21.189 5.943" style="stroke:#000;stroke-width:.1"/><path d="M240.887 505.872a240.9 240.9 0 0 1 68.81 57.215" style="stroke:#000;stroke-width:.1"/><path d="M257.05 515.695a317.3 317.3 0 0 1 73.587 52.757" style="stroke:#000;stroke-width:.1"/><path d="M565.89 333.2a317.3 317.3 0 0 1-52.758-73.587" style="stroke:#000;stroke-width:.1"/><path d="M560.524 312.26a240.9 240.9 0 0 1-57.214-68.81" style="stroke:#000;stroke-width:.1"/><path d="m433.482 436.045-75.508 75.508" style="stroke:#000;stroke-width:.1"/><path d="M561.294 836.766a1154.4 1154.4 0 0 1-250.038-271.572" style="stroke:#000;stroke-width:.1"/><path d="M330.939 594.045a97.83 97.83 0 0 1 27.035-82.492" style="stroke:#000;stroke-width:.1"/><path d="M561.294 836.766a12.02 12.02 0 0 1 5.988-6.924" style="stroke:#000;stroke-width:.1"/><path d="m567.282 829.842-14.967-12.471" style="stroke:#000;stroke-width:.1"/><path d="m552.315 817.371-3.405 9.524" style="stroke:#000;stroke-width:.1"/><path d="m552.315 817.371-6.783 6.783" style="stroke:#000;stroke-width:.1"/><path d="m814.808 554.878 6.783-6.783" style="stroke:#000;stroke-width:.1"/><path d="m814.808 554.878 9.525-3.405" style="stroke:#000;stroke-width:.1"/><path d="m827.279 569.845-12.47-14.967" style="stroke:#000;stroke-width:.1"/><path d="M827.279 569.845a12.02 12.02 0 0 1 6.924-5.989" style="stroke:#000;stroke-width:.1"/><path d="M508.99 360.536a97.83 97.83 0 0 1 82.492-27.035" style="stroke:#000;stroke-width:.1"/><path d="M562.631 313.818a1154.4 1154.4 0 0 1 271.572 250.038" style="stroke:#000;stroke-width:.1"/><path d="m433.482 436.045 75.509-75.509" style="stroke:#000;stroke-width:.1"/><path d="M375.584 378.146 245.885 507.845" style="stroke:#000;stroke-width:.1"/><path d="M369.794 372.356 239.867 502.283" style="stroke:#000;stroke-width:.1"/><path d="M240.887 505.872a2.418 2.418 0 0 1-1.02-3.59" style="stroke:#000;stroke-width:.1"/><path d="M246.086 508.977a.725.725 0 0 1-.154-1.18" style="stroke:#000;stroke-width:.1"/><path d="M376.163 378.725 246.464 508.424" style="stroke:#000;stroke-width:.1"/><path d="M246.406 509.162a.433.433 0 0 1 .058-.738" style="stroke:#000;stroke-width:.1"/><path d="M505.861 249.027a.433.433 0 0 1 .738-.058" style="stroke:#000;stroke-width:.1"/><path d="M376.163 378.725 505.86 249.027" style="stroke:#000;stroke-width:.1"/><path d="M505.235 248.495a.725.725 0 0 1 1.179.154" style="stroke:#000;stroke-width:.1"/><path d="M499.72 242.43a2.418 2.418 0 0 1 3.59 1.02" style="stroke:#000;stroke-width:.1"/><path d="M369.794 372.356 499.72 242.43" style="stroke:#000;stroke-width:.1"/><path d="m375.584 378.146 129.698-129.698" style="stroke:#000;stroke-width:.1"/><path d="M221.818 523.311a216.6 216.6 0 0 1 68.568 55.015 1180.7 1180.7 0 0 0 255.73 277.753 22.2 22.2 0 0 0 15.2-19.341 12.03 12.03 0 0 1 5.997-6.935 481 481 0 0 0 40.77-35.692l91.956-91.956 91.956-91.956a481 481 0 0 0 35.692-40.77 12.03 12.03 0 0 1 6.934-5.997 22.2 22.2 0 0 0 19.342-15.2 1180.7 1180.7 0 0 0-277.753-255.73 216.6 216.6 0 0 1-55.015-68.568 12.6 12.6 0 0 0-21.19-5.942l-284.13 284.13a12.6 12.6 0 0 0 5.943 21.19" style="stroke:#000;stroke-width:.1"/><circle cx="1269.26" cy="1271.376" r="755" style="stroke:#000;stroke-width:.1"/><circle cx="1269.26" cy="1271.376" r="775" style="stroke:#000;stroke-width:.1"/></g></svg>
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 2026-03-10 13:19:32 Generated by QCAD 3.32.6 SVG Exporter -->
+<svg  width="2577.6001mm" height="2577.6001mm" viewBox="-19.5399 -2560.1762 2577.6001 2577.6001" version="1.1" xmlns="http://www.w3.org/2000/svg" style="stroke-linecap:round;stroke-linejoin:round;">
+    <g transform="scale(1,-1)">
+            <!-- Auto-generated fillable area -->
+            <!-- Block Reference: 8 seater round table / entities: 18 -->
+        <g>
+            <!-- Block Reference: A$C1D6968EA / entities: 30 -->
+            <g>
+                <!-- Arc -->
+                <path d="M1455.1367,2539.8385 A240.8687,240.8687 0 0,1 1446.9375,2450.7259" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1450.6532,2521.4639 A317.3163,317.3163 0 0,1 1435.9248,2432.1255" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1103.2271,2432.1255 A317.3163,317.3163 0 0,1 1088.4987,2521.4639" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1092.2144,2450.7259 A240.8687,240.8687 0 0,1 1084.0152,2539.8385" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1269.5759,2453.0289 L1376.361,2453.0289 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1462.5519,2079.3001 A1154.4088,1154.4088 0 0,1 1447.3251,2448.134" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1453.8083,2413.8149 A97.8312,97.8312 0 0,1 1376.361,2453.0289" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1462.5519,2079.3001 A12.0153,12.0153 0 0,1 1453.4216,2079.9618" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1453.4216,2079.9618 L1455.1867,2099.3629 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1455.1867,2099.3629 L1464.329,2095.0355 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1455.1867,2099.3629 L1464.7794,2099.3629 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1083.9652,2099.3629 L1074.3725,2099.3629 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1083.9652,2099.3629 L1074.8229,2095.0355 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1085.7303,2079.9618 L1083.9652,2099.3629 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1085.7303,2079.9618 A12.0153,12.0153 0 0,1 1076.6,2079.3001" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1162.7909,2453.0289 A97.8312,97.8312 0 0,1 1085.3436,2413.8149" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1091.8268,2448.134 A1154.4088,1154.4088 0 0,1 1076.6,2079.3001" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1269.5759,2453.0289 L1162.7909,2453.0289 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1269.5759,2534.9099 L1452.9973,2534.9099 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1269.5759,2543.098 L1453.3194,2543.098 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1455.1367,2539.8385 A2.4177,2.4177 0 0,1 1453.3194,2543.098" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1453.6556,2533.9673 A0.7251,0.7251 0 0,1 1452.9309,2534.9099" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1269.5759,2534.0911 L1452.9973,2534.0911 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1453.5603,2533.6103 A0.4331,0.4331 0 0,1 1452.9973,2534.0911" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1086.1546,2534.0911 A0.4331,0.4331 0 0,1 1085.5916,2533.6103" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1269.5759,2534.0911 L1086.1546,2534.0911 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1086.2209,2534.9099 A0.7251,0.7251 0 0,1 1085.4963,2533.9673" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1085.8325,2543.098 A2.4177,2.4177 0 0,1 1084.0152,2539.8385" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1269.5759,2543.098 L1085.8325,2543.098 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1269.5759,2534.9099 L1086.1546,2534.9099 " style="stroke:#000000;stroke-width:0.1;"/>
+            </g>
+            <!-- Polyline -->
+            <path d="M1480.9519,2540.9914 A216.619,216.619 0 0 1 1471.3682,2453.6056 A1180.69,1180.69 0 0 0 1486.9416,2076.3761 A22.2032,22.2032 0 0 0 1462.5165,2079.3043 A12.0328,12.0328 0 0 1 1453.3729,2079.967 A480.879,480.879 0 0 0 1399.3054,2076.3761 L1269.2601,2076.3761 L1139.2149,2076.3761 A480.879,480.879 0 0 0 1085.1473,2079.967 A12.0328,12.0328 0 0 1 1076.0038,2079.3043 A22.2032,22.2032 0 0 0 1051.5787,2076.3761 A1180.69,1180.69 0 0 0 1067.1521,2453.6056 A216.619,216.619 0 0 1 1057.5683,2540.9914 A12.6008,12.6008 0 0 0 1068.3498,2560.1761 L1470.1704,2560.1761 A12.6008,12.6008 0 0 0 1480.9519,2540.9914 Z" style="stroke:#000000;stroke-width:0.1;"/>
+            <!-- Block Reference: A$C1D6968EA / entities: 30 -->
+            <g>
+                <!-- Arc -->
+                <path d="M2537.7225,1085.4996 A240.8687,240.8687 0 0,1 2448.6099,1093.6988" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2519.3479,1089.9831 A317.3163,317.3163 0 0,1 2430.0095,1104.7114" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2430.0095,1437.4092 A317.3163,317.3163 0 0,1 2519.3479,1452.1375" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2448.6099,1448.4218 A240.8687,240.8687 0 0,1 2537.7225,1456.621" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2450.9129,1271.0603 L2450.9129,1164.2752 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2077.1841,1078.0843 A1154.4088,1154.4088 0 0,1 2446.018,1093.3111" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2411.6989,1086.828 A97.8312,97.8312 0 0,1 2450.9129,1164.2752" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2077.1841,1078.0843 A12.0153,12.0153 0 0,1 2077.8458,1087.2146" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2077.8458,1087.2146 L2097.2469,1085.4496 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2097.2469,1085.4496 L2092.9195,1076.3073 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2097.2469,1085.4496 L2097.2469,1075.8568 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2097.2469,1456.671 L2097.2469,1466.2638 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2097.2469,1456.671 L2092.9195,1465.8133 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2077.8458,1454.906 L2097.2469,1456.671 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2077.8458,1454.906 A12.0153,12.0153 0 0,1 2077.1841,1464.0363" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2450.9129,1377.8453 A97.8312,97.8312 0 0,1 2411.6989,1455.2926" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2446.018,1448.8095 A1154.4088,1154.4088 0 0,1 2077.1841,1464.0363" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2450.9129,1271.0603 L2450.9129,1377.8453 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2532.7939,1271.0603 L2532.7939,1087.6389 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2540.982,1271.0603 L2540.982,1087.3168 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2537.7225,1085.4996 A2.4177,2.4177 0 0,1 2540.982,1087.3168" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2531.8513,1086.9806 A0.7251,0.7251 0 0,1 2532.7939,1087.7053" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2531.9751,1271.0603 L2531.9751,1087.6389 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2531.4943,1087.0759 A0.4331,0.4331 0 0,1 2531.9751,1087.6389" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2531.9751,1454.4817 A0.4331,0.4331 0 0,1 2531.4943,1455.0447" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2531.9751,1271.0603 L2531.9751,1454.4817 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2532.7939,1454.4153 A0.7251,0.7251 0 0,1 2531.8513,1455.1399" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2540.982,1454.8038 A2.4177,2.4177 0 0,1 2537.7225,1456.621" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2540.982,1271.0603 L2540.982,1454.8038 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2532.7939,1271.0603 L2532.7939,1454.4817 " style="stroke:#000000;stroke-width:0.1;"/>
+            </g>
+            <!-- Polyline -->
+            <path d="M2538.8754,1059.6843 A216.619,216.619 0 0 1 2451.4896,1069.2681 A1180.69,1180.69 0 0 0 2074.2601,1053.6946 A22.2032,22.2032 0 0 0 2077.1883,1078.1197 A12.0328,12.0328 0 0 1 2077.851,1087.2633 A480.879,480.879 0 0 0 2074.2601,1141.3308 L2074.2601,1271.3761 L2074.2601,1401.4214 A480.879,480.879 0 0 0 2077.851,1455.4889 A12.0328,12.0328 0 0 1 2077.1883,1464.6325 A22.2032,22.2032 0 0 0 2074.2601,1489.0576 A1180.69,1180.69 0 0 0 2451.4896,1473.4842 A216.619,216.619 0 0 1 2538.8754,1483.0679 A12.6008,12.6008 0 0 0 2558.0601,1472.2864 L2558.0601,1070.4658 A12.6008,12.6008 0 0 0 2538.8754,1059.6843 Z" style="stroke:#000000;stroke-width:0.1;"/>
+            <!-- Block Reference: A$C1D6968EA / entities: 30 -->
+            <g>
+                <!-- Arc -->
+                <path d="M2297.633,2036.8799 A240.8687,240.8687 0 0,1 2228.8232,1979.6655" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2281.47,2027.0574 A317.3163,317.3163 0 0,1 2207.8836,1974.3001" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1972.6308,2209.553 A317.3163,317.3163 0 0,1 2025.3881,2283.1393" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1977.9961,2230.4925 A240.8687,240.8687 0 0,1 2035.2105,2299.3024" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2105.0381,2106.7075 L2180.5465,2031.199 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1977.2266,1705.9867 A1154.4088,1154.4088 0 0,1 2227.2646,1977.5586" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2207.5816,1948.7071 A97.8312,97.8312 0 0,1 2180.5465,2031.199" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1977.2266,1705.9867 A12.0153,12.0153 0 0,1 1971.2384,1712.9107" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1971.2384,1712.9107 L1986.2051,1725.3813 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1986.2051,1725.3813 L1989.6098,1715.8567 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1986.2051,1725.3813 L1992.9882,1718.5982 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1723.7119,1987.8745 L1716.9288,1994.6576 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1723.7119,1987.8745 L1714.1874,1991.2791 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1711.2414,1972.9078 L1723.7119,1987.8745 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1711.2414,1972.9078 A12.0153,12.0153 0 0,1 1704.3173,1978.8959" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2029.5297,2182.2159 A97.8312,97.8312 0 0,1 1947.0377,2209.2509" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1975.8893,2228.9339 A1154.4088,1154.4088 0 0,1 1704.3173,1978.8959" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2105.0381,2106.7075 L2029.5297,2182.2159 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2162.9367,2164.6061 L2292.6353,2034.9076 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2168.7266,2170.396 L2298.6529,2040.4697 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2297.633,2036.8799 A2.4177,2.4177 0 0,1 2298.6529,2040.4697" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2292.4342,2033.7756 A0.7251,0.7251 0 0,1 2292.5883,2034.9545" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2162.3578,2164.0271 L2292.0563,2034.3286 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2292.1144,2033.5906 A0.4331,0.4331 0 0,1 2292.0563,2034.3286" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2032.6593,2293.7256 A0.4331,0.4331 0 0,1 2031.9212,2293.7838" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2162.3578,2164.0271 L2032.6593,2293.7256 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2033.2852,2294.2577 A0.7251,0.7251 0 0,1 2032.1062,2294.1035" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2038.8003,2300.3222 A2.4177,2.4177 0 0,1 2035.2105,2299.3024" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2168.7266,2170.396 L2038.8003,2300.3222 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2162.9367,2164.6061 L2033.2382,2294.3046 " style="stroke:#000000;stroke-width:0.1;"/>
+            </g>
+            <!-- Polyline -->
+            <path d="M2316.7025,2019.441 A216.619,216.619 0 0 1 2248.1346,1964.4266 A1180.69,1180.69 0 0 0 1992.4051,1686.673 A22.2032,22.2032 0 0 0 1977.2045,1706.0147 A12.0328,12.0328 0 0 1 1971.2077,1712.9488 A480.879,480.879 0 0 0 1930.437,1748.6412 L1838.4811,1840.5971 L1746.5252,1932.553 A480.879,480.879 0 0 0 1710.8328,1973.3236 A12.0328,12.0328 0 0 1 1703.8987,1979.3205 A22.2032,22.2032 0 0 0 1684.557,1994.5211 A1180.69,1180.69 0 0 0 1962.3107,2250.2506 A216.619,216.619 0 0 1 2017.325,2318.8184 A12.6008,12.6008 0 0 0 2038.5143,2324.7604 L2322.6444,2040.6303 A12.6008,12.6008 0 0 0 2316.7025,2019.441 Z" style="stroke:#000000;stroke-width:0.1;"/>
+            <!-- Block Reference: A$C1D6968EA / entities: 30 -->
+            <g>
+                <!-- Arc -->
+                <path d="M0.7978,1457.2527 A240.8687,240.8687 0 0,1 89.9104,1449.0534" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M19.1723,1452.7692 A317.3163,317.3163 0 0,1 108.5108,1438.0408" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M108.5108,1105.343 A317.3163,317.3163 0 0,1 19.1723,1090.6147" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M89.9104,1094.3304 A240.8687,240.8687 0 0,1 0.7978,1086.1312" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M87.6074,1271.6919 L87.6074,1378.477 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M461.3362,1464.6679 A1154.4088,1154.4088 0 0,1 92.5023,1449.4411" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M126.8214,1455.9243 A97.8312,97.8312 0 0,1 87.6074,1378.477" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M461.3362,1464.6679 A12.0153,12.0153 0 0,1 460.6744,1455.5376" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M460.6744,1455.5376 L441.2733,1457.3027 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M441.2733,1457.3027 L445.6008,1466.445 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M441.2733,1457.3027 L441.2733,1466.8954 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M441.2733,1086.0812 L441.2733,1076.4885 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M441.2733,1086.0812 L445.6008,1076.9389 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M460.6744,1087.8462 L441.2733,1086.0812 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M460.6744,1087.8462 A12.0153,12.0153 0 0,1 461.3362,1078.7159" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M87.6074,1164.9069 A97.8312,97.8312 0 0,1 126.8214,1087.4596" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M92.5023,1093.9428 A1154.4088,1154.4088 0 0,1 461.3362,1078.7159" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M87.6074,1271.6919 L87.6074,1164.9069 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M5.7263,1271.6919 L5.7263,1455.1133 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M-2.4618,1271.6919 L-2.4618,1455.4354 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M0.7978,1457.2527 A2.4177,2.4177 0 0,1 -2.4618,1455.4354" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M6.669,1455.7716 A0.7251,0.7251 0 0,1 5.7263,1455.0469" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M6.5452,1271.6919 L6.5452,1455.1133 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M7.0259,1455.6763 A0.4331,0.4331 0 0,1 6.5452,1455.1133" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M6.5452,1088.2705 A0.4331,0.4331 0 0,1 7.0259,1087.7076" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M6.5452,1271.6919 L6.5452,1088.2705 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M5.7263,1088.3369 A0.7251,0.7251 0 0,1 6.669,1087.6123" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M-2.4618,1087.9484 A2.4177,2.4177 0 0,1 0.7978,1086.1312" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M-2.4618,1271.6919 L-2.4618,1087.9484 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M5.7263,1271.6919 L5.7263,1088.2705 " style="stroke:#000000;stroke-width:0.1;"/>
+            </g>
+            <!-- Polyline -->
+            <path d="M-0.3552,1483.0679 A216.619,216.619 0 0 1 87.0306,1473.4842 A1180.69,1180.69 0 0 0 464.2601,1489.0576 A22.2032,22.2032 0 0 0 461.3319,1464.6325 A12.0328,12.0328 0 0 1 460.6692,1455.4889 A480.879,480.879 0 0 0 464.2601,1401.4214 L464.2601,1271.3761 L464.2601,1141.3308 A480.879,480.879 0 0 0 460.6692,1087.2633 A12.0328,12.0328 0 0 1 461.3319,1078.1197 A22.2032,22.2032 0 0 0 464.2601,1053.6946 A1180.69,1180.69 0 0 0 87.0306,1069.2681 A216.619,216.619 0 0 1 -0.3552,1059.6843 A12.6008,12.6008 0 0 0 -19.5399,1070.4658 L-19.5399,1472.2864 A12.6008,12.6008 0 0 0 -0.3552,1483.0679 Z" style="stroke:#000000;stroke-width:0.1;"/>
+            <!-- Block Reference: A$C1D6968EA / entities: 30 -->
+            <g>
+                <!-- Arc -->
+                <path d="M503.7563,2299.749 A240.8687,240.8687 0 0,1 560.9708,2230.9392" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M513.5788,2283.5859 A317.3163,317.3163 0 0,1 566.3361,2209.9996" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M331.0833,1974.7468 A317.3163,317.3163 0 0,1 257.4969,2027.5041" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M310.1437,1980.1121 A240.8687,240.8687 0 0,1 241.3339,2037.3265" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M433.9288,2107.1541 L509.4372,2182.6625 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M834.6496,1979.3426 A1154.4088,1154.4088 0 0,1 563.0776,2229.3805" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M591.9292,2209.6975 A97.8312,97.8312 0 0,1 509.4372,2182.6625" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M834.6496,1979.3426 A12.0153,12.0153 0 0,1 827.7255,1973.3544" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M827.7255,1973.3544 L815.255,1988.3211 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M815.255,1988.3211 L824.7795,1991.7257 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M815.255,1988.3211 L822.0381,1995.1042 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M552.7618,1725.8279 L545.9787,1719.0448 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M552.7618,1725.8279 L549.3571,1716.3033 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M567.7285,1713.3573 L552.7618,1725.8279 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M567.7285,1713.3573 A12.0153,12.0153 0 0,1 561.7403,1706.4333" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M358.4203,2031.6457 A97.8312,97.8312 0 0,1 331.3853,1949.1537" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M311.7023,1978.0053 A1154.4088,1154.4088 0 0,1 561.7403,1706.4333" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M433.9288,2107.1541 L358.4203,2031.6457 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M376.0301,2165.0527 L505.7286,2294.7512 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M370.2403,2170.8426 L500.1665,2300.7689 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M503.7563,2299.749 A2.4177,2.4177 0 0,1 500.1665,2300.7689" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M506.8606,2294.5502 A0.7251,0.7251 0 0,1 505.6817,2294.7043" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M376.6091,2164.4737 L506.3076,2294.1723 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M507.0457,2294.2304 A0.4331,0.4331 0 0,1 506.3076,2294.1723" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M246.9106,2034.7752 A0.4331,0.4331 0 0,1 246.8525,2034.0372" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M376.6091,2164.4737 L246.9106,2034.7752 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M246.3786,2035.4012 A0.7251,0.7251 0 0,1 246.5327,2034.2222" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M240.314,2040.9163 A2.4177,2.4177 0 0,1 241.3339,2037.3265" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M370.2403,2170.8426 L240.314,2040.9163 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M376.0301,2165.0527 L246.3316,2035.3542 " style="stroke:#000000;stroke-width:0.1;"/>
+            </g>
+            <!-- Polyline -->
+            <path d="M521.1952,2318.8184 A216.619,216.619 0 0 1 576.2096,2250.2506 A1180.69,1180.69 0 0 0 853.9632,1994.5211 A22.2032,22.2032 0 0 0 834.6215,1979.3205 A12.0328,12.0328 0 0 1 827.6874,1973.3236 A480.879,480.879 0 0 0 791.9951,1932.553 L700.0392,1840.5971 L608.0833,1748.6412 A480.879,480.879 0 0 0 567.3126,1712.9488 A12.0328,12.0328 0 0 1 561.3157,1706.0147 A22.2032,22.2032 0 0 0 546.1151,1686.673 A1180.69,1180.69 0 0 0 290.3856,1964.4266 A216.619,216.619 0 0 1 221.8178,2019.441 A12.6008,12.6008 0 0 0 215.8759,2040.6303 L500.0059,2324.7604 A12.6008,12.6008 0 0 0 521.1952,2318.8184 Z" style="stroke:#000000;stroke-width:0.1;"/>
+            <!-- Block Reference: A$C1D6968EA / entities: 30 -->
+            <g>
+                <!-- Arc -->
+                <path d="M1083.3836,2.9137 A240.8687,240.8687 0 0,1 1091.5828,92.0264" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1087.8671,21.2883 A317.3163,317.3163 0 0,1 1102.5954,110.6267" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1435.2932,110.6267 A317.3163,317.3163 0 0,1 1450.0216,21.2883" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1446.3058,92.0264 A240.8687,240.8687 0 0,1 1454.505,2.9137" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1268.9443,89.7234 L1162.1593,89.7234 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1075.9683,463.4522 A1154.4088,1154.4088 0 0,1 1091.1951,94.6183" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1084.712,128.9374 A97.8312,97.8312 0 0,1 1162.1593,89.7234" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1075.9683,463.4522 A12.0153,12.0153 0 0,1 1085.0986,462.7904" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1085.0986,462.7904 L1083.3336,443.3893 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1083.3336,443.3893 L1074.1913,447.7168 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1083.3336,443.3893 L1073.7408,443.3893 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1454.555,443.3893 L1464.1478,443.3893 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1454.555,443.3893 L1463.6973,447.7168 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1452.79,462.7904 L1454.555,443.3893 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1452.79,462.7904 A12.0153,12.0153 0 0,1 1461.9203,463.4522" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1375.7294,89.7234 A97.8312,97.8312 0 0,1 1453.1766,128.9374" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1446.6935,94.6183 A1154.4088,1154.4088 0 0,1 1461.9203,463.4522" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1268.9443,89.7234 L1375.7294,89.7234 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1268.9443,7.8423 L1085.5229,7.8423 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1268.9443,-0.3458 L1085.2008,-0.3458 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1083.3836,2.9137 A2.4177,2.4177 0 0,1 1085.2008,-0.3458" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1084.8647,8.785 A0.7251,0.7251 0 0,1 1085.5893,7.8423" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1268.9443,8.6611 L1085.5229,8.6611 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1084.9599,9.1419 A0.4331,0.4331 0 0,1 1085.5229,8.6611" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1452.3657,8.6611 A0.4331,0.4331 0 0,1 1452.9287,9.1419" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1268.9443,8.6611 L1452.3657,8.6611 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1452.2993,7.8423 A0.7251,0.7251 0 0,1 1453.024,8.785" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1452.6878,-0.3458 A2.4177,2.4177 0 0,1 1454.505,2.9137" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1268.9443,-0.3458 L1452.6878,-0.3458 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1268.9443,7.8423 L1452.3657,7.8423 " style="stroke:#000000;stroke-width:0.1;"/>
+            </g>
+            <!-- Polyline -->
+            <path d="M1057.5683,1.7608 A216.619,216.619 0 0 1 1067.1521,89.1466 A1180.69,1180.69 0 0 0 1051.5787,466.3761 A22.2032,22.2032 0 0 0 1076.0038,463.4479 A12.0328,12.0328 0 0 1 1085.1473,462.7852 A480.879,480.879 0 0 0 1139.2149,466.3761 L1269.2601,466.3761 L1399.3054,466.3761 A480.879,480.879 0 0 0 1453.3729,462.7852 A12.0328,12.0328 0 0 1 1462.5165,463.4479 A22.2032,22.2032 0 0 0 1486.9416,466.3761 A1180.69,1180.69 0 0 0 1471.3682,89.1466 A216.619,216.619 0 0 1 1480.9519,1.7608 A12.6008,12.6008 0 0 0 1470.1704,-17.4239 L1068.3498,-17.4239 A12.6008,12.6008 0 0 0 1057.5683,1.7608 Z" style="stroke:#000000;stroke-width:0.1;"/>
+            <!-- Block Reference: A$C1D6968EA / entities: 30 -->
+            <g>
+                <!-- Arc -->
+                <path d="M2034.7639,243.0032 A240.8687,240.8687 0 0,1 1977.5495,311.8131" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2024.9414,259.1663 A317.3163,317.3163 0 0,1 1972.1841,332.7526" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2207.437,568.0055 A317.3163,317.3163 0 0,1 2281.0233,515.2482" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2228.3765,562.6401 A240.8687,240.8687 0 0,1 2297.1864,505.4257" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2104.5915,435.5981 L2029.0831,360.0897 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1703.8707,563.4097 A1154.4088,1154.4088 0 0,1 1975.4426,313.3717" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1946.5911,333.0547 A97.8312,97.8312 0 0,1 2029.0831,360.0897" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1703.8707,563.4097 A12.0153,12.0153 0 0,1 1710.7947,569.3978" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1710.7947,569.3978 L1723.2653,554.4311 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1723.2653,554.4311 L1713.7407,551.0265 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1723.2653,554.4311 L1716.4822,547.648 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1985.7585,816.9243 L1992.5416,823.7074 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1985.7585,816.9243 L1989.1631,826.4489 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M1970.7918,829.3949 L1985.7585,816.9243 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M1970.7918,829.3949 A12.0153,12.0153 0 0,1 1976.7799,836.3189" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2180.0999,511.1066 A97.8312,97.8312 0 0,1 2207.1349,593.5985" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2226.8179,564.747 A1154.4088,1154.4088 0 0,1 1976.7799,836.3189" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2104.5915,435.5981 L2180.0999,511.1066 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2162.4901,377.6995 L2032.7916,248.001 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2168.28,371.9096 L2038.3537,241.9834 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2034.7639,243.0032 A2.4177,2.4177 0 0,1 2038.3537,241.9834" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2031.6596,248.2021 A0.7251,0.7251 0 0,1 2032.8386,248.0479" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2161.9111,378.2785 L2032.2126,248.58 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2031.4746,248.5218 A0.4331,0.4331 0 0,1 2032.2126,248.58" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2291.6096,507.977 A0.4331,0.4331 0 0,1 2291.6678,508.715" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2161.9111,378.2785 L2291.6096,507.977 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2292.1417,507.3511 A0.7251,0.7251 0 0,1 2291.9875,508.53" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M2298.2062,501.8359 A2.4177,2.4177 0 0,1 2297.1864,505.4257" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2168.28,371.9096 L2298.2062,501.8359 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M2162.4901,377.6995 L2292.1886,507.398 " style="stroke:#000000;stroke-width:0.1;"/>
+            </g>
+            <!-- Polyline -->
+            <path d="M2017.325,223.9338 A216.619,216.619 0 0 1 1962.3107,292.5016 A1180.69,1180.69 0 0 0 1684.557,548.2311 A22.2032,22.2032 0 0 0 1703.8987,563.4317 A12.0328,12.0328 0 0 1 1710.8328,569.4286 A480.879,480.879 0 0 0 1746.5252,610.1993 L1838.4811,702.1552 L1930.437,794.111 A480.879,480.879 0 0 0 1971.2077,829.8034 A12.0328,12.0328 0 0 1 1977.2045,836.7375 A22.2032,22.2032 0 0 0 1992.4051,856.0792 A1180.69,1180.69 0 0 0 2248.1346,578.3256 A216.619,216.619 0 0 1 2316.7025,523.3112 A12.6008,12.6008 0 0 0 2322.6444,502.1219 L2038.5143,217.9919 A12.6008,12.6008 0 0 0 2017.325,223.9338 Z" style="stroke:#000000;stroke-width:0.1;"/>
+            <!-- Block Reference: A$C1D6968EA / entities: 30 -->
+            <g>
+                <!-- Arc -->
+                <path d="M240.8872,505.8723 A240.8687,240.8687 0 0,1 309.6971,563.0868" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M257.0503,515.6948 A317.3163,317.3163 0 0,1 330.6366,568.4521" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M565.8895,333.1993 A317.3163,317.3163 0 0,1 513.1322,259.6129" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M560.5241,312.2597 A240.8687,240.8687 0 0,1 503.3097,243.4498" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M433.4821,436.0448 L357.9737,511.5532 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M561.2937,836.7656 A1154.4088,1154.4088 0 0,1 311.2557,565.1936" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M330.9387,594.0452 A97.8312,97.8312 0 0,1 357.9737,511.5532" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M561.2937,836.7656 A12.0153,12.0153 0 0,1 567.2818,829.8415" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M567.2818,829.8415 L552.3151,817.371 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M552.3151,817.371 L548.9105,826.8955 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M552.3151,817.371 L545.532,824.154 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M814.8083,554.8777 L821.5914,548.0947 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M814.8083,554.8777 L824.3329,551.4731 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M827.2789,569.8445 L814.8083,554.8777 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M827.2789,569.8445 A12.0153,12.0153 0 0,1 834.2029,563.8563" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M508.9906,360.5363 A97.8312,97.8312 0 0,1 591.4825,333.5013" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M562.631,313.8183 A1154.4088,1154.4088 0 0,1 834.2029,563.8563" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M433.4821,436.0448 L508.9906,360.5363 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M375.5835,378.1461 L245.885,507.8446 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M369.7936,372.3563 L239.8674,502.2825 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M240.8872,505.8723 A2.4177,2.4177 0 0,1 239.8674,502.2825" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M246.0861,508.9766 A0.7251,0.7251 0 0,1 245.9319,507.7977" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M376.1625,378.7251 L246.464,508.4236 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M246.4058,509.1617 A0.4331,0.4331 0 0,1 246.464,508.4236" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M505.861,249.0266 A0.4331,0.4331 0 0,1 506.599,248.9685" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M376.1625,378.7251 L505.861,249.0266 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M505.2351,248.4946 A0.7251,0.7251 0 0,1 506.414,248.6487" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Arc -->
+                <path d="M499.7199,242.43 A2.4177,2.4177 0 0,1 503.3097,243.4498" style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M369.7936,372.3563 L499.7199,242.43 " style="stroke:#000000;stroke-width:0.1;"/>
+                <!-- Line -->
+                <path d="M375.5835,378.1461 L505.282,248.4476 " style="stroke:#000000;stroke-width:0.1;"/>
+            </g>
+            <!-- Polyline -->
+            <path d="M221.8178,523.3112 A216.619,216.619 0 0 1 290.3856,578.3256 A1180.69,1180.69 0 0 0 546.1151,856.0792 A22.2032,22.2032 0 0 0 561.3157,836.7375 A12.0328,12.0328 0 0 1 567.3126,829.8034 A480.879,480.879 0 0 0 608.0833,794.111 L700.0392,702.1552 L791.9951,610.1993 A480.879,480.879 0 0 0 827.6874,569.4286 A12.0328,12.0328 0 0 1 834.6215,563.4317 A22.2032,22.2032 0 0 0 853.9632,548.2311 A1180.69,1180.69 0 0 0 576.2096,292.5016 A216.619,216.619 0 0 1 521.1952,223.9338 A12.6008,12.6008 0 0 0 500.0059,217.9919 L215.8759,502.1219 A12.6008,12.6008 0 0 0 221.8178,523.3112 Z" style="stroke:#000000;stroke-width:0.1;"/>
+            <!-- Circle -->
+            <circle cx="1269.2601271378353" cy="1271.3761120304216" r="755" style="stroke:#000000;stroke-width:0.1;"/>
+            <!-- Circle -->
+            <circle cx="1269.2601271378353" cy="1271.3761120304216" r="775" style="stroke:#000000;stroke-width:0.1;"/>
+        </g>
+    </g>
+</svg>
+

@@ -1,1 +1,94 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="645mm" height="457mm" viewBox="5.5 -459.34 645.427 457.195" version="1.1"><g transform="scale(1 -1)"><g id="auto-fill" fill="inherit" stroke="none" class="auto-fill-layer"><path d="M149.229 459.338h345.182a30.841 30.841 0 0 0 0-60.961H149.228a30.841 30.841 0 0 0 0 60.961" class="auto-fill"/><path d="M123.208 2.152h410.444a74.58 74.58 0 0 1 36.073 77.744l-49.148 252.453a61.62 61.62 0 0 1-52.274 50.8H188.558a61.62 61.62 0 0 1-52.273-50.8L87.135 79.895a74.58 74.58 0 0 1 36.073-77.744" class="auto-fill"/><path d="M5.5 66.085a63.83 63.83 0 0 1 65.954 0v165.273a63.8 63.8 0 0 1-12.62 6.145v49.968a22.122 22.122 0 0 1-40.198.074l.085-49.847a63.8 63.8 0 0 1-13.22-6.34Z" class="auto-fill"/><path d="M585.107 66.085a63.83 63.83 0 0 1 65.803 0v165.273a63.8 63.8 0 0 1-13.071 6.34v49.848a22.123 22.123 0 0 1-40.236-.082l-.027-49.96a63.8 63.8 0 0 1-12.47-6.145Z" class="auto-fill"/></g><g id="stroke-layer" fill="none"><path d="M123.134 2.145h410.442" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M149.229 459.338a30.841 30.841 0 0 1 0-60.961" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M188.558 383.148a61.62 61.62 0 0 1-52.273-50.8" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M136.205 332.346 87.078 79.892" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M5.5 231.359V66.084" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M71.454 231.359V66.084" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M58.834 287.471v-49.968" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M18.721 287.546v-49.848" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M87.136 79.896a74.58 74.58 0 0 1 36.072-77.744" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M5.633 66.09a63.83 63.83 0 0 1 65.839 0" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M71.471 231.355a63.83 63.83 0 0 1-65.838 0" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M58.806 287.464a22.122 22.122 0 0 1-40.17.08" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M494.41 398.377a30.841 30.841 0 0 1 0 60.961" style="fill:none;stroke:#000;stroke-width:.1"/><path d="m520.506 332.346 49.126-252.454" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M533.652 2.152a74.58 74.58 0 0 1 36.073 77.744" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M494.365 398.39h-345.09" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M468.224 383.14H188.487" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M520.577 332.349a61.62 61.62 0 0 1-52.274 50.8" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M650.91 231.359V66.084" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M585.107 231.359V66.084" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M597.576 287.471v-49.968" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M637.839 287.546v-49.848" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M585.089 66.09a63.83 63.83 0 0 1 65.838 0" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M650.927 231.354a63.83 63.83 0 0 1-65.838 0" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M637.774 287.545a22.123 22.123 0 0 1-40.17-.081" style="fill:none;stroke:#000;stroke-width:.1"/><path d="M494.365 459.34h-345.09" style="fill:none;stroke:#000;stroke-width:.1"/></g></g></svg>
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fixed fillable version: fill layer added, original QCAD strokes kept on top -->
+<svg width="645.4269mm" height="457.1948mm" viewBox="5.5004 -459.34 645.4269 457.1948" version="1.1" xmlns="http://www.w3.org/2000/svg" style="stroke-linecap:round;stroke-linejoin:round;fill:none">
+    <g transform="scale(1,-1)">
+        <!-- Editable fill layer -->
+        <g id="auto-fill" class="auto-fill-layer">
+            <!-- Back rest -->
+            <path class="auto-fill" fill="inherit" stroke="none" d="M149.229,459.338 L494.4105,459.338 A30.8414,30.8414 0 0,0 494.4103,398.3766 L149.2291,398.3766 A30.8414,30.8414 0 0,0 149.229,459.338 Z"/>
+
+            <!-- Main seat -->
+            <path class="auto-fill" fill="inherit" stroke="none" d="M123.2083,2.1524 L533.6523,2.1524 A74.5811,74.5811 0 0,1 569.7251,79.8957 L520.5766,332.349 A61.6215,61.6215 0 0,1 468.3035,383.1489 L188.5576,383.1481 A61.6206,61.6206 0 0,1 136.2848,332.3483 L87.1356,79.8964 A74.5811,74.5811 0 0,1 123.2083,2.1524 Z"/>
+
+            <!-- Left armrest, rebuilt to include the rounded top cap with no white gap -->
+            <path class="auto-fill" fill="inherit" stroke="none" d="
+                M5.5004,66.0851
+                A63.8259,63.8259 0 0,1 71.4535,66.0851
+                L71.4535,231.3585
+                A63.8259,63.8259 0 0,1 58.8338,237.5031
+                L58.8338,287.4713
+                A22.1224,22.1224 0 0,1 18.6357,287.5447
+                L18.7211,237.6984
+                A63.8259,63.8259 0 0,1 5.5004,231.3585
+                Z"/>
+
+            <!-- Right armrest, rebuilt to include the rounded top cap with no white gap -->
+            <path class="auto-fill" fill="inherit" stroke="none" d="
+                M585.1066,66.0851
+                A63.8253,63.8253 0 0,1 650.9095,66.0851
+                L650.9095,231.3585
+                A63.8253,63.8253 0 0,1 637.839,237.6984
+                L637.839,287.5464
+                A22.1225,22.1225 0 0,1 597.6034,287.4638
+                L597.5761,237.5031
+                A63.8253,63.8253 0 0,1 585.1066,231.3585
+                Z"/>
+        </g>
+
+        <!-- Original QCAD strokes kept untouched on top -->
+        <g id="stroke-layer" fill="none">
+            <!-- Line -->
+            <path d="M123.1343,2.1452 L533.576,2.1452 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Arc -->
+            <path d="M149.229,459.338 A30.8414,30.8414 0 0,1 149.2291,398.3766" style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Arc -->
+            <path d="M188.5576,383.1481 A61.6206,61.6206 0 0,1 136.2848,332.3483" style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Line -->
+            <path d="M136.2047,332.3464 L87.0779,79.8917 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Line -->
+            <path d="M5.5004,231.3585 L5.5004,66.0851 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Line -->
+            <path d="M71.4535,231.3585 L71.4535,66.0851 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Line -->
+            <path d="M58.8338,287.4713 L58.8338,237.5031 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Line -->
+            <path d="M18.7211,287.5464 L18.7211,237.6984 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Arc -->
+            <path d="M87.1356,79.8964 A74.5811,74.5811 0 0,1 123.2083,2.1524" style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Arc -->
+            <path d="M5.6325,66.0892 A63.8259,63.8259 0 0,1 71.4716,66.0892" style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Arc -->
+            <path d="M71.4713,231.3546 A63.8259,63.8259 0 0,1 5.6325,231.3544" style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Arc -->
+            <path d="M58.8063,287.4637 A22.1224,22.1224 0 0,1 18.6357,287.5447" style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Arc -->
+            <path d="M494.4103,398.3766 A30.8414,30.8414 0 0,1 494.4105,459.338" style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Line -->
+            <path d="M520.5056,332.3464 L569.6324,79.8917 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Arc -->
+            <path d="M533.6523,2.1524 A74.5811,74.5811 0 0,1 569.7251,79.8957" style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Line -->
+            <path d="M494.3647,398.3897 L149.2752,398.3897 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Line -->
+            <path d="M468.2239,383.1408 L188.4865,383.1408 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Arc -->
+            <path d="M520.5766,332.349 A61.6215,61.6215 0 0,1 468.3035,383.1489" style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Line -->
+            <path d="M650.9095,231.3585 L650.9095,66.0851 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Line -->
+            <path d="M585.1066,231.3585 L585.1066,66.0851 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Line -->
+            <path d="M597.5761,287.4713 L597.5761,237.5031 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Line -->
+            <path d="M637.839,287.5464 L637.839,237.6984 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Arc -->
+            <path d="M585.0888,66.0898 A63.8253,63.8253 0 0,1 650.9273,66.0898" style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Arc -->
+            <path d="M650.9272,231.3539 A63.8253,63.8253 0 0,1 585.0888,231.3539" style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Arc -->
+            <path d="M637.7743,287.5448 A22.1225,22.1225 0 0,1 597.6034,287.4638" style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+            <!-- Line -->
+            <path d="M494.3647,459.34 L149.2752,459.34 " style="fill:none;stroke:#000000;stroke-width:0.1;"/>
+        </g>
+    </g>
+</svg>
