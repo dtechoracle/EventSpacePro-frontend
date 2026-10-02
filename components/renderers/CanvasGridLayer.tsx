@@ -95,8 +95,8 @@ export default function CanvasGridLayer({
         const x = Math.round(worldX * zoom + panX) + 0.5;
         const isMajor = lineIndex % majorEvery === 0;
         ctx.strokeStyle = isMajor 
-          ? (isDarkMode ? '#3f3f46' : '#cbd5e1') // zinc-700 / slate-300
-          : (isDarkMode ? '#27272a' : '#e2e8f0'); // zinc-800 / slate-200
+          ? (isDarkMode ? '#dfd6c6' : '#cbd5e1') 
+          : (isDarkMode ? '#ece5d8' : '#e2e8f0');
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, height);
@@ -108,8 +108,8 @@ export default function CanvasGridLayer({
         const y = Math.round(worldY * zoom + panY) + 0.5;
         const isMajor = lineIndex % majorEvery === 0;
         ctx.strokeStyle = isMajor 
-          ? (isDarkMode ? '#3f3f46' : '#cbd5e1') 
-          : (isDarkMode ? '#27272a' : '#e2e8f0');
+          ? (isDarkMode ? '#dfd6c6' : '#cbd5e1') 
+          : (isDarkMode ? '#ece5d8' : '#e2e8f0');
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(width, y);
@@ -119,11 +119,11 @@ export default function CanvasGridLayer({
       const label = `Grid: ${formatGridSize(worldStep, unitSystem)}`;
       ctx.font = '600 12px Inter, system-ui, sans-serif';
       const labelWidth = Math.ceil(ctx.measureText(label).width) + 16;
-      ctx.fillStyle = isDarkMode ? 'rgba(24, 24, 27, 0.85)' : 'rgba(255, 255, 255, 0.85)';
+      ctx.fillStyle = isDarkMode ? 'rgba(244, 240, 234, 0.85)' : 'rgba(255, 255, 255, 0.85)';
       ctx.beginPath();
       ctx.roundRect(15, 12, labelWidth, 24, 4);
       ctx.fill();
-      ctx.fillStyle = isDarkMode ? '#a1a1aa' : '#475569';
+      ctx.fillStyle = isDarkMode ? '#57534e' : '#475569';
       ctx.fillText(label, 23, 28);
     });
 

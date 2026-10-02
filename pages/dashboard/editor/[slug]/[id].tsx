@@ -1209,6 +1209,7 @@ const getLocalDraftKey = (slug: string, eventId: string) =>
   `esp-workspace-draft:${slug}:${eventId}`;
 
 export default function Editor() {
+  const isDarkMode = useEditorStore(s => s.isDarkMode);
   useUnsavedChangesGuard();
   const [showAssetsModal, setShowAssetsModal] = useState(false);
   const [show3D, setShow3D] = useState(false);
@@ -2857,20 +2858,64 @@ export default function Editor() {
 
     return (
       <div className={`${isPreviewMode ? 'h-full w-full' : 'h-screen'} flex overflow-hidden bg-gray-50`}>
+        {/* Global Dark Mode Override for Sidebars */}
+        {isDarkMode && (
+          <style>{`
+            .workspace-sidebar,
+            .workspace-sidebar * {
+               border-color: #3f3f46 !important; /* zinc-700 */
+            }
+            .workspace-sidebar,
+            .workspace-sidebar > *,
+            .workspace-sidebar > div,
+            .workspace-sidebar > aside,
+            .workspace-sidebar .bg-\\[\\#fcfcfd\\] {
+               background-color: #18181b !important; /* zinc-900 */
+               color: #f4f4f5 !important;
+            }
+            .workspace-sidebar .bg-white,
+            .workspace-sidebar .bg-gray-50,
+            .workspace-sidebar .bg-slate-50,
+            .workspace-sidebar .bg-amber-50 {
+               background-color: #27272a !important; /* zinc-800 */
+            }
+            .workspace-sidebar .text-gray-900,
+            .workspace-sidebar .text-slate-900,
+            .workspace-sidebar .text-gray-800 {
+               color: #f4f4f5 !important;
+            }
+            .workspace-sidebar .text-gray-700,
+            .workspace-sidebar .text-slate-700,
+            .workspace-sidebar .text-gray-600,
+            .workspace-sidebar .text-slate-600 {
+               color: #d4d4d8 !important;
+            }
+            .workspace-sidebar .text-gray-500,
+            .workspace-sidebar .text-slate-500 {
+               color: #a1a1aa !important;
+            }
+            .workspace-sidebar button:hover {
+               background-color: #3f3f46 !important;
+            }
+          `}</style>
+        )}
+
         {/* Dashboard Sidebar - only show if not in preview mode */}
-        {!isPreviewMode && <div data-tour="sidebar"><DashboardSidebar /></div>}
+        {!isPreviewMode && <div className="workspace-sidebar" data-tour="sidebar"><DashboardSidebar /></div>}
 
         <div className="flex-1 flex overflow-hidden">
           {/* Elements Pane & Assets Sidebar - only show if not in preview mode and not a viewer */}
           {!isPreviewMode && !isViewerMode && (
             <>
-              <div className={`${isElementsCollapsed ? 'w-10' : 'w-44'} bg-white border-r border-gray-200 flex-shrink-0 shadow-sm transition-all duration-200`} data-tour="elements">
+              <div className={`workspace-sidebar ${isElementsCollapsed ? 'w-10' : 'w-44'} bg-white border-r border-gray-200 flex-shrink-0 shadow-sm transition-all duration-200`} data-tour="elements">
                 <ElementsPane isCollapsed={isElementsCollapsed} onToggleCollapse={() => setIsElementsCollapsed(!isElementsCollapsed)} />
               </div>
-              <AssetsSidebar
-                isOpen={showAssetsModal}
-                onClose={() => setShowAssetsModal(false)}
-              />
+              <div className="workspace-sidebar">
+                <AssetsSidebar
+                  isOpen={showAssetsModal}
+                  onClose={() => setShowAssetsModal(false)}
+                />
+              </div>
             </>
           )}
 
@@ -2897,7 +2942,7 @@ export default function Editor() {
 
               {/* Properties Sidebar - only show if not in preview mode and not a viewer */}
               {!isPreviewMode && !isViewerMode && (
-                <div className="flex-shrink-0 w-64 bg-white border-l border-gray-200" data-tour="properties">
+                <div className="workspace-sidebar flex-shrink-0 w-64 bg-white border-l border-gray-200" data-tour="properties">
                   <PropertiesSidebar />
                 </div>
               )}

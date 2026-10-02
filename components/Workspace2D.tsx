@@ -4625,7 +4625,7 @@ export default function Workspace2D({
   return (
     <div
       ref={canvasRef}
-      className={`relative w-full h-full overflow-hidden ${isDarkMode ? 'bg-[#18181b]' : 'bg-gray-50'} select-none ${activeTool === 'select' ? 'workspace-cursor-default' : ''}`}
+      className={`relative w-full h-full overflow-hidden ${isDarkMode ? 'bg-[#f4f0ea]' : 'bg-gray-50'} select-none ${activeTool === 'select' ? 'workspace-cursor-default' : ''}`}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleAssetDrop}
       onMouseDown={handleMouseDown}
