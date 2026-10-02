@@ -2663,6 +2663,24 @@ export default function Workspace2D({
                   if (Math.abs(rotX) <= rectWidth / 2 + pad && Math.abs(rotY) <= rectHeight / 2 + pad) isHit = true;
                 }
               }
+
+              // Special double-click handling for LabelArrow to bypass dragging and ensure edit mode triggers
+              if (isHit && activeTool !== 'trim-to-blend' && !e.shiftKey && selectedIds.includes(arrow.id)) {
+                const now = Date.now();
+                const lastT = (window as any).__lastArrowClickTime || 0;
+                const lastI = (window as any).__lastArrowClickId;
+                if (now - lastT < 300 && lastI === arrow.id) {
+                  (window as any).__lastArrowClickTime = 0;
+                  (window as any).__lastArrowClickId = null;
+                  setSelectedIds([arrow.id]);
+                  setEditingTextId(arrow.id);
+                  updateTyping(true);
+                  itemSelected = true;
+                  return;
+                }
+                (window as any).__lastArrowClickTime = now;
+                (window as any).__lastArrowClickId = arrow.id;
+              }
             }
 
             if (isHit) {
