@@ -66,7 +66,9 @@ interface BarProps {
 }
 
 export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
-    const tools = useToolbarTools();
+    const allTools = useToolbarTools();
+    const tools = allTools.filter(t => t.label !== "Selection");
+    const selectionToolGroup = allTools.find(t => t.label === "Selection");
     // Viewers get a genuinely inert toolbar. The server already refuses their
     // edits; without this the buttons stayed live and the refusal was invisible.
     const isReadOnly = useEditorStore(s => s.isReadOnly);
@@ -950,6 +952,42 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                         transition={{ type: "spring", stiffness: 220, damping: 22 }}
                         className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-lg relative border border-gray-100"
                     >
+                        {/* Selection Tools (Standalone Group) */}
+                        {selectionToolGroup && (
+                            <div className="flex items-center gap-1 bg-gray-100/80 p-1 rounded-lg border border-gray-200">
+                                {selectionToolGroup.options.map((option) => {
+                                    const isCurrentlyActive = (option.id === "rectangular-select" && activeTool === "rectangular-select") ||
+                                                              (activeTool === option.id);
+                                    return (
+                                        <Tooltip key={option.id} content={option.label}>
+                                            <motion.button
+                                                onClick={() => {
+                                                    deactivateAllTools();
+                                                    if (option.id === "pointer-select") {
+                                                        setEditorTool("select");
+                                                    } else if (option.id === "pan") {
+                                                        setEditorTool("pan");
+                                                    }
+                                                    handleOptionClick(option);
+                                                }}
+                                                whileTap={{ scale: 0.95 }}
+                                                whileHover={{ scale: 1.03 }}
+                                                className={`w-7 h-7 flex items-center justify-center rounded focus:outline-none transition-colors ${
+                                                    isCurrentlyActive 
+                                                        ? "bg-white shadow-sm border border-gray-200 text-blue-600" 
+                                                        : "text-gray-500 hover:text-gray-900 hover:bg-gray-200/50"
+                                                }`}
+                                            >
+                                                {option.icon}
+                                            </motion.button>
+                                        </Tooltip>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        
+                        {selectionToolGroup && <div className="w-px h-6 bg-gray-200 mx-1" />}
+
                         {tools.map((tool, index) => (
                             <div
                                 key={index}
