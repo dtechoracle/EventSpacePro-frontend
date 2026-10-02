@@ -4977,11 +4977,12 @@ export default function Workspace2D({
           <textarea
             ref={(el) => {
               if (el && document.activeElement !== el) {
-                setTimeout(() => {
+                // Use requestAnimationFrame for a more reliable next-tick focus
+                requestAnimationFrame(() => {
                   el.focus();
                   const len = el.value.length;
                   el.setSelectionRange(len, len);
-                }, 50);
+                });
               }
             }}
             defaultValue={lbl}
@@ -5007,21 +5008,25 @@ export default function Workspace2D({
               position: 'fixed',
               left: `${screenX}px`,
               top: `${screenY}px`,
+              width: `${(rectWidth + 24) * zoom}px`,
+              height: `${(rectHeight + 24) * zoom}px`,
               transform: 'translate(-50%, -50%)',
-              background: 'white',
-              border: '2px solid #3b82f6',
-              borderRadius: '4px',
+              background: '#ffffff',
+              border: '3px solid #10b981', // Distinct Green border to signify EDIT MODE
+              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)', // Deep shadow
+              borderRadius: '6px',
               padding: '0 4px',
               outline: 'none',
+              color: '#0f172a',
               fontSize: `${fontSize * zoom}px`,
               fontFamily: arrow.fontFamily || 'Inter, sans-serif',
               fontWeight: arrow.fontWeight || '700',
               zIndex: 9999,
               resize: 'none',
-              minWidth: '60px',
-              minHeight: '30px',
               textAlign: 'center',
-              lineHeight: '1.2'
+              lineHeight: '1.2',
+              pointerEvents: 'auto',
+              cursor: 'text'
             }}
           />
         );
