@@ -445,7 +445,7 @@ const DragPreviewLayer = React.memo(({
   if (items.length === 0 && dragGroupBounds.length === 0) return null;
 
   return (
-    <g transform={`translate(${preview.dx}, ${preview.dy})`} className="drag-preview-layer pointer-events-none">
+    <g transform={`translate(${preview.dx}, ${preview.dy})`} className="drag-preview-layer pointer-events-none" style={{ willChange: 'transform' }}>
       {/* Group bounding boxes during drag */}
       {dragGroupBounds.map(gb => (
         <rect
@@ -2119,67 +2119,7 @@ export default function Workspace2D({
       if (!canvasRef.current) return;
       const { x: worldX, y: worldY } = screenToWorld(e.clientX, e.clientY);
 
-      // Check for asset hit through the spatial index instead of scanning every asset.
-      const assetHit = findTopAssetAtPoint(worldX, worldY);
-      if (assetHit) {
-        const asset = assetHit.item;
-          // Explode asset
-          /* // Explode asset logic - commented out for now
-          if (asset.isExploded) {
-            toast("Asset already exploded.");
-            return;
-          }
-
-          // Optimize explosion with batched updates using requestAnimationFrame
-          convertAssetToShapes(asset).then((newShapes) => {
-            if (newShapes.length > 0) {
-              const store = useProjectStore.getState();
-
-              // Save history once for the entire explosion
-              store.saveToHistory();
-
-              requestAnimationFrame(() => {
-                const batchSize = 50;
-                let index = 0;
-
-                const addBatch = () => {
-                  const end = Math.min(index + batchSize, newShapes.length);
-                  for (let i = index; i < end; i++) {
-                    // Use skipHistory=true because we already saved once
-                    store.addShape(newShapes[i], true);
-                  }
-                  index = end;
-
-                  if (index < newShapes.length) {
-                    requestAnimationFrame(addBatch);
-                  } else {
-                    const groupId = `group-${Date.now()}`;
-                    const newGroup = {
-                      id: groupId,
-                      itemIds: newShapes.map((s) => s.id),
-                      zIndex: asset.zIndex,
-                    };
-                    store.addGroup(newGroup, true); // skipHistory=true
-
-                    store.updateAsset(asset.id, {
-                      isExploded: true,
-                      childShapeIds: newShapes.map((s) => s.id),
-                    }, true); // skipHistory=true
-
-                    setSelectedIds([groupId]);
-                    toast.success("Asset exploded into a group!");
-                  }
-                };
-
-                addBatch();
-              });
-            } else {
-              toast.error("Could not convert asset to shapes.");
-            }
-          });
-          return; */
-          console.log("Asset double-clicked, explosion is currently disabled.");
-      }
+      let hitFound = false;
 
       // Check for shape hit
       for (let i = shapes.length - 1; i >= 0; i--) {
@@ -2306,8 +2246,14 @@ export default function Workspace2D({
           return;
         }
       }
+
+      // Check for asset hit after all other items (since the others generally act as annotations/foreground elements)
+      const assetHit = findTopAssetAtPoint(worldX, worldY);
+      if (assetHit) {
+        console.log("Asset double-clicked, explosion is currently disabled.");
+      }
     },
-    [findTopAssetAtPoint, shapes, textAnnotations, screenToWorld, setSelectedIds, setEditingTextId, updateTyping]
+    [findTopAssetAtPoint, shapes, textAnnotations, screenToWorld, setSelectedIds, setEditingTextId, updateTyping, labelArrows]
   );
 
   const handleMouseDown = useCallback(
@@ -4887,7 +4833,7 @@ export default function Workspace2D({
         data-workspace-root="true"
       >
         <TexturePatternDefs />
-        <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>
+        <g transform={`translate(${panX}, ${panY}) scale(${zoom})`} style={{ willChange: 'transform' }}>
           <SnapMarkersRenderer dragPreview={dragPreview} />
 
           <RenderLayer 
