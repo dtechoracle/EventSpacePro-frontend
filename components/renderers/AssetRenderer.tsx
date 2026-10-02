@@ -120,18 +120,10 @@ function getSvgMetrics(svgText: string): SvgMetrics {
             return result;
         }
 
-        let bbox: DOMRect | null = null;
-
-        let minX = Number.POSITIVE_INFINITY;
-        let minY = Number.POSITIVE_INFINITY;
-        let maxX = Number.NEGATIVE_INFINITY;
-        let maxY = Number.NEGATIVE_INFINITY;
-
-        const graphics = Array.from(tempSvg.querySelectorAll('*')).filter((node): node is SVGGraphicsElement => {
-            if (!(node instanceof SVGGraphicsElement)) return false;
-            if (node.closest('defs, clipPath, mask, pattern, marker, symbol, title, desc, style, script')) return false;
-            
-            // Filter out obviously invisible elements (like designer artboard rects) that artificially expand bounds
+        // Find and remove completely invisible background rects/paths before measuring the root bounds,
+        // so we don't accidentally measure the designer's invisible artboard box.
+        const allGraphics = Array.from(tempSvg.querySelectorAll('*')).filter((node) => node instanceof SVGGraphicsElement);
+        allGraphics.forEach(node => {
             const fill = (node.getAttribute('fill') || '').trim();
             const stroke = (node.getAttribute('stroke') || '').trim();
             const style = (node.getAttribute('style') || '').toLowerCase();
@@ -139,32 +131,19 @@ function getSvgMetrics(svgText: string): SvgMetrics {
             const isFillNone = fill === 'none' || style.includes('fill:none') || style.includes('fill: none');
             const isStrokeNone = stroke === 'none' || stroke === '' || style.includes('stroke:none') || style.includes('stroke: none');
             
-            if (isFillNone && isStrokeNone) return false;
-
-            return true;
-        });
-
-        graphics.forEach(node => {
-            try {
-                const box = node.getBBox();
-                if (box.width <= 0 && box.height <= 0) return;
-
-                minX = Math.min(minX, box.x);
-                minY = Math.min(minY, box.y);
-                maxX = Math.max(maxX, box.x + box.width);
-                maxY = Math.max(maxY, box.y + box.height);
-            } catch {
-                // Ignore nodes that cannot report bounds
+            if (isFillNone && isStrokeNone && node.parentNode) {
+                node.parentNode.removeChild(node);
             }
         });
 
-        if (Number.isFinite(minX) && Number.isFinite(minY) && Number.isFinite(maxX) && Number.isFinite(maxY)) {
-            bbox = {
-                x: minX,
-                y: minY,
-                width: maxX - minX,
-                height: maxY - minY,
-            } as DOMRect;
+        let bbox: DOMRect | null = null;
+        try {
+            const rootBox = tempSvg.getBBox();
+            if (rootBox.width > 0 && rootBox.height > 0) {
+                bbox = rootBox;
+            }
+        } catch {
+            bbox = null;
         }
 
         if (!bbox || bbox.width <= 0 || bbox.height <= 0) {
