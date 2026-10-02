@@ -1,4 +1,5 @@
 import React from "react";
+import { BrickWall } from "lucide-react";
 import {
   FaMousePointer,
   FaEdit,
@@ -52,10 +53,10 @@ export function useToolbarTools(): Tool[] {
   return [
     // 1) Drawing
     {
-      icon: <FaDrawPolygon size={18} />,
+      icon: <BrickWall size={18} strokeWidth={2.5} />,
       label: "Wall",
       options: [
-        { id: "draw-wall", label: "Draw Wall ►", icon: <FaDrawPolygon size={14} /> },
+        { id: "draw-wall", label: "Draw Wall", icon: <BrickWall size={14} strokeWidth={2.5} /> },
       ],
     },
     // 2) Shapes
@@ -68,7 +69,7 @@ export function useToolbarTools(): Tool[] {
         { id: "line", label: "Line", icon: <FaMinus size={14} /> },
         { id: "arrow-shape", label: "Arrow", icon: <FaArrowRight size={14} /> },
         { id: "freehand", label: "Freehand Draw", icon: <FaPenNib size={14} /> },
-        { id: "polygon", label: "Polygon", icon: <FaDrawPolygon size={14} /> },
+        { id: "polygon", label: "Polygon", icon: <BrickWall size={14} strokeWidth={2.5} /> },
         { id: "arch", label: "Arch", icon: <FaBezierCurve size={14} /> },
       ],
     },

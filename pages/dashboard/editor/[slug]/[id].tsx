@@ -2863,7 +2863,7 @@ export default function Editor() {
           <style>{`
             .workspace-sidebar,
             .workspace-sidebar * {
-               border-color: #3f3f46 !important; /* zinc-700 */
+               border-color: #27272a !important; /* zinc-800 instead of 700 */
             }
             .workspace-sidebar,
             .workspace-sidebar > *,
@@ -2900,35 +2900,36 @@ export default function Editor() {
             .workspace-sidebar .text-blue-500,
             .workspace-sidebar .text-blue-600,
             .workspace-sidebar .text-blue-800 {
-               color: var(--accent) !important;
+               color: #93c5fd !important;
             }
             .workspace-sidebar .border-blue-500,
             .workspace-sidebar .border-blue-600 {
-               border-color: var(--accent) !important;
+               border-color: #93c5fd !important;
             }
             .workspace-sidebar .bg-blue-500,
             .workspace-sidebar .bg-blue-600 {
-               background-color: var(--accent) !important;
+               background-color: #60a5fa !important;
+               color: #111827 !important;
             }
             .workspace-sidebar .bg-blue-100,
             .workspace-sidebar .bg-blue-50 {
-               background-color: #3f3f46 !important;
-               color: var(--accent) !important;
+               background-color: #27272a !important;
+               color: #93c5fd !important;
             }
           `}</style>
         )}
 
         {/* Dashboard Sidebar - only show if not in preview mode */}
-        {!isPreviewMode && <div className="workspace-sidebar" data-tour="sidebar"><DashboardSidebar /></div>}
+        {!isPreviewMode && <div className="workspace-sidebar h-full" data-tour="sidebar"><DashboardSidebar /></div>}
 
         <div className="flex-1 flex overflow-hidden">
           {/* Elements Pane & Assets Sidebar - only show if not in preview mode and not a viewer */}
           {!isPreviewMode && !isViewerMode && (
             <>
-              <div className={`workspace-sidebar ${isElementsCollapsed ? 'w-10' : 'w-44'} bg-white border-r border-gray-200 flex-shrink-0 shadow-sm transition-all duration-200`} data-tour="elements">
+              <div className={`workspace-sidebar h-full ${isElementsCollapsed ? 'w-10' : 'w-44'} bg-white border-r border-gray-200 flex-shrink-0 shadow-sm transition-all duration-200`} data-tour="elements">
                 <ElementsPane isCollapsed={isElementsCollapsed} onToggleCollapse={() => setIsElementsCollapsed(!isElementsCollapsed)} />
               </div>
-              <div className="workspace-sidebar">
+              <div className="workspace-sidebar h-full">
                 <AssetsSidebar
                   isOpen={showAssetsModal}
                   onClose={() => setShowAssetsModal(false)}
