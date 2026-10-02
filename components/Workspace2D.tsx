@@ -1032,6 +1032,7 @@ export default function Workspace2D({
   const setMouseWorldPos = useEditorStore(s => s.setMouseWorldPos);
   const screenToWorld = useEditorStore(s => s.screenToWorld);
 
+  const editingTextId = useEditorStore(s => s.editingTextId);
   const setEditingTextId = useEditorStore(s => s.setEditingTextId);
   const setSelectedEdgeId = useEditorStore(s => s.setSelectedEdgeId);
   const wheelTransformRef = useRef({ zoom, panX, panY });
