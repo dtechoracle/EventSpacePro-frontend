@@ -69,7 +69,7 @@ export function useToolbarTools(): Tool[] {
         { id: "line", label: "Line", icon: <FaMinus size={14} /> },
         { id: "arrow-shape", label: "Arrow", icon: <FaArrowRight size={14} /> },
         { id: "freehand", label: "Freehand Draw", icon: <FaPenNib size={14} /> },
-        { id: "polygon", label: "Polygon", icon: <BrickWall size={14} strokeWidth={2.5} /> },
+        { id: "polygon", label: "Polygon", icon: <FaDrawPolygon size={14} /> },
         { id: "arch", label: "Arch", icon: <FaBezierCurve size={14} /> },
       ],
     },

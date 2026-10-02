@@ -2863,25 +2863,34 @@ export default function Editor() {
           <style>{`
             .workspace-sidebar,
             .workspace-sidebar * {
-               border-color: #27272a !important; /* zinc-800 instead of 700 */
+               border-color: #27272a !important; /* zinc-800 */
             }
             .workspace-sidebar,
             .workspace-sidebar > *,
             .workspace-sidebar > div,
             .workspace-sidebar > aside,
-            .workspace-sidebar .bg-\\[\\#fcfcfd\\] {
+            .workspace-sidebar.bg-white,
+            .workspace-sidebar > .bg-white,
+            .workspace-sidebar > .bg-\\[\\#fcfcfd\\],
+            .workspace-sidebar .bg-\\[\\#fcfcfd\\],
+            .workspace-sidebar .bg-\\[\\#fcfcfd\\]\\/95,
+            .workspace-sidebar .bg-white\\/90,
+            .workspace-sidebar .bg-white\\/95 {
                background-color: #18181b !important; /* zinc-900 */
                color: #f4f4f5 !important;
             }
-            .workspace-sidebar .bg-white,
+            .workspace-sidebar .bg-white:not(.workspace-sidebar > .bg-white),
             .workspace-sidebar .bg-gray-50,
             .workspace-sidebar .bg-slate-50,
-            .workspace-sidebar .bg-amber-50 {
+            .workspace-sidebar .bg-amber-50,
+            .workspace-sidebar .sidebar-input {
                background-color: #27272a !important; /* zinc-800 */
+               color: #f4f4f5 !important;
             }
             .workspace-sidebar .text-gray-900,
             .workspace-sidebar .text-slate-900,
-            .workspace-sidebar .text-gray-800 {
+            .workspace-sidebar .text-gray-800,
+            .workspace-sidebar .text-black {
                color: #f4f4f5 !important;
             }
             .workspace-sidebar .text-gray-700,
@@ -2899,21 +2908,24 @@ export default function Editor() {
             }
             .workspace-sidebar .text-blue-500,
             .workspace-sidebar .text-blue-600,
-            .workspace-sidebar .text-blue-800 {
+            .workspace-sidebar .text-blue-800,
+            .workspace-sidebar .text-\\[var\\(--accent\\)\\] {
                color: #93c5fd !important;
             }
             .workspace-sidebar .border-blue-500,
-            .workspace-sidebar .border-blue-600 {
+            .workspace-sidebar .border-blue-600,
+            .workspace-sidebar .border-\\[var\\(--accent\\)\\] {
                border-color: #93c5fd !important;
             }
             .workspace-sidebar .bg-blue-500,
-            .workspace-sidebar .bg-blue-600 {
+            .workspace-sidebar .bg-blue-600,
+            .workspace-sidebar .bg-\\[var\\(--accent\\)\\] {
                background-color: #60a5fa !important;
                color: #111827 !important;
             }
             .workspace-sidebar .bg-blue-100,
             .workspace-sidebar .bg-blue-50 {
-               background-color: #27272a !important;
+               background-color: #3f3f46 !important;
                color: #93c5fd !important;
             }
           `}</style>
