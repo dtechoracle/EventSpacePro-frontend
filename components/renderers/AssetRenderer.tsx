@@ -13,7 +13,6 @@ import { getDwgSvgString } from '@/utils/dwgParser';
 const svgCache: Record<string, string> = {};
 const pendingSvgCache: Record<string, Promise<string>> = {};
 const processedSvgCache: Record<string, string> = {};
-const standaloneDataUrlCache: Record<string, string> = {};
 const svgMetricsCache: Record<string, SvgMetrics> = {};
 const elementMetricsCache = new WeakMap<Element, { cx: number; cy: number; width: number; height: number }>();
 
@@ -960,51 +959,6 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const displayWidth = asset.width || definition?.width || 100;
     const displayHeight = asset.height || definition?.height || 100;
 
-    // Client-side Rasterization Alternative (Ultra-Fast)
-    // Convert the cached baseSvg to a standalone Data URL by injecting hardcoded CSS vars.
-    // This allows us to render custom colors using an <image> tag instead of a heavy <use> shadow tree!
-    const standaloneSvgDataUrl = useMemo(() => {
-        if (!baseSvg) return null;
-        
-        try {
-            const tColor = (asset as any).tableColor || currentFill;
-            const cColor = (asset as any).chairColor || currentFill;
-            
-            // Generate a unique cache key for this specific colored asset variant
-            const cacheKey = `${baseCacheKey || definition?.path}_${currentFill}_${tColor}_${cColor}_${currentStroke}_${currentStrokeWidth}`;
-            if (standaloneDataUrlCache[cacheKey]) {
-                return standaloneDataUrlCache[cacheKey];
-            }
-
-            let coloredSvg = baseSvg;
-
-            coloredSvg = coloredSvg.replace(/var\(--table-color,\s*inherit\)/g, tColor);
-            coloredSvg = coloredSvg.replace(/var\(--chair-color,\s*inherit\)/g, cColor);
-
-            if (!coloredSvg.includes('xmlns=')) {
-                coloredSvg = coloredSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
-            }
-
-            if (!preserveVenueStrokes) {
-                coloredSvg = coloredSvg.replace(
-                    /<svg([^>]*)>/i, 
-                    `<svg$1 fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}">`
-                );
-            }
-
-            // Using a Blob URL is thousands of times faster than encodeURIComponent + btoa
-            // and completely avoids maximum call stack / URI length limits that crash the page!
-            const blob = new Blob([coloredSvg], { type: 'image/svg+xml' });
-            const url = URL.createObjectURL(blob);
-            
-            standaloneDataUrlCache[cacheKey] = url;
-            return url;
-        } catch(e) {
-            console.error("Failed to generate standalone SVG data url", e);
-            return null;
-        }
-    }, [baseSvg, baseCacheKey, definition?.path, currentFill, (asset as any).tableColor, (asset as any).chairColor, currentStroke, currentStrokeWidth, preserveVenueStrokes]);
-
     // 3. (Removed processedSvg useMemo - we use <use> tags instead!)
 
     if (asset.isExploded) return null;
@@ -1140,17 +1094,19 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                             preserveAspectRatio="xMidYMid meet"
                             style={{ outline: 'none', filter: 'none', pointerEvents: 'none' }}
                         />
-                    ) : standaloneSvgDataUrl ? (
-                        <image
+                    ) : baseSvg && defId ? (
+                        <use
+                            href={`#${defId}`}
                             data-venue="true"
-                            href={standaloneSvgDataUrl}
                             x={-displayWidth / 2}
                             y={-displayHeight / 2}
                             width={displayWidth}
                             height={displayHeight}
-                            preserveAspectRatio="none"
+                            fill={preserveVenueStrokes ? undefined : currentFill}
+                            stroke={preserveVenueStrokes ? undefined : currentStroke}
+                            strokeWidth={preserveVenueStrokes ? undefined : currentStrokeWidth}
                             style={{ 
-                                outline: 'none',
+                                ...(preserveVenueStrokes ? {} : { fill: currentFill, stroke: currentStroke, strokeWidth: currentStrokeWidth }),
                                 filter: 'none',
                                 overflow: 'visible',
                                 pointerEvents: 'none'
