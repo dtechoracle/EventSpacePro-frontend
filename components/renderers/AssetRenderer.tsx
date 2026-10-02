@@ -959,6 +959,38 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const displayWidth = asset.width || definition?.width || 100;
     const displayHeight = asset.height || definition?.height || 100;
 
+    // Client-side Rasterization Alternative (Ultra-Fast)
+    // Convert the cached baseSvg to a standalone Data URL by injecting hardcoded CSS vars.
+    // This allows us to render custom colors using an <image> tag instead of a heavy <use> shadow tree!
+    const standaloneSvgDataUrl = useMemo(() => {
+        if (!baseSvg) return null;
+        
+        try {
+            let coloredSvg = baseSvg;
+            const tColor = (asset as any).tableColor || currentFill;
+            const cColor = (asset as any).chairColor || currentFill;
+
+            coloredSvg = coloredSvg.replace(/var\(--table-color,\s*inherit\)/g, tColor);
+            coloredSvg = coloredSvg.replace(/var\(--chair-color,\s*inherit\)/g, cColor);
+
+            if (!coloredSvg.includes('xmlns=')) {
+                coloredSvg = coloredSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+            }
+
+            if (!preserveVenueStrokes) {
+                coloredSvg = coloredSvg.replace(
+                    /<svg([^>]*)>/i, 
+                    `<svg$1 fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}">`
+                );
+            }
+
+            return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(coloredSvg)))}`;
+        } catch(e) {
+            console.error("Failed to generate standalone SVG data url", e);
+            return null;
+        }
+    }, [baseSvg, currentFill, (asset as any).tableColor, (asset as any).chairColor, currentStroke, currentStrokeWidth, preserveVenueStrokes]);
+
     // 3. (Removed processedSvg useMemo - we use <use> tags instead!)
 
     if (asset.isExploded) return null;
@@ -1094,19 +1126,17 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                             preserveAspectRatio="xMidYMid meet"
                             style={{ outline: 'none', filter: 'none', pointerEvents: 'none' }}
                         />
-                    ) : baseSvg && defId ? (
-                        <use
-                            href={`#${defId}`}
+                    ) : standaloneSvgDataUrl ? (
+                        <image
                             data-venue="true"
+                            href={standaloneSvgDataUrl}
                             x={-displayWidth / 2}
                             y={-displayHeight / 2}
                             width={displayWidth}
                             height={displayHeight}
-                            fill={preserveVenueStrokes ? undefined : currentFill}
-                            stroke={preserveVenueStrokes ? undefined : currentStroke}
-                            strokeWidth={preserveVenueStrokes ? undefined : currentStrokeWidth}
+                            preserveAspectRatio="none"
                             style={{ 
-                                ...(preserveVenueStrokes ? {} : { fill: currentFill, stroke: currentStroke, strokeWidth: currentStrokeWidth }),
+                                outline: 'none',
                                 filter: 'none',
                                 overflow: 'visible',
                                 pointerEvents: 'none'
