@@ -744,6 +744,51 @@ const RenderLayer = React.memo(({
 });
 RenderLayer.displayName = 'RenderLayer';
 
+export function getLabelArrowHitBox(arrow: any) {
+  const dx = arrow.endPoint.x - arrow.startPoint.x;
+  const dy = arrow.endPoint.y - arrow.startPoint.y;
+  const lLen = Math.hypot(dx, dy);
+  const fontSize = arrow.fontSize || 120;
+  
+  let labelX = arrow.startPoint.x + dx * 0.5;
+  let labelY = arrow.startPoint.y + dy * 0.5;
+  let rotX = 0, rotY = 0, rectWidth = 0, rectHeight = 0, arrowHit = false;
+
+  if (lLen > 0.01) {
+    const offsetMag = fontSize / 2 + 10;
+    const ux = dx / lLen;
+    const uy = dy / lLen;
+    let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+    let px = -uy;
+    let py = ux;
+    if (textAngle > 90 || textAngle < -90) {
+        textAngle += 180;
+        px = uy;
+        py = -ux;
+    }
+    
+    const labelPos = arrow.textPosition || 'bottom';
+    if (labelPos === 'bottom') {
+        labelX += px * offsetMag;
+        labelY += py * offsetMag;
+    } else if (labelPos === 'top') {
+        labelX -= px * offsetMag;
+        labelY -= py * offsetMag;
+    }
+
+    const rectPadH = fontSize * 0.5;
+    const rectPadV = fontSize * 0.35;
+    const lbl = arrow.label || '';
+    rectWidth = Math.max(fontSize * 2, lbl.length * fontSize * 0.62 + rectPadH * 2);
+    rectHeight = fontSize + rectPadV * 2;
+    
+    const rad = -textAngle * Math.PI / 180;
+    const cosA = Math.cos(rad), sinA = Math.sin(rad);
+    return { labelX, labelY, rectWidth, rectHeight, cosA, sinA };
+  }
+  return null;
+}
+
 export default function Workspace2D({
   width = 1200,
   height = 800,
@@ -1508,22 +1553,9 @@ export default function Workspace2D({
               if (Math.hypot(worldX - (arrow.startPoint.x + t * dx), worldY - (arrow.startPoint.y + t * dy)) <= thickness) arrowHit = true;
             }
             if (!arrowHit) {
-              const lLen = Math.hypot(dx, dy);
-              if (lLen > 0.01) {
-                const labelPos = arrow.textPosition || 'bottom';
-                const labelT = labelPos === 'top' ? 0.86 : labelPos === 'middle' ? 0.5 : 0.14;
-                const labelX = arrow.startPoint.x + dx * labelT;
-                const labelY = arrow.startPoint.y + dy * labelT;
-                const fontSize = arrow.fontSize || 120;
-                const rectPadH = fontSize * 0.5;
-                const rectPadV = fontSize * 0.35;
-                const lbl = arrow.label || '';
-                const rectWidth = Math.max(fontSize * 2, lbl.length * fontSize * 0.62 + rectPadH * 2);
-                const rectHeight = fontSize + rectPadV * 2;
-                let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
-                if (textAngle > 90 || textAngle < -90) textAngle += 180;
-                const rad = -textAngle * Math.PI / 180;
-                const cosA = Math.cos(rad), sinA = Math.sin(rad);
+              const hitBox = getLabelArrowHitBox(arrow);
+              if (hitBox) {
+                const { labelX, labelY, rectWidth, rectHeight, cosA, sinA } = hitBox;
                 const localX = worldX - labelX, localY = worldY - labelY;
                 const rotX = localX * cosA - localY * sinA;
                 const rotY = localX * sinA + localY * cosA;
@@ -2140,23 +2172,9 @@ export default function Workspace2D({
           }
           
           if (!arrowHit) {
-            const lLen = Math.hypot(dx, dy);
-            if (lLen > 0.01) {
-              const fontSize = arrow.fontSize || 120;
-              const offset = fontSize / 2 + 10;
-              const ux = dx / lLen;
-              const uy = dy / lLen;
-              let labelX = arrow.startPoint.x - ux * offset;
-              let labelY = arrow.startPoint.y - uy * offset;
-              const rectPadH = fontSize * 0.5;
-              const rectPadV = fontSize * 0.35;
-              const lbl = arrow.label || '';
-              const rectWidth = Math.max(fontSize * 2, lbl.length * fontSize * 0.62 + rectPadH * 2);
-              const rectHeight = fontSize + rectPadV * 2;
-              let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
-              if (textAngle > 90 || textAngle < -90) textAngle += 180;
-              const rad = -textAngle * Math.PI / 180;
-              const cosA = Math.cos(rad), sinA = Math.sin(rad);
+            const hitBox = getLabelArrowHitBox(arrow);
+            if (hitBox) {
+              const { labelX, labelY, rectWidth, rectHeight, cosA, sinA } = hitBox;
               const localX = worldX - labelX, localY = worldY - labelY;
               const rotX = localX * cosA - localY * sinA;
               const rotY = localX * sinA + localY * cosA;
@@ -2644,23 +2662,9 @@ export default function Workspace2D({
                 if (Math.hypot(worldX - (arrow.startPoint.x + t * dx), worldY - (arrow.startPoint.y + t * dy)) <= thickness) isHit = true;
               }
               if (!isHit) {
-                const lLen = Math.hypot(dx, dy);
-                if (lLen > 0.01) {
-                  const fontSize = arrow.fontSize || 120;
-                  const offset = fontSize / 2 + 10;
-                  const ux = dx / lLen;
-                  const uy = dy / lLen;
-                  const labelX = arrow.startPoint.x - ux * offset;
-                  const labelY = arrow.startPoint.y - uy * offset;
-                  const rectPadH = fontSize * 0.5;
-                  const rectPadV = fontSize * 0.35;
-                  const lbl = arrow.label || '';
-                  const rectWidth = Math.max(fontSize * 2, lbl.length * fontSize * 0.62 + rectPadH * 2);
-                  const rectHeight = fontSize + rectPadV * 2;
-                  let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
-                  if (textAngle > 90 || textAngle < -90) textAngle += 180;
-                  const rad = -textAngle * Math.PI / 180;
-                  const cosA = Math.cos(rad), sinA = Math.sin(rad);
+                const hitBox = getLabelArrowHitBox(arrow);
+                if (hitBox) {
+                  const { labelX, labelY, rectWidth, rectHeight, cosA, sinA } = hitBox;
                   const localX = worldX - labelX, localY = worldY - labelY;
                   const rotX = localX * cosA - localY * sinA;
                   const rotY = localX * sinA + localY * cosA;

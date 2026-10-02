@@ -150,27 +150,31 @@ export default function LabelArrowRenderer({ arrow, zoom, isSelected, isHovered,
     };
 
     const labelPosition = arrow.textPosition || 'bottom';
-    let labelX = 0;
-    let labelY = 0;
+    let labelX = arrow.startPoint.x + dx * 0.5;
+    let labelY = arrow.startPoint.y + dy * 0.5;
     
     const fontSize = arrow.fontSize || 120;
     const labelStr = arrow.label || '';
     const rectPadH = fontSize * 0.5;
     const rectWidth = Math.max(fontSize * 2, labelStr.length * fontSize * 0.62 + rectPadH * 2);
 
-    const t = 0.0; // The tail/bottom of the arrow
-    const offset = fontSize / 2 + 10;
-    
-    // They want it attached directly to the bottom of the arrow.
-    // If they meant below the line, we use perp.
-    // If they meant the tail, t=0 is the tail.
-    // Let's position it at the tail, and offset it slightly backwards along the line.
-    labelX = arrow.startPoint.x - ux * offset;
-    labelY = arrow.startPoint.y - uy * offset;
-
-
+    const offsetMag = fontSize / 2 + 10;
     let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
-    if (textAngle > 90 || textAngle < -90) textAngle += 180;
+    let px = -uy;
+    let py = ux;
+    if (textAngle > 90 || textAngle < -90) {
+        textAngle += 180;
+        px = uy;
+        py = -ux;
+    }
+    
+    if (labelPosition === 'bottom') {
+        labelX += px * offsetMag;
+        labelY += py * offsetMag;
+    } else if (labelPosition === 'top') {
+        labelX -= px * offsetMag;
+        labelY -= py * offsetMag;
+    }
 
     const fontFamily = arrow.fontFamily || 'Inter, sans-serif';
     const fontWeight = arrow.fontWeight || '700';
