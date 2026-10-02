@@ -52,10 +52,9 @@ export function useToolbarTools(): Tool[] {
   return [
     // 1) Drawing
     {
-      icon: <FaPenNib size={18} />,
-      label: "Drawing",
+      icon: <FaDrawPolygon size={18} />,
+      label: "Wall",
       options: [
-        { id: "draw-line", label: "Draw Line", icon: <FaPenNib size={14} /> },
         { id: "draw-wall", label: "Draw Wall ►", icon: <FaDrawPolygon size={14} /> },
       ],
     },

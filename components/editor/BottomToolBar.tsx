@@ -937,7 +937,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
             <motion.button
                 onClick={() => setIsCollapsed(!isCollapsed)}
                 whileTap={{ scale: 0.95 }}
-                className="bg-white/90 backdrop-blur border border-gray-200 shadow-md text-gray-500 text-[10px] px-2 py-0.5 rounded-full hover:bg-gray-50 transition-colors font-bold uppercase tracking-wider flex items-center gap-1"
+                className="workspace-sidebar bg-white/90 backdrop-blur border border-gray-200 shadow-md text-gray-500 text-[10px] px-2 py-0.5 rounded-full hover:bg-gray-50 transition-colors font-bold uppercase tracking-wider flex items-center gap-1"
                 title={isCollapsed ? "Expand Toolbar" : "Collapse Toolbar"}
             >
                 <span>{isCollapsed ? "▲ Tools" : "▼ Collapse"}</span>
@@ -950,7 +950,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                         animate={{ y: 0, opacity: 1, scale: 1 }}
                         exit={{ y: 50, opacity: 0, scale: 0.95 }}
                         transition={{ type: "spring", stiffness: 220, damping: 22 }}
-                        className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-lg relative border border-gray-100"
+                        className="workspace-sidebar flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-lg relative border border-gray-100"
                     >
                         {/* Selection Tools (Standalone Group) */}
                         {selectionToolGroup && (
@@ -999,7 +999,9 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                                 <div
                                     onMouseEnter={() => {
                                         if (isReadOnly && !READ_ONLY_TOOLS.has(tool.label)) return;
-                                        setOpenIndex(index);
+                                        if (tool.options.length > 1) {
+                                            setOpenIndex(index);
+                                        }
                                     }}
                                     className="flex items-center"
                                 >
@@ -1049,7 +1051,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
 
                                 {/* Dropdown Menu */}
                                 <AnimatePresence>
-                                    {openIndex === index && (
+                                    {openIndex === index && tool.options.length > 1 && (
                                         <motion.div
                                             initial={{ opacity: 0, y: 8, scale: 0.98 }}
                                             animate={{ opacity: 1, y: 0, scale: 1 }}

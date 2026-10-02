@@ -2897,6 +2897,24 @@ export default function Editor() {
             .workspace-sidebar button:hover {
                background-color: #3f3f46 !important;
             }
+            .workspace-sidebar .text-blue-500,
+            .workspace-sidebar .text-blue-600,
+            .workspace-sidebar .text-blue-800 {
+               color: var(--accent) !important;
+            }
+            .workspace-sidebar .border-blue-500,
+            .workspace-sidebar .border-blue-600 {
+               border-color: var(--accent) !important;
+            }
+            .workspace-sidebar .bg-blue-500,
+            .workspace-sidebar .bg-blue-600 {
+               background-color: var(--accent) !important;
+            }
+            .workspace-sidebar .bg-blue-100,
+            .workspace-sidebar .bg-blue-50 {
+               background-color: #3f3f46 !important;
+               color: var(--accent) !important;
+            }
           `}</style>
         )}
 

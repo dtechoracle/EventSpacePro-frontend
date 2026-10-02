@@ -4660,7 +4660,7 @@ export default function Workspace2D({
         unitSystem={unitSystem}
       />
       {/* Grid unit / size control */}
-      <div className="absolute top-3 right-3 z-50 flex items-center gap-3 bg-white/90 shadow-sm rounded-md px-3 py-2 text-xs sm:text-sm text-slate-700 border border-slate-200">
+      <div className="workspace-sidebar absolute top-3 right-3 z-50 flex items-center gap-3 bg-white/90 shadow-sm rounded-md px-3 py-2 text-xs sm:text-sm text-slate-700 border border-slate-200">
         <button
           onClick={() => useProjectStore.getState().undo()}
           className={`px-2 py-1 rounded transition-colors flex items-center gap-1 ${
