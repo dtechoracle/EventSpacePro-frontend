@@ -5008,16 +5008,17 @@ export default function Workspace2D({
               position: 'fixed',
               left: `${screenX}px`,
               top: `${screenY}px`,
-              width: `${(rectWidth + 24) * zoom}px`,
-              height: `${(rectHeight + 24) * zoom}px`,
               transform: 'translate(-50%, -50%)',
-              background: '#ffffff',
-              border: '3px solid #10b981', // Distinct Green border to signify EDIT MODE
-              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)', // Deep shadow
+              width: 'auto',
+              minWidth: '100px',
+              minHeight: '40px',
+              background: 'white',
+              border: '1.5px solid #3b82f6',
               borderRadius: '6px',
-              padding: '0 4px',
+              padding: '4px 8px',
+              margin: '0',
               outline: 'none',
-              color: '#0f172a',
+              color: arrow.color || '#000',
               fontSize: `${fontSize * zoom}px`,
               fontFamily: arrow.fontFamily || 'Inter, sans-serif',
               fontWeight: arrow.fontWeight || '700',
@@ -5025,8 +5026,9 @@ export default function Workspace2D({
               resize: 'none',
               textAlign: 'center',
               lineHeight: '1.2',
-              pointerEvents: 'auto',
-              cursor: 'text'
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              overflow: 'hidden',
+              pointerEvents: 'auto'
             }}
           />
         );
