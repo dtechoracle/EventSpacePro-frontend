@@ -1917,7 +1917,7 @@ const renderAssetToCanvas = (
         const svgBlob = new Blob([svgResult.svgString], { type: 'image/svg+xml;charset=utf-8' });
         const svgUrl = URL.createObjectURL(svgBlob);
         const svgLink = document.createElement('a');
-        svgLink.download = `export-${Date.now()}.svg`;
+        svgLink.download = `${(projectName || 'layout').replace(/[^a-z0-9\-_ ]/gi, '').trim() || 'layout'}.svg`;
         svgLink.href = svgUrl;
         svgLink.click();
         setTimeout(() => URL.revokeObjectURL(svgUrl), 1000);
@@ -2033,7 +2033,8 @@ const renderAssetToCanvas = (
           else reject(new Error("Failed to encode image"));
         }, 'image/jpeg', JPEG_QUALITY);
       });
-      const fileName = `export-${Date.now()}.${option.format === 'png' ? 'jpg' : option.format}`;
+      const safeProjectName = (projectName || 'layout').replace(/[^a-z0-9\-_ ]/gi, '').trim() || 'layout';
+      const fileName = `${safeProjectName}.${option.format === 'png' ? 'jpg' : option.format}`;
       if (option.format === 'pdf') {
         const dataUrl = await new Promise<string>((resolve) => {
           const reader = new FileReader();
@@ -2140,10 +2141,14 @@ const renderAssetToCanvas = (
               else handleExport(primaryOption);
             }}
             disabled={isExporting}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#0056A9] text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#004b93] active:bg-[#004080] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#0056A9] text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#004b93] active:bg-[#004080] disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden px-2"
           >
-            {isExporting ? <FaExpand className="animate-spin" size={11} /> : <FaDownload size={11} />}
-            {isExporting ? `Exporting ${primaryOption.format.toUpperCase()}...` : `Export ${projectName || "Layout"}`}
+            <span className="flex-shrink-0">{isExporting ? <FaExpand className="animate-spin" size={11} /> : <FaDownload size={11} />}</span>
+            <span className="truncate">
+              {isExporting
+                ? `Exporting ${primaryOption.format.toUpperCase()}...`
+                : `Export${projectName ? ` · ${projectName}` : ''}`}
+            </span>
           </button>
         </div>
       )}

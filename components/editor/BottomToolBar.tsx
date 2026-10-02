@@ -1118,8 +1118,8 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                             </div>
                         ))}
 
-                        {/* Dark Mode Toggle */}
-                        <div className="w-px h-6 bg-gray-200 mx-2" />
+                        {/* Dark Mode Toggle - temporarily disabled */}
+                        {/* <div className="w-px h-6 bg-gray-200 mx-2" />
                         <Tooltip content={isDarkMode ? "Light Mode" : "Dark Mode"}>
                             <motion.button
                                 onClick={() => toggleDarkMode()}
@@ -1129,7 +1129,7 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                             >
                                 {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
                             </motion.button>
-                        </Tooltip>
+                        </Tooltip> */}
                     </motion.div>
                 )}
             </AnimatePresence>
