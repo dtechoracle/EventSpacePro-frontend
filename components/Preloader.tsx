@@ -5,7 +5,7 @@ import React from "react";
 export default function Preloader() {
   return (
     <div className="w-screen h-screen fixed inset-0 z-[99999] bg-white flex items-center justify-center">
-      <div className="w-48 h-48 sm:w-64 sm:h-64">
+      <div className="w-28 h-28 sm:w-36 sm:h-36">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="100%" height="100%">
           <defs>
             <style>{`

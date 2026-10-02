@@ -916,7 +916,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
         </div>
       )}
 
-      <div className="sticky top-0 z-20 border-b border-slate-200 bg-[#fcfcfd]/95 px-3 pb-3 pt-3 backdrop-blur">
+      <div className="sticky top-0 z-20 bg-[#fcfcfd]/95 px-3 pb-3 pt-3 backdrop-blur">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -965,7 +965,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
           </div>
         </div>
 
-        <div className="mb-3 border-b border-slate-200 pb-3">
+        <div className="mb-3 pb-3">
           <div className="flex items-center justify-between gap-3">
             <div
               className="flex min-w-0 items-center group cursor-pointer"
@@ -1082,7 +1082,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
               .slice()
               .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
               .map((comment) => (
-                <div key={comment.id} className="border-b border-slate-200 pb-2 pt-1 last:border-b-0">
+                <div key={comment.id} className=" pb-2 pt-1 last:border-b-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-[11px] font-semibold text-slate-800">{comment.author || 'Unknown'}</div>
@@ -1155,7 +1155,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
       )}
 
       {/* Model Section */}
-      <div className="mb-4 border-b border-slate-200 pb-2">
+      <div className="mb-4 pb-2">
         <button
           className="flex w-full items-center justify-between px-0 py-3 text-left"
           onClick={() => setShowModel((s) => !s)}
@@ -1244,7 +1244,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
       </div>
 
       {/* Canvas / Asset Properties Section */}
-      <div className="mb-4 border-b border-slate-200 pb-2">
+      <div className="mb-4 pb-2">
         <button
           className="flex w-full items-center justify-between px-0 py-3 text-left"
           onClick={() => setShowCanvas((s) => !s)}
@@ -4095,7 +4095,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
 
       {/* Workspace Numbering Section */}
       {tableNumberingItems.length > 0 && (
-        <div className="mb-4 border-b border-slate-200 pb-2">
+        <div className="mb-4 pb-2">
           <div className="flex items-center justify-between mb-2">
             <button
               type="button"
@@ -4118,7 +4118,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
           {showTableNumbering && (<div className="space-y-2">
 
           {/* Text Properties — shared between Auto and Manual modes */}
-          <div className="mb-4 pb-4 border-b border-slate-200/50 space-y-2">
+          <div className="mb-4 pb-4/50 space-y-2">
             <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Text</div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-600">Font</span>
@@ -4180,7 +4180,7 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
             </div>
           </div>
 
-          <div className="mb-4 pb-4 border-b border-slate-200/50 space-y-3">
+          <div className="mb-4 pb-4/50 space-y-3">
             <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
               {[
                 { id: 'manual', label: 'Manual' },

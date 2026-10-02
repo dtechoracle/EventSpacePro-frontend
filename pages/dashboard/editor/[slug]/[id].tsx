@@ -988,7 +988,7 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
     if (groupItems.length === 0) return null;
     const isExpanded = expanded[groupKey] ?? true;
     return (
-      <div key={groupKey} className="border-b border-gray-100">
+      <div key={groupKey} className="">
         <button
           type="button"
           onClick={() => setExpanded(prev => ({ ...prev, [groupKey]: !isExpanded }))}
@@ -1036,7 +1036,7 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
   if (items.length === 0) {
     return (
       <div className="h-full flex flex-col">
-        <div className="p-3 border-b border-gray-100 flex items-center justify-between font-semibold text-xs text-slate-800">
+        <div className="p-3 flex items-center justify-between font-semibold text-xs text-slate-800">
           <span>Elements</span>
           {onToggleCollapse && (
             <button
@@ -1064,7 +1064,7 @@ function ElementsPane({ isCollapsed, onToggleCollapse }: { isCollapsed?: boolean
       <svg width="0" height="0" className="absolute pointer-events-none">
         <TexturePatternDefs />
       </svg>
-      <div className="p-3 border-b border-gray-100 flex items-center justify-between font-semibold text-xs text-slate-800">
+      <div className="p-3 flex items-center justify-between font-semibold text-xs text-slate-800">
         <span>Elements</span>
         {onToggleCollapse && (
           <button
@@ -2910,23 +2910,23 @@ export default function Editor() {
             .workspace-sidebar .text-blue-600,
             .workspace-sidebar .text-blue-800,
             .workspace-sidebar .text-\\[var\\(--accent\\)\\] {
-               color: #93c5fd !important;
+               color: #f4f0ea !important;
             }
             .workspace-sidebar .border-blue-500,
             .workspace-sidebar .border-blue-600,
             .workspace-sidebar .border-\\[var\\(--accent\\)\\] {
-               border-color: #93c5fd !important;
+               border-color: #f4f0ea !important;
             }
             .workspace-sidebar .bg-blue-500,
             .workspace-sidebar .bg-blue-600,
             .workspace-sidebar .bg-\\[var\\(--accent\\)\\] {
-               background-color: #60a5fa !important;
-               color: #111827 !important;
+               background-color: #f4f0ea !important;
+               color: #18181b !important;
             }
             .workspace-sidebar .bg-blue-100,
             .workspace-sidebar .bg-blue-50 {
                background-color: #3f3f46 !important;
-               color: #93c5fd !important;
+               color: #f4f0ea !important;
             }
           `}</style>
         )}

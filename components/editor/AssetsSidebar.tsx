@@ -160,7 +160,7 @@ export default function AssetsSidebar({ isOpen, onClose }: AssetsSidebarProps) {
   return (
     <div className="w-60 h-full bg-white border-r border-gray-200 flex flex-col flex-shrink-0 z-20">
       {/* Header */}
-      <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+      <div className="px-3 py-2.5 flex items-center justify-between flex-shrink-0">
         <span className="text-xs font-bold text-slate-800">Asset Library</span>
         <button
           onClick={onClose}
@@ -172,7 +172,7 @@ export default function AssetsSidebar({ isOpen, onClose }: AssetsSidebarProps) {
       </div>
 
       {/* Search Bar */}
-      <div className="p-2 border-b border-gray-100 flex-shrink-0">
+      <div className="p-2 flex-shrink-0">
         <input
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
