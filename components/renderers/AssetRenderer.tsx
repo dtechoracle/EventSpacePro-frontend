@@ -683,7 +683,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 styleEl.setAttribute("id", styleId);
                 const scope = `svg.asset-svg-content`;
                 const vectorEffectRule = `${scope} path, ${scope} circle, ${scope} rect, ${scope} line, ${scope} polyline, ${scope} ellipse { vector-effect: non-scaling-stroke !important; }`;
-                const strokeWidthInheritRule = preserveVenueStrokes ? "" : "stroke-width: inherit !important;";
+                const strokeWidthInheritRule = preserveVenueStrokes ? "" : "stroke-width: var(--asset-stroke-width, inherit) !important;";
                 styleEl.textContent = `${vectorEffectRule} ${scope} .fill-none-el { fill: none !important; stroke: inherit !important; ${strokeWidthInheritRule} } ${scope} .fill-inherit-el { fill: inherit !important; stroke: inherit !important; ${strokeWidthInheritRule} } ${scope} .auto-fill-el { fill: inherit !important; stroke: none !important; } ${scope} .stroke-top-layer { pointer-events: none; } ${scope} .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } ${scope} .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } ${scope} .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } ${scope} .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
                 svg.prepend(styleEl);
             }
@@ -1123,7 +1123,12 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                             stroke={preserveVenueStrokes ? undefined : currentStroke}
                             strokeWidth={preserveVenueStrokes ? undefined : currentStrokeWidth}
                             style={{ 
-                                ...(preserveVenueStrokes ? {} : { fill: currentFill, stroke: currentStroke, strokeWidth: currentStrokeWidth }),
+                                ...(preserveVenueStrokes ? {} : { 
+                                    fill: currentFill, 
+                                    stroke: currentStroke, 
+                                    strokeWidth: currentStrokeWidth,
+                                    '--asset-stroke-width': currentStrokeWidth 
+                                } as any),
                                 filter: 'none',
                                 overflow: 'visible',
                                 pointerEvents: 'none'
