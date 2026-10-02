@@ -4975,7 +4975,15 @@ export default function Workspace2D({
         
         return (
           <textarea
-            autoFocus
+            ref={(el) => {
+              if (el && document.activeElement !== el) {
+                setTimeout(() => {
+                  el.focus();
+                  const len = el.value.length;
+                  el.setSelectionRange(len, len);
+                }, 50);
+              }
+            }}
             defaultValue={lbl}
             onFocus={(e) => {
               const val = e.target.value;
