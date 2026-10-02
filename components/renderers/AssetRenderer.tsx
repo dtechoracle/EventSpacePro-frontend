@@ -43,6 +43,8 @@ type SvgMetrics = {
     contentY: number | null;
     contentWidth: number | null;
     contentHeight: number | null;
+    physicalContentWidth: number | null;
+    physicalContentHeight: number | null;
     shouldCropToContent: boolean;
 };
 
@@ -78,6 +80,8 @@ function getSvgMetrics(svgText: string): SvgMetrics {
         contentY: null,
         contentWidth: null,
         contentHeight: null,
+        physicalContentWidth: null,
+        physicalContentHeight: null,
         shouldCropToContent: false,
     };
 
@@ -172,8 +176,6 @@ function getSvgMetrics(svgText: string): SvgMetrics {
         const contentWidth = bbox.width;
         const contentHeight = bbox.height;
 
-        // Compare content to viewBox (same user units), not width/height attrs
-        // which may be physical mm.
         const refW = viewBoxW || width;
         const refH = viewBoxH || height;
         const widthRatio = refW ? contentWidth / refW : null;
@@ -188,6 +190,10 @@ function getSvgMetrics(svgText: string): SvgMetrics {
             (widthRatio !== null && widthRatio < 0.95) ||
             (heightRatio !== null && heightRatio < 0.95);
 
+        // Scale physical dimensions for updateAsset if viewBox and width differ (e.g. mm vs user-units)
+        const scaleX = (width && viewBoxW) ? (width / viewBoxW) : 1;
+        const scaleY = (height && viewBoxH) ? (height / viewBoxH) : 1;
+
         return {
             artboardWidth: width,
             artboardHeight: height,
@@ -195,6 +201,8 @@ function getSvgMetrics(svgText: string): SvgMetrics {
             contentY,
             contentWidth,
             contentHeight,
+            physicalContentWidth: contentWidth * scaleX,
+            physicalContentHeight: contentHeight * scaleY,
             shouldCropToContent,
         };
     } finally {
@@ -430,7 +438,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         return hasCustomFill || hasCustomTableColor || hasCustomChairColor;
     }, [currentFill, (asset as any).tableColor, (asset as any).chairColor]);
 
-    const actuallyUseFastImage = canUseFastImage && !isCustomColored;
+    const actuallyUseFastImage = canUseFastImage && !isCustomColored && !isVenueAsset;
 
     useEffect(() => {
         setRasterImageFailed(false);
@@ -458,8 +466,8 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             svgMetricsCache[definition.path] = metrics;
             setRawSvgContent(prev => (prev === text ? prev : text));
 
-            const svgWidth = (metrics.shouldCropToContent && metrics.contentWidth) ? metrics.contentWidth : metrics.artboardWidth;
-            const svgHeight = (metrics.shouldCropToContent && metrics.contentHeight) ? metrics.contentHeight : metrics.artboardHeight;
+            const svgWidth = (metrics.shouldCropToContent && metrics.physicalContentWidth) ? metrics.physicalContentWidth : metrics.artboardWidth;
+            const svgHeight = (metrics.shouldCropToContent && metrics.physicalContentHeight) ? metrics.physicalContentHeight : metrics.artboardHeight;
 
             if (svgWidth && svgHeight) {
                 const currentW = asset.width;
