@@ -193,20 +193,6 @@ export default function LabelArrowRenderer({ arrow, zoom, isSelected, isHovered,
                     vectorEffect="non-scaling-stroke"
                     opacity={0.8}
                 />
-                <g transform={`translate(${labelX}, ${labelY}) rotate(${textAngle})`}>
-                    <rect
-                        x={-rectWidth / 2 - 2}
-                        y={-rectHeight / 2 - 2}
-                        width={rectWidth + 4}
-                        height={rectHeight + 4}
-                        fill="none"
-                        stroke={highlightColor}
-                        strokeWidth={strokeWidth + 4}
-                        rx={fontSize * 0.12}
-                        vectorEffect="non-scaling-stroke"
-                        opacity={0.8}
-                    />
-                </g>
             </g>
         );
     }
@@ -237,8 +223,7 @@ export default function LabelArrowRenderer({ arrow, zoom, isSelected, isHovered,
                     fill={arrow.backgroundColor || '#ffffff'}
                     rx={fontSize * 0.12}
                     opacity="0.96"
-                    stroke={isSelected ? '#3b82f6' : "rgba(15, 23, 42, 0.08)"}
-                    strokeWidth={isSelected ? 2 / zoom : 1}
+                    stroke="rgba(15, 23, 42, 0.08)"
                     style={{ filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.12))' }}
                 />
                                 <text
