@@ -423,9 +423,10 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     }, [asset.fillColor, (asset as any).fillType, (asset as any).fillTexture, (asset as any).fillTextureScale, (asset as any).fillTextureThickness]);
 
     const isCustomColored = useMemo(() => {
-        const hasCustomFill = currentFill !== 'transparent' && currentFill !== 'none';
-        const hasCustomTableColor = !!(asset as any).tableColor;
-        const hasCustomChairColor = !!(asset as any).chairColor;
+        const isRealColor = (c: any) => c && c !== 'transparent' && c !== 'none' && c !== '#ffffff' && c !== '#fff';
+        const hasCustomFill = isRealColor(currentFill);
+        const hasCustomTableColor = isRealColor((asset as any).tableColor);
+        const hasCustomChairColor = isRealColor((asset as any).chairColor);
         return hasCustomFill || hasCustomTableColor || hasCustomChairColor;
     }, [currentFill, (asset as any).tableColor, (asset as any).chairColor]);
 

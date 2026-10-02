@@ -749,42 +749,31 @@ export function getLabelArrowHitBox(arrow: any) {
   const dy = arrow.endPoint.y - arrow.startPoint.y;
   const lLen = Math.hypot(dx, dy);
   const fontSize = arrow.fontSize || 120;
-  
-  let labelX = arrow.startPoint.x + dx * 0.5;
-  let labelY = arrow.startPoint.y + dy * 0.5;
-  let rotX = 0, rotY = 0, rectWidth = 0, rectHeight = 0, arrowHit = false;
 
   if (lLen > 0.01) {
-    const offsetMag = fontSize / 2 + 10;
-    const ux = dx / lLen;
-    const uy = dy / lLen;
-    let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
-    let px = -uy;
-    let py = ux;
-    if (textAngle > 90 || textAngle < -90) {
-        textAngle += 180;
-        px = uy;
-        py = -ux;
-    }
-    
-    const labelPos = arrow.textPosition || 'bottom';
-    if (labelPos === 'bottom') {
-        labelX += px * offsetMag;
-        labelY += py * offsetMag;
-    } else if (labelPos === 'top') {
-        labelX -= px * offsetMag;
-        labelY -= py * offsetMag;
-    }
-
     const rectPadH = fontSize * 0.5;
     const rectPadV = fontSize * 0.35;
     const lbl = arrow.label || '';
-    rectWidth = Math.max(fontSize * 2, lbl.length * fontSize * 0.62 + rectPadH * 2);
-    rectHeight = fontSize + rectPadV * 2;
+    const rectWidth = Math.max(fontSize * 2, lbl.length * fontSize * 0.62 + rectPadH * 2);
+    const rectHeight = fontSize + rectPadV * 2;
+
+    const ux = dx / lLen;
+    const uy = dy / lLen;
+    
+    // They want it at the "bottom" (the tail / start point).
+    // Push it backwards along the line by half the text width so it never overlaps the arrow visually.
+    const offsetMag = rectWidth / 2 + 10;
+    const labelX = arrow.startPoint.x - ux * offsetMag;
+    const labelY = arrow.startPoint.y - uy * offsetMag;
+    
+    let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+    if (textAngle > 90 || textAngle < -90) {
+        textAngle += 180;
+    }
     
     const rad = -textAngle * Math.PI / 180;
     const cosA = Math.cos(rad), sinA = Math.sin(rad);
-    return { labelX, labelY, rectWidth, rectHeight, cosA, sinA };
+    return { labelX, labelY, rectWidth, rectHeight, cosA, sinA, textAngle };
   }
   return null;
 }

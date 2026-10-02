@@ -149,31 +149,20 @@ export default function LabelArrowRenderer({ arrow, zoom, isSelected, isHovered,
         );
     };
 
-    const labelPosition = arrow.textPosition || 'bottom';
-    let labelX = arrow.startPoint.x + dx * 0.5;
-    let labelY = arrow.startPoint.y + dy * 0.5;
-    
     const fontSize = arrow.fontSize || 120;
     const labelStr = arrow.label || '';
     const rectPadH = fontSize * 0.5;
     const rectWidth = Math.max(fontSize * 2, labelStr.length * fontSize * 0.62 + rectPadH * 2);
 
-    const offsetMag = fontSize / 2 + 10;
+    const offsetMag = rectWidth / 2 + 10;
+    
+    // Position at the start point (tail) and push backwards along the line
+    const labelX = arrow.startPoint.x - ux * offsetMag;
+    const labelY = arrow.startPoint.y - uy * offsetMag;
+    
     let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
-    let px = -uy;
-    let py = ux;
     if (textAngle > 90 || textAngle < -90) {
         textAngle += 180;
-        px = uy;
-        py = -ux;
-    }
-    
-    if (labelPosition === 'bottom') {
-        labelX += px * offsetMag;
-        labelY += py * offsetMag;
-    } else if (labelPosition === 'top') {
-        labelX -= px * offsetMag;
-        labelY -= py * offsetMag;
     }
 
     const fontFamily = arrow.fontFamily || 'Inter, sans-serif';
