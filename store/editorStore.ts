@@ -130,6 +130,9 @@ export type EditorState = {
   equalVenueStrokeWidth: boolean;
   toggleEqualVenueStrokeWidth: () => void;
 
+  isDarkMode: boolean;
+  toggleDarkMode: () => void;
+
   // Methods
   setZoom: (zoom: number) => void;
   zoomIn: () => void;
@@ -242,6 +245,10 @@ export const useEditorStore = create<EditorState>()(
       // Equal venue stroke width (view only)
       equalVenueStrokeWidth: false,
       toggleEqualVenueStrokeWidth: () => set((state) => ({ equalVenueStrokeWidth: !state.equalVenueStrokeWidth })),
+
+      // Dark mode toggle
+      isDarkMode: false,
+      toggleDarkMode: () => set((state) => ({ isDarkMode: !state.isDarkMode })),
 
       // Zoom methods
       // Zoom methods - "Infinity" zoom (very wide range)

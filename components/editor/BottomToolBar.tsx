@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Moon, Sun } from "lucide-react";
 import { useToolbarTools, ToolOption } from "@/hooks/useToolBarTools";
 import { useSceneStore, AssetInstance } from "@/store/sceneStore";
 import { useEditorStore } from "@/store/editorStore"; // NEW STORE
@@ -70,6 +70,8 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
     // Viewers get a genuinely inert toolbar. The server already refuses their
     // edits; without this the buttons stayed live and the refusal was invisible.
     const isReadOnly = useEditorStore(s => s.isReadOnly);
+    const isDarkMode = useEditorStore(s => s.isDarkMode);
+    const toggleDarkMode = useEditorStore(s => s.toggleDarkMode);
     const [openIndex, setOpenIndex] = useState<number | null>(null);
     const [showWallTypeSubmenu, setShowWallTypeSubmenu] = useState(false);
     const [activeTool, setActiveTool] = useState<string | null>(null);
@@ -1075,6 +1077,19 @@ export default function BottomToolbar({ setShowAssetsModal }: BarProps) {
                                 )}
                             </div>
                         ))}
+
+                        {/* Dark Mode Toggle */}
+                        <div className="w-px h-6 bg-gray-200 mx-2" />
+                        <Tooltip content={isDarkMode ? "Light Mode" : "Dark Mode"}>
+                            <motion.button
+                                onClick={() => toggleDarkMode()}
+                                whileTap={{ scale: 0.95 }}
+                                whileHover={{ scale: 1.03 }}
+                                className={`w-8 h-8 flex items-center justify-center rounded-md focus:outline-none outline-none hover:bg-gray-100 ${isDarkMode ? 'text-[var(--accent)]' : 'text-gray-600'}`}
+                            >
+                                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+                            </motion.button>
+                        </Tooltip>
                     </motion.div>
                 )}
             </AnimatePresence>

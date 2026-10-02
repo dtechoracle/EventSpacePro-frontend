@@ -391,7 +391,10 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // Fast image path: render standard unexploded assets using their pre-rendered .webp raster
     // instead of parsing DOM and dangerouslySetInnerHTML DOM string for every asset instance.
     // Falls back to processed SVG if raster fails or for custom-colored/exploded/venue assets.
-    const canUseFastImage = true;
+    // Disabled: the .webp rasters have ~10% margins and a thick outline baked in and they
+    // ignore asset.strokeWidth entirely, so stroke widths 0.6/0.5 rendered thick+small vs
+    // the hairline SVG path. Stroke-width control requires the SVG-processing path.
+    const canUseFastImage = false;
     const fastImageHref = canUseFastImage ? rasterAssetPath : assetPath;
     
     // 1. Fill resolution logic (moved before baseSvg to determine if we need SVG for custom colors)
