@@ -2174,6 +2174,7 @@ export default function Workspace2D({
           if (arrowHit) {
             setEditingTextId(arrow.id);
             setSelectedIds([arrow.id]);
+            updateTyping(true);
             return;
           }
         }
@@ -4945,6 +4946,77 @@ export default function Workspace2D({
       <Suspense fallback={null}>
         <TextAnnotationTool isActive={activeTool === 'text-annotation'} />
       </Suspense>
+
+      {/* Label Arrow Editor Overlay */}
+      {(() => {
+        if (!editingTextId) return null;
+        const arrow = labelArrows.find(a => a.id === editingTextId);
+        if (!arrow) return null;
+
+        const dx = arrow.endPoint.x - arrow.startPoint.x;
+        const dy = arrow.endPoint.y - arrow.startPoint.y;
+        const lLen = Math.hypot(dx, dy);
+        if (lLen < 0.01) return null;
+        
+        const fontSize = arrow.fontSize || 120;
+        const rectPadH = fontSize * 0.5;
+        const lbl = arrow.label || '';
+        const rectWidth = Math.max(fontSize * 2, lbl.length * fontSize * 0.62 + rectPadH * 2);
+        
+        const ux = dx / lLen;
+        const uy = dy / lLen;
+        const offsetMag = rectWidth / 2 + 10;
+        const labelX = arrow.startPoint.x - ux * offsetMag;
+        const labelY = arrow.startPoint.y - uy * offsetMag;
+        
+        const screenX = labelX * zoom + panX + canvasOffset.left;
+        const screenY = labelY * zoom + panY + canvasOffset.top;
+        
+        return (
+          <textarea
+            autoFocus
+            defaultValue={lbl}
+            onFocus={(e) => {
+              const val = e.target.value;
+              e.target.value = '';
+              e.target.value = val;
+            }}
+            onChange={(e) => {
+              useProjectStore.getState().updateLabelArrow(arrow.id, { label: e.target.value });
+            }}
+            onBlur={() => {
+              setEditingTextId(null);
+              updateTyping(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === 'Escape') {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+            }}
+            style={{
+              position: 'fixed',
+              left: `${screenX}px`,
+              top: `${screenY}px`,
+              transform: 'translate(-50%, -50%)',
+              background: 'white',
+              border: '2px solid #3b82f6',
+              borderRadius: '4px',
+              padding: '0 4px',
+              outline: 'none',
+              fontSize: `${fontSize * zoom}px`,
+              fontFamily: arrow.fontFamily || 'Inter, sans-serif',
+              fontWeight: arrow.fontWeight || '700',
+              zIndex: 9999,
+              resize: 'none',
+              minWidth: '60px',
+              minHeight: '30px',
+              textAlign: 'center',
+              lineHeight: '1.2'
+            }}
+          />
+        );
+      })()}
 
       {/* Comments Layer */}
       {

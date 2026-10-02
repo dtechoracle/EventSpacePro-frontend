@@ -226,68 +226,20 @@ export default function LabelArrowRenderer({ arrow, zoom, isSelected, isHovered,
                     stroke="rgba(15, 23, 42, 0.08)"
                     style={{ filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.12))' }}
                 />
-                                {editingTextId === arrow.id ? (
-                    <foreignObject
-                        x={-rectWidth / 2}
-                        y={-rectHeight / 2}
-                        width={rectWidth + 40}
-                        height={rectHeight}
-                        style={{ overflow: 'visible' }}
-                    >
-                        <input
-                            type="text"
-                            defaultValue={label}
-                            autoFocus
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onFocus={(e) => {
-                                const val = e.target.value;
-                                e.target.value = '';
-                                e.target.value = val;
-                            }}
-                            onChange={(e) => {
-                                updateLabelArrow(arrow.id, { label: e.target.value });
-                            }}
-                            onBlur={() => {
-                                setEditingTextId(null);
-                            }}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === 'Escape') {
-                                    e.preventDefault();
-                                    e.currentTarget.blur();
-                                }
-                            }}
-                            style={{
-                                width: '100%',
-                                height: '100%',
-                                fontSize: `${fontSize}px`,
-                                fontWeight,
-                                fontStyle,
-                                textDecoration,
-                                color: color,
-                                background: 'transparent',
-                                border: 'none',
-                                outline: 'none',
-                                textAlign: 'center',
-                                fontFamily
-                            }}
-                        />
-                    </foreignObject>
-                ) : (
-                    <text
-                        x="0"
-                        y="1"
-                        fontSize={fontSize}
-                        fontWeight={fontWeight}
-                        fontStyle={fontStyle}
-                        textDecoration={textDecoration}
-                        fill={color}
-                        dominantBaseline="middle"
-                        textAnchor="middle"
-                        fontFamily={fontFamily}
-                    >
-                        {label}
-                    </text>
-                )}
+                                <text
+                    x="0"
+                    y="1"
+                    fontSize={fontSize}
+                    fontWeight={fontWeight}
+                    fontStyle={fontStyle}
+                    textDecoration={textDecoration}
+                    fill={color}
+                    dominantBaseline="middle"
+                    textAnchor="middle"
+                    fontFamily={fontFamily}
+                >
+                    {label}
+                </text>
             </g>
         </g>
     );
