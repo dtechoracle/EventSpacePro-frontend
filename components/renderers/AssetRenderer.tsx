@@ -941,6 +941,15 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 }
             }
 
+            // Fix for resizable assets (Marquees, Dance Floors, Layout Elements):
+            // By default, SVG <use> tags preserve the aspect ratio of their referenced <svg>.
+            // When a user resizes a dance floor to a custom ratio (e.g. 200x50), if the SVG
+            // forces "meet", it shrinks the drawing to 50x50 inside the 200x50 box, leaving a gap.
+            // Setting preserveAspectRatio="none" forces the vectors to stretch to the bounding box exactly like the WebP does.
+            if (!isVenueAsset) {
+                svg.setAttribute("preserveAspectRatio", "none");
+            }
+
             const result = new XMLSerializer().serializeToString(doc);
             if (baseCacheKey) processedSvgCache[baseCacheKey] = result;
             if (defId) injectSvgDef(defId, result);
