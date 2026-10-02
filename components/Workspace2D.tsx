@@ -2175,7 +2175,7 @@ export default function Workspace2D({
           const fontSize = annotation.fontSize || 250;
           const lineHeight = annotation.lineHeight || 1.2;
           const lines = (annotation.text || '').split('\n');
-          const maxChars = Math.max(...lines.map(l => l.length), 1);
+          const maxChars = Math.max(...lines.map((l: string) => l.length), 1);
           const halfW = (maxChars * fontSize * 0.6) / 2;
           const halfH = (lines.length * fontSize * lineHeight) / 2;
 
