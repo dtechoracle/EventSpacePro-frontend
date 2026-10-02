@@ -683,7 +683,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 styleEl.setAttribute("id", styleId);
                 const scope = `svg.asset-svg-content`;
                 const vectorEffectRule = `${scope} path, ${scope} circle, ${scope} rect, ${scope} line, ${scope} polyline, ${scope} ellipse { vector-effect: non-scaling-stroke !important; }`;
-                const strokeWidthInheritRule = preserveVenueStrokes ? "" : "stroke-width: var(--asset-stroke-width, inherit) !important;";
+                const strokeWidthInheritRule = "";
                 styleEl.textContent = `${vectorEffectRule} ${scope} .fill-none-el { fill: none !important; stroke: inherit !important; ${strokeWidthInheritRule} } ${scope} .fill-inherit-el { fill: inherit !important; stroke: inherit !important; ${strokeWidthInheritRule} } ${scope} .auto-fill-el { fill: inherit !important; stroke: none !important; } ${scope} .stroke-top-layer { pointer-events: none; } ${scope} .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } ${scope} .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } ${scope} .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } ${scope} .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
                 svg.prepend(styleEl);
             }
@@ -807,7 +807,11 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                     shouldBeNone = true;
                 }
 
+                let originalSw = el.getAttribute("stroke-width");
                 if (styleAttr) {
+                    const swMatch = styleAttr.match(/stroke-width\s*:\s*([^;]+)/i);
+                    if (swMatch && !originalSw) originalSw = swMatch[1].trim();
+
                     let cleaned = styleAttr
                         .replace(/fill\s*:[^;]+;?/gi, "")
                         .replace(/stroke\s*:[^;]+;?/gi, "");
@@ -830,6 +834,11 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                 // Preserve per-element stroke-width for venue assets
                 if (!preserveVenueStrokes) {
                     el.removeAttribute("stroke-width");
+                    
+                    // Inject CSS var override that falls back to the original authored stroke width
+                    const fallbackSw = originalSw || "inherit";
+                    const currentStyle = el.getAttribute("style") || "";
+                    el.setAttribute("style", `${currentStyle ? currentStyle + ';' : ''} stroke-width: var(--asset-stroke-width, ${fallbackSw}) !important;`);
                 }
 
                 if (!isFurniture) {
@@ -1127,7 +1136,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                                     fill: currentFill, 
                                     stroke: currentStroke, 
                                     strokeWidth: currentStrokeWidth,
-                                    '--asset-stroke-width': currentStrokeWidth 
+                                    '--asset-stroke-width': asset.strokeWidth !== undefined ? asset.strokeWidth : 'unset'
                                 } as any),
                                 filter: 'none',
                                 overflow: 'visible',
