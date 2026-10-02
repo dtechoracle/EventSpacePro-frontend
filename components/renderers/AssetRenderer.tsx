@@ -406,6 +406,30 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // Falls back to processed SVG if raster fails or for custom-colored/exploded/venue assets.
     const canUseFastImage = true;
     const fastImageHref = canUseFastImage ? rasterAssetPath : assetPath;
+    
+    // 1. Fill resolution logic (moved before baseSvg to determine if we need SVG for custom colors)
+    const currentFill = useMemo(() => {
+        let fill = asset.fillColor || 'transparent'; // Standard default
+        const a = asset as any;
+        if (a.fillType === 'texture' || a.fillType === 'hatch' || a.fillType === 'hash') {
+            const scale = a.fillTextureScale !== undefined ? a.fillTextureScale : 1;
+            const thickness = a.fillTextureThickness || 1;
+            if (a.fillTexture) {
+                const rotation = a.hatchRotation || 0;
+                return `url(#${a.fillTexture}-scale-${scale}-thick-${thickness}-rot-${rotation})`;
+            }
+        }
+        return fill;
+    }, [asset.fillColor, (asset as any).fillType, (asset as any).fillTexture, (asset as any).fillTextureScale, (asset as any).fillTextureThickness]);
+
+    const isCustomColored = useMemo(() => {
+        const hasCustomFill = currentFill !== 'transparent' && currentFill !== 'none';
+        const hasCustomTableColor = !!(asset as any).tableColor;
+        const hasCustomChairColor = !!(asset as any).chairColor;
+        return hasCustomFill || hasCustomTableColor || hasCustomChairColor;
+    }, [currentFill, (asset as any).tableColor, (asset as any).chairColor]);
+
+    const actuallyUseFastImage = canUseFastImage && !isCustomColored;
 
     useEffect(() => {
         setRasterImageFailed(false);
@@ -500,29 +524,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const baseCacheKey = definition?.path ? `${definition.path}_workspace_v56_no_raster_${equalVenueStrokeWidth ? 'equal' : 'layered'}_eko_individual_strokes` : null;
     const defId = baseCacheKey ? "def-" + Math.abs(Array.from(baseCacheKey).reduce((h, c) => Math.imul(31, h) + c.charCodeAt(0) | 0, 0)) : null;
 
-    // 1. Fill resolution logic (moved before baseSvg to determine if we need SVG for custom colors)
-    const currentFill = useMemo(() => {
-        let fill = asset.fillColor || 'transparent'; // Standard default
-        const a = asset as any;
-        if (a.fillType === 'texture' || a.fillType === 'hatch' || a.fillType === 'hash') {
-            const scale = a.fillTextureScale !== undefined ? a.fillTextureScale : 1;
-            const thickness = a.fillTextureThickness || 1;
-            if (a.fillTexture) {
-                const rotation = a.hatchRotation || 0;
-                return `url(#${a.fillTexture}-scale-${scale}-thick-${thickness}-rot-${rotation})`;
-            }
-        }
-        return fill;
-    }, [asset.fillColor, (asset as any).fillType, (asset as any).fillTexture, (asset as any).fillTextureScale, (asset as any).fillTextureThickness]);
 
-    const isCustomColored = useMemo(() => {
-        const hasCustomFill = currentFill !== 'transparent' && currentFill !== 'none';
-        const hasCustomTableColor = !!(asset as any).tableColor;
-        const hasCustomChairColor = !!(asset as any).chairColor;
-        return hasCustomFill || hasCustomTableColor || hasCustomChairColor;
-    }, [currentFill, (asset as any).tableColor, (asset as any).chairColor]);
-
-    const actuallyUseFastImage = canUseFastImage && !isCustomColored;
 
     // 2. Base SVG processing (Heavy - matches InlineSvg logic)
     const baseSvg = useMemo(() => {
