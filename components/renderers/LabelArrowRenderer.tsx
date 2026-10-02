@@ -1,11 +1,15 @@
 "use client";
 
 import React from 'react';
-import { LabelArrow } from '@/store/projectStore';
+import { LabelArrow, useProjectStore } from '@/store/projectStore';
+import { useEditorStore } from '@/store/editorStore';
 
 interface LabelArrowRendererProps {
     arrow: LabelArrow;
     zoom: number;
+    isSelected?: boolean;
+    isHovered?: boolean;
+    isHighlightOnly?: boolean;
 }
 
 type MarkerType = NonNullable<LabelArrow['arrowHeadType']>;
@@ -14,7 +18,10 @@ function markerLabel(type: MarkerType | undefined) {
     return type || 'none';
 }
 
-export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererProps) {
+export default function LabelArrowRenderer({ arrow, zoom, isSelected, isHovered, isHighlightOnly }: LabelArrowRendererProps) {
+    const editingTextId = useEditorStore(s => s.editingTextId);
+    const updateLabelArrow = useProjectStore(s => s.updateLabelArrow);
+    const setEditingTextId = useEditorStore(s => s.setEditingTextId);
     const dx = arrow.endPoint.x - arrow.startPoint.x;
     const dy = arrow.endPoint.y - arrow.startPoint.y;
     const length = Math.hypot(dx, dy);
@@ -151,19 +158,16 @@ export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererPr
     const rectPadH = fontSize * 0.5;
     const rectWidth = Math.max(fontSize * 2, labelStr.length * fontSize * 0.62 + rectPadH * 2);
 
-    if (labelPosition === 'top') {
-        // Appended to the very end of the arrow (outwards)
-        labelX = arrow.endPoint.x + ux * (rectWidth / 2 + headSize + 10);
-        labelY = arrow.endPoint.y + uy * (rectWidth / 2 + headSize + 10);
-    } else if (labelPosition === 'bottom') {
-        // Appended to the very start of the arrow (outwards)
-        labelX = arrow.startPoint.x - ux * (rectWidth / 2 + tailSize + 10);
-        labelY = arrow.startPoint.y - uy * (rectWidth / 2 + tailSize + 10);
-    } else {
-        // Middle - centered on the arrow line
-        labelX = arrow.startPoint.x + dx * 0.5;
-        labelY = arrow.startPoint.y + dy * 0.5;
-    }
+    const t = 0.0; // The tail/bottom of the arrow
+    const offset = fontSize / 2 + 10;
+    
+    // They want it attached directly to the bottom of the arrow.
+    // If they meant below the line, we use perp.
+    // If they meant the tail, t=0 is the tail.
+    // Let's position it at the tail, and offset it slightly backwards along the line.
+    labelX = arrow.startPoint.x - ux * offset;
+    labelY = arrow.startPoint.y - uy * offset;
+
 
     let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
     if (textAngle > 90 || textAngle < -90) textAngle += 180;
@@ -177,8 +181,32 @@ export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererPr
     const label = labelStr; // Map to the one declared above
 
 
+    
+    const highlightColor = '#3b82f6';
+    const showHighlight = isHovered || isSelected;
+
+    if (isHighlightOnly) {
+        if (!showHighlight) return null;
+        return (
+            <g data-id={arrow.id}>
+                <line
+                    x1={arrow.startPoint.x}
+                    y1={arrow.startPoint.y}
+                    x2={arrow.endPoint.x}
+                    y2={arrow.endPoint.y}
+                    stroke={highlightColor}
+                    strokeWidth={strokeWidth + 4}
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                    opacity={0.8}
+                />
+            </g>
+        );
+    }
+
     return (
         <g data-id={arrow.id}>
+
             <line
                 x1={arrow.startPoint.x}
                 y1={arrow.startPoint.y}
@@ -205,20 +233,68 @@ export default function LabelArrowRenderer({ arrow, zoom }: LabelArrowRendererPr
                     stroke="rgba(15, 23, 42, 0.08)"
                     style={{ filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.12))' }}
                 />
-                <text
-                    x="0"
-                    y="1"
-                    fontSize={fontSize}
-                    fontWeight={fontWeight}
-                    fontStyle={fontStyle}
-                    textDecoration={textDecoration}
-                    fill={color}
-                    dominantBaseline="middle"
-                    textAnchor="middle"
-                    fontFamily={fontFamily}
-                >
-                    {label}
-                </text>
+                                {editingTextId === arrow.id ? (
+                    <foreignObject
+                        x={-rectWidth / 2}
+                        y={-rectHeight / 2}
+                        width={rectWidth + 40}
+                        height={rectHeight}
+                        style={{ overflow: 'visible' }}
+                    >
+                        <input
+                            type="text"
+                            defaultValue={label}
+                            autoFocus
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onFocus={(e) => {
+                                const val = e.target.value;
+                                e.target.value = '';
+                                e.target.value = val;
+                            }}
+                            onChange={(e) => {
+                                updateLabelArrow(arrow.id, { label: e.target.value });
+                            }}
+                            onBlur={() => {
+                                setEditingTextId(null);
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === 'Escape') {
+                                    e.preventDefault();
+                                    e.currentTarget.blur();
+                                }
+                            }}
+                            style={{
+                                width: '100%',
+                                height: '100%',
+                                fontSize: `${fontSize}px`,
+                                fontWeight,
+                                fontStyle,
+                                textDecoration,
+                                color: color,
+                                background: 'transparent',
+                                border: 'none',
+                                outline: 'none',
+                                textAlign: 'center',
+                                fontFamily
+                            }}
+                        />
+                    </foreignObject>
+                ) : (
+                    <text
+                        x="0"
+                        y="1"
+                        fontSize={fontSize}
+                        fontWeight={fontWeight}
+                        fontStyle={fontStyle}
+                        textDecoration={textDecoration}
+                        fill={color}
+                        dominantBaseline="middle"
+                        textAnchor="middle"
+                        fontFamily={fontFamily}
+                    >
+                        {label}
+                    </text>
+                )}
             </g>
         </g>
     );

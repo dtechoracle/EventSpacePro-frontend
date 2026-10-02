@@ -584,7 +584,20 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
                     centerX = initialShape.x + offLX * cosR - offLY * sinR;
                     centerY = initialShape.y + offLX * sinR + offLY * cosR;
                 }
-                store.updateShape(item.id, { x: centerX, y: centerY, width: halfW * 2, height: halfH * 2 }, true);
+                                let newWidth = halfW * 2;
+                let newHeight = halfH * 2;
+                let pointsUpdate = {};
+                if (initialShape.points && initialShape.points.length > 0) {
+                    const scaleX = initialShape.width ? newWidth / initialShape.width : 1;
+                    const scaleY = initialShape.height ? newHeight / initialShape.height : 1;
+                    pointsUpdate = {
+                        points: initialShape.points.map(p => ({
+                            x: p.x * scaleX,
+                            y: p.y * scaleY
+                        }))
+                    };
+                }
+                store.updateShape(item.id, { x: centerX, y: centerY, width: newWidth, height: newHeight, ...pointsUpdate }, true);
 
 
                 }
@@ -884,46 +897,7 @@ export default function SelectionTool({ isActive, viewportSize, dragPreview }: S
         );
     }
 
-    // New: If single Polyline is selected, render vertex handles
-    const isSinglePolyline = selectedItems.length === 1 && selectedItems[0].type === 'shape' && (selectedItems[0].object as Shape).points;
-    if (isSinglePolyline) {
-        const shape = selectedItems[0].object as Shape;
-        let sx = shape.x;
-        let sy = shape.y;
-        if (dragPreview && dragPreview.ids.includes(shape.id)) {
-            sx += dragPreview.dx;
-            sy += dragPreview.dy;
-        }
-        if (shape.points) {
-            return (
-                <g data-export-ignore="true">
-                    {/* Bounding box for moving the whole thing */}
-                    <polygon 
-                        points={`${boxTopLeft.x},${boxTopLeft.y} ${boxTopRight.x},${boxTopRight.y} ${boxBottomRight.x},${boxBottomRight.y} ${boxBottomLeft.x},${boxBottomLeft.y}`} 
-                        fill={overlayFill} 
-                        stroke="#3B82F6" 
-                        strokeWidth={isTooLarge ? 1 : 2} 
-                        strokeDasharray={overlayDash}
-                        vectorEffect="non-scaling-stroke" 
-                        onMouseDown={(e) => handleMouseDown(e, 'move')} 
-                        style={{ cursor: 'move' }}
-                    />
-                    {shape.points.map((p, i) => {
-                        const pt = worldToScreenPoint(sx + p.x, sy + p.y);
-                        return (
-                            <rect 
-                                key={i} 
-                                x={pt.x - 5} y={pt.y - 5} width={10} height={10} 
-                                fill="white" stroke="#3b82f6" strokeWidth={1.5} 
-                                className="cursor-crosshair" 
-                                onMouseDown={(e) => handleMouseDown(e, `vertex-${i}`)} 
-                            />
-                        );
-                    })}
-                </g>
-            );
-        }
-    }
+
 
     return (
         <g data-export-ignore="true">

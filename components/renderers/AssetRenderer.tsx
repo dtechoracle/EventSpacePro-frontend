@@ -16,6 +16,26 @@ const processedSvgCache: Record<string, string> = {};
 const svgMetricsCache: Record<string, SvgMetrics> = {};
 const elementMetricsCache = new WeakMap<Element, { cx: number; cy: number; width: number; height: number }>();
 
+function injectSvgDef(defId: string, svgString: string) {
+    if (typeof document === 'undefined') return;
+    let container = document.getElementById('asset-svg-defs-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'asset-svg-defs-container';
+        container.style.display = 'none';
+        document.body.appendChild(container);
+    }
+    if (!document.getElementById(defId)) {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = svgString;
+        const svgEl = wrapper.firstElementChild;
+        if (svgEl) {
+            svgEl.setAttribute('id', defId);
+            container.appendChild(svgEl);
+        }
+    }
+}
+
 type SvgMetrics = {
     artboardWidth: number | null;
     artboardHeight: number | null;
@@ -378,6 +398,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // the SVG-processing path with non-scaling-stroke, which is what keeps a thin
     // outline legible at tiny zoom).
     const isVenueAsset = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
+    const preserveVenueStrokes = isVenueAsset && !equalVenueStrokeWidth;
     const isCad = !!definition?.path && (definition.path.toLowerCase().endsWith('.dwg') || definition.path.toLowerCase().endsWith('.dxf'));
     const isRasterFile = !!definition?.path && /\.(png|jpe?g|webp|gif|avif)$/i.test(definition.path);
     // Fast image path: render standard unexploded assets using their pre-rendered .webp raster
@@ -476,13 +497,18 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
         return () => { cancelled = true; };
     }, [isCad, assetPath]);
 
+    const baseCacheKey = definition?.path ? `${definition.path}_workspace_v56_no_raster_${equalVenueStrokeWidth ? 'equal' : 'layered'}_eko_individual_strokes` : null;
+    const defId = baseCacheKey ? "def-" + Math.abs(Array.from(baseCacheKey).reduce((h, c) => Math.imul(31, h) + c.charCodeAt(0) | 0, 0)) : null;
+
     // 1. Base SVG processing (Heavy - matches InlineSvg logic)
     const baseSvg = useMemo(() => {
         if (canUseFastImage) return null;
         if (!rawSvgContent || typeof window === 'undefined' || !definition?.path) return null;
 
-        const cacheKey = `${definition.path}_workspace_v56_no_raster_${equalVenueStrokeWidth ? 'equal' : 'layered'}_eko_individual_strokes`;
-        if (processedSvgCache[cacheKey]) return processedSvgCache[cacheKey];
+        if (baseCacheKey && processedSvgCache[baseCacheKey]) {
+            if (defId) injectSvgDef(defId, processedSvgCache[baseCacheKey]);
+            return processedSvgCache[baseCacheKey];
+        }
 
         try {
             const parser = new DOMParser();
@@ -563,7 +589,8 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                     normalizedSvg.appendChild(strokeUse);
 
                     const result = new XMLSerializer().serializeToString(normalizedDoc);
-                    processedSvgCache[cacheKey] = result;
+                    if (baseCacheKey) processedSvgCache[baseCacheKey] = result;
+                    if (defId) injectSvgDef(defId, result);
                     return result;
                 }
             }
@@ -572,11 +599,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             // Some QCAD SVGs put fill="none" on a parent <g>.
             // If we only set fill on the outer <svg>, that inner group blocks the fill,
             // so circles / auto-fill paths still render as unfilled.
-            // Remove inherited fill/stroke blockers from containers only.
-            const isVenueAsset = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
-            // False when the "Equal stroke width" view toggle is on: the venue then
             // follows the exact same uniform-width path as every other asset.
-            const preserveVenueStrokes = isVenueAsset && !equalVenueStrokeWidth;
 
             // Equal-stroke view: measure the widest source layer (exterior walls) from
             // the RAW source before the child loop below strips stroke-width from every
@@ -620,11 +643,13 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
 
             const styleId = "dynamic-asset-style";
             if (!doc.getElementById(styleId)) {
+                svg.classList.add("asset-svg-content");
                 const styleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
                 styleEl.setAttribute("id", styleId);
-                const vectorEffectRule = "svg path, svg circle, svg rect, svg line, svg polyline, svg ellipse { vector-effect: non-scaling-stroke !important; }";
+                const scope = `svg.asset-svg-content`;
+                const vectorEffectRule = `${scope} path, ${scope} circle, ${scope} rect, ${scope} line, ${scope} polyline, ${scope} ellipse { vector-effect: non-scaling-stroke !important; }`;
                 const strokeWidthInheritRule = preserveVenueStrokes ? "" : "stroke-width: inherit !important;";
-                styleEl.textContent = `${vectorEffectRule} svg .fill-none-el { fill: none !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .fill-inherit-el { fill: inherit !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .auto-fill-el { fill: inherit !important; stroke: none !important; } svg .stroke-top-layer { pointer-events: none; } svg .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } svg .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } svg .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
+                styleEl.textContent = `${vectorEffectRule} ${scope} .fill-none-el { fill: none !important; stroke: inherit !important; ${strokeWidthInheritRule} } ${scope} .fill-inherit-el { fill: inherit !important; stroke: inherit !important; ${strokeWidthInheritRule} } ${scope} .auto-fill-el { fill: inherit !important; stroke: none !important; } ${scope} .stroke-top-layer { pointer-events: none; } ${scope} .table-fill-el { fill: var(--table-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } ${scope} .table-auto-fill-el { fill: var(--table-color, inherit) !important; stroke: none !important; } ${scope} .chair-fill-el { fill: var(--chair-color, inherit) !important; stroke: inherit !important; ${strokeWidthInheritRule} } ${scope} .chair-auto-fill-el { fill: var(--chair-color, inherit) !important; stroke: none !important; }`;
                 svg.prepend(styleEl);
             }
 
@@ -890,13 +915,14 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
             }
 
             const result = new XMLSerializer().serializeToString(doc);
-            processedSvgCache[cacheKey] = result;
+            if (baseCacheKey) processedSvgCache[baseCacheKey] = result;
+            if (defId) injectSvgDef(defId, result);
             return result;
         } catch (e) {
             console.error("Error processing base SVG in AssetRenderer", e);
             return rawSvgContent;
         }
-    }, [rawSvgContent, definition?.path, asset.type, canUseFastImage, equalVenueStrokeWidth]);
+    }, [rawSvgContent, definition?.path, asset.type, canUseFastImage, equalVenueStrokeWidth, baseCacheKey, defId]);
 
     // 2. Fill resolution logic
     const currentFill = useMemo(() => {
@@ -919,32 +945,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     const displayWidth = asset.width || definition?.width || 100;
     const displayHeight = asset.height || definition?.height || 100;
 
-    // 3. Final Instance Processing
-    const processedSvg = useMemo(() => {
-        if (canUseFastImage) return null;
-        if (!baseSvg) return null;
-
-        return baseSvg.replace(/<svg([^>]*)>/i, (_match, attrs) => {
-            const cleanAttrs = attrs
-                .replace(/\s+width\s*=\s*["'][^"']*["']/gi, '')
-                .replace(/\s+height\s*=\s*["'][^"']*["']/gi, '')
-                .replace(/\s+x\s*=\s*["'][^"']*["']/gi, '')
-                .replace(/\s+y\s*=\s*["'][^"']*["']/gi, '')
-                .replace(/\s+fill\s*=\s*["'][^"']*["']/gi, '')
-                .replace(/\s+stroke\s*=\s*["'][^"']*["']/gi, '')
-                .replace(/\s+xmlns:\w+\s*=\s*["'][^"']*["']/gi, '');
-
-            // For venue assets, don't set a uniform stroke-width on the root SVG.
-            // Per-element stroke-widths are preserved from the original SVG so different
-            // architectural layers (walls 0.5, interior 0.35, doors 0.25, etc.) keep
-            // their distinct visual weights.
-            const isVenueFinal = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
-            if (isVenueFinal) {
-                return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" width="${displayWidth}" height="${displayHeight}" x="${-displayWidth / 2}" y="${-displayHeight / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none;">`;
-            }
-            return `<svg${cleanAttrs} fill="${currentFill}" stroke="${currentStroke}" stroke-width="${currentStrokeWidth}" width="${displayWidth}" height="${displayHeight}" x="${-displayWidth / 2}" y="${-displayHeight / 2}" preserveAspectRatio="none" style="overflow: visible; pointer-events: none;">`;
-        });
-    }, [baseSvg, canUseFastImage, currentFill, currentStroke, currentStrokeWidth, displayWidth, displayHeight]);
+    // 3. (Removed processedSvg useMemo - we use <use> tags instead!)
 
     if (asset.isExploded) return null;
     const rotation = asset.rotation || 0;
@@ -1079,17 +1080,29 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
                             preserveAspectRatio="xMidYMid meet"
                             style={{ outline: 'none', filter: 'none', pointerEvents: 'none' }}
                         />
-                    ) : processedSvg ? (
-                        <g
+                    ) : baseSvg && defId ? (
+                        <use
+                            href={`#${defId}`}
                             data-venue="true"
-                            dangerouslySetInnerHTML={{ __html: processedSvg }}
-                            style={{ filter: 'none' }}
+                            x={-displayWidth / 2}
+                            y={-displayHeight / 2}
+                            width={displayWidth}
+                            height={displayHeight}
+                            fill={preserveVenueStrokes ? undefined : currentFill}
+                            stroke={preserveVenueStrokes ? undefined : currentStroke}
+                            strokeWidth={preserveVenueStrokes ? undefined : currentStrokeWidth}
+                            style={{ 
+                                ...(preserveVenueStrokes ? {} : { fill: currentFill, stroke: currentStroke, strokeWidth: currentStrokeWidth }),
+                                filter: 'none',
+                                overflow: 'visible',
+                                pointerEvents: 'none'
+                            }}
                         />
                     ) : (
                         fastImageHref && (() => {
                             const isVenueImage = definition?.category === 'Venue' || definition?.path?.toLowerCase().includes('preloaded-venues');
                             if (isVenueImage) {
-                                // Venue SVGs: wait for processedSvg to avoid flicker between
+                                // Venue SVGs: wait for baseSvg to avoid flicker between
                                 // image fallback and inline SVG at different sizes.
                                 return null;
                             }

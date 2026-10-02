@@ -108,15 +108,15 @@ export default function SnapMarkersRenderer({ dragPreview }: SnapMarkersRenderer
                     <g key={`${point.elementId}-${index}`} transform={`translate(${point.x}, ${point.y})`}>
                         {isActive ? (
                             <circle
-                                r={7}
+                                r={7 / zoom}
                                 fill="none"
                                 stroke="#22c55e"
-                                strokeWidth={1.5}
+                                strokeWidth={1.5 / zoom}
                                 opacity={1}
                             />
                         ) : (
                             <circle
-                                r={5.5}
+                                r={5.5 / zoom}
                                 fill="#22c55e"
                                 opacity={0.7}
                             />

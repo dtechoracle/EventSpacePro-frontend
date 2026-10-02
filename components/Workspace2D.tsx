@@ -645,9 +645,26 @@ const SelectionHighlightLayer = React.memo(({
             {item._renderType === 'asset' && (
               <AssetRenderer asset={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
             )}
-            {item._renderType === 'wall' && (
+                        {item._renderType === 'wall' && (
               <WallRenderer key={`highlight-${getWallRenderKey(item)}`} wall={item} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
             )}
+            {item._renderType === 'labelArrow' && (
+              <LabelArrowRenderer arrow={item} zoom={zoom} isSelected={isSelected} isHovered={isHovered} isHighlightOnly />
+            )}
+            
+            {/* Render green snap anchor vertices for selected/hovered items */}
+            {vertices.map((v: any, idx: number) => (
+              <circle
+                key={`vertex-${item.id}-${idx}`}
+                cx={v.x}
+                cy={v.y}
+                r={4 / zoom}
+                fill="#22c55e"
+                stroke="#ffffff"
+                strokeWidth={1 / zoom}
+                style={{ pointerEvents: 'none' }}
+              />
+            ))}
           </React.Fragment>
         );
       })}
@@ -1129,6 +1146,10 @@ export default function Workspace2D({
     [allRenderables]
   );
 
+  const cullPanX = Math.round(panX / 500);
+  const cullPanY = Math.round(panY / 500);
+  const cullZoom = Math.round(zoom * 5) / 5;
+
   // Viewport Culling - Filter items that are actually visible to maximize performance with 100k+ assets
   // Use a very large conservative margin so items near viewport edges are never incorrectly culled.
   const visibleRenderables = useMemo(() => {
@@ -1185,7 +1206,7 @@ export default function Workspace2D({
     });
 
     return result;
-  }, [svgRenderables, panX, panY, zoom, viewportSize]);
+  }, [svgRenderables, cullPanX, cullPanY, cullZoom, viewportSize]);
 
   const autoDimensionShapes = useMemo(
     () => shapes.filter((shape) => (shape as any).showDimensions && shape.type !== 'line' && shape.type !== 'arrow'),
@@ -1400,7 +1421,7 @@ export default function Workspace2D({
             if (shape.id === 'background-texture') break;
 
             if (shape.type === 'line' || shape.type === 'arrow') {
-              const thickness = Math.max((shape.strokeWidth ?? 2) + 20, 30);
+              const thickness = Math.max((shape.strokeWidth ?? 2) + 20 / zoom, 30 / zoom);
               const points = shape.points;
               if (points && points.length >= 2) {
                 let lineHit = false;
@@ -1417,10 +1438,31 @@ export default function Workspace2D({
                   }
                 }
                 if (lineHit) targetId = shape.id;
+              } else {
+                // Fallback for straight lines without points
+                const rad = (shape.rotation || 0) * Math.PI / 180;
+                const halfW = (shape.width || 0) / 2;
+                const ax = shape.x - Math.cos(rad) * halfW;
+                const ay = shape.y - Math.sin(rad) * halfW;
+                const bx = shape.x + Math.cos(rad) * halfW;
+                const by = shape.y + Math.sin(rad) * halfW;
+                const dx = bx - ax, dy = by - ay;
+                const lenSq = dx * dx + dy * dy;
+                if (lenSq > 0) {
+                  const t = Math.max(0, Math.min(1, ((worldX - ax) * dx + (worldY - ay) * dy) / lenSq));
+                  if (Math.hypot(worldX - (ax + t * dx), worldY - (ay + t * dy)) <= thickness) {
+                    targetId = shape.id;
+                  }
+                }
               }
             } else {
+              const rad = -(shape.rotation || 0) * Math.PI / 180;
+              const dx = worldX - (shape.x || 0);
+              const dy = worldY - (shape.y || 0);
+              const localX = dx * Math.cos(rad) - dy * Math.sin(rad);
+              const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
               const halfW = (shape.width || 0) / 2, halfH = (shape.height || 0) / 2;
-              if (worldX >= (shape.x || 0) - halfW && worldX <= (shape.x || 0) + halfW && worldY >= (shape.y || 0) - halfH && worldY <= (shape.y || 0) + halfH) {
+              if (localX >= -halfW && localX <= halfW && localY >= -halfH && localY <= halfH) {
                 targetId = shape.id;
               }
             }
@@ -2192,6 +2234,55 @@ export default function Workspace2D({
         }
       }
 
+            // Check for labelArrow hit
+      for (let i = labelArrows.length - 1; i >= 0; i--) {
+        const arrow = labelArrows[i];
+        const dx = arrow.endPoint.x - arrow.startPoint.x, dy = arrow.endPoint.y - arrow.startPoint.y;
+        const lenSq = dx * dx + dy * dy;
+        const thickness = (arrow.strokeWidth || 2) + 30;
+        let arrowHit = false;
+        
+        // Check line hit
+        if (lenSq === 0) {
+          if (Math.hypot(worldX - arrow.startPoint.x, worldY - arrow.startPoint.y) <= thickness) arrowHit = true;
+        } else {
+          const t = Math.max(0, Math.min(1, ((worldX - arrow.startPoint.x) * dx + (worldY - arrow.startPoint.y) * dy) / lenSq));
+          if (Math.hypot(worldX - (arrow.startPoint.x + t * dx), worldY - (arrow.startPoint.y + t * dy)) <= thickness) arrowHit = true;
+        }
+        
+        // Check text hit
+        if (!arrowHit) {
+          const lLen = Math.hypot(dx, dy);
+          if (lLen > 0.01) {
+            const fontSize = arrow.fontSize || 120;
+            const offset = fontSize / 2 + 10;
+            const ux = dx / lLen;
+            const uy = dy / lLen;
+            let labelX = arrow.startPoint.x - ux * offset;
+            let labelY = arrow.startPoint.y - uy * offset;
+            const rectPadH = fontSize * 0.5;
+            const rectPadV = fontSize * 0.35;
+            const lbl = arrow.label || '';
+            const rectWidth = Math.max(fontSize * 2, lbl.length * fontSize * 0.62 + rectPadH * 2);
+            const rectHeight = fontSize + rectPadV * 2;
+            let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+            if (textAngle > 90 || textAngle < -90) textAngle += 180;
+            const rad = -textAngle * Math.PI / 180;
+            const cosA = Math.cos(rad), sinA = Math.sin(rad);
+            const localX = worldX - labelX, localY = worldY - labelY;
+            const rotX = localX * cosA - localY * sinA;
+            const rotY = localX * sinA + localY * cosA;
+            if (Math.abs(rotX) <= rectWidth / 2 + 10 && Math.abs(rotY) <= rectHeight / 2 + 10) arrowHit = true;
+          }
+        }
+        
+        if (arrowHit) {
+          setEditingTextId(arrow.id);
+          setSelectedIds([arrow.id]);
+          return;
+        }
+      }
+
       // Check for text annotation hit
       for (let i = textAnnotations.length - 1; i >= 0; i--) {
         const annotation = textAnnotations[i];
@@ -2538,7 +2629,7 @@ export default function Workspace2D({
             } else if (item._renderType === 'shape') {
               const shape = item;
               if (shape.type === 'line' || shape.type === 'arrow') {
-                const thickness = Math.max((shape.strokeWidth ?? 2) + 20, 30); // Increased hit radius for easier selection
+                const thickness = Math.max((shape.strokeWidth ?? 2) + 20 / zoom, 30 / zoom); // Increased hit radius for easier selection
                 if (shape.points && shape.points.length >= 2) {
                   for (let s = 0; s < shape.points.length - 1; s++) {
                     const p1 = shape.points[s];
@@ -3838,14 +3929,14 @@ export default function Workspace2D({
           group.itemIds.forEach(childId => {
             const shape = shapes.find(s => s.id === childId);
             if (shape) {
-              const newShape = { ...shape, id: generateId(), groupId: newGroupId, x: shape.x + offset * (i + 1), y: shape.y, zIndex: getNextZIndex() };
+              const newShape = { ...shape, id: generateId(), groupId: newGroupId, x: shape.x + offset * (i + 1), y: shape.y, zIndex: getNextZIndex(), tableName: undefined };
               addShape(newShape, true);
               newChildIds.push(newShape.id);
               return;
             }
             const asset = assets.find(a => a.id === childId);
             if (asset) {
-              const newAsset = { ...asset, id: generateId(), groupId: newGroupId, x: asset.x + offset * (i + 1), y: asset.y, zIndex: getNextZIndex() };
+              const newAsset = { ...asset, id: generateId(), groupId: newGroupId, x: asset.x + offset * (i + 1), y: asset.y, zIndex: getNextZIndex(), tableName: undefined };
               addAsset(newAsset, true);
               newChildIds.push(newAsset.id);
               return;
@@ -3882,13 +3973,7 @@ export default function Workspace2D({
           // Try shape
           const shape = shapes.find(s => s.id === id);
           if (shape) {
-            const newShape = {
-              ...shape,
-              id: generateId(),
-              x: shape.x + offset * (i + 1),
-              y: shape.y,
-              zIndex: getNextZIndex()
-            };
+            const newShape = { ...shape, id: generateId(), x: shape.x + offset * (i + 1), y: shape.y, zIndex: getNextZIndex(), tableName: undefined };
             addShape(newShape, true); // skipHistory
             newSelectedIds.push(newShape.id);
             return;
@@ -3897,13 +3982,7 @@ export default function Workspace2D({
           // Try asset
           const asset = assets.find(a => a.id === id);
           if (asset) {
-            const newAsset = {
-              ...asset,
-              id: generateId(),
-              x: asset.x + offset * (i + 1),
-              y: asset.y,
-              zIndex: getNextZIndex()
-            };
+            const newAsset = { ...asset, id: generateId(), x: asset.x + offset * (i + 1), y: asset.y, zIndex: getNextZIndex(), tableName: undefined };
             addAsset(newAsset, true); // skipHistory
             newSelectedIds.push(newAsset.id);
             return;

@@ -505,37 +505,47 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
     }
   }, [itemType, selectedTextAnnotation, localTextProps.id, localTextProps.text]);
 
-  const tableNumberingItems = useMemo<NumberableTable[]>(() => {
-    const tables = [
-      ...assets
-        .filter(isTableLike)
-        .map((asset, index) => ({
-          id: asset.id,
-          type: 'asset' as const,
-          x: asset.x,
-          y: asset.y,
-          name: asset.tableName,
-          label: getTableLabel(asset, `Table ${index + 1}`),
-        })),
-      ...shapes
-        .filter(isTableLike)
-        .map((shape, index) => ({
-          id: shape.id,
-          type: 'shape' as const,
-          x: shape.x,
-          y: shape.y,
-          name: shape.tableName,
-          label: getTableLabel(shape, `Table ${index + 1}`),
-        })),
-    ];
+  const [debouncedTables, setDebouncedTables] = useState<NumberableTable[]>([]);
 
-    return getOrderedTablesForNumbering(
-      tables,
-      numberingDirection,
-      numberingPattern,
-      getStageAnchor(assets, shapes)
-    );
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      const tables = [
+        ...assets
+          .filter(isTableLike)
+          .map((asset, index) => ({
+            id: asset.id,
+            type: 'asset' as const,
+            x: asset.x,
+            y: asset.y,
+            name: asset.tableName,
+            label: getTableLabel(asset, `Table ${index + 1}`),
+          })),
+        ...shapes
+          .filter(isTableLike)
+          .map((shape, index) => ({
+            id: shape.id,
+            type: 'shape' as const,
+            x: shape.x,
+            y: shape.y,
+            name: shape.tableName,
+            label: getTableLabel(shape, `Table ${index + 1}`),
+          })),
+      ];
+
+      setDebouncedTables(
+        getOrderedTablesForNumbering(
+          tables,
+          numberingDirection,
+          numberingPattern,
+          getStageAnchor(assets, shapes)
+        )
+      );
+    }, 150);
+
+    return () => clearTimeout(timeout);
   }, [assets, shapes, numberingDirection, numberingPattern]);
+
+  const tableNumberingItems = debouncedTables;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -621,6 +631,62 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
     tableNumberingItems,
     batchUpdateItems
   ]);
+
+  const handleRenumberAll = useCallback(() => {
+    if (tableNumberingItems.length === 0) return;
+    
+    // We want to re-number ALL tables based on arrangement
+    const sortedTables = [...tableNumberingItems];
+
+    if (numberingDirection === 'radial') {
+        const cx = sortedTables.reduce((sum, t) => sum + t.x, 0) / sortedTables.length;
+        const cy = sortedTables.reduce((sum, t) => sum + t.y, 0) / sortedTables.length;
+        sortedTables.sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
+    } else {
+        const isTopDown = numberingDirection.includes('from-top');
+        const isLeftToRight = numberingDirection.includes('to-right');
+        
+        sortedTables.sort((a, b) => {
+            if (Math.abs(a.y - b.y) > 250) {
+                return isTopDown ? a.y - b.y : b.y - a.y;
+            }
+            return isLeftToRight ? a.x - b.x : b.x - a.x;
+        });
+
+        if (numberingPattern === 's-direction') {
+            const rows: NumberableTable[][] = [];
+            let currentRow: NumberableTable[] = [];
+
+            for (const t of sortedTables) {
+                if (currentRow.length === 0 || Math.abs(t.y - currentRow[0].y) <= 250) {
+                    currentRow.push(t);
+                } else {
+                    rows.push(currentRow);
+                    currentRow = [t];
+                }
+            }
+            if (currentRow.length > 0) rows.push(currentRow);
+
+            rows.forEach((row, i) => {
+                if (i % 2 === 1) row.reverse();
+            });
+            
+            sortedTables.splice(0, sortedTables.length, ...rows.flat());
+        }
+    }
+
+    let nextNum = startingNumber;
+    const updates = sortedTables.map(t => {
+      const n = nextNum;
+      nextNum++;
+      return { id: t.id, type: t.type, updates: { tableName: String(n) } };
+    });
+
+    if (updates.length > 0) {
+      batchUpdateItems(updates, true);
+      toast.success('Renumbered all tables');
+    }
+  }, [tableNumberingItems, numberingPattern, numberingDirection, startingNumber, batchUpdateItems]);
 
   const handleToggleGrid = () => {
     toggleGrid();
@@ -1470,13 +1536,13 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                     <button
                       type="button"
                       title="Horizontal"
-                      onClick={() => flipSelectionX()}
+                      onClick={() => flipSelectionY()}
                       className="px-3 py-1 text-xs border rounded transition-colors bg-white border-gray-200 text-gray-600 hover:bg-gray-50 focus:outline-none"
                     >H</button>
                     <button
                       type="button"
                       title="Vertical"
-                      onClick={() => flipSelectionY()}
+                      onClick={() => flipSelectionX()}
                       className="px-3 py-1 text-xs border rounded transition-colors bg-white border-gray-200 text-gray-600 hover:bg-gray-50 focus:outline-none"
                     >V</button>
                   </div>
@@ -1610,13 +1676,13 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                         <button
                           type="button"
                           title="Horizontal"
-                          onClick={() => flipSelectionX()}
+                          onClick={() => flipSelectionY()}
                           className="px-3 py-1 text-xs border rounded transition-colors bg-white border-gray-200 text-gray-600 hover:bg-gray-50 focus:outline-none"
                         >H</button>
                         <button
                           type="button"
                           title="Vertical"
-                          onClick={() => flipSelectionY()}
+                          onClick={() => flipSelectionX()}
                           className="px-3 py-1 text-xs border rounded transition-colors bg-white border-gray-200 text-gray-600 hover:bg-gray-50 focus:outline-none"
                         >V</button>
                       </div>
@@ -4169,7 +4235,10 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
                   <span className="text-xs text-slate-600">Pattern</span>
                   <select
                     value={numberingPattern}
-                    onChange={(e) => setNumberingPattern(e.target.value as any)}
+                    onChange={(e) => {
+                      setNumberingPattern(e.target.value as any);
+                      if (numberingMode === 'auto') setTimeout(handleRenumberAll, 50);
+                    }}
                     className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-36 focus:ring-1 focus:ring-blue-500 outline-none"
                   >
                     <option value="linear">Linear</option>
@@ -4179,18 +4248,29 @@ const setEditorGridSize = useEditorStore(s => s.setGridSize);
 
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-600">Direction</span>
-                  <select
+                                    <select
                     value={numberingDirection}
-                    onChange={(e) => setNumberingDirection(e.target.value as any)}
+                    onChange={(e) => {
+                      setNumberingDirection(e.target.value as any);
+                      if (numberingMode === 'auto') setTimeout(handleRenumberAll, 50);
+                    }}
                     className="text-xs border border-slate-200 rounded px-2 py-1 bg-white w-36 focus:ring-1 focus:ring-blue-500 outline-none"
                   >
-                    <option value="from-top-right-to-left">Top (R - L)</option>
-                    <option value="from-bottom-right-to-left">Bottom (R - L)</option>
-                    <option value="from-top-left-to-right">Top (L - R)</option>
-                    <option value="from-bottom-left-to-right">Bottom (L - R)</option>
+                    <option value="from-top-left-to-right">Top Left &#8594; Right</option>
+                    <option value="from-top-right-to-left">Top Right &#8592; Left</option>
+                    <option value="from-bottom-left-to-right">Bottom Left &#8594; Right</option>
+                    <option value="from-bottom-right-to-left">Bottom Right &#8592; Left</option>
                     <option value="radial">Radial</option>
                   </select>
                 </div>
+                
+                <button
+                  onClick={handleRenumberAll}
+                  className="w-full mt-2 py-1.5 text-xs font-semibold text-white bg-blue-500 rounded hover:bg-blue-600 transition"
+                >
+                  Renumber All Tables
+                </button>
+
               </>
             )}
 

@@ -233,7 +233,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                                 strokeWidth={outerWidth}
                                 opacity={commonProps.opacity}
                                 strokeLinecap="round"
-                                strokeLinejoin="round"
+                                strokeLinejoin="miter"
                                 data-id={shape.id}
                             />
                             {/* Inner "gap" line - using white for now */}
@@ -244,24 +244,11 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                                 strokeWidth={gapWidth}
                                 opacity={1}
                                 strokeLinecap="round"
-                                strokeLinejoin="round"
+                                strokeLinejoin="miter"
                                 data-id={shape.id}
                             />
 
-                            {/* Control points for polyline */}
-                            {!isHighlight && isSelected && shape.points.map((p, i) => (
-                                <circle
-                                    key={i}
-                                    cx={p.x}
-                                    cy={p.y}
-                                    r={6.5}
-                                    fill="#ffffff"
-                                    stroke="#3b82f6"
-                                    strokeWidth={1} 
-                                    className="cursor-move"
-                                    data-id={shape.id}
-                                />
-                            ))}
+
                         </g>
                     );
                 }
@@ -284,25 +271,12 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                             strokeWidth={commonProps.strokeWidth}
                             opacity={commonProps.opacity}
                             strokeLinecap="round"
-                            strokeLinejoin="round"
+                            strokeLinejoin="miter"
                             strokeDasharray={commonProps.strokeDasharray}
                             style={commonProps.style}
                             data-id={shape.id}
                         />
-                        {/* Control points for polyline */}
-                        {!isHighlight && isSelected && shape.points.map((p, i) => (
-                            <circle
-                                key={i}
-                                cx={p.x}
-                                cy={p.y}
-                                r={6.5}
-                                fill="#ffffff"
-                                stroke="#3b82f6"
-                                strokeWidth={1} 
-                                className="cursor-move"
-                                data-id={shape.id}
-                            />
-                        ))}
+
                     </g>
                 );
             }
@@ -310,6 +284,16 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
             // Fallback: legacy straight line using width / rotation.
             return (
                 <g data-id={shape.id}>
+                    <line
+                        x1={-shape.width / 2}
+                        y1={0}
+                        x2={shape.width / 2}
+                        y2={0}
+                        stroke="transparent"
+                        strokeWidth={Math.max(20, (commonProps.strokeWidth || 1) + 10)}
+                        style={{ pointerEvents: 'stroke' }}
+                        data-id={shape.id}
+                    />
                     <line
                         x1={-shape.width / 2}
                         y1={0}
@@ -506,7 +490,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                             strokeWidth={commonProps.strokeWidth}
                             opacity={commonProps.opacity}
                             strokeLinecap="round"
-                            strokeLinejoin="round"
+                            strokeLinejoin="miter"
                             strokeDasharray={commonProps.strokeDasharray}
                             data-id={shape.id}
                         />
@@ -632,7 +616,7 @@ const InnerShapeRenderer = ({ shape, isSelected = false, isHovered = false, isHi
                     d={pathData}
                     {...commonProps}
                     strokeLinecap="round"
-                    strokeLinejoin="round"
+                    strokeLinejoin="miter"
                 />
             );
         }

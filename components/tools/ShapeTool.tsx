@@ -188,7 +188,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                 }
             }
 
-            if (lastPoint) {
+            if (lastPoint && !currentSnapPoint) {
                 snapped = snapTo90Degrees(lastPoint, snapped, 6);
             }
             setPreviewPoint(snapped);
@@ -219,12 +219,6 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         let finalWidth = Math.abs(dx);
         let finalHeight = Math.abs(dy);
         let finalRotation = 0;
-
-        if (shapeType === 'line' || shapeType === 'arrow') {
-            finalWidth = dist;
-            finalHeight = 0;
-            finalRotation = Math.atan2(dy, dx) * (180 / Math.PI);
-        }
 
         const newShape: Shape = {
             id: crypto.randomUUID(),
@@ -488,20 +482,36 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
             // But previewPoint is state, better to recalc or trust mousemove updated it?
             // Let's recalc strict snap for accuracy.
             const snapThreshold = 32 / useEditorStore.getState().zoom;
-            for (const p of existingEndpoints) {
-                if (Math.hypot(snapped.x - p.x, snapped.y - p.y) < snapThreshold) {
-                    snapped = p;
-                    break;
+            const { snapToObjects } = useEditorStore.getState();
+            let didObjectSnap = false;
+
+            // Object snap takes priority
+            if (snapToObjects !== false) {
+                const snapResult = findSnapPointInShapes(worldPos, drawingSnapTargets, snapThreshold);
+                if (snapResult) {
+                    snapped = { x: snapResult.x, y: snapResult.y };
+                    didObjectSnap = true;
+                }
+            }
+
+            if (!didObjectSnap) {
+                for (const p of existingEndpoints) {
+                    if (Math.hypot(snapped.x - p.x, snapped.y - p.y) < snapThreshold) {
+                        snapped = p;
+                        didObjectSnap = true;
+                        break;
+                    }
                 }
             }
             if (segments.length > 0) {
                 const start = segments[0].start;
                 if (Math.hypot(snapped.x - start.x, snapped.y - start.y) < snapThreshold) {
                     snapped = start;
+                    didObjectSnap = true;
                 }
             }
 
-            if (dragStartPos.current) {
+            if (dragStartPos.current && !didObjectSnap) {
                 snapped = snapTo90Degrees(dragStartPos.current, snapped, 6);
             }
 
@@ -570,7 +580,7 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
         }
         setIsLineDragging(false);
         dragStartPos.current = null;
-    }, [isDrawing, isLineDragging, lastPoint, segments, screenToWorld, snapToGridEnabled, gridSize, existingEndpoints]);
+    }, [isDrawing, isLineDragging, lastPoint, segments, screenToWorld, snapToGridEnabled, gridSize, existingEndpoints, drawingSnapTargets]);
 
     // Attach event listeners
     useEffect(() => {
@@ -886,20 +896,6 @@ export default function ShapeTool({ isActive, shapeType }: ShapeToolProps) {
                         vectorEffect="non-scaling-stroke"
                     />
                 )}
-
-                {(shapeType === 'line' || shapeType === 'arrow') && (
-                    <line
-                        x1={startPoint.x}
-                        y1={startPoint.y}
-                        x2={endPoint.x}
-                        y2={endPoint.y}
-                        stroke="#3b82f6"
-                        strokeWidth={2}
-                        opacity={0.7}
-                        vectorEffect="non-scaling-stroke"
-                    />
-                )}
-
                 {shapeType === 'ellipse' && (
                     <ellipse
                         cx={centerX}
