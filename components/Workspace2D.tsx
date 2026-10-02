@@ -2738,11 +2738,12 @@ export default function Workspace2D({
               if (!isHit) {
                 const lLen = Math.hypot(dx, dy);
                 if (lLen > 0.01) {
-                  const labelPos = arrow.textPosition || 'bottom';
-                  const labelT = labelPos === 'top' ? 0.86 : labelPos === 'middle' ? 0.5 : 0.14;
-                  const labelX = arrow.startPoint.x + dx * labelT;
-                  const labelY = arrow.startPoint.y + dy * labelT;
                   const fontSize = arrow.fontSize || 120;
+                  const offset = fontSize / 2 + 10;
+                  const ux = dx / lLen;
+                  const uy = dy / lLen;
+                  const labelX = arrow.startPoint.x - ux * offset;
+                  const labelY = arrow.startPoint.y - uy * offset;
                   const rectPadH = fontSize * 0.5;
                   const rectPadV = fontSize * 0.35;
                   const lbl = arrow.label || '';
