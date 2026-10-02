@@ -2121,133 +2121,95 @@ export default function Workspace2D({
 
       let hitFound = false;
 
-      // Check for shape hit
-      for (let i = shapes.length - 1; i >= 0; i--) {
-        const shape = shapes[i];
-        const halfW = shape.width / 2;
-        const halfH = shape.height / 2;
+      const hitRenderables = visibleRenderables;
+      for (let i = hitRenderables.length - 1; i >= 0; i--) {
+        const item = hitRenderables[i];
 
-        // Simple bounding box check (ignoring rotation for hit test simplicity)
-        if (
-          worldX >= shape.x - halfW &&
-          worldX <= shape.x + halfW &&
-          worldY >= shape.y - halfH &&
-          worldY <= shape.y + halfH
-        ) {
-          // Convert to polygon if rectangle or ellipse
-          /* 
-          // DISABLED: User requested to disable double-click conversion for shapes
-          if (shape.type === 'rectangle' || shape.type === 'ellipse') {
-            let pts: { x: number, y: number }[] = [];
-            if (shape.type === 'rectangle') {
-              pts = [
-                { x: -halfW, y: -halfH },
-                { x: halfW, y: -halfH },
-                { x: halfW, y: halfH },
-                { x: -halfW, y: halfH }
-              ];
-            } else {
-              // Ellipse approximation (16 points)
-              const sides = 16;
-              for (let j = 0; j < sides; j++) {
-                const angle = (Math.PI * 2 * j) / sides;
-                pts.push({
-                  x: Math.cos(angle) * halfW,
-                  y: Math.sin(angle) * halfH
-                });
-              }
+        if (item._renderType === 'labelArrow') {
+          const arrow = item;
+          const dx = arrow.endPoint.x - arrow.startPoint.x, dy = arrow.endPoint.y - arrow.startPoint.y;
+          const lenSq = dx * dx + dy * dy;
+          const thickness = (arrow.strokeWidth || 2) + 30;
+          let arrowHit = false;
+          
+          if (lenSq === 0) {
+            if (Math.hypot(worldX - arrow.startPoint.x, worldY - arrow.startPoint.y) <= thickness) arrowHit = true;
+          } else {
+            const t = Math.max(0, Math.min(1, ((worldX - arrow.startPoint.x) * dx + (worldY - arrow.startPoint.y) * dy) / lenSq));
+            if (Math.hypot(worldX - (arrow.startPoint.x + t * dx), worldY - (arrow.startPoint.y + t * dy)) <= thickness) arrowHit = true;
+          }
+          
+          if (!arrowHit) {
+            const lLen = Math.hypot(dx, dy);
+            if (lLen > 0.01) {
+              const fontSize = arrow.fontSize || 120;
+              const offset = fontSize / 2 + 10;
+              const ux = dx / lLen;
+              const uy = dy / lLen;
+              let labelX = arrow.startPoint.x - ux * offset;
+              let labelY = arrow.startPoint.y - uy * offset;
+              const rectPadH = fontSize * 0.5;
+              const rectPadV = fontSize * 0.35;
+              const lbl = arrow.label || '';
+              const rectWidth = Math.max(fontSize * 2, lbl.length * fontSize * 0.62 + rectPadH * 2);
+              const rectHeight = fontSize + rectPadV * 2;
+              let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+              if (textAngle > 90 || textAngle < -90) textAngle += 180;
+              const rad = -textAngle * Math.PI / 180;
+              const cosA = Math.cos(rad), sinA = Math.sin(rad);
+              const localX = worldX - labelX, localY = worldY - labelY;
+              const rotX = localX * cosA - localY * sinA;
+              const rotY = localX * sinA + localY * cosA;
+              if (Math.abs(rotX) <= rectWidth / 2 + 10 && Math.abs(rotY) <= rectHeight / 2 + 10) arrowHit = true;
             }
-
-            updateShape(shape.id, {
-              type: 'polygon',
-              points: pts,
-              polygonSides: pts.length
-            });
-            toast.success("Converted to editable polygon");
-            setSelectedIds([shape.id]);
-          } else */
-          if (shape.type === 'polygon' || shape.type === 'line') {
-            // Already editable, just ensure selected
-            setSelectedIds([shape.id]);
           }
-          return;
-        }
-      }
-
-            // Check for labelArrow hit
-      for (let i = labelArrows.length - 1; i >= 0; i--) {
-        const arrow = labelArrows[i];
-        const dx = arrow.endPoint.x - arrow.startPoint.x, dy = arrow.endPoint.y - arrow.startPoint.y;
-        const lenSq = dx * dx + dy * dy;
-        const thickness = (arrow.strokeWidth || 2) + 30;
-        let arrowHit = false;
-        
-        // Check line hit
-        if (lenSq === 0) {
-          if (Math.hypot(worldX - arrow.startPoint.x, worldY - arrow.startPoint.y) <= thickness) arrowHit = true;
-        } else {
-          const t = Math.max(0, Math.min(1, ((worldX - arrow.startPoint.x) * dx + (worldY - arrow.startPoint.y) * dy) / lenSq));
-          if (Math.hypot(worldX - (arrow.startPoint.x + t * dx), worldY - (arrow.startPoint.y + t * dy)) <= thickness) arrowHit = true;
-        }
-        
-        // Check text hit
-        if (!arrowHit) {
-          const lLen = Math.hypot(dx, dy);
-          if (lLen > 0.01) {
-            const fontSize = arrow.fontSize || 120;
-            const offset = fontSize / 2 + 10;
-            const ux = dx / lLen;
-            const uy = dy / lLen;
-            let labelX = arrow.startPoint.x - ux * offset;
-            let labelY = arrow.startPoint.y - uy * offset;
-            const rectPadH = fontSize * 0.5;
-            const rectPadV = fontSize * 0.35;
-            const lbl = arrow.label || '';
-            const rectWidth = Math.max(fontSize * 2, lbl.length * fontSize * 0.62 + rectPadH * 2);
-            const rectHeight = fontSize + rectPadV * 2;
-            let textAngle = Math.atan2(dy, dx) * (180 / Math.PI);
-            if (textAngle > 90 || textAngle < -90) textAngle += 180;
-            const rad = -textAngle * Math.PI / 180;
-            const cosA = Math.cos(rad), sinA = Math.sin(rad);
-            const localX = worldX - labelX, localY = worldY - labelY;
-            const rotX = localX * cosA - localY * sinA;
-            const rotY = localX * sinA + localY * cosA;
-            if (Math.abs(rotX) <= rectWidth / 2 + 10 && Math.abs(rotY) <= rectHeight / 2 + 10) arrowHit = true;
+          
+          if (arrowHit) {
+            setEditingTextId(arrow.id);
+            setSelectedIds([arrow.id]);
+            return;
           }
         }
-        
-        if (arrowHit) {
-          setEditingTextId(arrow.id);
-          setSelectedIds([arrow.id]);
-          return;
+        else if (item._renderType === 'textAnnotation') {
+          const annotation = item;
+          const fontSize = annotation.fontSize || 250;
+          const lineHeight = annotation.lineHeight || 1.2;
+          const lines = (annotation.text || '').split('\n');
+          const maxChars = Math.max(...lines.map(l => l.length), 1);
+          const halfW = (maxChars * fontSize * 0.6) / 2;
+          const halfH = (lines.length * fontSize * lineHeight) / 2;
+
+          if (
+            worldX >= annotation.x - halfW &&
+            worldX <= annotation.x + halfW &&
+            worldY >= annotation.y - halfH &&
+            worldY <= annotation.y + halfH
+          ) {
+            setEditingTextId(annotation.id);
+            setSelectedIds([annotation.id]);
+            updateTyping(true);
+            return;
+          }
+        }
+        else if (item._renderType === 'shape') {
+          const shape = item;
+          const halfW = shape.width / 2;
+          const halfH = shape.height / 2;
+
+          if (
+            worldX >= shape.x - halfW &&
+            worldX <= shape.x + halfW &&
+            worldY >= shape.y - halfH &&
+            worldY <= shape.y + halfH
+          ) {
+            if (shape.type === 'polygon' || shape.type === 'line') {
+              setSelectedIds([shape.id]);
+            }
+            return;
+          }
         }
       }
 
-      // Check for text annotation hit
-      for (let i = textAnnotations.length - 1; i >= 0; i--) {
-        const annotation = textAnnotations[i];
-        const fontSize = annotation.fontSize || 250;
-        const lineHeight = annotation.lineHeight || 1.2;
-        const lines = (annotation.text || '').split('\n');
-        const maxChars = Math.max(...lines.map(l => l.length), 1);
-        const halfW = (maxChars * fontSize * 0.6) / 2;
-        const halfH = (lines.length * fontSize * lineHeight) / 2;
-
-        if (
-          worldX >= annotation.x - halfW &&
-          worldX <= annotation.x + halfW &&
-          worldY >= annotation.y - halfH &&
-          worldY <= annotation.y + halfH
-        ) {
-          // Double click enters edit mode for text
-          setEditingTextId(annotation.id);
-          setSelectedIds([annotation.id]);
-          updateTyping(true);
-          return;
-        }
-      }
-
-      // Check for asset hit after all other items (since the others generally act as annotations/foreground elements)
       const assetHit = findTopAssetAtPoint(worldX, worldY);
       if (assetHit) {
         console.log("Asset double-clicked, explosion is currently disabled.");
@@ -2989,7 +2951,7 @@ export default function Workspace2D({
     // But don't close editing if user is still inside the textarea (e.g. after text-select drag)
     if (useEditorStore.getState().editingTextId) {
       const activeEl = document.activeElement;
-      const isInTextarea = activeEl && activeEl.tagName === 'TEXTAREA';
+      const isInTextarea = activeEl && (activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'INPUT');
       if (!isInTextarea) {
         setEditingTextId(null);
         updateTyping(false);

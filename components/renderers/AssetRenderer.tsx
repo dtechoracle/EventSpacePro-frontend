@@ -404,7 +404,7 @@ const AssetRendererBase = ({ asset, isSelected = false, isHovered = false, isHig
     // Fast image path: render standard unexploded assets using their pre-rendered .webp raster
     // instead of parsing DOM and dangerouslySetInnerHTML DOM string for every asset instance.
     // Falls back to processed SVG if raster fails or for custom-colored/exploded/venue assets.
-    const canUseFastImage = false;
+    const canUseFastImage = true;
     const fastImageHref = canUseFastImage ? rasterAssetPath : assetPath;
 
     useEffect(() => {
